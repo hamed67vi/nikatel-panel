@@ -21,7 +21,7 @@ const R = {
   services: { ok: true, services: [{ id: 7, remark: BADNAME, server: "🇩🇪 S\"1", expire: NOW + 5 * 86400, active: true }, { id: 8, remark: "old", server: "S2", expire: NOW - 3600, active: false }] },
   live: { ok: true, id: 7, live: { used: 1073741824 * 8.5, limit: 1073741824 * 50, expire: NOW + 86400, status: "active", hold: 0 }, status_fa: "فعال" },
   service: { ok: true, service: { id: 7, remark: BADNAME, server: "S\"1", expire: NOW + 5 * 86400, active: true, plan: { id: 1, title: "p\"q'r" }, status_fa: "فعال",
-    live: { used: 1073741824, limit: 1073741824 * 2, expire: NOW + 86400 * 5, status: "active", hold: 0 }, sub: "https://h.example/sub/a\"b?x=1&y=2", links: ["vless://x\"y@h.example:443?a=1&b=2#n'1", "vmess://zzz"] } },
+    live: { used: 1073741824, limit: 1073741824 * 2, expire: NOW + 86400 * 5, status: "active", hold: 0 }, sub: "https://h.example/sub/a\"b?x=1&y=2", sub_alt: ["https://alt1.example/sub/tok", "https://alt2.example/sub/to\"k'1"], links: ["vless://x\"y@h.example:443?a=1&b=2#n'1", "vmess://zzz"] } },
   quote: { ok: true, renew: { price: 130000, volume: 50, days: 30, title: "t" }, volume: { gb_price: 2500, presets: [{ gb: 5, price: 12000 }] }, days: { day_price: 1500, presets: [{ days: 7, price: 9000 }] }, wallet: 500000 },
   plans: { ok: true, plans: [{ id: 11, title: "P\"1", descr: "d\nx", price: 130000, list_price: 150000, discount: 10, volume: 0, days: 0, users: 1, server: "S\"1", category: "C\"1", sold_out: false }], sell: true, cashback: 5 },
   history: { ok: true, pays: [
@@ -30,7 +30,7 @@ const R = {
     { type: "خرید سرویس", kind: "BUY_SUB", price: 300, state: "paid_with_wallet", state_fa: "از کیف پول", at: NOW, note: "n\"1" },
     { type: "خرید سرویس", kind: "BUY_SUB", price: 400, state: "low_wallet", state_fa: "موجودی کم", at: NOW, note: "" }], cashback: [{ at: NOW, order: 1000, back: 50 }] },
   referral: { ok: true, link: "https://t.me/my_bot?start=1", invited: 3, buyers: 1, reward: 5000, text: "hello <b>x</b>" },
-  apps: { ok: true, apps: [{ title: "t\"1", link: "https://x.example/?a=\"b&c='d" }] },
+  apps: { ok: true, apps: [{ title: "t\"1", link: "https://x.example/?a=\"b&c='d", rec: false, os: "" }, { title: "AAA plain iOS", link: "https://apps.apple.com/app/aaa/id1", rec: false, os: "ios" }, { title: "Karing iPhone", link: "https://apps.apple.com/app/karing/id2", rec: true, os: "ios" }, { title: "Karing android x\"y", link: "https://github.com/KaringX/karing/releases/latest", rec: true, os: "android" }, { title: "v2rayN win", link: "https://github.com/2dust/v2rayN/releases/latest", rec: false, os: "windows" }, { title: "Happ mac", link: "https://apps.apple.com/app/happ/id3", rec: false, os: "mac" }] },
   tickets: { ok: true, tickets: [{ id: 3, title: "t\"x", state: 0, created: NOW, last: { from: "ADMIN", text: "hi\"" } }], categories: ["a\"b", "c"] },
   ticket_messages: { ok: true, messages: [{ text: "m\"1", from: "USER", at: NOW }] },
 };
@@ -94,7 +94,7 @@ const tick = () => new Promise(r => setImmediate(r));
   S.plans = R.plans.plans; X.buySheet(11);
   await X.renewSheet(7); await X.extraSheet(7, "volume"); await X.extraSheet(7, "days"); X.reportSheet(7);
   for (const kind of ["detail", "usdt"]) { S.topup = { kind, amount: 150000, exact: 150357, hash: "h", card: "6037997512345678", holder: "h\"1", usdt_wallet: "TXyZ\"abc", usdt: 3.4, text: "<b>x</b>" }; HTML.push(await X.VIEWS.topup()); }
-  HTML.push(await X.VIEWS.bought({ ok: true, order_id: 7, remark: BADNAME, cashback: 5, sub: "https://h.example/sub/a\"b", links: ["vless://a\"b", "vmess://c"] }));
+  HTML.push(await X.VIEWS.bought({ ok: true, order_id: 7, remark: BADNAME, cashback: 5, sub: "https://h.example/sub/a\"b", sub_alt: ["https://alt1.example/sub/a\"b"], links: ["vless://a\"b", "vmess://c"] }));
   HTML.push(await X.VIEWS.topup_done({ amount: 5 }));
   out.values.htmlParts = HTML.length;
   // 1) every tag must parse the way a browser parses it: name, then attributes that are bare or name="value" (a stray quote ends the value early and the rest becomes junk attributes)
@@ -110,6 +110,10 @@ const tick = () => new Promise(r => setImmediate(r));
   // 2) every inline handler must be JavaScript
   for (const [name, code] of handlers) { try { new vm.Script(code); } catch (e) { out.errors.push(name + " is not JavaScript: " + code.slice(0, 90)); } }
   out.values.handlers = handlers.length;
+  const appsHtml = HTML.filter(h => h.includes("⭐ پیشنهادی"))[0] || "";
+  out.values.apps = { groups: appsHtml.match(/📱 آیفون|🤖 اندروید|🪟 ویندوز|💻 مک|📚 آموزش/g), pills: (appsHtml.match(/⭐ پیشنهادی/g) || []).length, recFirst: appsHtml.indexOf("Karing iPhone") > -1 && appsHtml.indexOf("Karing iPhone") < appsHtml.indexOf("AAA plain iOS"), noMarker: !appsHtml.includes("(پیشنهادی)") };
+  out.values.altBoxes = HTML.filter(h => h.includes("لینک کمکی اشتراک")).length;
+  out.values.altCopy = handlers.filter(h => /^copy\(.*alt\d\.example/.test(h[1])).length;
   // 3) a handler calls only the functions of the app: strip the string literals, list what is called; `alert(1)` after a quote that ended the string shows up here
   const known = new Set([...src.matchAll(/(?:^|\n)(?:async\s+)?function\s+(\w+)/g)].map(m => m[1]).concat(["if", "querySelectorAll", "forEach", "remove"]));
   const called = new Set();

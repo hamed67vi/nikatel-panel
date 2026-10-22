@@ -193,7 +193,7 @@ function randomId(int $n = 10): string { $a = 'abcdefghijklmnopqrstuvwxyzABCDEFG
 function ridOf(array $body): string { $r = $body['rid'] ?? ''; return is_string($r) && preg_match('/^[A-Za-z0-9_-]{8,40}$/', $r) ? 'mini:' . $r : ''; }
 function wallet(int $uid): int { return (int) (row("SELECT wallet FROM users WHERE userid = ?", [$uid])['wallet'] ?? 0); }
 function serverOf(int $id): ?array {
-    $s = row("SELECT i.id, i.title, i.flag, i.remark, i.active, i.ucount, c.type, c.panel_url, c.username, c.password FROM server_info i JOIN server_config c ON c.id = i.id WHERE i.id = ?", [$id]);
+    $s = row("SELECT i.id, i.title, i.flag, i.remark, i.active, i.ucount, c.type, c.panel_url, c.username, c.password, c.sub_links FROM server_info i JOIN server_config c ON c.id = i.id WHERE i.id = ?", [$id]);
     if ($s) $s['label'] = trim(exEmojiStrip((string) $s['flag']) . ' ' . $s['title']);
     return $s;
 }
@@ -281,6 +281,19 @@ function panelToken(array $srv): ?string {
     return $cache[$base] = (is_array($j) && !empty($j['access_token']) ? (string) $j['access_token'] : null);
 }
 function panelUserPath(array $srv, string $remark): string { return (panelKind($srv) === 'marzneshin' ? '/api/users/' : '/api/user/') . rawurlencode($remark); }
+/** the helper subscription links of a server for one token: every domain of server_config.sub_links (comma separated) + /sub/<token>, as the bot's buildSubBackupSection writes them;
+    the token is the one of the live subscription link when it has one, else the one saved with the order */
+function subAlt($raw, string $liveSub, string $savedToken): array {
+    if (!on('subLinkState', 'on')) return [];
+    $token = $savedToken;
+    if (strpos($liveSub, '/sub/') !== false) $token = explode('?', explode('/sub/', $liveSub, 2)[1], 2)[0];
+    if ($token === '') return [];
+    $out = [];
+    foreach (array_filter(array_map('trim', explode(',', (string) $raw))) as $d) {
+        if (preg_match('~^https?://[^\s<>"\']+$~i', $d)) $out[] = rtrim($d, '/') . '/sub/' . $token;
+    }
+    return array_values(array_unique($out));
+}
 function subUrl(array $srv, string $sub): string {
     if ($sub === '') return '';
     if (strpos($sub, 'http') !== 0) $sub = rtrim((string) $srv['panel_url'], '/') . '/' . ltrim($sub, '/');
@@ -407,7 +420,7 @@ function panelDeleteUser(array $srv, string $remark): bool {
 
 /* ---------------------------------------------------------------- orders of this user */
 function orderOf(int $id, int $uid): ?array {
-    $o = row("SELECT o.*, s.title, s.flag, s.remark AS srv_remark, c.type, c.panel_url, c.username, c.password FROM orders_list o LEFT JOIN server_info s ON s.id = o.server_id LEFT JOIN server_config c ON c.id = o.server_id WHERE o.id = ? AND o.userid = ?", [$id, $uid]);
+    $o = row("SELECT o.*, s.title, s.flag, s.remark AS srv_remark, c.type, c.panel_url, c.username, c.password, c.sub_links FROM orders_list o LEFT JOIN server_info s ON s.id = o.server_id LEFT JOIN server_config c ON c.id = o.server_id WHERE o.id = ? AND o.userid = ?", [$id, $uid]);
     if ($o) $o['label'] = trim(exEmojiStrip((string) ($o['flag'] ?? '')) . ' ' . ($o['title'] ?? ''));
     return $o;
 }
@@ -458,7 +471,7 @@ function buyAgain(int $oid, int $uid, int $wallet): void {
     $stored = json_decode((string) $o['link'], true);
     $links = $live && $live['links'] ? $live['links'] : (is_array($stored) ? array_values(array_filter($stored, 'is_string')) : []);
     out(['ok' => true, 'duplicate' => true, 'order_id' => (int) $o['id'], 'remark' => $o['remark'], 'wallet' => $wallet, 'cashback' => 0, 'sub' => on('subLinkState', 'on') ? ($live['sub'] ?? '') : '',
-        'links' => on('configLinkState', 'on') ? $links : [], 'expire' => (int) $o['expire_date']]);
+        'links' => on('configLinkState', 'on') ? $links : [], 'expire' => (int) $o['expire_date'], 'sub_alt' => subAlt($o['sub_links'] ?? '', (string) ($live['sub'] ?? ''), (string) ($o['token'] ?? ''))]);
 }
 
 /** one slot of a server (ucount, or acount of an inbound plan) taken in ONE statement before the panel is called: 6 customers buying the last slot at once -> one wins, the others are refused before an account is made
@@ -520,7 +533,7 @@ case 'service': {
     $plan = orderPlan($o);
     out(['ok' => true, 'service' => ['id' => (int) $o['id'], 'remark' => $o['remark'], 'server' => $o['label'], 'server_id' => (int) $o['server_id'], 'expire' => (int) $o['expire_date'], 'bought' => (int) $o['date'], 'active' => (int) $o['status'] === 1,
         'plan' => $plan ? ['id' => (int) $plan['id'], 'title' => $plan['title'], 'volume' => (float) $plan['volume'], 'days' => (int) $plan['days']] : null,
-        'live' => $live ? array_diff_key($live, ['links' => 1]) : null, 'status_fa' => $live ? statusFa($live['status']) : null, 'sub' => on('subLinkState', 'on') ? ($live['sub'] ?? '') : '', 'links' => on('configLinkState', 'on') ? $links : []]]);
+        'live' => $live ? array_diff_key($live, ['links' => 1]) : null, 'status_fa' => $live ? statusFa($live['status']) : null, 'sub' => on('subLinkState', 'on') ? ($live['sub'] ?? '') : '', 'sub_alt' => subAlt($o['sub_links'] ?? '', (string) ($live['sub'] ?? ''), (string) ($o['token'] ?? '')), 'links' => on('configLinkState', 'on') ? $links : []]]);
 }
 
 case 'quote': {   // what renew / more volume / more days cost for one service
@@ -588,7 +601,7 @@ case 'buy': {
             run("UPDATE pays SET order_id = ? WHERE hash_id = ?", [$oid, $hash]);      // (the bot's pays rows carry the order too; a retried request finds its order by it)
             if ($isTrial) run("UPDATE users SET freetrial = 'used' WHERE userid = ?", [$uid]);
         } catch (Throwable $e) { $undo(); throw $e; }
-        return ['ok' => true, 'order_id' => $oid, 'remark' => $remark, 'sub' => $made['sub'], 'links' => $made['links'], 'expire' => $expire, 'undo' => $undo];
+        return ['ok' => true, 'order_id' => $oid, 'remark' => $remark, 'sub' => $made['sub'], 'sub_alt' => subAlt($srv['sub_links'] ?? '', (string) $made['sub'], $token), 'links' => $made['links'], 'expire' => $expire, 'undo' => $undo];
     });
     if (!($r['ok'] ?? false) || !empty($r['duplicate'])) giveSlotBack($plan, $srv);      // (nothing was made: the slot taken above goes back)
     if (!($r['ok'] ?? false)) out(array_merge(['ok' => false], $r));
@@ -598,7 +611,7 @@ case 'buy': {
     $sub = on('subLinkState', 'on') ? $r['sub'] : '';
     tgText($uid, "✅ <b>خرید شما انجام شد</b>\n\n📦 " . h($plan['title']) . "\n🌍 " . h($srv['label']) . "\n🔖 <code>" . h($r['remark']) . "</code>\n⏳ " . ($days > 0 ? $days . " روز" : "نامحدود") . " · 🔋 " . rtrim(rtrim(number_format($gb, 2), '0'), '.') . " گیگ\n💰 " . fa($price) . " تومان از کیف پول" . ($sub !== '' ? "\n\n🔗 لینک اشتراک:\n<code>" . h($sub) . "</code>" : '') . "\n\nجزئیات و کانفیگ‌ها در مینی‌اپ 👇");
     tellAdmins("🛍 <b>خرید جدید (مینی‌اپ)</b>\n\n👤 " . userLink($uid, (string) $me['name']) . " · <code>$uid</code>" . ($isAgent ? " · همکار" : '') . "\n📦 " . h($plan['title']) . " · " . h($srv['label']) . "\n🔖 <code>" . h($r['remark']) . "</code>\n💰 " . fa($price) . " تومان (کیف پول)" . ($back ? "\n🎁 کش‌بک: " . fa($back) . " تومان" : '') . "\n💳 موجودی بعد از خرید: " . fa($r['wallet'] + $back) . " تومان");
-    out(['ok' => true, 'order_id' => $r['order_id'], 'remark' => $r['remark'], 'wallet' => $r['wallet'] + $back, 'cashback' => $back, 'sub' => $sub, 'links' => on('configLinkState', 'on') ? $r['links'] : [], 'expire' => $r['expire']]);
+    out(['ok' => true, 'order_id' => $r['order_id'], 'remark' => $r['remark'], 'wallet' => $r['wallet'] + $back, 'cashback' => $back, 'sub' => $sub, 'sub_alt' => $r['sub_alt'] ?? [], 'links' => on('configLinkState', 'on') ? $r['links'] : [], 'expire' => $r['expire']]);
 }
 
 case 'renew': {
@@ -821,7 +834,14 @@ case 'referral': {
 
 case 'apps': {
     $apps = rows("SELECT title, link FROM needed_sofwares WHERE status = 1 ORDER BY id");
-    out(['ok' => true, 'apps' => array_map(fn($a) => ['title' => exEmojiStrip((string) $a['title']), 'link' => $a['link']], $apps)]);
+    /* the list is the bot's own (needed_sofwares: title, link): a title with (پیشنهادی) is a recommended app, and the words iPhone / iOS, Android, Windows, Mac in a title say its system */
+    out(['ok' => true, 'apps' => array_map(function ($a) {
+        $t = exEmojiStrip((string) $a['title']);
+        $rec = (bool) preg_match('/[\(（]\s*پیشنهادی\s*[\)）]/u', $t);
+        $t = trim((string) preg_replace('/\s*[\(（]\s*پیشنهادی\s*[\)）]/u', '', $t));
+        $os = preg_match('/iphone|\bios\b|آیفون/iu', $t) ? 'ios' : (preg_match('/android|اندروید|آندروید/iu', $t) ? 'android' : (preg_match('/windows|ویندوز/iu', $t) ? 'windows' : (preg_match('/macos|\bmac\b|مک/iu', $t) ? 'mac' : '')));
+        return ['title' => $t, 'link' => $a['link'], 'rec' => $rec, 'os' => $os];
+    }, $apps)]);
 }
 
 case 'tickets': {

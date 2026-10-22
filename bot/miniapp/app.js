@@ -181,6 +181,7 @@ AFTER.service = async p => {
       ${L === null && s.active ? `<div class="note warn mt">ارتباط با پنل این سرور برقرار نشد؛ اعداد زنده فعلاً در دسترس نیست.</div>` : ""}
     </div>
     ${s.sub ? `<div class="card"><h3>لینک اشتراک <button class="btn sm" onclick="copy(${js(s.sub)})">📋 کپی</button></h3><div class="code" onclick="copy(${js(s.sub)})">${esc(s.sub)}<span class="cp">📋</span></div><div class="qr hide" id="qr"></div><div class="btns"><button class="btn sm" onclick="showQr(${js(s.sub)})">▦ QR</button>${F.apps ? `<button class="btn sm" onclick="go('apps')">📱 برنامه‌ی اتصال</button>` : ""}</div></div>` : ""}
+    ${s.sub ? altBox(s.sub_alt) : ""}
     ${s.links && s.links.length ? `<div class="card"><h3>کانفیگ‌ها <span class="pill">${T(s.links.length)}</span></h3>${s.links.slice(0, 12).map(l => `<div class="code mb" onclick="copy(${js(l)})">${esc(l.length > 110 ? l.slice(0, 110) + "…" : l)}<span class="cp">📋</span></div>`).join("")}${s.links.length > 1 ? `<button class="btn w sm" onclick="copy(${js(s.links.join("\n"))}, 'همه‌ی کانفیگ‌ها کپی شد ✓')">📋 کپی همه</button>` : ""}</div>` : ""}
     <div class="card"><h3>مدیریت سرویس</h3><div class="grid">
       ${F.renew ? `<button class="btn" onclick="renewSheet(${s.id})">🔄 تمدید</button>` : ""}
@@ -190,6 +191,8 @@ AFTER.service = async p => {
       <button class="btn" onclick="go('tickets',{svc:${js(s.remark)}})">🎫 پشتیبانی</button>
     </div></div>`;
 };
+/* the helper subscription links of the server (the bot's "لینک کمکی اشتراک"): the same token on the server's other domains, for when the main link does not open */
+const altBox = list => list && list.length ? `<div class="card"><h3>🔁 لینک کمکی اشتراک</h3>${list.map(u => `<div class="code mb" onclick="copy(${js(u)})">${esc(u)}<span class="cp">📋</span></div>`).join("")}<div class="note">اگر لینک اصلی اشتراک کار نکرد از لینک کمکی اشتراک استفاده کنید.</div></div>` : "";
 function showQr(text) {
   const box = $("qr"); if (!box) return;
   if (typeof qrcode !== "function") { toast("کتابخانه‌ی QR بارگذاری نشد", "bad"); return; }
@@ -293,6 +296,7 @@ async function doBuy(id) {
 VIEWS.bought = async r => `
   <div class="card c"><div style="font-size:44px">🎉</div><h3 style="justify-content:center">سرویس شما ساخته شد</h3><div class="sm mut">نام سرویس: <b>${esc(r.remark)}</b>${r.cashback ? `، کش‌بک ${T(r.cashback)} تومان به کیف پولت برگشت` : ""}</div></div>
   ${r.sub ? `<div class="card"><h3>لینک اشتراک <button class="btn sm" onclick="copy(${js(r.sub)})">📋 کپی</button></h3><div class="code" onclick="copy(${js(r.sub)})">${esc(r.sub)}<span class="cp">📋</span></div><div class="qr hide" id="qr"></div><div class="btns"><button class="btn sm" onclick="showQr(${js(r.sub)})">▦ QR</button>${S.feat.apps ? `<button class="btn sm" onclick="go('apps')">📱 برنامه‌ی اتصال</button>` : ""}</div><div class="note mt">لینک اشتراک را در برنامه‌ی اتصال (v2rayNG، Streisand، Hiddify…) وارد کن؛ کانفیگ‌ها خودکار می‌آیند. همین لینک در چت ربات هم برایت فرستاده شد.</div></div>` : ""}
+  ${r.sub ? altBox(r.sub_alt) : ""}
   ${r.links && r.links.length ? `<div class="card"><h3>کانفیگ‌ها <span class="pill">${T(r.links.length)}</span></h3>${r.links.slice(0, 8).map(l => `<div class="code mb" onclick="copy(${js(l)})">${esc(l.length > 110 ? l.slice(0, 110) + "…" : l)}<span class="cp">📋</span></div>`).join("")}</div>` : ""}
   <div class="btns"><button class="btn pri" onclick="S.stack=[{v:'services'},{v:'service',p:{id:${r.order_id}}}];render()">📦 جزئیات سرویس</button><button class="btn" onclick="setTab('home')">خانه</button></div>`;
 async function redeem() { const code = ($("gift").value || "").trim(); if (!code) return; const r = await api("gift", {code}); if (r.ok) { toast(T(r.amount) + " تومان به کیف پولت اضافه شد 🎁", "ok"); $("gift").value = ""; } else toast(r.error, "bad"); }
@@ -384,7 +388,20 @@ VIEWS.more = async () => {
 };
 VIEWS.gift = async () => `<div class="title">🎁 کد هدیه</div><div class="card"><div class="sm mut mb">کد هدیه را وارد کن؛ مبلغ آن بلافاصله به کیف پولت اضافه می‌شود.</div><div class="row"><input class="input grow" id="gift" placeholder="کد هدیه" autocomplete="off"><button class="btn pri" onclick="redeem()">اعمال</button></div></div>`;
 VIEWS.apps = async () => `<div class="title">📱 اپلیکیشن‌های اتصال</div><div id="apps" class="list"><div class="loading"><i class="spin"></i>…</div></div><div class="note">لینک اشتراک سرویس را کپی کن و در برنامه، گزینه‌ی «افزودن از کلیپ‌بورد / Import from clipboard» را بزن.</div>`;
-AFTER.apps = async () => { const r = await api("apps"); const box = $("apps"); if (!box) return; box.innerHTML = r.ok && r.apps.length ? r.apps.map(a => `<div class="item" onclick="openLink(${js(a.link)})"><div class="ic">⬇️</div><div class="tx"><b>${esc(a.title)}</b><small class="ell ltr">${esc(a.link)}</small></div><span class="chev">‹</span></div>`).join("") : `<div class="empty">${r.ok ? "برنامه‌ای ثبت نشده." : esc(r.error)}</div>`; };
+/* the apps of the bot grouped by system (the one this phone runs first), the recommended ones (a title with (پیشنهادی) in the bot's list) on top of each group with a badge */
+const OS_ORDER = ["ios", "android", "windows", "mac", ""];
+const OS_NAME = {ios: "📱 آیفون / iOS", android: "🤖 اندروید", windows: "🪟 ویندوز", mac: "💻 مک / macOS", "": "📚 آموزش‌ها و بقیه"};
+function myOs() { const p = String((tg && tg.platform) || "").toLowerCase(); return p.indexOf("ios") === 0 ? "ios" : p.indexOf("android") === 0 ? "android" : p === "macos" ? "mac" : ""; }
+const appRow = a => `<div class="item" onclick="openLink(${js(a.link)})"><div class="ic">⬇️</div><div class="tx"><div class="row"><b>${esc(a.title)}</b>${a.rec ? `<span class="pill ok">⭐ پیشنهادی</span>` : ""}</div><small class="ell ltr">${esc(a.link)}</small></div><span class="chev">‹</span></div>`;
+AFTER.apps = async () => {
+  const r = await api("apps"); const box = $("apps"); if (!box) return;
+  if (!r.ok || !r.apps.length) { box.innerHTML = `<div class="empty">${r.ok ? "برنامه‌ای ثبت نشده." : esc(r.error)}</div>`; return; }
+  const me = myOs(), order = me ? [me].concat(OS_ORDER.filter(k => k !== me)) : OS_ORDER;
+  box.innerHTML = order.map(k => {
+    const list = r.apps.filter(a => (a.os || "") === k).sort((x, y) => (y.rec ? 1 : 0) - (x.rec ? 1 : 0));
+    return list.length ? `<div class="sm mut mt mb"><b>${OS_NAME[k]}</b>${me && k === me ? " · دستگاه شما" : ""}</div>` + list.map(appRow).join("") : "";
+  }).join("");
+};
 VIEWS.referral = async () => `<div class="title">👥 دعوت دوستان</div><div id="ref"><div class="loading"><i class="spin"></i>…</div></div>`;
 AFTER.referral = async () => {
   const r = await api("referral"); const box = $("ref"); if (!box) return;

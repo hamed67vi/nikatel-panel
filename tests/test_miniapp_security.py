@@ -232,10 +232,41 @@ def test_the_page_keeps_the_key_of_a_payment_while_the_answer_is_lost_and_drops_
     assert len(rr) == 2 and rr[0] == rr[1] and res["values"]["left"] == []
 
 
+@pytest.mark.skipif(PHP is None, reason="php is not installed here")
+def test_the_helper_subscription_links_are_the_servers_other_domains_with_the_same_token(tmp_path):
+    """the bot's buildSubBackupSection: every domain of server_config.sub_links + /sub/<token>; the owner (2026-10-23): "if a subscription has helper links, show them there" (the Mini App showed only the main link)"""
+    out = _php(tmp_path, "function on($k, $d = 'off') { global $botState; return ($botState[$k] ?? $d) === 'on'; }\n" + _fn("subAlt") + textwrap.dedent(r"""
+        $botState = ['subLinkState' => 'on'];
+        $raw = 'https://a.example.com, https://b.example.com/ ,javascript:alert(1),ftp://x.example,,https://a.example.com,http://c.example:8443/path';
+        $r = [subAlt($raw, 'https://panel.example/sub/TOK1?x=1', 'saved'), subAlt($raw, '', 'saved'), subAlt($raw, 'https://panel.example/user/none', ''), subAlt('', 'https://p/sub/T', 'saved'), subAlt(null, '', 'saved')];
+        $botState['subLinkState'] = 'off';
+        $r[] = subAlt($raw, 'https://p/sub/T', 'saved');
+        echo json_encode($r);
+        """))
+    got = json.loads(out)
+    assert got[0] == ["https://a.example.com/sub/TOK1", "https://b.example.com/sub/TOK1", "http://c.example:8443/path/sub/TOK1"]      # the token of the live link (without its query)
+    assert got[1] == ["https://a.example.com/sub/saved", "https://b.example.com/sub/saved", "http://c.example:8443/path/sub/saved"]      # no live link: the token saved with the order
+    assert got[2:] == [[], [], [], []]
+    for name in ("service", "buy"):
+        assert "'sub_alt' =>" in _case(name)
+    assert "c.sub_links" in _fn("orderOf") and "c.sub_links" in _fn("serverOf") and "'sub_alt' => subAlt(" in _fn("buyAgain")
+
+
+@pytest.mark.skipif(NODE is None, reason="node is not installed here")
+def test_the_page_shows_the_helper_links_and_the_apps_by_system_with_the_recommended_ones_first():
+    """the owner (2026-10-23): "show the recommended apps; NPV and Karing must be among them for iPhone and Android": a title with (پیشنهادی) is a badge, the apps are grouped by system"""
+    res = json.loads(subprocess.run([NODE, str(DRIVER), str(MINI / "app.js")], capture_output=True, text=True, timeout=90, check=True).stdout)
+    assert "crash" not in res and res["errors"] == [], res
+    v = res["values"]
+    assert v["altBoxes"] >= 2 and v["altCopy"] >= 3                       # the service page and the page after a purchase, a copy handler per link (the quotes in one stay inside its string)
+    assert v["apps"]["groups"] == ["📱 آیفون", "🤖 اندروید", "🪟 ویندوز", "💻 مک", "📚 آموزش"]
+    assert v["apps"]["pills"] == 2 and v["apps"]["recFirst"] and v["apps"]["noMarker"]
+
+
 def test_only_web_links_are_opened_and_the_files_have_a_new_version_for_the_cache():
     assert r'if (!/^https?:\/\//i.test(u)) return;' in JS
     html = (MINI / "index.html").read_text(encoding="utf-8")
-    assert "app.css?v=3.0.4" in html and "app.js?v=3.0.4" in html
+    assert "app.css?v=3.0.5" in html and "app.js?v=3.0.5" in html
 
 
 # ---------------------------------------------------------------------------------------------- the whole attack harness (opt in)

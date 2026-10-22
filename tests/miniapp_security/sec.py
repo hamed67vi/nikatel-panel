@@ -906,6 +906,53 @@ def st1():
     return bool(bad), f"without extras.php: {bad}" if bad else "me, plans, services, buy, apps all answer without extras.php"
 
 
+@scn("SA1", "LOW", "helper subscription links: the server's other domains + /sub/<token> on a purchase, on the service page and on a repeated purchase; none without domains, with the switch off, or for a domain that is not http(s)")
+def sa1():
+    problems = []
+    reset(); mk_user(U, wal=900_000)
+    sql("UPDATE server_config SET sub_links='https://alt1.example.com, https://alt2.example.com/ ,javascript:alert(1),ftp://x.example,,https://alt1.example.com' WHERE id=1")
+    c, j, t = call("buy", {"plan_id": 1, "rid": "rid-alt-0001-xyz"})
+    token = (j.get("sub") or "").split("/sub/")[-1]
+    want = [f"https://alt1.example.com/sub/{token}", f"https://alt2.example.com/sub/{token}"]
+    if not ok(j) or not token or j.get("sub_alt") != want:
+        problems.append(f"buy: sub_alt={j.get('sub_alt')} want {want}")
+    c2, j2, t2 = call("service", {"id": j.get("order_id")})
+    if not ok(j2) or j2["service"].get("sub_alt") != want:
+        problems.append(f"service: sub_alt={(j2 or {}).get('service', {}).get('sub_alt')}")
+    c3, j3, t3 = call("buy", {"plan_id": 1, "rid": "rid-alt-0001-xyz"})
+    if not (ok(j3) and j3.get("duplicate") and j3.get("sub_alt") == want):
+        problems.append(f"repeated purchase: {t3[:120]}")
+    sql("UPDATE server_config SET sub_links=NULL WHERE id=1")
+    c4, j4, t4 = call("service", {"id": j.get("order_id")})
+    if not ok(j4) or j4["service"].get("sub_alt") != []:
+        problems.append("no domains must give an empty list")
+    sql("UPDATE server_config SET sub_links='https://alt1.example.com' WHERE id=1")
+    sql("UPDATE setting SET value=REPLACE(value, '\"subLinkState\": \"on\"', '\"subLinkState\": \"off\"') WHERE type='BOT_STATES'")
+    c5, j5, t5 = call("service", {"id": j.get("order_id")})
+    if not ok(j5) or j5["service"].get("sub_alt") != [] or j5["service"].get("sub"):
+        problems.append("with the sub link switch off nothing of it may be shown")
+    return bool(problems), "; ".join(problems) if problems else "helper links right in buy, service and the repeated purchase; none when they should be none"
+
+
+@scn("AP1", "LOW", "the apps list of the bot: a (recommended) title becomes a flag and loses the words, the system is read from the title, nothing is lost")
+def ap1():
+    reset(); mk_user(U)
+    sql("DELETE FROM needed_sofwares")
+    rec = "(پیشنهادی)"
+    rows = [("Karing برای iPhone / iOS " + rec, "https://apps.apple.com/app/karing/id6472431552"), ("NPV Tunnel برای اندروید " + rec, "https://play.google.com/store/apps/details?id=com.napsternetlabs.napsternetv"),
+            ("Foxray IOS", "https://apps.apple.com/app/foxray/id6448898396"), ("Nekoray Windows", "https://github.com/MatsuriDayo/nekoray/releases"), ("Happ برای مک (macOS)", "https://apps.apple.com/app/happ/id1"),
+            ("آموزش V2rayNG", "https://t.me/x"), ("Karing macOS (" + "پیشنهادی" + ")", "https://github.com/KaringX/karing/releases/latest")]
+    for title, link in rows:
+        sql(f"INSERT INTO needed_sofwares (title, link, status) VALUES ({esc(title)}, {esc(link)}, 1)")
+    sql("INSERT INTO needed_sofwares (title, link, status) VALUES ('hidden app', 'https://x.example', 0)")
+    c, j, t = call("apps")
+    got = {a["link"]: (a["title"], a["rec"], a["os"]) for a in j.get("apps", [])} if ok(j) else {}
+    exp = {rows[0][1]: ("Karing برای iPhone / iOS", True, "ios"), rows[1][1]: ("NPV Tunnel برای اندروید", True, "android"), rows[2][1]: ("Foxray IOS", False, "ios"),
+           rows[3][1]: ("Nekoray Windows", False, "windows"), rows[4][1]: ("Happ برای مک (macOS)", False, "mac"), rows[5][1]: ("آموزش V2rayNG", False, ""), "https://github.com/KaringX/karing/releases/latest": ("Karing macOS", True, "mac")}
+    bad = {k: (got.get(k), v) for k, v in exp.items() if got.get(k) != v}
+    return bool(bad) or len(got) != len(exp), f"{len(got)} apps (want {len(exp)}); differences: {bad}" if bad or len(got) != len(exp) else "7 apps, 2 recommended read, systems read, the hidden row (status 0) is not shown"
+
+
 # ===== injection and web basics
 SQLI = ["'", "\"", "' OR '1'='1", "1' OR '1'='1' -- ", "1; DROP TABLE users; -- ", "' UNION SELECT 1,2,3 -- ", "\\", "%27", "1 AND SLEEP(2)", "') OR 1=1 -- ", "0x27", "\x00", "a' or 1=1#", "1) UNION SELECT password FROM server_config -- ", "O'Brien", "%' OR '%'='", "{\"a\":\"'\"}"]
 
