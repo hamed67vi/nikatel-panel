@@ -309,6 +309,13 @@ def start(iran_id: int, foreign_id: int, ports: str, kind: str, transport: str, 
             res = builder.delete_tunnel(tid, trash=True)
             autopilot._say(aid, f"Removed {name}: " + "; ".join(res))
 
+            try:
+                from . import standby
+
+                standby.forget(name)          # (the owner removed this tunnel: its mark and its warm standby go with it - as the Delete button does; a standby of a tunnel that is gone stood on the servers for hours)
+            except Exception:
+                log.exception("the standby of the replaced tunnel %s could not be forgotten", name)
+
         chosen = 0
         attempts = [(kind, transport, opts)] + [tunnel_test.build_args(k) for k in (fallback_kinds or [])]          # ("Best of the day": the next best types of the pair, when the first one does not work)
 

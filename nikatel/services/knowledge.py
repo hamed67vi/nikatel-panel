@@ -107,7 +107,7 @@ def stability(e: dict | None, now: int) -> dict | None:
 
     passed = sum(1 for x in h if x.get("ok"))
     downs = [float(x["down"]) for x in h if x.get("down") is not None]
-    swing = (min(downs) / max(downs) if max(downs) > 0 else 0.0) if len(downs) >= 2 else 1.0
+    swing = max(0.0, min(1.0, min(downs) / max(downs) if max(downs) > 0 else 0.0)) if len(downs) >= 2 else 1.0          # (a reading below zero must not push the stability below 0)
     pct = 100.0 * (passed / len(h)) * (0.4 + 0.6 * swing)
 
     if any(float(x.get("loss") or 0) > 2.0 for x in h):

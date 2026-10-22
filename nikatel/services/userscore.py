@@ -32,9 +32,9 @@ def user_score(q: dict | None) -> int:
     if not q or q.get("error") or q.get("latency_ms") is None:
         return 0
 
-    jit = max(0.0, 100.0 - (q.get("jitter_ms") or 0) * 5)
-    loss = max(0.0, 100.0 - (q.get("loss_pct") or 0) * 10)
-    return round(speed_points(q) * W_SPEED + ping_points(q["latency_ms"]) * W_PING + loss * W_LOSS + jit * W_JITTER)
+    jit = min(100.0, max(0.0, 100.0 - (q.get("jitter_ms") or 0) * 5))           # (a reading below zero - a counter that went back - is not better than a clean line: every part stays between 0 and 100)
+    loss = min(100.0, max(0.0, 100.0 - (q.get("loss_pct") or 0) * 10))
+    return round(max(0.0, speed_points(q)) * W_SPEED + ping_points(q["latency_ms"]) * W_PING + loss * W_LOSS + jit * W_JITTER)
 
 
 def has_speed(q: dict | None) -> bool:

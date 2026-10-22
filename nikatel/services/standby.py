@@ -1066,9 +1066,37 @@ def _cleanup_unmarked(name: str, v: dict) -> None:
         remove_standby(name)
 
 
+def _gone_since(name: str, now: int) -> int:
+    """Since when the row of a marked tunnel is missing. It is written in the mark itself (settings), not only in memory: the panel is restarted for every update, and a clock in memory started again at every restart - the standby of a tunnel
+    that was removed stood on the servers for 9 hours (the live panel, 2026-10-21) because no run of the panel lasted the 3 hours of MISSING_GRACE."""
+    with _LOCK:
+        d = st.get("standby")
+        marked = dict(d.get("marked") or {})
+        e = dict(marked.get(name) or {})
+
+        if e.get("gone") is None:
+            e["gone"] = now
+            marked[name] = e
+            st.put("standby", {"marked": marked})
+
+        return int(e["gone"])
+
+
+def _gone_clear(name: str) -> None:
+    """The row is back (a repair that builds the tunnel again): the clock of its absence is forgotten."""
+    with _LOCK:
+        d = st.get("standby")
+        marked = dict(d.get("marked") or {})
+
+        if name in marked and "gone" in marked[name]:
+            marked[name] = {k: v for k, v in marked[name].items() if k != "gone"}
+            st.put("standby", {"marked": marked})
+
+
 def _step(name: str) -> None:
     now = int(time.time())
-    marked = name in _marks()
+    marks = _marks()
+    marked = name in marks
     v = _view(name)
 
     if not marked:
@@ -1078,7 +1106,10 @@ def _step(name: str) -> None:
     p, s = v["p"], v["s"]
 
     if p is None:
-        since = _MISSING.setdefault(name, now)
+        since = _MISSING.get(name)
+
+        if since is None:
+            since = _MISSING[name] = _gone_since(name, now)
 
         if now - since > MISSING_GRACE:
             _MISSING.pop(name, None)
@@ -1088,6 +1119,9 @@ def _step(name: str) -> None:
         return
 
     _MISSING.pop(name, None)
+
+    if "gone" in (marks.get(name) or {}):
+        _gone_clear(name)
 
     if s is not None and time.time() - _CHECKED.get(s["id"], 0) >= CHECK_EVERY and not s["stale"]:
         _CHECKED[s["id"]] = time.time()

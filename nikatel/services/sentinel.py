@@ -139,7 +139,11 @@ def is_hard(signs: list[str]) -> bool:
 # ------------------------------------------------------------------ the job
 def look(item: tuple[Watch, list[str]]) -> None:
     w, signs = item
-    tunnels.check_tunnel(w.id, fresh_ext=True, quick=is_hard(signs))
+
+    try:
+        tunnels.check_tunnel(w.id, fresh_ext=True, quick=is_hard(signs))
+    except Exception:  # the boundary of one item: a check that crashes (a locked database, an odd record) must not end the round for the other tunnels of the turn
+        log.exception("sentinel: the check of %s crashed", w.name)
 
 
 def _load() -> tuple[list[Watch], dict[int, Node]]:

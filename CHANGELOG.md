@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.69.101 - The standby of a removed tunnel goes, the stories a restart left open are closed, the engine's rules checked with odd inputs
+
+> **به زبان ساده:** وقتی تانلی را با «جایگزین کردن» در ساخت تانل عوض می‌کردید، استندبای تانل قدیمی روی سرورها می‌ماند (در پنل زنده ۹ ساعت ماند، چون شمارندهٔ پاک‌سازی با هر ری‌استارت از نو شروع می‌شد). حالا استندبای آن هم مثل دکمهٔ حذف پاک می‌شود و شمارنده در تنظیمات ذخیره است. ۷۵ گزارش نیمه‌کارهٔ قدیمی که ری‌استارت باز گذاشته بود بسته می‌شوند، نمرهٔ کاربر همیشه بین ۰ و ۱۰۰ است، و قانون‌های موتور تانل با ورودی‌های عجیب آزمایش شدند.
+
+> **In short:** replacing a tunnel from Create tunnel left the warm standby of the old tunnel on the servers (9 hours on the live panel: the clock that removes the standby of a tunnel that is gone was in memory and started again at every restart of the panel). The standby is forgotten like the Delete button does, and the clock is kept in the mark. The 75 stories a restart left open (the oldest 12 days) are closed, the user's mark is always 0 - 100, and the rules of the engine are checked with odd inputs.
+
+Found by reading the live panel read-only (its database, its log of the last 24 hours) and the code.
+
+- **The standby of a replaced tunnel**: `create.start` removed the replaced tunnel without `standby.forget(name)`, which the Delete button calls; the tunnel's mark and its standby (running units, an open port) stayed. The only clean-up was `standby._step` after `MISSING_GRACE` (3 hours) of the row being gone - counted in memory, from zero at every start of the panel, and the owner updates the panel every hour or so. The count is written in the mark now (`marked[name]["gone"]`), cleared when the row is back (a repair that builds the tunnel again).
+- **Stories left open**: the housekeeping kept every story that was not finished, for ever - a restart in the middle of a build, a test or a repair leaves one (the live panel: 75, 12 days old, none ever closed). `housekeeping.close_orphans` closes the ones older than 12 hours ("Stopped: the panel was restarted while this was running.", closed at their own start so the times the repair rules read do not move); they are trimmed with the others after 90 days.
+- **The user's mark** (`userscore.user_score`) could be above 100 or below 0 for a negative reading (a counter that went back): 0 - 100 now. **The stability of a type** (`knowledge.stability`) could be below 0 for the same reason: 0 - 100 now.
+- **The watch of the tunnels nobody uses** read a live number with an age of exactly 0.0 s as "no age" and dropped it, which started the silence of that tunnel again.
+- **The sentinel**: a check that crashes no longer ends the round of the other tunnels of the turn (the job was marked failed).
+- **Property tests of the engine** (`tests/test_engine_fuzz.py`, 27 tests, a seeded random generator, nothing new to install): `judge`, `settle`, `flap`, `throughput`, `ping_verdict`, the ranking and the better-type rules (`ranked`, `upgrade_kinds`, `steadier_kinds`, `faster_kinds`, `candidates`, `stability`, `in_window`), `user_score`, the bandwidth state machine (`add_sample`, `reference`, `zero_step`, `silent_problems`, `explain`), the repair ladder (`classify`, `ladder_for`, `escalate_due`, `retry_after`), `standby.decide`, `shifted`, and the alert machine (`alerts.decide`) are run on None, empty, zero, negative, huge, equal times and the future: nothing raised for any finite input; the two cases that gave a wrong NUMBER (the mark, the stability) are fixed above.
+- **Not changed**: what the Doctor decides, the order of the types, the rails.
+- **Proved**: `tests/test_engine_leftovers.py` (11 tests; 9 fail on 1.69.87) and `tests/test_engine_fuzz.py`; the existing test of the housekeeping changed (an open story older than 12 hours is closed - it used to stay for ever).
+- **Not proved**: a real standby of a replaced tunnel removed from real servers (the removal itself is the one the Delete button has used for a long time); the closing of the 75 stories on the live database (tested on a copy of the rule, not run on the live file); inputs that are not finite numbers (NaN, infinity) - the panel never writes them.
+
 ## 1.69.100 - The engine can not be wedged: a pair is never left "being built", one tunnel test at a time, a test story always ends
 
 > **به زبان ساده:** وقتی دیتابیس یک لحظه قفل می‌شد، ساخت تانل بین دو سرور می‌توانست تا ری‌استارت بعدی پنل «در حال ساخت» بماند و هیچ تعمیر یا ساخت تازه‌ای بین آن دو سرور شروع نمی‌شد. حالا هر شکستی در شروع یا پایان ساخت، آن دو سرور را آزاد می‌کند. دو تست هم‌زمان هم دیگر هم‌دیگر را خراب نمی‌کنند و گزارش تستی که پاکسازی‌اش خطا بدهد همیشه بسته می‌شود.

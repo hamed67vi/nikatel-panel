@@ -1121,7 +1121,7 @@ def _zero_watch() -> None:
     for tid, name, marked in rows:
         seen.add(tid)
         r = view.get(str(tid))
-        use = max(float(r.get("down") or 0), float(r.get("up") or 0)) if r and float(r.get("age") or 999) <= 120 else None
+        use = max(float(r.get("down") or 0), float(r.get("up") or 0)) if r and float(r["age"] if r.get("age") is not None else 999) <= 120 else None          # (an age of 0.0 s is a reading from this very moment, not "no age")
         entry, look = zero_step(_ZERO.get(tid), now, use, True)
 
         if entry is None:
