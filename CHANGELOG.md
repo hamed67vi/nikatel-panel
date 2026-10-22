@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.69.97 - app.js put back: the 1.69.9x release had replaced it with an old copy
+
+> **Ø¨Ù‡ Ø²Ø¨Ø§Ù† Ø³Ø§Ø¯Ù‡:** Ù†Ø³Ø®Ù‡Ù” 1.69.9x (ÙØ±Ù… ÙˆØ±ÙˆØ¯ Ø¨Ø§ POST) Ú©Ù„ ÙØ§ÛŒÙ„ app.js Ø±Ø§ Ø§Ø² ÛŒÚ© Ù†Ø³Ø®Ù‡Ù” Ù‚Ø¯ÛŒÙ…ÛŒ Ø¬Ø§ÛŒÚ¯Ø²ÛŒÙ† Ú©Ø±Ø¯Ù‡ Ø¨ÙˆØ¯ Ùˆ Ú†Ù†Ø¯ Ø§ØµÙ„Ø§Ø­ Ù‚Ø¨Ù„ÛŒ Ø±Ø§ Ø¨Ø±Ú¯Ø±Ø¯Ø§Ù†Ø¯: Ù…ØªÙ†â€ŒÙ‡Ø§ÛŒ Â«RestoreÂ» Ø¯Ø± ØµÙØ­Ù‡Ù” DNSØŒ Ø§Ù†ØªØ®Ø§Ø¨ Ù¾Ù†Ù„ Ø¢Ù†Ù„Ø§ÛŒÙ† Ø¯Ø± ØµÙØ­Ù‡Ù” PanelØŒ Ùˆ Ø§ØµÙ„Ø§Ø­â€ŒÙ‡Ø§ÛŒ ØµÙØ­Ù‡Ù” ØªØ§Ù†Ù„ (Ù…Ù†ÙˆÛŒ Ø±Ø¯ÛŒÙØŒ Ø¬Ø³ØªØ¬ÙˆÛŒ Ø¨Ø¯ÙˆÙ† Ù†ØªÛŒØ¬Ù‡ØŒ Ø¨Ø³ØªÙ‡â€ŒÙ†Ø´Ø¯Ù† Ù¾Ù†Ø¬Ø±Ù‡â€ŒÙ‡Ø§ØŒ Ù¾Ø±Ø³ÛŒØ¯Ù† Ù‚Ø¨Ù„ Ø§Ø² RestartØŒ Ø´Ù…Ø±Ø¯Ù† ØªØ§Ù†Ù„â€ŒÙ‡Ø§ÛŒ Ø¨ÛŒâ€ŒØ¬ÙˆØ§Ø¨ Ø¯Ø± Check all). Ø§ÛŒÙ† Ù†Ø³Ø®Ù‡ Ù‡Ù…Ù‡Ù” Ø¢Ù†Ù‡Ø§ Ø±Ø§ Ø¯ÙˆØ¨Ø§Ø±Ù‡ Ù…ÛŒâ€ŒÚ¯Ø°Ø§Ø±Ø¯ Ùˆ Ø³Ù‡ ØªØºÛŒÛŒØ± Ø®ÙˆØ¯ 1.69.9x (ÙˆØ±ÙˆØ¯ØŒ Ø®Ø·Ø§ÛŒ idØŒ Ø§Ø³Ú©Ø±ÙˆÙ„ ØªØ¨â€ŒÙ‡Ø§ÛŒ ØªÙ†Ø¸ÛŒÙ…Ø§Øª) Ø±Ø§ Ù†Ú¯Ù‡ Ù…ÛŒâ€ŒØ¯Ø§Ø±Ø¯.
+>
+> **In short:** the 1.69.9x release (sign-in as a POST) shipped a whole `app.js` built from an old copy and undid parts of 1.69.88 / .89 / .90: the DNS Restore texts, the Panel page picking an online panel, and the tunnel-page fixes (row menu, search with no hit, windows not drawn away, Restart asks, Check all counts unanswered tunnels, Create window starts on an online foreign server). This release puts them all back and keeps the three changes of 1.69.9x (sign-in focus, the request id in an error, the Settings tab scroll).
+
+- **What was wrong**: `git diff 0d1c2f2 c2390d2 -- nikatel/web/app.js` showed 14 hunks, only 3 of them intended (`api()` request id, `showLogin` focus, Settings tabs scroll); the other 11 were old lines coming back. CI of that commit failed on `tests/test_qa_tunnel_pages.py` (python 3.10 and 3.12).
+- **The fix**: `app.js` = the file of 1.69.95 + those 3 hunks (the same two files of tests - `tests/test_qa_tunnel_pages.py`, `tests/test_qa_cfg_round.py` - now pass again).
+- **Rule for the next release**: never copy a whole `app.js` from a private tree into a tar; take the lines you changed (git merge-file against the CURRENT HEAD) and look at `git diff HEAD` before shipping.
+- **Proved**: the tests of the files above and the neighbours (`test_web_menu`, `test_fluid_layout`, `test_ui_walk3`, `test_platform_qa`, `test_qa_servers`, `test_ui_regression_walk`, `test_web_handlers`, `test_builder`).
+
 ## 1.69.96 - the sign-in form never puts the password in the address, the cursor waits in the password box, Telegram "not set up" is a 400, the open Settings tab scrolls into view on a phone
 
 > **به زبان ساده:** فرم ورود اگر اسکریپت صفحه شروع نشود رمز را در آدرس می‌گذاشت (روش GET)؛ حالا POST است. مکان‌نما روی کادر رمز می‌ماند. «تست» تلگرام وقتی هنوز تنظیم نشده خطای ۴۰۰ می‌دهد (نه ۵۰۲ «بد گیت‌وی») و شناسه‌ی درخواست دوبار نمی‌آید. در گوشی تبی که باز است در نوار تب‌های تنظیمات دیده می‌شود.

@@ -488,7 +488,7 @@ async function refreshNow() {
   }
 }
 let lastTick = Date.now();
-setInterval(() => { if (Date.now() - lastTick < (state.page === "nodes" ? 8000 : 15000)) return; if (!document.hidden && !$("#app").classList.contains("hidden") && !state.edit && !state.open && !state.nodeWin && !state.build && !["bot", "settings"].includes(state.page) && !cf.open && !cf.edit && !cf.add && !cf.sub && !cf.subEdit && !document.activeElement.matches("input, textarea, select") && !document.querySelector(".nk-dd, .lab-menu, .pn-uchk:checked, .pn-hchk:checked")) { lastTick = Date.now(); refresh(); } }, 2000);   // the servers page follows the pulse (every 10 s on the server)
+setInterval(() => { if (Date.now() - lastTick < (state.page === "nodes" ? 8000 : 15000)) return; if (!document.hidden && !$("#app").classList.contains("hidden") && !state.edit && !state.open && !state.nodeWin && !state.build && !["bot", "settings"].includes(state.page) && !cf.open && !cf.edit && !cf.add && !cf.sub && !cf.subEdit && !document.activeElement.matches("input, textarea, select") && !document.querySelector(".nk-dd, .lab-menu, .pn-uchk:checked, .pn-hchk:checked, #modal .modal:not(.keep)")) { lastTick = Date.now(); refresh(); } }, 2000);      // (a window that is open - Messages, Explain, a restore - is not drawn away by the round of the page behind: the tunnels page closed them within seconds)   // the servers page follows the pulse (every 10 s on the server)
 /* a change of the STATE of a server (on / off) or a tunnel (up, down ...) shows within ~2 s (the owner, 2026-10-20: "it detected very late - show it at once when a tunnel or a server is cut"): one signature of the
    states is asked every 2 s; when it changes the round of the page above is made due (lastTick = 0), so it redraws at once, under the same guards (no window open, nothing typed). */
 let briefSig = null;
@@ -1344,6 +1344,10 @@ function applyQ() {
   document.querySelectorAll("#page .nk-ghead").forEach(h => { const tb = h.nextElementSibling; if (tb && tb.matches("table")) h.classList.toggle("q-hide", !!q && !tb.querySelector("tr[data-q]:not(.q-hide)")); });
   document.querySelectorAll("#page table.tbl").forEach(tb => tb.classList.toggle("q-hide", !!q && !!tb.querySelector("tr[data-q]") && !tb.querySelector("tr[data-q]:not(.q-hide)")));
   document.querySelectorAll("#page .dr-g").forEach(g => { const any = !!g.querySelector(".dr-rec:not(.q-hide)"); g.classList.toggle("q-hide", !any); g.classList.toggle("q-open", !!q && any); });      // a search opens the groups that have a match
+  document.querySelectorAll("#page .lbox").forEach(b => {      // a search that finds nothing says so (the box stayed as high as before, empty, with no word in it)
+    let n = b.querySelector(":scope > .q-none"); const none = !!q && !!b.querySelector("tr[data-q]") && !b.querySelector("tr[data-q]:not(.q-hide)");
+    if (none) { if (!n) { n = document.createElement("div"); n.className = "q-none empty"; b.appendChild(n); } n.textContent = `Nothing matches “${q}”.`; } else if (n) n.remove();
+  });
   const sb = $(".searchbar"); if (sb) sb.dataset.n = q ? shown + " / " + total : "";
 }
 const holdBoxes = () => document.querySelectorAll("#page .lbox").forEach(b => { if (!b.style.minHeight) b.style.minHeight = b.offsetHeight + "px"; });      // the list box keeps its height while the rows are filtered
@@ -1540,7 +1544,7 @@ window.checkAll = async () => {      // Check all: it works right there on the b
   const btn = document.querySelector('button[onclick="checkAll()"]'); if (btn) { btn.disabled = true; btn.innerHTML = '<i class="spin"></i>Checking…'; }
   try {
     const r = await api("/api/tunnels/full-check", {method: "POST"}), bad = r.rows.filter(x => x.state !== "up" || x.loss === "high").map(x => x.name);
-    toast(`${r.up} up · ${r.degraded} unstable · ${r.down} down${r.high_loss ? " · " + r.high_loss + " with high packet loss" : ""}${bad.length ? ": " + bad.slice(0, 4).join(", ") + (bad.length > 4 ? "…" : "") : ""}`, r.down || r.high_loss ? "bad" : "ok");
+    toast(`${r.up} up · ${r.degraded} unstable · ${r.down} down${r.unknown ? " · " + r.unknown + " not answering" : ""}${r.high_loss ? " · " + r.high_loss + " with high packet loss" : ""}${bad.length ? ": " + bad.slice(0, 4).join(", ") + (bad.length > 4 ? "…" : "") : ""}`, r.down || r.unknown || r.high_loss ? "bad" : "ok");      // (a tunnel whose servers did not answer is in the names below: it must be in the count too - 9 + 1 + 1 of 12 added up to 11)
   } catch (e) { toast("✕ " + e.message, "bad"); }
   state.tunChecking = false; refresh();
 };
@@ -1552,7 +1556,7 @@ async function followAction(id, every = 2000, limitSeconds = 900) {
 }
 const lastLine = s => (s.story || []).slice(-1)[0] || "";
 window.healthAll = async () => { toast("Checking every tunnel… (up to a minute)"); try { const r = await api("/api/tunnels/health-all", {method: "POST"}); const s = await followAction(r.action_id); toast(lastLine(s), s.ok ? "ok" : "bad"); } catch (e) { toast("✕ " + e.message, "bad"); } refresh(); };
-window.restartTunnel = async (id, name) => { toast(`Restarting ${name}…`); try { const r = await api(`/api/tunnels/${id}/restart`, {method: "POST"}); toast(`${name}: ${r.state}` + (r.why ? " - " + r.why : ""), r.state === "up" ? "ok" : "bad"); } catch (e) { toast("✕ " + e.message, "bad"); } refresh(); };
+window.restartTunnel = async (id, name) => { if (!await gconfirm(`Restart the tunnel ${name} on both servers? It is down for a few seconds.`)) return; toast(`Restarting ${name}…`); try { const r = await api(`/api/tunnels/${id}/restart`, {method: "POST"}); toast(`${name}: ${r.state}` + (r.why ? " - " + r.why : ""), r.state === "up" ? "ok" : "bad"); } catch (e) { toast("✕ " + e.message, "bad"); } refresh(); };
 window.restartAll = async () => { if (!await gconfirm("Restart every tunnel on both servers? Each is down for a few seconds.")) return; toast("Restarting every tunnel… (about two minutes)"); try { const r = await api("/api/tunnels/restart-all", {method: "POST"}); const s = await followAction(r.action_id); toast(lastLine(s), s.ok ? "ok" : "bad"); } catch (e) { toast("✕ " + e.message, "bad"); } refresh(); };
 window.bwMeasure = async id => { toast("Measuring the bandwidth… (a few seconds)"); try { const r = await api(`/api/tunnels/${id}/bandwidth`, {method: "POST"}); const s = await followAction(r.action_id, 1500, 120); toast(lastLine(s), s.ok ? "ok" : "bad"); } catch (e) { toast("✕ " + e.message, "bad"); } refresh(); };
 window.qualityAll = async () => { toast("Measuring every tunnel… (10 s each)"); try { const r = await api("/api/tunnels/quality-all", {method: "POST"}); const s = await followAction(r.action_id); toast(lastLine(s), s.ok ? "ok" : "bad"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
@@ -1771,7 +1775,8 @@ async function buildFormHtml() {
   const srvOpt = role => servers.filter(s => s.role === role && s.enabled);
   void srvOpt;
   const v = bk.v, val = (n, d) => esc(v[n] != null ? v[n] : d);
-  const opt = (role, name) => servers.filter(s => s.role === role).map(s => `<option value="${s.id}" ${s.enabled ? "" : "disabled"} ${s.enabled && String(s.id) === String(v[name]) ? "selected" : ""}>${esc(s.name)}${isNew(s) ? " · new" : ""} — ${esc(s.host)}${!s.enabled ? " (disabled: enable it in Servers → Edit)" : s.online === false ? " (offline)" : ""}</option>`).join("");
+  const firstOn = role => (servers.filter(s => s.role === role && s.enabled && s.online !== false)[0] || {}).id;      // (nothing chosen yet: the first server that answers, not the first one by name - that one may be off)
+  const opt = (role, name) => servers.filter(s => s.role === role).map(s => `<option value="${s.id}" ${s.enabled ? "" : "disabled"} ${s.enabled && (String(s.id) === String(v[name]) || (role === "foreign" && (v[name] == null || v[name] === "") && s.id === firstOn(role))) ? "selected" : ""}>${esc(s.name)}${isNew(s) ? " · new" : ""} — ${esc(s.host)}${!s.enabled ? " (disabled: enable it in Servers → Edit)" : s.online === false ? " (offline)" : ""}</option>`).join("");
   const num = (name, label, d, min, max, small) => `<label>${label}${small ? ` <small>${small}</small>` : ""}<input name="${name}" type="number" min="${min}" max="${max}" value="${val(name, d)}"></label>`;
   const chk = (name, label, small, dflt = false) => `<label class="chk"><input name="${name}" type="checkbox" ${(name in bk.chk ? bk.chk[name] : dflt) ? "checked" : ""}> ${label}${small ? ` <small class="mut">${small}</small>` : ""}</label>`;
   const nodelay = chk("nodelay", "TCP no-delay", "lower latency for small packets", true);
@@ -1995,6 +2000,12 @@ window.tunHistory = async (id, name) => {      // the history opens INSIDE the t
     body.innerHTML = `<div class="wback"><button class="sm" onclick="tunBack(${id})">← Back</button><b style="margin-left:10px">History of ${esc(name)}</b></div>` + (rows.length ? `<div class="th-list">${rows.map(a => { const tx = ((a.story || []).slice(-1)[0] || "").trim(), d = new Date(a.ts * 1000); return `<div class="th-row ${a.ok === false ? "bad" : "ok"}" title="${esc(tx)}"><time>${d.toLocaleDateString(undefined, {month: "2-digit", day: "2-digit"})} ${d.toLocaleTimeString(undefined, {hour12: false})}</time><i></i><b>${esc(a.action)}</b><span>${esc(tx)}</span></div>`; }).join("")}</div>` : '<div class="empty">Nothing was done to this tunnel yet.</div>'); }
   catch (e) { body.innerHTML = `<div class="wback"><button class="sm" onclick="tunBack(${id})">← Back</button></div><div class="err">${esc(e.message)}</div>`; }
 };
+window.tunWinOpen = id => {      // true when the window of this tunnel is open (opened here when it was not: the menu of a row in the list has Fix, Dry run, Speed test, History and Rebuild, which all draw INTO that window)
+  if (state.open === id && document.getElementById("tun-detail-" + id)) return true;
+  const t = (state.tunnelsCache || []).find(x => x.id === id); if (!t || t.state === "starting") return false;
+  state.edit = null; state.wtab = null; state.open = id; state.tsec = null; tunModal(t); tunAfter(t);
+  return !!document.getElementById("tun-detail-" + id);
+};
 window.tunBack = id => { const t = (state.tunnelsCache || []).find(x => x.id === id); if (t) { tunModal(t); tunAfter(t); } };
 /* the speed a CUSTOMER gets (the owner, 2026-10-16: "a speed test in the tunnel menu: what speed does a user in Iran get - the closest possible to what the customer holds"): opens INSIDE the tunnel window (Back returns). Two ways: through a config of the tunnel on the probe (the whole path, one connection like a phone), or through the test door of the tunnel (the tunnel alone) */
 const spdN = v => v == null ? "—" : +v >= 100 ? String(Math.round(+v)) : (+v).toFixed(1);
@@ -2033,6 +2044,7 @@ window.trashRestore = async id => {
   const it = (state.trashCache || []).find(x => x.id === id); if (!it) return;
   if (!await gconfirm(`Restore the tunnel ${it.title}? It is built again between ${it.sub} with the ports ${it.ports} (a new GRE key; the services start by themselves; about a minute).`)) return;
   showModal(`<b>♻ Restoring ${esc(it.title)}</b>`, '<div id="trash-story" class="fix"><div class="fx-line run"><i></i>Starting…</div></div>', "wide");
+  state.keepWin = true;      // (the list behind is drawn again when the story ends - that used to take the window away with its error or its result, within a blink; only its Close button (or Esc) closes it now)
   try { const r = await api(`/api/tunnel-trash/${encodeURIComponent(id)}/restore`, {method: "POST"}); await followStory(r.id, $("#trash-story"), 600); } catch (e) { const b = $("#trash-story"); if (b) b.innerHTML = `<div class="fx-line bad"><b>!</b>${esc(e.message)}</div>`; }
   refresh();
 };
@@ -2295,9 +2307,11 @@ window.foPoint = async () => {
   if (!await gconfirm(`Point ${names.join(", ")} at ${sel.options[sel.selectedIndex].textContent} now? Every change is listed below with a Restore.`, {danger: true})) return;
   try { const r = await api("/api/failover/point", {method: "POST", body: JSON.stringify({names, iran_id: +sel.value})}); showModal("<b>🌐 DNS</b>", '<div id="ap-story" class="fix"><div class="fx-line run"><i></i>Starting…</div></div>'); followStory(r.action_id, $("#ap-story"), 120).then(() => refresh()); } catch (e) { toast("✕ " + e.message, "bad"); }
 };
-window.foRestore = async id => {
-  if (!await gconfirm("Point this DNS record back at its previous address? The tunnels stay where they are, so users of this name reach the old server again.", {danger: true})) return;
-  try { const r = await api("/api/failover/dns/" + encodeURIComponent(id) + "/restore", {method: "POST"}); toast("✓ " + r.fqdn + " points at " + r.old + " again", "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); }
+window.foRestore = async (id, op) => {
+  const ask = {create: "Delete this record again? It was made by hand.", delete: "Make this deleted record again, as it was?", edit: "Put this record back as it was before the change?"}[op]
+    || "Point this DNS record back at its previous address? The tunnels stay where they are, so users of this name reach the old server again.";
+  if (!await gconfirm(ask, {danger: true})) return;
+  try { const r = await api("/api/failover/dns/" + encodeURIComponent(id) + "/restore", {method: "POST"}); toast("✓ " + (op === "create" ? r.fqdn + " deleted again" : op === "delete" ? r.fqdn + " made again" : op === "edit" ? r.fqdn + " is back as it was" : r.fqdn + " points at " + r.old + " again"), "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); }
 };
 window.apDetail = id => {
   const t = (state.tunnelsCache || []).find(x => x.id === id); if (!t) return;
@@ -2680,9 +2694,9 @@ PAGES.panels = async () => {
   const manage = pnManage(), list = manage ? every : every.filter(x => x.type === "pasarguard");      // outside General the bar switches between the PasarGuard panels only
   if (pn.id === "*" && list.length > 1 && pnIsUsers()) return pnAllRender(list);       // "All panels": the accounts over every panel (roadmap M12)
   if (pn.id === "*") pn.id = "";
-  const sel = list.find(p => String(p.id) === pn.id) || list[0];
+  const sel = list.find(p => String(p.id) === pn.id) || list.find(p => p.status === "up") || list[0];      // (no panel picked yet: one that answers, not the first by name - a panel that is down opened every page with an error)
   if (sel && String(sel.id) !== pn.id) { pn.id = String(sel.id); pn.users = pn.hosts = pn.core = pn.user = pn.logs = null; }
-  const chip = p => p.status === "up" ? `<span class="pill ok" title="${esc((p.version ? "version " + p.version + " · " : "") + (p.checked_at ? "checked " + ago(p.checked_at) + " ago" : ""))}">●<span class="up"> up ·</span> ${p.latency_ms} ms</span>` : p.status === "down" ? `<span class="pill err" title="${esc(p.last_error || "")}">● down</span>` : '<span class="pill">not checked yet</span>';
+  const chip = p => p.status === "up" ? `<span class="pill ok" title="${esc((p.version ? "version " + p.version + " · " : "") + (p.checked_at ? "checked " + ago(p.checked_at) + " ago" : ""))}">●<span class="up"> up ·</span> ${p.latency_ms != null ? p.latency_ms + " ms" : "answers"}</span>` : p.status === "down" ? `<span class="pill err" title="${esc(p.last_error || "")}">● down</span>` : '<span class="pill">not checked yet</span>';
   if (!list.length) { $("#page").innerHTML = manage ? pnBar([], "", "") + pnFirstCard() : pnEmptyPage(); if (!manage) pnFuse(); if (typeof fxFit === "function") fxFit(); return; }      // (no panel: the boxes of the tab stay, empty, with the way to add one - the owner, 2026-10-15)
   const p = sel, s = p.stats || {};
   const nodesOk = (p.nodes || []).filter(n => n.fails === 0 || ["connected", "healthy"].includes(n.status)).length, st = (label, val, tip = "", cls = "", click = "") => `<span class="dns-stat ${cls}" ${click} title="${esc(tip)}"><i class="lab">${label}</i> <b>${val}</b></span>`;
@@ -5043,7 +5057,7 @@ function dnsChanges(log, accounts) {
   const an = id => (accounts.find(a => a.id === (id || "arvan")) || {}).name || "ArvanCloud", opName = {create: "made", edit: "changed", delete: "deleted"};
   const row = e => `<tr class="${e.restored ? "" : "up"}"><td class="mut" title="${when(e.at)}">${ago(e.at)} ago</td><td class="name" dir="ltr" title="${esc(e.fqdn)}">${esc(e.fqdn)}</td><td class="mono dns-who" title="${esc(e.op ? (e.old || "—") + " → " + (e.new || "—") : e.old + " → " + e.new)}">${e.op ? esc((e.old || "—") + " → " + (e.new || "—")) : esc(e.old) + " → " + esc(e.new)}</td><td class="dns-who" title="${esc(e.op ? an(e.account) + " · by hand · " + opName[e.op] : e.server + (e.target && e.target !== e.server ? " → " + e.target : ""))}">${e.op ? esc(an(e.account)) + " · by hand · " + opName[e.op] : esc(e.server) + (e.target && e.target !== e.server ? " → " + esc(e.target) : "")}</td>
     <td>${e.restored ? `<span class="pill" title="${e.restored_at ? when(e.restored_at) : ""}">restored</span>` : '<span class="pill ok">active</span>'}</td>
-    <td>${e.restored ? "" : `<button class="sm" onclick="foRestore('${esc(e.id)}')" title="Put this change back">↩ Restore</button>`}</td></tr>`;
+    <td>${e.restored ? "" : `<button class="sm" onclick="foRestore('${esc(e.id)}', '${esc(e.op || "")}')" title="Put this change back">↩ Restore</button>`}</td></tr>`;
   return `<table class="tbl lift srv-tbl joined"><colgroup><col style="width:10%"><col style="width:22%"><col style="width:22%"><col style="width:26%"><col style="width:9%"><col style="width:11%"></colgroup>
     <thead><tr><th>When</th><th data-fit="200">Name</th><th data-min="150">Address</th><th data-min="150">Who</th><th>State</th><th></th></tr></thead>
     <tbody>${log.map(row).join("") || '<tr><td colspan="6" class="empty">No record has been changed yet. Every record you make, change or delete (or the failover re-points) is listed here and can be put back with one click.</td></tr>'}</tbody></table>`;
