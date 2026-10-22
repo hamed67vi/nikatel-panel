@@ -5063,10 +5063,18 @@ window.dnsSave = async (e, k) => {
   const po = f.elements.port, up = f.elements.upstream;      // only what was changed is sent: a record with several ports keeps them when you leave the port alone
   if (po && !po.disabled && po.value !== (po.dataset.orig || "")) body.port = po.value === "" ? 0 : +po.value;
   if (up && up.value !== (up.dataset.orig || "default")) body.upstream = up.value;
-  const btn = f.querySelector(".qp-pri"); btn.disabled = true; formErr(f, "");
-  try { await api(r ? `/api/dns/records/${encodeURIComponent(r.account)}/${encodeURIComponent(r.domain)}/${encodeURIComponent(r.id)}` : "/api/dns/records", {method: r ? "PUT" : "POST", body: JSON.stringify(body)}); closeModal(); toast(r ? "✓ Record changed" : "✓ Record made", "ok"); refresh(); }      // (no "fresh": the server lays the write on its copy and answers at once; a fresh read of 26 domains took 20 s and the page kept the old record meanwhile)
-  catch (err) { btn.disabled = false; formErr(f, err.message); }
+  const vals = {account: f.elements.account.value, domain: f.elements.domain.value, rtype: rt, name: f.elements.name.value, ips: f.elements.ips.value, ttl: f.elements.ttl.value, cloud: f.elements.cloud.checked, port: po ? po.value : "", upstream: up ? up.value : ""};
+  closeModal(); toast(r ? "Saving the record…" : "Making the record…");      // (the box closes at ONCE, whatever the provider takes to answer - a second or two for Cloudflare or ArvanCloud; the owner, 2026-10-23: "after Save the box must close"; a refusal opens it again with what was typed)
+  try { await api(r ? `/api/dns/records/${encodeURIComponent(r.account)}/${encodeURIComponent(r.domain)}/${encodeURIComponent(r.id)}` : "/api/dns/records", {method: r ? "PUT" : "POST", body: JSON.stringify(body)}); toast(r ? "✓ Record changed" : "✓ Record made", "ok"); refresh(); }      // (no "fresh": the server lays the write on its copy and answers at once; a fresh read of 26 domains took 20 s and the page kept the old record meanwhile)
+  catch (err) { toast("✕ " + err.message, "bad"); if (state.page === "tunnels" && sub("tunnels") === "dns" && !$("#modal .modal")) { dnsForm(k); setTimeout(() => dnsRestore(vals, err.message), 140); } }
   return false;
+};
+window.dnsRestore = (v, msg) => {      // the form again, with what was typed, after the provider refused it (the box had closed at once)
+  const f = document.querySelector(".modal.plan-add form"); if (!f) return;
+  const set = (n, x) => { const el = f.elements[n]; if (el && !el.disabled && x != null) el.value = x; };
+  if (!f.elements.account.disabled) { set("account", v.account); dnsFormAcc(f); set("domain", v.domain); set("rtype", v.rtype); dnsFormAcc(f); set("domain", v.domain); }
+  set("ttl", v.ttl); set("name", v.name); set("ips", v.ips); if (f.elements.cloud) f.elements.cloud.checked = v.cloud; set("port", v.port); set("upstream", v.upstream);
+  dnsFormSync(f); dnsPrev(f); formErr(f, msg);
 };
 window.dnsDel = async k => {
   const r = (state.dnsRecs || {})[k]; if (!r) return;

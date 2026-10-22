@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.69.107 - The record form of the CDN page closes at once when Save is pressed
+
+The owner (2026-10-23, with a picture of the "Edit record" box on its dimmed Save): "when we set a DNS or change something here, after Save the box must close".
+
+- **Cause** (`app.js dnsSave`): the box stayed open, with its Save dimmed, until the provider had answered the whole request. An edit is three calls to the provider (read the record, write it, read it back to be sure it was kept) - a second or two each for ArvanCloud or Cloudflare - so the box hung on the screen for several seconds after the click and looked as if nothing had happened.
+- **Fix**: the box closes in the same moment; the status bar says "Saving the record…" (or "Making the record…") and then "✓ Record changed" / "✓ Record made". If the provider refuses (a wrong address, a limit, a token), the form opens again at once with everything that was typed - the name, the address, the TTL, the cloud, the port and the protocol, and for a new record the account and the domain - and the reason in red, and a message in the status bar; it opens again only while the CDN page is still on the screen. The three calls themselves are as before (the read-back is on purpose).
+- **Proved**: `tests/test_dns_form_close.py` pins the order (the box closes before the call) and the way back; measured in the browser on a test panel with fake providers that took 3 s per call: the box was gone at 0 ms (before: after 12 s), the record was changed 12 s later with "✓ Record changed" in the status bar; a wrong address brought the form back within 0.5 s with the name, the address, the TTL (300) and the cloud as typed and "'999.1.1.1' is not an IPv4 address"; a new record the same.
+- **Not proved**: the owner's real accounts and 329 domains (only the suite's fakes); a refusal that arrives after the owner has already gone to another page (nothing reopens; the message in the status bar is all he gets); the other forms (Add account) - they were not changed.
 ## 1.69.106 - A server that goes off is one Telegram message, not five
 
 > **به زبان ساده:** سرور که خاموش شود فقط یک پیام می‌آید؛ تانل‌ها، کانفیگ‌ها و نودهای وابسته‌اش ساکت می‌مانند.
