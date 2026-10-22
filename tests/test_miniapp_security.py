@@ -1,0 +1,238 @@
+"""The Mini App of the shop bot, audited for security and for its payments (the owner, 2026-10-23: "test the Telegram Mini App from zero to 100 and check it has no security problem. If you
+see any inconsistency, especially in its payment system, fix it").
+
+The attack harness (tests/miniapp_security/sec.py: api.php under php -S on a private MariaDB with the bot's schema, a fake Marzban, a fake Telegram over TLS) found these and ran again
+clean after the fixes; it needs MariaDB, php and openssl, so the full run is opt-in (NIKATEL_MINIAPP_SEC=1) and the tests below keep every fix from being undone without them:
+the PHP functions are run on their own, the page is drawn with a hostile support name (node), and the order of the steps inside the payment code is checked in the source."""
+import hashlib
+import hmac
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+import textwrap
+import time
+import urllib.parse
+from pathlib import Path
+
+import pytest
+
+ROOT = Path(__file__).resolve().parents[1]
+MINI = ROOT / "bot" / "miniapp"
+HARNESS = Path(__file__).with_name("miniapp_security")
+NODE, PHP = shutil.which("node"), shutil.which("php")
+DRIVER = Path(__file__).with_name("miniapp_driver.js")
+SRC = (MINI / "api.php").read_text(encoding="utf-8")
+JS = (MINI / "app.js").read_text(encoding="utf-8")
+
+
+def _case(name: str) -> str:
+    """the body of one `case 'name': {` of api.php (addvolume and adddays share one body)"""
+    start = SRC.index(f"case '{name}':")
+    if name == "addvolume":
+        return SRC[start:SRC.index("case 'topup':", start)]
+    nxt = SRC.find("\ncase '", start + 10)
+    return SRC[start:nxt if nxt > 0 else len(SRC)]
+
+
+def _fn(name: str) -> str:
+    start = SRC.index(f"function {name}(")
+    end = SRC.find("\n}\n", start)
+    one_line = SRC.find("\n", start)
+    return SRC[start:one_line] if SRC[start:one_line].rstrip().endswith("}") else SRC[start:end + 3]
+
+
+def _php(tmp_path, body: str, *args: str) -> str:
+    script = tmp_path / "t.php"
+    script.write_text("<?php\n" + body, encoding="utf-8")
+    return subprocess.run([PHP, str(script), *args], capture_output=True, text=True, check=True).stdout
+
+
+def _init(uid: int, token: str, auth_date: int | None = None) -> str:
+    user = json.dumps({"id": uid, "first_name": "A"}, separators=(",", ":"))
+    d = {"auth_date": str(auth_date or int(time.time())), "query_id": "q", "user": user}
+    secret = hmac.new(b"WebAppData", token.encode(), hashlib.sha256).digest()
+    d["hash"] = hmac.new(secret, "\n".join(f"{k}={d[k]}" for k in sorted(d)).encode(), hashlib.sha256).hexdigest()
+    return urllib.parse.urlencode(d)
+
+
+# ---------------------------------------------------------------------------------------------- authentication
+@pytest.mark.skipif(PHP is None, reason="php is not installed here")
+def test_an_empty_bot_token_verifies_nothing(tmp_path):
+    """HMAC("WebAppData", token) is the signing key: with an empty token (a broken baseInfo.php) the key is public and anyone could sign an initData for any user id - the harness did it (AU2)"""
+    out = _php(tmp_path, _fn("tgVerify") + textwrap.dedent(r"""
+        $r = [];
+        foreach ([[$argv[1], ''], [$argv[1], 'x:y'], [$argv[2], ''], [$argv[2], 'real:token']] as [$i, $t]) { $e = false; $u = tgVerify($i, $t, $e); $r[] = $u['id'] ?? null; }
+        echo json_encode($r);
+        """), _init(7, ""), _init(7, "real:token"))
+    assert json.loads(out) == [None, None, None, 7]
+
+
+def test_the_token_is_checked_before_any_other_work():
+    assert "if ($initData === '' || $token === '') return null;" in SRC
+    assert "hash_equals(hash_hmac('sha256', $check, $secret), $hash)" in SRC and "86400" in SRC      # (constant-time compare, one day of validity: unchanged)
+
+
+# ---------------------------------------------------------------------------------------------- price and keys
+@pytest.mark.skipif(PHP is None, reason="php is not installed here")
+def test_an_agent_percentage_never_makes_the_price_negative_or_higher_than_the_list_price(tmp_path):
+    """discount_percent {"normal":150} (or a per-server 250) made the price negative: the purchase paid the customer (PY6)"""
+    out = _php(tmp_path, _fn("priceFor") + textwrap.dedent(r"""
+        $botState = ['agencyPlanDiscount' => 'off'];
+        $plan = ['id' => 1, 'server_id' => 1, 'price' => 130000];
+        $r = [];
+        foreach (['{"normal":150}', '{"normal":100}', '{"normal":-50}', '{"normal":"100%"}', '{"normal":30,"servers":{"1":250}}', 'not json', '{"normal":99999999999}', '{"normal":10}', ''] as $d) {
+            $r[] = priceFor(['is_agent' => 1, 'discount_percent' => $d], $plan)[0];
+        }
+        $r[] = priceFor(['is_agent' => 0], ['id' => 1, 'server_id' => 1, 'price' => -5])[0];
+        echo json_encode($r);
+        """))
+    assert json.loads(out) == [0, 0, 130000, 0, 0, 130000, 0, 117000, 130000, 0]
+
+
+@pytest.mark.skipif(PHP is None, reason="php is not installed here")
+def test_the_key_of_a_payment_is_a_short_plain_string_or_nothing(tmp_path):
+    out = _php(tmp_path, _fn("ridOf") + textwrap.dedent(r"""
+        echo json_encode([ridOf(['rid' => 'abcdefgh12']), ridOf(['rid' => 'short']), ridOf(['rid' => 'has space in it']), ridOf(['rid' => str_repeat('x', 41)]), ridOf(['rid' => 12345678]), ridOf(['rid' => ['abcdefghij']]), ridOf([])]);
+        """))
+    assert json.loads(out) == ["mini:abcdefgh12", "", "", "", "", "", ""]
+
+
+@pytest.mark.skipif(PHP is None, reason="php is not installed here")
+def test_what_puts_a_panel_account_back_is_its_limit_its_expiry_and_a_settable_status(tmp_path):
+    out = _php(tmp_path, _fn("panelBack") + textwrap.dedent(r"""
+        echo json_encode([panelBack(['limit' => 5, 'expire' => 9, 'status' => 'active']), panelBack(['limit' => 0, 'expire' => 0, 'status' => 'expired']), panelBack(['limit' => 1, 'expire' => 2, 'status' => 'on_hold'])]);
+        """))
+    assert json.loads(out) == [{"data_limit": 5, "expire": 9, "status": "active"}, {"data_limit": 0, "expire": 0}, {"data_limit": 1, "expire": 2, "status": "on_hold"}]
+
+
+# ---------------------------------------------------------------------------------------------- the order of the steps inside the payments
+def test_a_purchase_takes_its_slot_in_one_statement_before_the_panel_is_called():
+    """6 customers buying the last slot: the old "check, call the panel, then ucount - 1" let them all through and InnoDB deadlocked five AFTER their accounts existed (PY9)"""
+    buy = _case("buy")
+    assert buy.index("takeSlot(") < buy.index("payWithWallet(") < buy.index("giveSlotBack(")
+    assert "ucount - 1" not in buy and "acount - 1" not in buy
+    take = _fn("takeSlot")
+    assert "CAST(ucount AS SIGNED) > 0" in take and "acount > 0" in take
+
+
+def test_an_account_made_for_an_order_that_could_not_be_saved_is_taken_back_and_a_panel_change_is_put_back():
+    """PY8 / PY21: the order rows failed after the panel made the account (or changed it) - an orphan account, a free extension"""
+    pay, buy = _fn("payWithWallet"), _case("buy")
+    assert "is_callable($res['undo'] ?? null)" in pay and pay.index("$c->rollback()") < pay.index("($res['undo'])()")
+    assert "panelDeleteUser($srv, $remark)" in buy and "catch (Throwable $e) { $undo(); throw $e; }" in buy
+    assert ">= 500)) panelDeleteUser($srv, $remark)" in buy      # (a time-out or a 5xx may have made the account before the answer was lost)
+    for name in ("renew", "addvolume"):
+        c = _case(name)
+        assert "panelBack($live)" in c
+        assert c.index("INSERT INTO increase_order") < c.index("panelModifyUser(")      # the rows first (they can fail), the panel last
+
+
+def test_a_renewal_is_written_like_the_bots_renewal_and_extra_volume_and_days_like_the_bots_extras():
+    """bot.php: RENEW_ACCOUNT with the order id, volume/day 0 and one increase_order row (config.php counts "renewals today" from that table); INCREASE_VOLUME_<order>_<id> / INCREASE_DAY_<order>_<id> (PY18)"""
+    renew, extra, hist = _case("renew"), _case("addvolume"), _case("history")
+    assert "'type' => 'RENEW_ACCOUNT'" in renew and "'order_id' => (int) $o['id']" in renew and "INSERT INTO increase_order (userid, server_id, inbound_id, remark, amount, date)" in renew
+    assert "'INCREASE_VOLUME_' : 'INCREASE_DAY_'" in extra and "'order_id' => (int) $o['id']" in extra and "'id' => (int) $o['fileid']" in extra      # (the plan percentage is looked up by the plan of the order, like the bot)
+    assert "'RENEW_ACCOUNT' => 'تمدید'" in hist and "$kindOf" in hist
+    assert 'p.kind === "BUY_SUB" || p.kind === "RENEW_ACCOUNT"' in JS
+
+
+def test_extra_volume_is_not_sold_for_a_service_that_has_no_limit():
+    """setting data_limit 0 keeps the account unlimited: the customer paid for nothing (PY17)"""
+    c = _case("addvolume")
+    assert "if ($isVol && $live['limit'] <= 0) return ['ok' => false" in c and "$live['limit'] + $n * GB" in c
+
+
+def test_a_plan_that_costs_nothing_is_the_bots_one_per_customer_test_account():
+    """bot.php getTestAccount / freeTrial: price 0 plans, users.freetrial = 'used', admins and agents on a 100 % discount excepted; the Mini App sold it again and again (PY20)"""
+    buy = _case("buy")
+    assert "$isTrial = (int) $plan['price'] <= 0;" in buy and "($me['freetrial'] ?? '') === 'used'" in buy
+    assert "SELECT freetrial FROM users WHERE userid = ? FOR UPDATE" in buy and "UPDATE users SET freetrial = 'used'" in buy
+    assert "$normalDiscount === '100'" in buy
+
+
+def test_one_payment_key_is_one_payment():
+    """a lost answer (a slow panel, a dropped connection) followed by a tap on "try again" paid twice (PY22); the key is read under the row lock, so two requests at once cannot both pass"""
+    pay = _fn("payWithWallet")
+    assert pay.index("FOR UPDATE") < pay.index("payid = ?") < pay.index("INSERT INTO pays") and "payid) VALUES" in pay and "'duplicate' => true" in pay
+    for name in ("buy", "renew", "addvolume"):
+        assert "ridOf($body)" in _case(name)
+    assert "buyAgain(" in _case("buy") and "!empty($r['duplicate'])" in _case("renew") and "!empty($r['duplicate'])" in _case("addvolume")
+    assert 'api("buy", {plan_id: id, rid: ridFor("buy:" + id)})' in JS and 'api("renew", {id, rid: ridFor("renew:" + id)})' in JS and "rid: ridFor(rk)" in JS
+    assert "net: true" in JS and "if (!r.net) delete RID" in JS
+
+
+def test_one_receipt_at_a_time_for_one_top_up_and_one_top_up_request_at_a_time_for_one_customer():
+    """five requests at once each sent their own photo with their own Approve button to every admin (PY10); eight top-up requests at once left two pending rows (PY12)"""
+    rec, top = _case("receipt"), _case("topup")
+    assert rec.index("GET_LOCK(") < rec.index("tg('sendPhoto'") and "'miniapp_receipt_' . md5($hash)" in rec
+    assert top.index("begin_transaction()") < top.index("FOR UPDATE") < top.index("DELETE FROM pays") < top.index("INSERT INTO pays") < top.index("db()->commit()")
+
+
+def test_gift_codes_have_a_brake_and_only_pay_a_positive_amount():
+    gift = _case("gift")
+    assert "throttled($uid, 'gift', 10, 900)" in gift and gift.index("throttled(") < gift.index("begin_transaction")
+    assert "(int) $g['amount'] <= 0" in gift and "throttleHit($uid, 'gift')" in gift
+    assert "throttled($uid, 'ticket', 20, 600)" in _case("ticket_reply")
+    assert "try { db()->rollback(); } catch (Throwable $e2) {}" in SRC      # (an exception in the middle of a transaction leaves nothing half done)
+
+
+def test_a_new_customer_row_is_like_the_bots_and_a_second_first_request_is_not_an_error():
+    at = SRC.index("INSERT IGNORE INTO users")
+    assert "INSERT IGNORE INTO users (userid, name, username, refcode, wallet, date) VALUES" in SRC and "step" not in SRC[at:at + 140]
+
+
+def test_the_backup_of_a_deploy_is_not_inside_the_web_root():
+    """the old copies in app/.prev-<time>/ were served to anybody (app.js, index.html; api.php answered 500 there)"""
+    sh = (ROOT / "scripts" / "deploy-miniapp.sh").read_text(encoding="utf-8")
+    assert r'BACKUP="$(dirname "$DIR")/.miniapp-prev-$(basename "$DIR")/$STAMP"' in sh
+    assert r"mkdir -p '$DIR/app' '$BACKUP'" in sh and r"'$BACKUP/'" in sh and r"mkdir -p '$DIR/app/.prev'" not in sh      # (the copy goes beside the bot folder, never into app/)
+    assert r"for old in '$DIR'/app/.prev '$DIR'/app/.prev-*; do" in sh      # (a folder an earlier deploy left in the web root is moved out)
+    assert "It keeps the previous files in `app/.prev/`" not in (MINI / "README.md").read_text(encoding="utf-8")
+
+
+# ---------------------------------------------------------------------------------------------- the page
+@pytest.mark.skipif(NODE is None, reason="node is not installed here")
+def test_a_quote_in_the_support_id_or_the_bot_name_stays_inside_the_string_of_the_handler():
+    """onclick="openLink('https://t.me/${esc(S.support)}')": esc() makes &#39; which the browser turns back into ' BEFORE the handler runs, so x');alert(1);(' ran alert (the copy buttons had the same bug in 1.5.0)"""
+    out = subprocess.run([NODE, str(DRIVER), str(MINI / "app.js"), "hostile"], capture_output=True, text=True, timeout=90, check=True).stdout
+    res = json.loads(out)
+    assert "crash" not in res, res
+    assert res["errors"] == []
+    assert res["values"]["unknownCalls"] == []
+    mine = [h for h in res["values"]["openLinks"] if "t.me/x" in h]      # (the support card on three pages, the wallet card, and two more in the "more" list)
+    assert len(mine) >= 6 and all(h.startswith('openLink("https://t.me/x') and h.endswith('")') for h in mine), mine
+
+
+@pytest.mark.skipif(NODE is None, reason="node is not installed here")
+def test_the_page_keeps_the_key_of_a_payment_while_the_answer_is_lost_and_drops_it_once_it_has_one():
+    """a key per sheet: two purchases = two keys; the answer lost (the fetch threw) = the SAME key on the next tap, so api.php can show the first result instead of charging again; any answer (done or refused) drops it"""
+    out = subprocess.run([NODE, str(DRIVER), str(MINI / "app.js"), "payflow"], capture_output=True, text=True, timeout=90, check=True).stdout
+    res = json.loads(out)
+    assert "crash" not in res and res["errors"] == [], res
+    r = res["values"]["rids"]
+    assert len(r) == 6 and all(re.fullmatch(r"[A-Za-z0-9_-]{8,40}", x) for x in r)
+    assert r[0] != r[1] and r[2] == r[3] == r[4] and r[5] not in (r[0], r[1], r[4])
+    rr = res["values"]["renewRids"]
+    assert len(rr) == 2 and rr[0] == rr[1] and res["values"]["left"] == []
+
+
+def test_only_web_links_are_opened_and_the_files_have_a_new_version_for_the_cache():
+    assert r'if (!/^https?:\/\//i.test(u)) return;' in JS
+    html = (MINI / "index.html").read_text(encoding="utf-8")
+    assert "app.css?v=3.0.4" in html and "app.js?v=3.0.4" in html
+
+
+# ---------------------------------------------------------------------------------------------- the whole attack harness (opt in)
+@pytest.mark.skipif(not os.environ.get("NIKATEL_MINIAPP_SEC") or not shutil.which("mariadbd") or PHP is None or not shutil.which("openssl"),
+                    reason="the attack harness needs NIKATEL_MINIAPP_SEC=1, mariadbd, php and openssl (it starts a private MariaDB and php -S on ports 49510-49514)")
+def test_the_attack_harness_finds_no_hole(tmp_path):
+    env = dict(os.environ, SEC_SCRATCH=str(tmp_path / "sec"), SEC_RESULTS=str(tmp_path))
+    subprocess.run(["bash", str(HARNESS / "sec_setup_db.sh"), "start"], env=env, check=True, capture_output=True, timeout=300)
+    try:
+        r = subprocess.run([sys.executable, str(HARNESS / "sec.py"), str(MINI), "--label", "pytest"], check=False, env=env, capture_output=True, text=True, timeout=1500)
+    finally:
+        subprocess.run(["bash", str(HARNESS / "sec_setup_db.sh"), "stop"], check=False, env=env, capture_output=True, timeout=120)
+    assert "0 HOLE, 0 error" in r.stdout, r.stdout[-3000:]

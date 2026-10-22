@@ -10,7 +10,8 @@ button from `$botUrl` in `baseInfo.php`). Four files, no build step:
 | `index.html`, `app.js`, `app.css` | the app: RTL Persian, follows the Telegram theme, bottom tabs خانه · خرید · سرویس‌ها · کیف پول · بیشتر |
 
 Deploy: `bash scripts/deploy-miniapp.sh root@bot-host /var/www/<bot>` (or `--local` on the bot's own
-server). It keeps the previous files in `app/.prev/` and runs `php -l`.
+server). It keeps the previous files in `<bot dir>/../.miniapp-prev-<bot dir name>/<time>/` - NEVER inside the web root, where
+they would be served to anybody - and runs `php -l`.
 
 ## What the customer can do
 
@@ -40,8 +41,11 @@ the Mini App's activity as if it came from the bot:
   `chats_info`, `gift_codes`, `wheel_log`, `outage_reports`.
 * Texts come from `settings/values.php` plus the panel's `text_overrides.json` / `button_overrides.json`.
 
-Rules kept from the bot: agents pay their `discount_percent`; the wallet can never go negative (row
-lock + transaction, the panel call happens inside it and a refusal rolls everything back); on-hold
+Rules kept from the bot: agents pay their `discount_percent` (0 - 100 %, never a negative price); the wallet can never go negative (row
+lock + transaction, the panel call happens inside it and a refusal rolls everything back; an account made on the panel for an order
+that then could not be saved is deleted again, a panel change is put back); a renewal is written like the bot writes it
+(`RENEW_ACCOUNT`, the order id, one `increase_order` row), extra volume / days as `INCREASE_VOLUME_<order>_<id>` /
+`INCREASE_DAY_<order>_<id>`; a plan that costs nothing is the one-per-customer test account (`users.freetrial`); on-hold
 plans start at the first connection; a new user without payment history sees the gift-card / USDT
 text instead of the card number; three receipts waiting = no new top-up.
 
@@ -52,5 +56,15 @@ text instead of the card number; three receipts waiting = no new top-up.
 * Every query is a prepared statement; uploads are checked by size (6 MB) and real MIME type and are
   sent to Telegram, never stored on disk.
 * Errors go to `settings/miniapp_error.log`; the client only sees a sentence.
+* An empty bot token verifies nothing (its signing key would be public).
+* A payment carries a key (`rid`, kept in `pays.payid` as `mini:<key>`): the same key again shows the first result and charges
+  nothing, so a lost answer followed by "try again" does not pay twice. One receipt upload at a time per top-up (named lock),
+  one top-up request at a time per customer (row lock), one slot of a server taken in one statement before the panel is called.
+* Gift codes: 10 wrong codes in 15 minutes stop the guessing; a ticket reply is limited to 20 in 10 minutes.
+* `tests/miniapp_security/` is the attack harness (forged and replayed initData, parallel payments, odd amounts, injection,
+  uploads, a fake Telegram and a fake panel); `NIKATEL_MINIAPP_SEC=1 pytest tests/test_miniapp_security.py` runs it.
+* The folder the bot lives in must not be served whole: only `app/` (index.html, app.js, app.css, api.php), `bot.php`, `pay/` and
+  `settings/subLink.php` are meant to be reachable; logs, traces, backups (`*.bak*`, `*.sql`), `*.json`, `*.txt` and the cron
+  scripts of `settings/` must answer 404 (Caddy `respond @secret 404`, nginx `location ~ ... { return 404; }`).
 * The bot token, database password and panel credentials stay in `baseInfo.php` / the database on the
   bot's server. Nothing in this directory identifies a real installation.

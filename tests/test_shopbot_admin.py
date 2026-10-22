@@ -286,3 +286,20 @@ def test_plan_inbounds_are_given_to_the_accounts_already_bought(db, monkeypatch)
     monkeypatch.setattr(adm, "_managed_panel", lambda sid: None)
     with pytest.raises(ValueError, match="Users"):
         adm.plan_apply_start(5)
+
+
+def test_only_an_open_wallet_top_up_can_be_approved_or_declined(db):
+    """a purchase paid from the wallet (the Mini App and the bot write BUY_SUB / RENEW_ACCOUNT / INCREASE_VOLUME_<order>_<id> in state paid_with_wallet) has nothing to approve - approving it added its price to the wallet;
+    a top-up the bot already settled (paid, auto_cart_approved) was credited once and must not be credited again (the owner, 2026-10-23: payments must agree between the bot, the Mini App and the panel)"""
+    base = {"id": "5", "hash_id": "h", "user_id": "555", "price": "130000", "chat_id": "", "message_id": "", "admins_messages": ""}
+    for typ, state in (("BUY_SUB", "paid_with_wallet"), ("RENEW_ACCOUNT", "paid_with_wallet"), ("INCREASE_VOLUME_12_3", "paid_with_wallet"), ("INCREASE_WALLET", "paid"), ("INCREASE_WALLET", "auto_cart_approved"), ("INCREASE_WALLET", "approved"), ("INCREASE_WALLET", "declined")):
+        db.answers = {"FROM pays WHERE id = 5": [dict(base, type=typ, state=state)], "COALESCE(wallet, 0) AS w": [{"w": "1000"}]}
+        with pytest.raises(ValueError):
+            adm.pay_approve(5)
+        with pytest.raises(ValueError):
+            adm.pay_decline(5, "no")
+    assert db.writes == [] and db.tg == []          # nothing was written, nobody was told
+    for state in ("pending", "have_sent", "expired_have_sent"):
+        db.answers = {"FROM pays WHERE id = 5": [dict(base, type="INCREASE_WALLET", state=state)], "COALESCE(wallet, 0) AS w": [{"w": "1000"}]}
+        assert adm.pay_approve(5)["wallet"] == 131000          # a card receipt (and, by hand, an expired one) is approved as before
+

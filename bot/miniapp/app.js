@@ -33,7 +33,7 @@ function toast(t, kind) { const e = $("toast"); e.textContent = t; e.className =
 function confirmTg(text) { return new Promise(res => { if (tg && tg.showConfirm) tg.showConfirm(text, ok => res(!!ok)); else res(window.confirm(text)); }); }
 function copy(t, msg) { const done = () => toast(msg || "کپی شد ✓", "ok"); if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(t).then(done, () => fallbackCopy(t, done)); else fallbackCopy(t, done); }
 function fallbackCopy(t, done) { const ta = document.createElement("textarea"); ta.value = t; ta.style.position = "fixed"; ta.style.opacity = "0"; document.body.appendChild(ta); ta.select(); try { document.execCommand("copy"); done(); } catch (e) { toast("کپی نشد", "bad"); } ta.remove(); }
-function openLink(u) { if (tg && /^https:\/\/t\.me\//.test(u)) tg.openTelegramLink(u); else if (tg) tg.openLink(u); else window.open(u, "_blank"); }
+function openLink(u) { u = String(u == null ? "" : u); if (!/^https?:\/\//i.test(u)) return; if (tg && /^https:\/\/t\.me\//.test(u)) tg.openTelegramLink(u); else if (tg) tg.openLink(u); else window.open(u, "_blank"); }      // (only http(s): a javascript: or tg:// link from a database row is never opened)
 
 /* ---- api */
 async function api(a, body, form) {
@@ -44,8 +44,12 @@ async function api(a, body, form) {
     const j = await r.json();
     if (j && j.ok && typeof j.wallet === "number") setWallet(j.wallet);
     return j || {ok: false, error: "پاسخ نامعتبر"};
-  } catch (e) { return {ok: false, error: "ارتباط برقرار نشد؛ اینترنت را بررسی کن."}; }
+  } catch (e) { return {ok: false, net: true, error: "ارتباط برقرار نشد؛ اینترنت را بررسی کن."}; }      // (net: the answer may have been lost AFTER the server did the work)
 }
+/* one key per payment sheet, sent with the payment: when the answer is lost and the customer taps again, api.php finds the first payment by the key and shows its result instead of charging twice;
+   the key is dropped as soon as an answer (done or refused) has been read */
+const RID = {};
+function ridFor(k) { if (!RID[k]) { let r = ""; try { const a = new Uint8Array(12); crypto.getRandomValues(a); r = Array.from(a, b => b.toString(36).padStart(2, "0")).join(""); } catch (e) {} RID[k] = r || (Math.random().toString(36).slice(2) + Date.now().toString(36) + Math.random().toString(36).slice(2)); } return RID[k]; }
 function setWallet(w) { if (S.me) S.me.wallet = w; $("wallet").textContent = T(w); }
 
 /* ---- navigation: a stack of views; the first entry is the tab */
@@ -116,7 +120,7 @@ VIEWS.home = async () => {
   return `${hero}
     <div class="card"><h3>سرویس‌های من <span class="pill" id="h-count">${S.me ? T(S.me.services) : "—"}</span></h3><div id="h-svc" class="list"><div class="sk" style="height:58px"></div></div></div>
     <div class="card"><h3>دسترسی سریع</h3><div class="qa" style="--cols:${qa.length <= 4 ? Math.max(qa.length, 1) : qa.length <= 6 ? 3 : 4}">${qa.map(q => `<button onclick="${q[2]}"><i>${q[0]}</i>${q[1]}</button>`).join("")}</div></div>
-    ${S.support ? `<div class="card tap" onclick="openLink('https://t.me/${esc(S.support)}')"><div class="row"><div><b>ارتباط مستقیم با پشتیبانی</b><div class="sm mut">${ltr("@" + S.support)}</div></div><span class="chev">‹</span></div></div>` : ""}`;
+    ${S.support ? `<div class="card tap" onclick="openLink(${js("https://t.me/" + S.support)})"><div class="row"><div><b>ارتباط مستقیم با پشتیبانی</b><div class="sm mut">${ltr("@" + S.support)}</div></div><span class="chev">‹</span></div></div>` : ""}`;
 };
 AFTER.home = async () => {
   const r = await loadServices();
@@ -206,7 +210,7 @@ async function renewSheet(id) {
 }
 async function doRenew(id) {
   if (S.busy) return; S.busy = true; const b = $("do-renew"); if (b) { b.disabled = true; b.innerHTML = '<i class="spin"></i> در حال تمدید…'; }
-  const r = await api("renew", {id}); S.busy = false;
+  const r = await api("renew", {id, rid: ridFor("renew:" + id)}); S.busy = false; if (!r.net) delete RID["renew:" + id];
   if (!r.ok) { toast(r.error, "bad"); if (b) { b.disabled = false; b.textContent = "دوباره"; } return; }
   closeSheet(); toast("سرویس تمدید شد ✓" + (r.cashback ? "، کش‌بک " + T(r.cashback) + " تومان" : ""), "ok"); delete S.live[id]; S.services = null; render();
 }
@@ -233,7 +237,8 @@ async function doExtra() {
   const E = S.extra; if (!E || !E.n || !E.price) { toast("مقدار را انتخاب کن", "bad"); return; }
   if (E.price > E.wallet) { closeSheet(); toast("موجودی کافی نیست؛ " + T(E.price - E.wallet) + " تومان کم داری", "bad"); setTab("wallet"); topupStart(E.price - E.wallet); return; }
   if (S.busy) return; S.busy = true; const b = $("do-extra"); b.disabled = true; b.innerHTML = '<i class="spin"></i> در حال اعمال…';
-  const r = await api(E.kind === "volume" ? "addvolume" : "adddays", {id: E.id, amount: E.n}); S.busy = false;
+  const rk = "extra:" + E.id + ":" + E.kind + ":" + E.n;
+  const r = await api(E.kind === "volume" ? "addvolume" : "adddays", {id: E.id, amount: E.n, rid: ridFor(rk)}); S.busy = false; if (!r.net) delete RID[rk];
   if (!r.ok) { toast(r.error, "bad"); b.disabled = false; b.textContent = "دوباره"; return; }
   closeSheet(); toast((E.kind === "volume" ? T(E.n) + " گیگ" : T(E.n) + " روز") + " اضافه شد ✓", "ok"); delete S.live[E.id]; render();
 }
@@ -280,7 +285,7 @@ function buySheet(id) {
 }
 async function doBuy(id) {
   if (S.busy) return; S.busy = true; const b = $("do-buy"); b.disabled = true; b.innerHTML = '<i class="spin"></i> در حال ساخت سرویس…';
-  const r = await api("buy", {plan_id: id}); S.busy = false;
+  const r = await api("buy", {plan_id: id, rid: ridFor("buy:" + id)}); S.busy = false; if (!r.net) delete RID["buy:" + id];
   if (!r.ok) { toast(r.error, "bad"); b.disabled = false; b.textContent = "دوباره تلاش کن"; if (r.short) { closeSheet(); setTab("wallet"); topupStart(r.short); } return; }
   closeSheet(); hap("ok"); S.services = null; if (S.me) S.me.services++;
   S.stack = [{v: "services"}, {v: "bought", p: r}]; render();
@@ -300,7 +305,7 @@ VIEWS.wallet = async () => {
     ${tp ? `<div class="card" id="tp-resume"><h3>شارژ ناتمام <span class="pill warn">${T(tp.amount)} تومان</span></h3><div class="sm mut">هنوز رسید این شارژ را نفرستاده‌ای.</div><div class="btns"><button class="btn pri" onclick="go('topup',{resume:1})">ادامه و ارسال رسید</button><button class="btn" onclick="topupCancel()">لغو</button></div></div>` : ""}
     ${F.wallet && F.card ? `<div class="card"><h3>شارژ کیف پول</h3><div class="amounts" id="amounts">${(S.amounts.length ? S.amounts : [100000, 200000, 500000]).map(a => `<button onclick="amountPick(${a},this)">${T(a)}<br><small class="mut xs">تومان</small></button>`).join("")}</div>
       <label class="lb">یا مبلغ دلخواه (تومان)</label><input class="input num" id="tp-amount" type="number" inputmode="numeric" min="${S.min_topup || 10000}" step="1000" placeholder="مثلاً 150000" oninput="document.querySelectorAll('#amounts button').forEach(b=>b.classList.remove('on'))">
-      <button class="btn pri w mt" onclick="topupStart()">💳 ادامه (کارت‌به‌کارت)</button></div>` : F.wallet ? `<div class="card"><div class="note">شارژ از این‌جا فعلاً فعال نیست؛ از منوی ربات کیف پول را شارژ کن.</div><button class="btn w mt" onclick="openLink('https://t.me/${esc(S.bot)}?start=wallet')">🤖 باز کردن ربات</button></div>` : ""}
+      <button class="btn pri w mt" onclick="topupStart()">💳 ادامه (کارت‌به‌کارت)</button></div>` : F.wallet ? `<div class="card"><div class="note">شارژ از این‌جا فعلاً فعال نیست؛ از منوی ربات کیف پول را شارژ کن.</div><button class="btn w mt" onclick="openLink(${js("https://t.me/" + S.bot + "?start=wallet")})">🤖 باز کردن ربات</button></div>` : ""}
     <div class="card"><h3>تاریخچه</h3><div id="hist" class="list"><div class="sk" style="height:46px"></div></div></div>`;
 };
 function amountPick(a, btn) { document.querySelectorAll("#amounts button").forEach(b => b.classList.toggle("on", b === btn)); $("tp-amount").value = a; }
@@ -310,7 +315,7 @@ AFTER.wallet = async () => {
   const cls = s => ({approved: "ok", auto_cart_approved: "ok", paid: "ok", paid_with_wallet: "info", have_sent: "warn", pending: "warn", declined: "bad", low_wallet: "bad", expired_have_sent: "bad", expired_pending: "bad"}[s] || "");
   const rows = r.pays.filter(p => p.state !== "pending" || p.kind !== "INCREASE_WALLET");
   const done = s => s === "approved" || s === "auto_cart_approved" || s === "paid" || s === "paid_with_wallet";      // only a payment that went through moves the wallet: a refused or expired one shows its amount without a sign
-  box.innerHTML = rows.length ? rows.slice(0, 25).map(p => `<div class="item static"><div class="ic">${p.kind === "INCREASE_WALLET" ? "💳" : p.kind === "BUY_SUB" ? "🛍" : "➕"}</div><div class="tx"><div class="row"><b>${esc(p.type)}</b><span class="pill ${cls(p.state)}">${esc(p.state_fa)}</span></div><small>${when(p.at)}${p.note ? "، " + esc(p.note) : ""}</small></div><b class="ltr amt${done(p.state) ? "" : " mut"}">${done(p.state) ? (p.kind === "INCREASE_WALLET" ? "+" : "−") : ""}${T(p.price)}</b></div>`).join("")
+  box.innerHTML = rows.length ? rows.slice(0, 25).map(p => `<div class="item static"><div class="ic">${p.kind === "INCREASE_WALLET" ? "💳" : p.kind === "BUY_SUB" || p.kind === "RENEW_ACCOUNT" ? "🛍" : "➕"}</div><div class="tx"><div class="row"><b>${esc(p.type)}</b><span class="pill ${cls(p.state)}">${esc(p.state_fa)}</span></div><small>${when(p.at)}${p.note ? "، " + esc(p.note) : ""}</small></div><b class="ltr amt${done(p.state) ? "" : " mut"}">${done(p.state) ? (p.kind === "INCREASE_WALLET" ? "+" : "−") : ""}${T(p.price)}</b></div>`).join("")
     + (r.cashback.length ? `<div class="sm mut mt">کش‌بک‌ها</div>` + r.cashback.slice(0, 5).map(c => `<div class="item static"><div class="ic">🎁</div><div class="tx"><b>کش‌بک خرید</b><small>${when(c.at)}، خرید ${T(c.order)} تومان</small></div><b class="ltr amt">+${T(c.back)}</b></div>`).join("") : "")
     : `<div class="empty">هنوز تراکنشی نداری.</div>`;
 };
@@ -371,8 +376,8 @@ VIEWS.more = async () => {
     F.apps && ["📱", "اپلیکیشن‌های اتصال", "برنامه‌های پیشنهادی برای هر دستگاه", "go('apps')"],
     F.gift && ["🎁", "کد هدیه", "کد را وارد کن و کیف پولت را شارژ کن", "go('gift')"],
     F.wheel && ["🎡", "گردونه شانس", "هر روز یک شانس", "go('wheel')"],
-    S.support && ["💬", "ارتباط مستقیم با پشتیبان", ltr("@" + S.support), `openLink('https://t.me/${esc(S.support)}')`],
-    ["🤖", "باز کردن ربات", "منوی کامل ربات", `openLink('https://t.me/${esc(S.bot)}')`],
+    S.support && ["💬", "ارتباط مستقیم با پشتیبان", ltr("@" + S.support), `openLink(${js("https://t.me/" + S.support)})`],
+    ["🤖", "باز کردن ربات", "منوی کامل ربات", `openLink(${js("https://t.me/" + S.bot)})`],
   ].filter(Boolean);
   return `<div class="title">بیشتر</div><div class="list">${rows.map(r => `<div class="item" onclick="${r[3]}"><div class="ic">${r[0]}</div><div class="tx"><b>${r[1]}</b><small>${r[2]}</small></div><span class="chev">‹</span></div>`).join("")}</div>
     <div class="card sm mut c">شناسه‌ی تو: <b class="ltr">${S.me ? S.me.id : ""}</b>${S.me && S.me.since ? "، عضو از " + day(S.me.since) : ""}</div>`;
@@ -416,7 +421,7 @@ async function spin() {
 }
 
 /* ---- tickets */
-VIEWS.tickets = async p => `<div class="title">🎫 پشتیبانی <button class="btn sm pri" onclick="go('ticket_new',{svc:${js(p.svc || "")}})">+ تیکت جدید</button></div>${S.support ? `<div class="card tap" onclick="openLink('https://t.me/${esc(S.support)}')"><div class="row"><div><b>گفتگوی مستقیم</b><div class="sm mut">${ltr("@" + S.support)}</div></div><span class="chev">‹</span></div></div>` : ""}<div id="tk-list" class="list"><div class="loading"><i class="spin"></i>…</div></div>`;
+VIEWS.tickets = async p => `<div class="title">🎫 پشتیبانی <button class="btn sm pri" onclick="go('ticket_new',{svc:${js(p.svc || "")}})">+ تیکت جدید</button></div>${S.support ? `<div class="card tap" onclick="openLink(${js("https://t.me/" + S.support)})"><div class="row"><div><b>گفتگوی مستقیم</b><div class="sm mut">${ltr("@" + S.support)}</div></div><span class="chev">‹</span></div></div>` : ""}<div id="tk-list" class="list"><div class="loading"><i class="spin"></i>…</div></div>`;
 AFTER.tickets = async () => {
   const r = await api("tickets"); const box = $("tk-list"); if (!box) return;
   if (!r.ok) { box.innerHTML = `<div class="empty">${esc(r.error)}</div>`; return; }

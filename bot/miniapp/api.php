@@ -128,7 +128,7 @@ function fa(int|float $n): string { return number_format((float) $n); }
 
 /* ---------------------------------------------------------------- Telegram WebApp initData */
 function tgVerify(string $initData, string $token, bool &$expired = false): ?array {
-    if ($initData === '') return null;
+    if ($initData === '' || $token === '') return null;      // (an empty token - a broken baseInfo.php - would make the signing key public: anyone could sign an initData for any user id)
     parse_str($initData, $d);
     if (empty($d['hash']) || !is_string($d['hash'])) return null;
     $hash = $d['hash'];
@@ -164,7 +164,7 @@ $me = row("SELECT * FROM users WHERE userid = ?", [$uid]);
 if (!$me) {
     $name = mb_substr(trim(($user['first_name'] ?? '') . ' ' . ($user['last_name'] ?? '')), 0, 60) ?: ' ';
     $un = (string) ($user['username'] ?? ' ');
-    run("INSERT INTO users (userid, name, username, refcode, wallet, date, step) VALUES (?, ?, ?, 0, 0, ?, '')", [$uid, $name, $un, time()]);
+    run("INSERT IGNORE INTO users (userid, name, username, refcode, wallet, date) VALUES (?, ?, ?, 0, 0, ?)", [$uid, $name, $un, time()]);      // (like the bot: step keeps the column default 'none'; IGNORE = a second first request at the same moment is not an error)
     $me = row("SELECT * FROM users WHERE userid = ?", [$uid]) ?? ['userid' => $uid, 'name' => $name, 'username' => $un, 'wallet' => 0, 'is_agent' => 0, 'step' => '', 'discount_percent' => '', 'date' => time()];
 }
 if (($me['step'] ?? '') === 'banned') fail('دسترسی شما به ربات بسته است.', 403);
@@ -173,6 +173,9 @@ $admins = array_values(array_unique(array_filter(array_map('intval', array_merge
 
 /* ---------------------------------------------------------------- helpers shared by the actions */
 function randomId(int $n = 10): string { $a = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'; $s = ''; for ($i = 0; $i < $n; $i++) $s .= $a[random_int(0, 61)]; return $s; }
+/** the key of one wallet payment: the page makes one per sheet and sends the same one again when an answer was lost on the way (a slow panel, a dropped connection),
+    so the retry shows the first result instead of paying a second time; it is kept in pays.payid with a prefix the bot's gateways never use */
+function ridOf(array $body): string { $r = $body['rid'] ?? ''; return is_string($r) && preg_match('/^[A-Za-z0-9_-]{8,40}$/', $r) ? 'mini:' . $r : ''; }
 function wallet(int $uid): int { return (int) (row("SELECT wallet FROM users WHERE userid = ?", [$uid])['wallet'] ?? 0); }
 function serverOf(int $id): ?array {
     $s = row("SELECT i.id, i.title, i.flag, i.remark, i.active, i.ucount, c.type, c.panel_url, c.username, c.password FROM server_info i JOIN server_config c ON c.id = i.id WHERE i.id = ?", [$id]);
@@ -182,14 +185,15 @@ function serverOf(int $id): ?array {
 /** the price this user pays for a plan: agents get their discount_percent (bot: calculateAgentPrice) */
 function priceFor(array $me, array $plan): array {
     global $botState;
-    $price = (int) $plan['price'];
+    $price = max(0, (int) $plan['price']);
     if ((int) ($me['is_agent'] ?? 0) !== 1) return [$price, 0, 0];
     $d = json_decode((string) ($me['discount_percent'] ?? ''), true); if (!is_array($d)) $d = [];
     $normal = (int) ($d['normal'] ?? 0);
     if (($botState['agencyPlanDiscount'] ?? '') === 'on') $pct = (int) ($d['plans'][(string) $plan['id']] ?? $d['plans'][(int) $plan['id']] ?? $normal);
     else $pct = (int) ($d['servers'][(string) $plan['server_id']] ?? $d['servers'][(int) $plan['server_id']] ?? $normal);
+    $pct = max(0, min(100, $pct));      // (a percentage above 100 made the price negative: the "purchase" paid the customer)
     if ($pct > 0) $price -= (int) floor($price * $pct / 100);
-    return [$price, 1, $pct];
+    return [max(0, $price), 1, $pct];
 }
 /** remark like the bot (buy_helpers.php buildRemark) */
 function makeRemark(string $srvRemark, int $uid): string {
@@ -365,10 +369,24 @@ function panelModifyUser(array $srv, string $remark, array $fields): bool {
     [$code, $r] = panelHttp('PUT', rtrim((string) $srv['panel_url'], '/') . panelUserPath($srv, $remark), $tok, $body, 15);
     return $code < 300 && is_array($r) && isset($r['username']);
 }
+/** the fields that put an account back to what a live read showed (limit, expiry, and the status when the panel lets it be set) */
+function panelBack(array $live): array {
+    $f = ['data_limit' => (int) $live['limit'], 'expire' => (int) $live['expire']];
+    if (in_array($live['status'], ['active', 'disabled', 'on_hold'], true)) $f['status'] = $live['status'];
+    return $f;
+}
 function panelResetUser(array $srv, string $remark): bool {
     $tok = panelToken($srv);
     if ($tok === null) return false;
     [$code] = panelHttp('POST', rtrim((string) $srv['panel_url'], '/') . panelUserPath($srv, $remark) . '/reset', $tok, [], 15);
+    return $code < 300;
+}
+/** takes back an account this request made when the order could not be saved (no orphan account on the panel, no account the customer never got) */
+function panelDeleteUser(array $srv, string $remark): bool {
+    $tok = panelToken($srv);
+    if ($tok === null) return false;
+    [$code] = panelHttp('DELETE', rtrim((string) $srv['panel_url'], '/') . panelUserPath($srv, $remark), $tok, null, 15);
+    if ($code >= 300) error_log("miniapp: could not delete the account $remark after a failed order (HTTP $code)");
     return $code < 300;
 }
 
@@ -381,31 +399,68 @@ function orderOf(int $id, int $uid): ?array {
 function orderPlan(array $o): ?array { return (int) $o['fileid'] > 0 ? row("SELECT * FROM server_plans WHERE id = ?", [(int) $o['fileid']]) : null; }
 function statusFa(string $s): string { return ['active' => 'فعال', 'on_hold' => 'منتظر اولین اتصال', 'disabled' => 'غیرفعال', 'expired' => 'منقضی', 'limited' => 'حجم تمام شده'][$s] ?? $s; }
 
-/** takes money from the wallet inside a transaction and runs $work(); the pays row mirrors the bot's wallet payments */
+/** takes money from the wallet inside a transaction and runs $work(); the pays row mirrors the bot's wallet payments.
+    $work($hash) does the panel call and the order rows; it may return an 'undo' callable (what to do on the panel when the DB part after it fails): it runs if saving or committing throws */
 function payWithWallet(int $uid, int $price, array $pay, callable $work): array {
     $c = db();
+    $res = null;
+    if ($price < 0) return ['ok' => false, 'error' => 'پرداخت انجام نشد؛ مبلغی از کیف پول کم نشده است.'];
     $c->begin_transaction();
     try {
         $u = row("SELECT wallet FROM users WHERE userid = ? FOR UPDATE", [$uid]);
         $have = (int) ($u['wallet'] ?? 0);
+        $rid = (string) ($pay['rid'] ?? '');
+        if ($rid !== '') {      // (read under the row lock: a second request with the same key waits for the first to finish and then finds its payment)
+            $dup = row("SELECT hash_id, order_id, price FROM pays WHERE user_id = ? AND payid = ? AND state = 'paid_with_wallet' LIMIT 1", [$uid, $rid]);
+            if ($dup) { $c->rollback(); return ['ok' => true, 'duplicate' => true, 'hash' => $dup['hash_id'], 'order_id' => (int) $dup['order_id'], 'price' => (int) $dup['price'], 'wallet' => $have]; }
+        }
         if ($have < $price) { $c->rollback(); return ['ok' => false, 'error' => 'موجودی کیف پول کافی نیست.', 'short' => $price - $have, 'wallet' => $have]; }
         $hash = randomId(10);
-        run("INSERT INTO pays (hash_id, user_id, type, plan_id, server_id, volume, day, price, request_date, state, description, agent_bought, agent_count) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'processing_wallet', ?, ?, 0)",
-            [$hash, $uid, $pay['type'], (int) ($pay['plan_id'] ?? 0), (int) ($pay['server_id'] ?? 0), (int) round((float) ($pay['volume'] ?? 0)), (int) ($pay['day'] ?? 0), $price, time(), (string) ($pay['description'] ?? ''), (int) ($pay['agent_bought'] ?? 0)]);
+        run("INSERT INTO pays (hash_id, user_id, type, plan_id, server_id, order_id, volume, day, price, request_date, state, description, agent_bought, agent_count, payid) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'processing_wallet', ?, ?, 0, ?)",
+            [$hash, $uid, $pay['type'], (int) ($pay['plan_id'] ?? 0), (int) ($pay['server_id'] ?? 0), isset($pay['order_id']) ? (int) $pay['order_id'] : null, (int) round((float) ($pay['volume'] ?? 0)), (int) ($pay['day'] ?? 0), $price, time(), (string) ($pay['description'] ?? ''), (int) ($pay['agent_bought'] ?? 0), $rid !== '' ? $rid : null]);
         run("UPDATE users SET wallet = wallet - ? WHERE userid = ?", [$price, $uid]);
         $res = $work($hash);
         if (!($res['ok'] ?? false)) { $c->rollback(); return $res; }
         run("UPDATE pays SET state = 'paid_with_wallet' WHERE hash_id = ?", [$hash]);
         $c->commit();
+        unset($res['undo']);
         $res['hash'] = $hash;
         $res['wallet'] = $have - $price;
         return $res;
     } catch (Throwable $e) {
-        $c->rollback();
+        try { $c->rollback(); } catch (Throwable $e2) {}
         error_log('miniapp pay: ' . $e->getMessage());
+        if (is_array($res) && is_callable($res['undo'] ?? null)) { try { ($res['undo'])(); } catch (Throwable $e3) { error_log('miniapp pay undo: ' . $e3->getMessage()); } }      // (the panel was already changed: put it back, nothing was charged)
         return ['ok' => false, 'error' => 'پرداخت انجام نشد؛ مبلغی از کیف پول کم نشده است.'];
     }
 }
+
+/** the same purchase asked for again (same key): the first result is shown, nothing is charged or made or announced a second time */
+function buyAgain(int $oid, int $uid, int $wallet): void {
+    $o = orderOf($oid, $uid);
+    if (!$o) fail('سرویس پیدا نشد.', 404);
+    $live = !empty($o['panel_url']) ? panelGetUser($o, (string) $o['remark']) : null;
+    $stored = json_decode((string) $o['link'], true);
+    $links = $live && $live['links'] ? $live['links'] : (is_array($stored) ? array_values(array_filter($stored, 'is_string')) : []);
+    out(['ok' => true, 'duplicate' => true, 'order_id' => (int) $o['id'], 'remark' => $o['remark'], 'wallet' => $wallet, 'cashback' => 0, 'sub' => on('subLinkState', 'on') ? ($live['sub'] ?? '') : '',
+        'links' => on('configLinkState', 'on') ? $links : [], 'expire' => (int) $o['expire_date']]);
+}
+
+/** one slot of a server (ucount, or acount of an inbound plan) taken in ONE statement before the panel is called: 6 customers buying the last slot at once -> one wins, the others are refused before an account is made
+    (the old "check, call the panel, then ucount - 1" let them all through and InnoDB deadlocked five of them AFTER their accounts existed) */
+function takeSlot(array $plan, array $srv): bool {
+    if ((int) $plan['inbound_id'] === 0) return run("UPDATE server_info SET ucount = ucount - 1 WHERE id = ? AND CAST(ucount AS SIGNED) > 0", [(int) $srv['id']]) > 0;
+    return run("UPDATE server_plans SET acount = acount - 1 WHERE id = ? AND acount > 0", [(int) $plan['id']]) > 0;
+}
+function giveSlotBack(array $plan, array $srv): void {
+    if ((int) $plan['inbound_id'] === 0) run("UPDATE server_info SET ucount = ucount + 1 WHERE id = ?", [(int) $srv['id']]);
+    else run("UPDATE server_plans SET acount = acount + 1 WHERE id = ?", [(int) $plan['id']]);
+}
+
+/** a small brake for actions a script could use to guess: n failures of a kind in the last $secs seconds (one row per failure) */
+function throttleTable(): void { static $made = false; if (!$made) { db()->query("CREATE TABLE IF NOT EXISTS miniapp_throttle (id INT NOT NULL AUTO_INCREMENT PRIMARY KEY, userid BIGINT NOT NULL, kind VARCHAR(20) NOT NULL, at BIGINT NOT NULL, KEY k (userid, kind, at)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"); $made = true; } }
+function throttled(int $uid, string $kind, int $max, int $secs): bool { throttleTable(); return (int) (row("SELECT COUNT(*) AS n FROM miniapp_throttle WHERE userid = ? AND kind = ? AND at > ?", [$uid, $kind, time() - $secs])['n'] ?? 0) >= $max; }
+function throttleHit(int $uid, string $kind): void { throttleTable(); run("INSERT INTO miniapp_throttle (userid, kind, at) VALUES (?, ?, ?)", [$uid, $kind, time()]); run("DELETE FROM miniapp_throttle WHERE at < ?", [time() - 86400]); }
 
 /* ================================================================ actions */
 try {
@@ -479,6 +534,8 @@ case 'plans': {
 }
 
 case 'buy': {
+    $ridBuy = ridOf($body);
+    if ($ridBuy !== '' && ($first = row("SELECT order_id FROM pays WHERE user_id = ? AND payid = ? AND state = 'paid_with_wallet' LIMIT 1", [$uid, $ridBuy])) && (int) $first['order_id'] > 0) buyAgain((int) $first['order_id'], $uid, wallet($uid));
     if (!on('sellState', 'on')) fail('فروش موقتاً غیرفعال است.');
     $plan = row("SELECT * FROM server_plans WHERE id = ? AND active = 1", [(int) ($body['plan_id'] ?? 0)]);
     if (!$plan) fail('این پلن در دسترس نیست.', 404);
@@ -490,21 +547,37 @@ case 'buy': {
     [$price, $agentBought] = priceFor($me, $plan);
     $planInfo = json_decode((string) ($plan['custom_sni'] ?? ''), true); if (!is_array($planInfo)) $planInfo = [];
     $days = (int) $plan['days']; $gb = (float) $plan['volume'];
+    /* a plan that costs nothing is the bot's test account: one per customer (users.freetrial = 'used'), admins and agents on a 100 % discount excepted - the Mini App sold it again and again */
+    $isTrial = (int) $plan['price'] <= 0;
+    $normalDiscount = (string) (json_decode((string) ($me['discount_percent'] ?? ''), true)['normal'] ?? '');
+    $trialExempt = in_array($uid, $admins, true) || ($isAgent && $normalDiscount === '100');
+    if ($isTrial && !$trialExempt && ($me['freetrial'] ?? '') === 'used') fail('شما اکانت تست را قبلا استفاده کرده اید.');
+    if (!takeSlot($plan, $srv)) fail((int) $plan['inbound_id'] === 0 ? mainText('out_of_server_capacity', 'ظرفیت این سرور پر شده است.') : mainText('out_of_connection_capacity', 'ظرفیت این پلن پر شده است.'));
 
-    $r = payWithWallet($uid, $price, ['type' => 'BUY_SUB', 'plan_id' => (int) $plan['id'], 'server_id' => (int) $srv['id'], 'volume' => $gb, 'day' => $days, 'description' => (string) $plan['title'], 'agent_bought' => $agentBought], function (string $hash) use ($uid, $plan, $srv, $planInfo, $gb, $days, $price, $agentBought) {
+    $r = payWithWallet($uid, $price, ['type' => 'BUY_SUB', 'plan_id' => (int) $plan['id'], 'server_id' => (int) $srv['id'], 'volume' => $gb, 'day' => $days, 'description' => (string) $plan['title'], 'agent_bought' => $agentBought, 'rid' => ridOf($body)], function (string $hash) use ($uid, $plan, $srv, $planInfo, $gb, $days, $price, $agentBought, $isTrial, $trialExempt) {
+        if ($isTrial && !$trialExempt && (row("SELECT freetrial FROM users WHERE userid = ? FOR UPDATE", [$uid])['freetrial'] ?? '') === 'used') return ['ok' => false, 'error' => 'شما اکانت تست را قبلا استفاده کرده اید.'];      // (read again under the row lock: two taps at once)
         $remark = makeRemark((string) $srv['remark'], $uid);
         $made = panelCreateUser($srv, $remark, $gb, $days, $planInfo);
         if (!$made['ok'] && stripos((string) $made['msg'], 'exist') !== false) { $remark .= random_int(1111, 99999); $made = panelCreateUser($srv, $remark, $gb, $days, $planInfo); }
-        if (!$made['ok']) { error_log("miniapp buy: panel refused ($hash): " . $made['msg']); return ['ok' => false, 'error' => 'سرور پاسخ نداد؛ مبلغی از کیف پول کم نشد. چند دقیقه دیگر دوباره تلاش کنید.']; }
-        $token = strpos($made['sub'], '/sub/') !== false ? explode('/sub/', $made['sub'], 2)[1] : randomId(16);
-        $expire = $days > 0 ? time() + 86400 * $days : 0;
-        $oid = run("INSERT INTO orders_list (userid, token, transid, fileid, server_id, inbound_id, remark, uuid, protocol, expire_date, link, amount, status, date, notif, rahgozar, agent_bought) VALUES (?, ?, '', ?, ?, ?, ?, '', ?, ?, ?, ?, 1, ?, 0, ?, ?)",
-            [$uid, $token, (int) $plan['id'], (int) $srv['id'], (int) $plan['inbound_id'], $remark, (string) ($plan['protocol'] ?: 'vless'), $expire, json_encode($made['links'], JSON_UNESCAPED_SLASHES), $price, (string) time(), (int) ($plan['rahgozar'] ?? 0), $agentBought]);
-        if ((int) $plan['inbound_id'] === 0) run("UPDATE server_info SET ucount = ucount - 1 WHERE id = ?", [(int) $srv['id']]);
-        else run("UPDATE server_plans SET acount = acount - 1 WHERE id = ?", [(int) $plan['id']]);
-        return ['ok' => true, 'order_id' => $oid, 'remark' => $remark, 'sub' => $made['sub'], 'links' => $made['links'], 'expire' => $expire];
+        if (!$made['ok']) {
+            if (isset($made['code']) && ((int) $made['code'] === 0 || (int) $made['code'] >= 500)) panelDeleteUser($srv, $remark);      // (a time-out or a 5xx: the panel may have made the account before the answer was lost - it must not stay behind)
+            error_log("miniapp buy: panel refused ($hash): " . $made['msg']);
+            return ['ok' => false, 'error' => 'سرور پاسخ نداد؛ مبلغی از کیف پول کم نشد. چند دقیقه دیگر دوباره تلاش کنید.'];
+        }
+        $undo = fn() => panelDeleteUser($srv, $remark);      // (the account exists now: if saving the order fails it must not stay behind on the panel)
+        try {
+            $token = strpos($made['sub'], '/sub/') !== false ? explode('/sub/', $made['sub'], 2)[1] : randomId(16);
+            $expire = $days > 0 ? time() + 86400 * $days : 0;
+            $oid = run("INSERT INTO orders_list (userid, token, transid, fileid, server_id, inbound_id, remark, uuid, protocol, expire_date, link, amount, status, date, notif, rahgozar, agent_bought) VALUES (?, ?, '', ?, ?, ?, ?, '', ?, ?, ?, ?, 1, ?, 0, ?, ?)",
+                [$uid, $token, (int) $plan['id'], (int) $srv['id'], (int) $plan['inbound_id'], $remark, (string) ($plan['protocol'] ?: 'vless'), $expire, json_encode($made['links'], JSON_UNESCAPED_SLASHES), $price, (string) time(), (int) ($plan['rahgozar'] ?? 0), $agentBought]);
+            run("UPDATE pays SET order_id = ? WHERE hash_id = ?", [$oid, $hash]);      // (the bot's pays rows carry the order too; a retried request finds its order by it)
+            if ($isTrial) run("UPDATE users SET freetrial = 'used' WHERE userid = ?", [$uid]);
+        } catch (Throwable $e) { $undo(); throw $e; }
+        return ['ok' => true, 'order_id' => $oid, 'remark' => $remark, 'sub' => $made['sub'], 'links' => $made['links'], 'expire' => $expire, 'undo' => $undo];
     });
+    if (!($r['ok'] ?? false) || !empty($r['duplicate'])) giveSlotBack($plan, $srv);      // (nothing was made: the slot taken above goes back)
     if (!($r['ok'] ?? false)) out(array_merge(['ok' => false], $r));
+    if (!empty($r['duplicate'])) buyAgain((int) $r['order_id'], $uid, (int) $r['wallet']);
 
     $back = cashback($uid, $price);
     $sub = on('subLinkState', 'on') ? $r['sub'] : '';
@@ -521,17 +594,22 @@ case 'renew': {
     if (!$plan || (int) $plan['active'] !== 1) fail('پلن این سرویس دیگر فعال نیست؛ یک سرویس جدید بخرید.');
     [$price] = priceFor($me, $plan);
     $days = (int) $plan['days']; $gb = (float) $plan['volume'];
-    $r = payWithWallet($uid, $price, ['type' => 'BUY_SUB', 'plan_id' => (int) $plan['id'], 'server_id' => (int) $o['server_id'], 'volume' => $gb, 'day' => $days, 'description' => 'تمدید ' . $o['remark'], 'agent_bought' => $isAgent ? 1 : 0], function (string $hash) use ($o, $gb, $days) {
+    /* what the bot writes for a renewal (bot.php renew with the wallet): type RENEW_ACCOUNT with the order id, volume/day 0, and one increase_order row (its "renewals today / this week" counters read that table) */
+    $r = payWithWallet($uid, $price, ['type' => 'RENEW_ACCOUNT', 'plan_id' => (int) $plan['id'], 'server_id' => (int) $o['server_id'], 'order_id' => (int) $o['id'], 'volume' => 0, 'day' => 0, 'description' => 'تمدید ' . $o['remark'], 'agent_bought' => $isAgent ? 1 : 0, 'rid' => ridOf($body)], function (string $hash) use ($o, $gb, $days, $price, $uid) {
         $live = panelGetUser($o, (string) $o['remark']);
         if (!$live) return ['ok' => false, 'error' => 'سرور پاسخ نداد؛ مبلغی از کیف پول کم نشد.'];
         $from = max(time(), $live['expire'] > 0 ? $live['expire'] : 0);
         $expire = $days > 0 ? $from + 86400 * $days : 0;
-        if (!panelModifyUser($o, (string) $o['remark'], ['data_limit' => (int) round($gb * GB), 'expire' => $expire, 'status' => 'active'])) return ['ok' => false, 'error' => 'پنل تغییر را نپذیرفت؛ مبلغی از کیف پول کم نشد.'];
-        panelResetUser($o, (string) $o['remark']);
+        /* the rows first (they can fail), the panel last: a failing row leaves nothing on the panel to take back */
         run("UPDATE orders_list SET expire_date = ?, status = 1, notif = 0 WHERE id = ?", [$expire, (int) $o['id']]);
-        return ['ok' => true, 'expire' => $expire];
+        run("INSERT INTO increase_order (userid, server_id, inbound_id, remark, amount, date) VALUES (?, ?, ?, ?, ?, ?)", [$uid, (int) $o['server_id'], (int) $o['inbound_id'], $o['remark'], $price, (string) time()]);
+        if (!panelModifyUser($o, (string) $o['remark'], ['data_limit' => (int) round($gb * GB), 'expire' => $expire, 'status' => 'active'])) { panelModifyUser($o, (string) $o['remark'], panelBack($live)); return ['ok' => false, 'error' => 'پنل تغییر را نپذیرفت؛ مبلغی از کیف پول کم نشد.']; }      // (a time-out may have applied it: put the old values back)
+        $undo = fn() => panelModifyUser($o, (string) $o['remark'], panelBack($live));
+        if (!panelResetUser($o, (string) $o['remark'])) error_log("miniapp renew: usage of {$o['remark']} was not reset");
+        return ['ok' => true, 'expire' => $expire, 'undo' => $undo];
     });
     if (!($r['ok'] ?? false)) out(array_merge(['ok' => false], $r));
+    if (!empty($r['duplicate'])) out(['ok' => true, 'duplicate' => true, 'expire' => (int) $o['expire_date'], 'wallet' => $r['wallet'], 'cashback' => 0]);      // (the same payment again: the first result)
     $back = cashback($uid, $price);
     tgText($uid, "🔄 <b>سرویس تمدید شد</b>\n\n🔖 <code>" . h($o['remark']) . "</code>\n⏳ تا " . ($r['expire'] ? date('Y-m-d', $r['expire']) : 'نامحدود') . " · 🔋 " . rtrim(rtrim(number_format($gb, 2), '0'), '.') . " گیگ\n💰 " . fa($price) . " تومان از کیف پول");
     tellAdmins("🔄 <b>تمدید (مینی‌اپ)</b>\n\n👤 " . userLink($uid, (string) $me['name']) . " · <code>$uid</code>\n🔖 <code>" . h($o['remark']) . "</code> · " . h($o['label']) . "\n📦 " . h($plan['title']) . "\n💰 " . fa($price) . " تومان (کیف پول)");
@@ -546,23 +624,28 @@ case 'adddays': {
     if (!$o || empty($o['panel_url'])) fail('سرویس پیدا نشد.', 404);
     $n = (int) ($body['amount'] ?? 0);
     if ($n < 1 || $n > ($isVol ? 2000 : 1000)) fail('مقدار نامعتبر است.');
-    $preset = row($isVol ? "SELECT price FROM increase_plan WHERE volume = ? LIMIT 1" : "SELECT price FROM increase_day WHERE volume = ? LIMIT 1", [$n]);
+    $preset = row($isVol ? "SELECT id, price FROM increase_plan WHERE volume = ? LIMIT 1" : "SELECT id, price FROM increase_day WHERE volume = ? LIMIT 1", [$n]);
     $unit = (int) ($botState[$isVol ? 'gbPrice' : 'dayPrice'] ?? 0);
     $price = $preset ? (int) $preset['price'] : $unit * $n;
     if ($price <= 0) fail('قیمت این مورد تعریف نشده است.');
-    if ($isAgent) { [$p] = priceFor($me, ['id' => 0, 'server_id' => (int) $o['server_id'], 'price' => $price]); $price = $p; }
-    $r = payWithWallet($uid, $price, ['type' => $isVol ? 'INCREASE_VOLUME' : 'INCREASE_TIME', 'plan_id' => (int) $o['fileid'], 'server_id' => (int) $o['server_id'], 'volume' => $isVol ? $n : 0, 'day' => $isVol ? 0 : $n, 'description' => $o['remark'], 'agent_bought' => $isAgent ? 1 : 0], function (string $hash) use ($o, $n, $isVol, $uid, $price) {
+    if ($isAgent) { [$p] = priceFor($me, ['id' => (int) $o['fileid'], 'server_id' => (int) $o['server_id'], 'price' => $price]); $price = $p; }      // (the bot looks the plan percentage up by the plan of the order)
+    /* like the bot: type INCREASE_VOLUME_<order>_<increase_plan id> / INCREASE_DAY_<order>_<increase_day id> with the order id in its column */
+    $type = ($isVol ? 'INCREASE_VOLUME_' : 'INCREASE_DAY_') . (int) $o['id'] . '_' . (int) ($preset['id'] ?? 0);
+    $r = payWithWallet($uid, $price, ['type' => $type, 'plan_id' => (int) $o['fileid'], 'server_id' => (int) $o['server_id'], 'order_id' => (int) $o['id'], 'volume' => $isVol ? $n : 0, 'day' => $isVol ? 0 : $n, 'description' => $o['remark'], 'agent_bought' => $isAgent ? 1 : 0, 'rid' => ridOf($body)], function (string $hash) use ($o, $n, $isVol, $uid, $price) {
         $live = panelGetUser($o, (string) $o['remark']);
         if (!$live) return ['ok' => false, 'error' => 'سرور پاسخ نداد؛ مبلغی از کیف پول کم نشد.'];
+        if ($isVol && $live['limit'] <= 0) return ['ok' => false, 'error' => 'This service has no volume limit, so there is nothing to add; nothing was charged.'];      // (setting a limit of 0 on the panel keeps it unlimited: the customer would pay for nothing)
         $fields = ['status' => 'active'];
-        if ($isVol) $fields['data_limit'] = $live['limit'] > 0 ? $live['limit'] + $n * GB : 0;
+        if ($isVol) $fields['data_limit'] = $live['limit'] + $n * GB;
         else $fields['expire'] = ($live['expire'] > 0 ? max(time(), $live['expire']) : time()) + 86400 * $n;
-        if (!panelModifyUser($o, (string) $o['remark'], $fields)) return ['ok' => false, 'error' => 'پنل تغییر را نپذیرفت؛ مبلغی از کیف پول کم نشد.'];
+        /* the rows first, the panel last (see renew) */
         if (!$isVol) run("UPDATE orders_list SET expire_date = ?, notif = 0 WHERE id = ?", [$fields['expire'], (int) $o['id']]);
         run("INSERT INTO increase_order (userid, server_id, inbound_id, remark, volume, day, amount, date) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", [$uid, (int) $o['server_id'], (int) $o['inbound_id'], $o['remark'], $isVol ? $n : 0, $isVol ? 0 : $n, $price, (string) time()]);
-        return ['ok' => true, 'expire' => $fields['expire'] ?? (int) $o['expire_date'], 'limit' => $fields['data_limit'] ?? $live['limit']];
+        if (!panelModifyUser($o, (string) $o['remark'], $fields)) { panelModifyUser($o, (string) $o['remark'], panelBack($live)); return ['ok' => false, 'error' => 'پنل تغییر را نپذیرفت؛ مبلغی از کیف پول کم نشد.']; }
+        return ['ok' => true, 'expire' => $fields['expire'] ?? (int) $o['expire_date'], 'limit' => $fields['data_limit'] ?? $live['limit'], 'undo' => fn() => panelModifyUser($o, (string) $o['remark'], panelBack($live))];
     });
     if (!($r['ok'] ?? false)) out(array_merge(['ok' => false], $r));
+    if (!empty($r['duplicate'])) out(['ok' => true, 'duplicate' => true, 'expire' => (int) $o['expire_date'], 'wallet' => $r['wallet']]);
     $what = $isVol ? "$n گیگ حجم" : "$n روز";
     tgText($uid, "➕ <b>$what به سرویس شما اضافه شد</b>\n\n🔖 <code>" . h($o['remark']) . "</code>\n💰 " . fa($price) . " تومان از کیف پول");
     tellAdmins("➕ <b>افزایش $what (مینی‌اپ)</b>\n\n👤 " . userLink($uid, (string) $me['name']) . " · <code>$uid</code>\n🔖 <code>" . h($o['remark']) . "</code> · " . h($o['label']) . "\n💰 " . fa($price) . " تومان (کیف پول)");
@@ -574,11 +657,14 @@ case 'topup': {   // card to card: a pending INCREASE_WALLET like the bot's star
     if (!on('cartToCartState')) fail('پرداخت کارت‌به‌کارت فعال نیست؛ از داخل ربات شارژ کنید.');
     $amount = (int) ($body['amount'] ?? 0);
     if ($amount < MIN_TOPUP || $amount > MAX_TOPUP) fail('مبلغ باید بین ' . fa(MIN_TOPUP) . ' و ' . fa(MAX_TOPUP) . ' تومان باشد.');
+    db()->begin_transaction();
+    row("SELECT wallet FROM users WHERE userid = ? FOR UPDATE", [$uid]);      // one top-up request at a time for this customer (8 at once left 2 pending rows and let a 4th receipt through)
     $waiting = (int) (row("SELECT COUNT(*) AS n FROM pays WHERE user_id = ? AND type = 'INCREASE_WALLET' AND state = 'have_sent'", [$uid])['n'] ?? 0);
-    if ($waiting >= 3) fail('سه رسید شما هنوز در انتظار بررسی است؛ لطفاً تا بررسی آن‌ها صبر کنید.');
+    if ($waiting >= 3) { db()->rollback(); fail('سه رسید شما هنوز در انتظار بررسی است؛ لطفاً تا بررسی آن‌ها صبر کنید.'); }
     run("DELETE FROM pays WHERE user_id = ? AND type = 'INCREASE_WALLET' AND state = 'pending'", [$uid]);
     $hash = randomId(9);
     run("INSERT INTO pays (hash_id, user_id, type, plan_id, volume, day, price, request_date, state, agent_bought, agent_count) VALUES (?, ?, 'INCREASE_WALLET', 0, 0, 0, ?, ?, 'pending', 0, 0)", [$hash, $uid, $amount, time()]);
+    db()->commit();
 
     // the card details (the bot's buildCartToCartInfoMessage: new users without history get the gift-card / USDT text)
     $keys = settingJson('PAYMENT_KEYS');
@@ -616,6 +702,12 @@ case 'receipt': {   // the receipt picture goes to the admins exactly like from 
     if (!in_array($mime, ['image/jpeg', 'image/png', 'image/webp'], true)) fail('فقط تصویر (JPG / PNG) پذیرفته می‌شود.');
     $ext = ['image/jpeg' => 'jpg', 'image/png' => 'png', 'image/webp' => 'webp'][$mime];
 
+    /* one upload at a time for one top-up: five requests at once each passed the "still pending" check above and sent their own photo with their own Approve button to every admin
+       (a named lock is let go by the server when this script ends, so a crash cannot leave the top-up stuck) */
+    if (!(int) (row("SELECT GET_LOCK(?, 0) AS l", ['miniapp_receipt_' . md5($hash)])['l'] ?? 0)) fail('رسید این درخواست قبلاً ارسال شده و در انتظار بررسی است.');
+    $pay = row("SELECT * FROM pays WHERE hash_id = ? AND user_id = ? AND type = 'INCREASE_WALLET'", [$hash, $uid]);
+    if (!$pay || $pay['state'] !== 'pending') fail($pay && $pay['state'] === 'have_sent' ? 'رسید این درخواست قبلاً ارسال شده و در انتظار بررسی است.' : 'این درخواست دیگر فعال نیست.');
+
     [$mainValues, $buttonValues] = botTexts();
     /* the caption is sent as HTML: a name like "A<B" made Telegram refuse the receipt */
     $caption = str_replace(['PRICE', 'USERNAME', 'NAME', 'USER-ID'], [fa((int) $pay['price']), h((string) $me['username']), h((string) $me['name']), (string) $uid], (string) ($mainValues['increase_wallet_request_message'] ?? "💳 درخواست افزایش موجودی\n\n💰 مبلغ: PRICE تومان\n👤 NAME (@USERNAME)\n🆔 USER-ID"));
@@ -649,9 +741,11 @@ case 'receipt': {   // the receipt picture goes to the admins exactly like from 
 case 'history': {
     $pays = rows("SELECT hash_id, type, price, state, request_date, description FROM pays WHERE user_id = ? ORDER BY id DESC LIMIT 40", [$uid]);
     $list = [];
-    $typeFa = ['INCREASE_WALLET' => 'شارژ کیف پول', 'BUY_SUB' => 'خرید سرویس', 'INCREASE_VOLUME' => 'افزایش حجم', 'INCREASE_TIME' => 'افزایش زمان', 'RENEW_SUB' => 'تمدید'];
+    $typeFa = ['INCREASE_WALLET' => 'شارژ کیف پول', 'BUY_SUB' => 'خرید سرویس', 'INCREASE_VOLUME' => 'افزایش حجم', 'INCREASE_TIME' => 'افزایش زمان', 'RENEW_SUB' => 'تمدید', 'RENEW_ACCOUNT' => 'تمدید'];
+    /* the bot writes INCREASE_VOLUME_<order>_<id> / INCREASE_DAY_<order>_<id> and RENEW_ACCOUNT; the page keeps the short kinds */
+    $kindOf = fn(string $t): string => preg_match('/^INCREASE_VOLUME/', $t) ? 'INCREASE_VOLUME' : (preg_match('/^INCREASE_(DAY|TIME)/', $t) ? 'INCREASE_TIME' : $t);
     $stateFa = ['pending' => 'منتظر رسید', 'have_sent' => 'در انتظار تأیید', 'approved' => 'تأیید شد', 'auto_cart_approved' => 'تأیید شد', 'paid' => 'پرداخت شد', 'paid_with_wallet' => 'از کیف پول', 'declined' => 'رد شد', 'low_wallet' => 'موجودی کم', 'expired_have_sent' => 'منقضی', 'expired_pending' => 'منقضی', 'processing_wallet' => 'در حال پردازش'];
-    foreach ($pays as $p) $list[] = ['hash' => $p['hash_id'], 'type' => $typeFa[$p['type']] ?? $p['type'], 'kind' => $p['type'], 'price' => (int) $p['price'], 'state' => $p['state'], 'state_fa' => $stateFa[$p['state']] ?? $p['state'], 'at' => (int) $p['request_date'], 'note' => (string) ($p['description'] ?? '')];
+    foreach ($pays as $p) $list[] = ['hash' => $p['hash_id'], 'type' => $typeFa[$kindOf((string) $p['type'])] ?? $p['type'], 'kind' => $kindOf((string) $p['type']),'price' => (int) $p['price'], 'state' => $p['state'], 'state_fa' => $stateFa[$p['state']] ?? $p['state'], 'at' => (int) $p['request_date'], 'note' => (string) ($p['description'] ?? '')];
     $cb = [];
     try { $cb = rows("SELECT order_amount, cashback, at FROM cashback_log WHERE userid = ? ORDER BY id DESC LIMIT 20", [$uid]); } catch (Throwable $e) {}
     out(['ok' => true, 'pays' => $list, 'cashback' => array_map(fn($r) => ['order' => (int) $r['order_amount'], 'back' => (int) $r['cashback'], 'at' => (int) $r['at']], $cb), 'wallet' => wallet($uid)]);
@@ -661,20 +755,21 @@ case 'gift': {
     if (!on('giftState')) fail('کد هدیه فعال نیست.');
     $code = trim((string) ($body['code'] ?? ''));
     if ($code === '' || mb_strlen($code) > 64) fail('کد را وارد کن.');
+    if (throttled($uid, 'gift', 10, 900)) fail('Too many wrong codes; try again in a few minutes.', 429);      // (a script could try codes as fast as it likes)
     // the panel's Gift codes page writes this table; the bot database may not have it yet (then every code is simply "unknown", not an internal error)
     db()->query("CREATE TABLE IF NOT EXISTS gift_codes (id INT NOT NULL AUTO_INCREMENT PRIMARY KEY, code VARCHAR(64) NOT NULL, amount BIGINT NOT NULL DEFAULT 0, max_uses INT NOT NULL DEFAULT 1, used INT NOT NULL DEFAULT 0, used_by TEXT NULL, expires BIGINT NOT NULL DEFAULT 0, created BIGINT NOT NULL DEFAULT 0, note VARCHAR(255) NULL, UNIQUE KEY code (code)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
     // the code row is locked while it is checked and used: two taps (or two scripts) at the same moment cannot both pass the "unused" check and credit the wallet twice
     db()->begin_transaction();
     $g = row("SELECT * FROM gift_codes WHERE code = ? FOR UPDATE", [$code]);
     $err = '';
-    if (!$g) $err = 'این کد هدیه وجود ندارد.';
+    if (!$g || (int) $g['amount'] <= 0) $err = 'این کد هدیه وجود ندارد.';      // (a row with a zero or negative amount would take money out of the wallet: it is no gift)
     elseif ((int) $g['expires'] > 0 && (int) $g['expires'] < time()) $err = 'مهلت این کد تمام شده است.';
     elseif ((int) $g['used'] >= (int) $g['max_uses']) $err = 'این کد قبلاً استفاده شده است.';
     else {
         $by = json_decode((string) $g['used_by'], true); if (!is_array($by)) $by = [];
         if (in_array((string) $uid, array_map('strval', $by), true)) $err = 'شما قبلاً این کد را استفاده کرده‌اید.';
     }
-    if ($err !== '') { db()->rollback(); fail($err); }
+    if ($err !== '') { db()->rollback(); if (!$g) throttleHit($uid, 'gift'); fail($err); }
     $by[] = (string) $uid;
     run("UPDATE gift_codes SET used = used + 1, used_by = ? WHERE id = ?", [json_encode($by), (int) $g['id']]);
     run("UPDATE users SET wallet = COALESCE(wallet, 0) + ? WHERE userid = ?", [(int) $g['amount'], $uid]);
@@ -759,6 +854,8 @@ case 'ticket_reply': {
     if (!$c) fail('تیکت پیدا نشد.', 404);
     if ((int) $c['state'] === 2) fail('این تیکت بسته شده است؛ تیکت جدید بزن.');
     if ($text === '') fail('متن خالی است.');
+    if (throttled($uid, 'ticket', 20, 600)) fail('Too many messages; wait a few minutes.', 429);      // (every reply is sent to every admin)
+    throttleHit($uid, 'ticket');
     run("INSERT INTO chats_info (chat_id, sent_date, msg_type, text) VALUES (?, ?, 'USER', ?)", [$id, time(), $text]);
     run("UPDATE chats SET state = 0 WHERE id = ?", [$id]);
     $msg = "💬 <b>پیام جدید در تیکت</b> [" . h($c['title']) . "]\n\n👤 " . userLink($uid, (string) $me['name']) . " · <code>$uid</code>\n\n" . h($text);
@@ -783,6 +880,7 @@ default:
     fail('unknown action', 404);
 }
 } catch (Throwable $e) {
+    try { db()->rollback(); } catch (Throwable $e2) {}      // (an exception in the middle of a gift / wheel transaction: nothing half done)
     error_log("miniapp $action: " . get_class($e) . ': ' . $e->getMessage() . ' @ ' . $e->getFile() . ':' . $e->getLine());
     fail('خطای داخلی؛ چند لحظه بعد دوباره تلاش کنید.', 500);
 }

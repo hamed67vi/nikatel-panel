@@ -43,10 +43,16 @@ const ctx = {
   scrollTo() {}, open() {},
 };
 ctx.window = ctx; ctx.scrollTo = () => {};
+// "payflow": what the page sends with a payment (a key per sheet) and when it keeps or drops it
+const bodies = [];
+if (process.argv[3] === "payflow") ctx.fetch = async (url, opt) => { const a = /a=(\w+)/.exec(url)[1]; let b = {}; try { b = JSON.parse(opt.body); } catch (e) {} bodies.push({ a, b }); if (R.__net) throw new Error("net"); return { json: async () => (R[a] || { ok: false, error: "no " + a }) }; };
 if (process.argv[3] === "noconnect") R.me = { ok: false, error: "down" };
+// "hostile": the support id and the bot name come from the database / baseInfo.php; a quote in them must stay inside the string of the handler (not end it and run the rest)
+const HOSTILE = "x');alert(1);('";
+if (process.argv[3] === "hostile") { R.me.support = HOSTILE; R.me.bot = HOSTILE; R.me.features.card = false; }
 ctx.Telegram = { WebApp: { initData: "x=1", initDataUnsafe: {}, colorScheme: "dark", ready() {}, expand() {}, onEvent() {}, setHeaderColor() {}, setBackgroundColor() {}, enableClosingConfirmation() {}, BackButton: { onClick() {}, show() {}, hide() {} } } };
 vm.createContext(ctx);
-vm.runInContext(src + "\n;globalThis.__X = Object.fromEntries(['VIEWS','AFTER','S','esc','js','T','GB','left','leftTx','vol','ltr','boot','setTab','renewSheet','extraSheet','reportSheet','buySheet','render'].map(n => [n, (() => { try { return eval(n); } catch (e) { return undefined; } })()]));", ctx);
+vm.runInContext(src + "\n;globalThis.__X = Object.fromEntries(['VIEWS','AFTER','S','esc','js','T','GB','left','leftTx','vol','ltr','boot','setTab','renewSheet','extraSheet','reportSheet','buySheet','render','doBuy','doRenew','doExtra','RID'].map(n => [n, (() => { try { return eval(n); } catch (e) { return undefined; } })()]));", ctx);
 const X = ctx.__X;
 const out = { values: {}, errors: [], calls };
 const tick = () => new Promise(r => setImmediate(r));
@@ -55,6 +61,20 @@ const tick = () => new Promise(r => setImmediate(r));
   if (process.argv[3] === "noconnect") {
     const before = calls.length; X.setTab("wallet"); await tick(); await tick();
     out.values.noconnect = { me: calls.filter(a => a === "me").length, history: calls.filter(a => a === "history").length };
+    console.log(JSON.stringify(out)); return;
+  }
+  if (process.argv[3] === "payflow") {
+    R.buy = { ok: true, order_id: 9, remark: "r", wallet: 1, cashback: 0, sub: "", links: [], expire: 0 };
+    R.renew = { ok: true, expire: 1, wallet: 1, cashback: 0 };
+    X.S.plans = R.plans.plans; X.S.me = R.me.user;
+    X.buySheet(11);
+    R.__net = false; await X.doBuy(11); await X.doBuy(11);                  // two purchases: two keys
+    R.__net = true; await X.doBuy(11); await X.doBuy(11);                   // the answer was lost twice: the SAME key again
+    R.__net = false; await X.doBuy(11); await X.doBuy(11);                  // an answer at last: that key once more, then it is dropped; the next purchase has a new one
+    R.__net = true; await X.doRenew(7); R.__net = false; await X.doRenew(7);
+    out.values.rids = bodies.filter(x => x.a === "buy").map(x => x.b.rid);
+    out.values.renewRids = bodies.filter(x => x.a === "renew").map(x => x.b.rid);
+    out.values.left = Object.keys(X.RID);
     console.log(JSON.stringify(out)); return;
   }
   out.values.avatar = els.ava.textContent; out.values.hello = els.hello.textContent;
@@ -90,6 +110,12 @@ const tick = () => new Promise(r => setImmediate(r));
   // 2) every inline handler must be JavaScript
   for (const [name, code] of handlers) { try { new vm.Script(code); } catch (e) { out.errors.push(name + " is not JavaScript: " + code.slice(0, 90)); } }
   out.values.handlers = handlers.length;
+  // 3) a handler calls only the functions of the app: strip the string literals, list what is called; `alert(1)` after a quote that ended the string shows up here
+  const known = new Set([...src.matchAll(/(?:^|\n)(?:async\s+)?function\s+(\w+)/g)].map(m => m[1]).concat(["if", "querySelectorAll", "forEach", "remove"]));
+  const called = new Set();
+  for (const [, code] of handlers) for (const m of code.replace(/"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`(?:[^`\\]|\\.)*`/g, '""').matchAll(/([A-Za-z_$][\w$]*)\s*\(/g)) called.add(m[1]);
+  out.values.unknownCalls = [...called].filter(c => !known.has(c)).sort();
+  out.values.openLinks = handlers.filter(h => /^openLink\(/.test(h[1])).map(h => h[1].slice(0, 80));
   out.values.copyHandlers = handlers.filter(h => /^copy\(/.test(h[1])).map(h => h[1].slice(0, 80));
   out.values.hist = HTML.filter(h => h.includes("item static")).join("").match(/<b class="ltr amt[^"]*">[^<]*<\/b>/g);
   out.values.svcRow = (HTML.filter(h => h.includes('id="svc-8"'))[0] || "").match(/<span>[^<]*<\/span><\/div>/g);

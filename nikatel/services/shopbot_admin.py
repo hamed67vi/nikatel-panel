@@ -184,6 +184,19 @@ def _one_at_a_time(pay_id: int):
             _PAY_BUSY.discard(int(pay_id))
 
 
+_SETTLED = ("approved", "declined", "paid", "auto_cart_approved")          # (paid / auto_cart_approved: the bot credited the wallet already - approving again would credit it twice)
+
+
+def _check_open(p: dict) -> None:
+    """Only a wallet top-up nobody has settled can be approved or declined: a purchase paid from the wallet (BUY_SUB, RENEW_ACCOUNT, INCREASE_VOLUME_..., state paid_with_wallet) has nothing to approve,
+    and "approving" it would add its price to the wallet (money from nothing)."""
+    if p.get("state") in _SETTLED:
+        raise ValueError(f"this payment was already {p['state']}")
+
+    if str(p.get("type") or "INCREASE_WALLET") != "INCREASE_WALLET":
+        raise ValueError("only a wallet top-up can be approved or declined here")
+
+
 def pay_approve(pay_id: int, admin_id: int = 0) -> dict:
     """What the bot does when an admin presses ✅: state approved, the amount added to the user's wallet, both sides told."""
     with _one_at_a_time(pay_id):
@@ -192,9 +205,7 @@ def pay_approve(pay_id: int, admin_id: int = 0) -> dict:
 
 def _pay_approve(pay_id: int, admin_id: int) -> dict:
     p = _pay(pay_id)
-
-    if p.get("state") in ("approved", "declined"):
-        raise ValueError(f"this payment was already {p['state']}")
+    _check_open(p)
 
     price, uid = num(p.get("price")), str(p.get("user_id", "")).strip()
 
@@ -219,9 +230,7 @@ def pay_decline(pay_id: int, reason: str = "") -> dict:
 
 def _pay_decline(pay_id: int, reason: str) -> dict:
     p = _pay(pay_id)
-
-    if p.get("state") in ("approved", "declined"):
-        raise ValueError(f"this payment was already {p['state']}")
+    _check_open(p)
 
     uid = str(p.get("user_id", "")).strip()
     write(f'UPDATE pays SET state = "declined" WHERE id = {int(pay_id)}')
