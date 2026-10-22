@@ -103,8 +103,14 @@ def _line(msg, exc=None):
     return logmod._Formatter().format(rec)
 
 
+def test_a_wrong_verb_has_its_own_code(client):
+    r = client.delete("/api/health")
+    assert r.status_code == 405 and r.json() == {"ok": False, "error": "Method Not Allowed", "code": "method_not_allowed"}
+
+
 def test_a_stranger_cannot_forge_a_line_of_the_log():
-    """The path of a request is logged with the 404 it got; `%0a` in it is a line break. The Logs page reads the file line by line: the forged line showed as a real ERROR."""
+    """A message the browser sends (`POST /client-error`: any text with a line break), a header, an answer of a server: all of it is written to the log, and the Logs page reads the file line by line - a forged
+    line showed as a real ERROR (checked on the code before the fix: the row `jobs - job alerts failed` appeared). (A path with `%0a` loses the break before it is logged: not a way.)"""
     fake = "2026-10-22T00:00:00Z ERROR   jobs       job alerts failed rid=job:alerts"
     out = _line("GET /api/x\r\n" + fake + "\x0b" + fake + " " + fake)
     lines = out.split("\n")

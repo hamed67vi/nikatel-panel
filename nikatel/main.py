@@ -58,7 +58,7 @@ from .services import (
 
 log = logmod.get_logger("http")
 WEB = Path(__file__).parent / "web"
-ERROR_CODES = {400: "bad_request", 401: "not_signed_in", 402: "license_needed", 403: "forbidden", 404: "not_found", 409: "conflict", 422: "invalid",
+ERROR_CODES = {400: "bad_request", 401: "not_signed_in", 402: "license_needed", 403: "forbidden", 404: "not_found", 405: "method_not_allowed", 409: "conflict", 422: "invalid",
                413: "too_large", 429: "too_many_requests", 500: "internal", 502: "upstream_failed", 503: "unavailable"}      # docs/api.md: one error shape, these codes
 
 
