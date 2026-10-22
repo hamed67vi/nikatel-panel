@@ -1439,7 +1439,12 @@ def rebuild_tunnel(tunnel_id: int, fresh_link: bool = False) -> int:
         opts["avoid_net"] = rec["network"]
 
     pending_put(pending_item(name, iran_id, foreign_id, typ, transport, rec, ports_text, opts))
-    delete_tunnel(tunnel_id, trash=True)          # a copy is kept: a rebuild whose build fails can be restored from 'Recently removed'
+
+    try:
+        delete_tunnel(tunnel_id, trash=True)          # a copy is kept: a rebuild whose build fails can be restored from 'Recently removed'
+    except ValueError:
+        pending_drop(name)          # (refused before anything was removed - read-only, or the tunnel is gone: the note must go too, else the list shows "rebuilding…" for a tunnel nobody rebuilds and a restart of the panel would build it)
+        raise
 
     if other:
         from . import build_other

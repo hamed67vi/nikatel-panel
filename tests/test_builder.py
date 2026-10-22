@@ -226,3 +226,28 @@ def test_backhaul_wssmux_server_names_its_certificate():
     assert "tls_cert" not in plain
     assert "openssl req -x509" in render_action("backhaul_tls", {"NAME": "fi1-ir1"})
     assert '"/etc/backhaul/$n.crt"' in render_action("remove_tunnel_files", {"NAME": "fi1-ir1", "PORT": "9910", "TRANSPORT": "wssmux"})
+
+def test_a_rebuild_that_is_refused_leaves_no_note_behind(client):
+    """The note of a rebuild (pending_builds) is written before the removal; when the removal is refused (read-only) nothing was removed, so the note must go: else the list shows a
+    "rebuilding…" row for a tunnel nobody rebuilds, and once that tunnel is removed by hand a restart of the panel builds it again (QA 2026-10-22)."""
+    from nikatel.db import session
+    from nikatel.models import Server, Tunnel
+    from nikatel.services import builder
+    from nikatel.services import settings as st
+
+    with session() as db:
+        a, b = Server(name="i1", host="10.0.0.1", role="iran"), Server(name="f1", host="10.0.0.2", role="foreign")
+        db.add_all([a, b])
+        db.flush()
+        t = Tunnel(name="f1-i1", type="backhaul", transport="tcpmux", iran_server_id=a.id, foreign_server_id=b.id, port=9909, forwarded_ports=[80], record={"mtu": 1360, "keepalive": 75, "port_mapping": "80"})
+        db.add(t)
+        db.flush()
+        tid = t.id
+
+    with pytest.raises(ValueError, match="read-only"):
+        builder.rebuild_tunnel(tid)
+
+    assert st.get("pending_builds").get("items", []) == []
+    r = client.post(f"/api/tunnels/{tid}/rebuild")
+    assert r.status_code == 400 and "read-only" in r.json()["error"] and st.get("pending_builds").get("items", []) == []
+    assert [x["name"] for x in client.get("/api/tunnels").json()] == ["f1-i1"]          # (the tunnel itself is still there, one row, not "rebuilding")

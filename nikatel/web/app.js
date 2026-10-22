@@ -485,7 +485,7 @@ async function refreshNow() {
   }
 }
 let lastTick = Date.now();
-setInterval(() => { if (Date.now() - lastTick < (state.page === "nodes" ? 8000 : 15000)) return; if (!document.hidden && !$("#app").classList.contains("hidden") && !state.edit && !state.open && !state.nodeWin && !state.build && !["bot", "settings"].includes(state.page) && !cf.open && !cf.edit && !cf.add && !cf.sub && !cf.subEdit && !document.activeElement.matches("input, textarea, select") && !document.querySelector(".nk-dd, .lab-menu, .pn-uchk:checked, .pn-hchk:checked")) { lastTick = Date.now(); refresh(); } }, 2000);   // the servers page follows the pulse (every 10 s on the server)
+setInterval(() => { if (Date.now() - lastTick < (state.page === "nodes" ? 8000 : 15000)) return; if (!document.hidden && !$("#app").classList.contains("hidden") && !state.edit && !state.open && !state.nodeWin && !state.build && !["bot", "settings"].includes(state.page) && !cf.open && !cf.edit && !cf.add && !cf.sub && !cf.subEdit && !document.activeElement.matches("input, textarea, select") && !document.querySelector(".nk-dd, .lab-menu, .pn-uchk:checked, .pn-hchk:checked, #modal .modal:not(.keep)")) { lastTick = Date.now(); refresh(); } }, 2000);      // (a window that is open - Messages, Explain, a restore - is not drawn away by the round of the page behind: the tunnels page closed them within seconds)   // the servers page follows the pulse (every 10 s on the server)
 /* a change of the STATE of a server (on / off) or a tunnel (up, down ...) shows within ~2 s (the owner, 2026-10-20: "it detected very late - show it at once when a tunnel or a server is cut"): one signature of the
    states is asked every 2 s; when it changes the round of the page above is made due (lastTick = 0), so it redraws at once, under the same guards (no window open, nothing typed). */
 let briefSig = null;
@@ -1341,6 +1341,10 @@ function applyQ() {
   document.querySelectorAll("#page .nk-ghead").forEach(h => { const tb = h.nextElementSibling; if (tb && tb.matches("table")) h.classList.toggle("q-hide", !!q && !tb.querySelector("tr[data-q]:not(.q-hide)")); });
   document.querySelectorAll("#page table.tbl").forEach(tb => tb.classList.toggle("q-hide", !!q && !!tb.querySelector("tr[data-q]") && !tb.querySelector("tr[data-q]:not(.q-hide)")));
   document.querySelectorAll("#page .dr-g").forEach(g => { const any = !!g.querySelector(".dr-rec:not(.q-hide)"); g.classList.toggle("q-hide", !any); g.classList.toggle("q-open", !!q && any); });      // a search opens the groups that have a match
+  document.querySelectorAll("#page .lbox").forEach(b => {      // a search that finds nothing says so (the box stayed as high as before, empty, with no word in it)
+    let n = b.querySelector(":scope > .q-none"); const none = !!q && !!b.querySelector("tr[data-q]") && !b.querySelector("tr[data-q]:not(.q-hide)");
+    if (none) { if (!n) { n = document.createElement("div"); n.className = "q-none empty"; b.appendChild(n); } n.textContent = `Nothing matches “${q}”.`; } else if (n) n.remove();
+  });
   const sb = $(".searchbar"); if (sb) sb.dataset.n = q ? shown + " / " + total : "";
 }
 const holdBoxes = () => document.querySelectorAll("#page .lbox").forEach(b => { if (!b.style.minHeight) b.style.minHeight = b.offsetHeight + "px"; });      // the list box keeps its height while the rows are filtered
@@ -1537,7 +1541,7 @@ window.checkAll = async () => {      // Check all: it works right there on the b
   const btn = document.querySelector('button[onclick="checkAll()"]'); if (btn) { btn.disabled = true; btn.innerHTML = '<i class="spin"></i>Checking…'; }
   try {
     const r = await api("/api/tunnels/full-check", {method: "POST"}), bad = r.rows.filter(x => x.state !== "up" || x.loss === "high").map(x => x.name);
-    toast(`${r.up} up · ${r.degraded} unstable · ${r.down} down${r.high_loss ? " · " + r.high_loss + " with high packet loss" : ""}${bad.length ? ": " + bad.slice(0, 4).join(", ") + (bad.length > 4 ? "…" : "") : ""}`, r.down || r.high_loss ? "bad" : "ok");
+    toast(`${r.up} up · ${r.degraded} unstable · ${r.down} down${r.unknown ? " · " + r.unknown + " not answering" : ""}${r.high_loss ? " · " + r.high_loss + " with high packet loss" : ""}${bad.length ? ": " + bad.slice(0, 4).join(", ") + (bad.length > 4 ? "…" : "") : ""}`, r.down || r.unknown || r.high_loss ? "bad" : "ok");      // (a tunnel whose servers did not answer is in the names below: it must be in the count too - 9 + 1 + 1 of 12 added up to 11)
   } catch (e) { toast("✕ " + e.message, "bad"); }
   state.tunChecking = false; refresh();
 };
@@ -1549,7 +1553,7 @@ async function followAction(id, every = 2000, limitSeconds = 900) {
 }
 const lastLine = s => (s.story || []).slice(-1)[0] || "";
 window.healthAll = async () => { toast("Checking every tunnel… (up to a minute)"); try { const r = await api("/api/tunnels/health-all", {method: "POST"}); const s = await followAction(r.action_id); toast(lastLine(s), s.ok ? "ok" : "bad"); } catch (e) { toast("✕ " + e.message, "bad"); } refresh(); };
-window.restartTunnel = async (id, name) => { toast(`Restarting ${name}…`); try { const r = await api(`/api/tunnels/${id}/restart`, {method: "POST"}); toast(`${name}: ${r.state}` + (r.why ? " - " + r.why : ""), r.state === "up" ? "ok" : "bad"); } catch (e) { toast("✕ " + e.message, "bad"); } refresh(); };
+window.restartTunnel = async (id, name) => { if (!await gconfirm(`Restart the tunnel ${name} on both servers? It is down for a few seconds.`)) return; toast(`Restarting ${name}…`); try { const r = await api(`/api/tunnels/${id}/restart`, {method: "POST"}); toast(`${name}: ${r.state}` + (r.why ? " - " + r.why : ""), r.state === "up" ? "ok" : "bad"); } catch (e) { toast("✕ " + e.message, "bad"); } refresh(); };
 window.restartAll = async () => { if (!await gconfirm("Restart every tunnel on both servers? Each is down for a few seconds.")) return; toast("Restarting every tunnel… (about two minutes)"); try { const r = await api("/api/tunnels/restart-all", {method: "POST"}); const s = await followAction(r.action_id); toast(lastLine(s), s.ok ? "ok" : "bad"); } catch (e) { toast("✕ " + e.message, "bad"); } refresh(); };
 window.bwMeasure = async id => { toast("Measuring the bandwidth… (a few seconds)"); try { const r = await api(`/api/tunnels/${id}/bandwidth`, {method: "POST"}); const s = await followAction(r.action_id, 1500, 120); toast(lastLine(s), s.ok ? "ok" : "bad"); } catch (e) { toast("✕ " + e.message, "bad"); } refresh(); };
 window.qualityAll = async () => { toast("Measuring every tunnel… (10 s each)"); try { const r = await api("/api/tunnels/quality-all", {method: "POST"}); const s = await followAction(r.action_id); toast(lastLine(s), s.ok ? "ok" : "bad"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
@@ -1768,7 +1772,8 @@ async function buildFormHtml() {
   const srvOpt = role => servers.filter(s => s.role === role && s.enabled);
   void srvOpt;
   const v = bk.v, val = (n, d) => esc(v[n] != null ? v[n] : d);
-  const opt = (role, name) => servers.filter(s => s.role === role).map(s => `<option value="${s.id}" ${s.enabled ? "" : "disabled"} ${s.enabled && String(s.id) === String(v[name]) ? "selected" : ""}>${esc(s.name)}${isNew(s) ? " · new" : ""} — ${esc(s.host)}${!s.enabled ? " (disabled: enable it in Servers → Edit)" : s.online === false ? " (offline)" : ""}</option>`).join("");
+  const firstOn = role => (servers.filter(s => s.role === role && s.enabled && s.online !== false)[0] || {}).id;      // (nothing chosen yet: the first server that answers, not the first one by name - that one may be off)
+  const opt = (role, name) => servers.filter(s => s.role === role).map(s => `<option value="${s.id}" ${s.enabled ? "" : "disabled"} ${s.enabled && (String(s.id) === String(v[name]) || (role === "foreign" && (v[name] == null || v[name] === "") && s.id === firstOn(role))) ? "selected" : ""}>${esc(s.name)}${isNew(s) ? " · new" : ""} — ${esc(s.host)}${!s.enabled ? " (disabled: enable it in Servers → Edit)" : s.online === false ? " (offline)" : ""}</option>`).join("");
   const num = (name, label, d, min, max, small) => `<label>${label}${small ? ` <small>${small}</small>` : ""}<input name="${name}" type="number" min="${min}" max="${max}" value="${val(name, d)}"></label>`;
   const chk = (name, label, small, dflt = false) => `<label class="chk"><input name="${name}" type="checkbox" ${(name in bk.chk ? bk.chk[name] : dflt) ? "checked" : ""}> ${label}${small ? ` <small class="mut">${small}</small>` : ""}</label>`;
   const nodelay = chk("nodelay", "TCP no-delay", "lower latency for small packets", true);
@@ -1992,6 +1997,12 @@ window.tunHistory = async (id, name) => {      // the history opens INSIDE the t
     body.innerHTML = `<div class="wback"><button class="sm" onclick="tunBack(${id})">← Back</button><b style="margin-left:10px">History of ${esc(name)}</b></div>` + (rows.length ? `<div class="th-list">${rows.map(a => { const tx = ((a.story || []).slice(-1)[0] || "").trim(), d = new Date(a.ts * 1000); return `<div class="th-row ${a.ok === false ? "bad" : "ok"}" title="${esc(tx)}"><time>${d.toLocaleDateString(undefined, {month: "2-digit", day: "2-digit"})} ${d.toLocaleTimeString(undefined, {hour12: false})}</time><i></i><b>${esc(a.action)}</b><span>${esc(tx)}</span></div>`; }).join("")}</div>` : '<div class="empty">Nothing was done to this tunnel yet.</div>'); }
   catch (e) { body.innerHTML = `<div class="wback"><button class="sm" onclick="tunBack(${id})">← Back</button></div><div class="err">${esc(e.message)}</div>`; }
 };
+window.tunWinOpen = id => {      // true when the window of this tunnel is open (opened here when it was not: the menu of a row in the list has Fix, Dry run, Speed test, History and Rebuild, which all draw INTO that window)
+  if (state.open === id && document.getElementById("tun-detail-" + id)) return true;
+  const t = (state.tunnelsCache || []).find(x => x.id === id); if (!t || t.state === "starting") return false;
+  state.edit = null; state.wtab = null; state.open = id; state.tsec = null; tunModal(t); tunAfter(t);
+  return !!document.getElementById("tun-detail-" + id);
+};
 window.tunBack = id => { const t = (state.tunnelsCache || []).find(x => x.id === id); if (t) { tunModal(t); tunAfter(t); } };
 /* the speed a CUSTOMER gets (the owner, 2026-10-16: "a speed test in the tunnel menu: what speed does a user in Iran get - the closest possible to what the customer holds"): opens INSIDE the tunnel window (Back returns). Two ways: through a config of the tunnel on the probe (the whole path, one connection like a phone), or through the test door of the tunnel (the tunnel alone) */
 const spdN = v => v == null ? "—" : +v >= 100 ? String(Math.round(+v)) : (+v).toFixed(1);
@@ -2030,6 +2041,7 @@ window.trashRestore = async id => {
   const it = (state.trashCache || []).find(x => x.id === id); if (!it) return;
   if (!await gconfirm(`Restore the tunnel ${it.title}? It is built again between ${it.sub} with the ports ${it.ports} (a new GRE key; the services start by themselves; about a minute).`)) return;
   showModal(`<b>♻ Restoring ${esc(it.title)}</b>`, '<div id="trash-story" class="fix"><div class="fx-line run"><i></i>Starting…</div></div>', "wide");
+  state.keepWin = true;      // (the list behind is drawn again when the story ends - that used to take the window away with its error or its result, within a blink; only its Close button (or Esc) closes it now)
   try { const r = await api(`/api/tunnel-trash/${encodeURIComponent(id)}/restore`, {method: "POST"}); await followStory(r.id, $("#trash-story"), 600); } catch (e) { const b = $("#trash-story"); if (b) b.innerHTML = `<div class="fx-line bad"><b>!</b>${esc(e.message)}</div>`; }
   refresh();
 };
@@ -4828,6 +4840,11 @@ window.dockOpen = id => {
   m.innerHTML = ""; it.ov.classList.remove("docked"); m.appendChild(it.ov); dockRender();
 };
 window.dockDrop = id => { dock.items = dock.items.filter(x => x.id !== id); dockRender(); };
+document.addEventListener("click", e => {      // the sheet of a finished repair / rebuild in a tunnel window is put away by a click on it (it covered the boxes of the window and had no way out); one that still works stays, and selecting text to copy it does not close it
+  const b = e.target.closest && e.target.closest('#modal .tunwin .fix[id^="fix-"]');
+  if (!b || b.classList.contains("hidden") || b.querySelector(".fx-line.run, .loading") || String(window.getSelection && window.getSelection()).trim()) return;
+  b.classList.add("hidden"); b.innerHTML = "";
+});
 
 /* ---- smooth scrolling in every scroll box: the wheel moves a target and the box glides to it (ease-out), the nearest box that can still move takes the wheel, and a box at its end passes it on to the one around it.
    Lightweight: one wheel listener, one animation frame loop that runs only while something glides; off with the animations setting or reduced motion. */

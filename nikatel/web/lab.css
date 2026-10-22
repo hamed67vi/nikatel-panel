@@ -1268,3 +1268,9 @@ html body #page .abt-grid.abt-nolic > #about-hero .abt-cb { flex: 0 1 380px; min
 
 /* Persian is switched off for now (PERSIAN_ON in i18n.js): the language button is not shown, also before the script has removed it */
 html[data-persian="off"] .lang-btn { display: none !important; }
+
+/* the sheet of a repair / rebuild / speed test in a tunnel window: as high as its text (a one-line error was a 230 px empty sheet over the boxes), and a click on a finished one puts it away */
+html body #modal .tunwin .fix[id^="fix-"]:not(.hidden) { height: auto; min-height: 0; padding-right: 34px; cursor: pointer; }
+html body #modal .tunwin .fix[id^="fix-"]:not(.hidden):not(:has(.fx-line.run, .loading))::after { content: "✕"; position: absolute; top: 8px; right: 14px; font-size: 13px; opacity: .55; pointer-events: none; }
+/* a search with no hit: one quiet line in the middle of the box */
+html body #page .lbox > .q-none { padding: 34px 16px; text-align: center; font-size: 13.5px; color: var(--mut, #8b93a7); }
