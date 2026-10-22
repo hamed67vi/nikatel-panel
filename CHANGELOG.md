@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.69.108 - The Mini App starts on a bot without extras.php
+
+> **In short:** `bot/miniapp/api.php` required `../extras.php` (the extras layer of the test bot) and died with a fatal on the very first request on a bot that has none, like the main bot. The two helpers it uses (`exEmojiStrip`, `exOnHoldDays`) are built in now and extras.php is used when it exists.
+
+The owner (2026-10-23, translated from Persian, after the audit of 1.69.105): the Mini App should be in the menu of `@nikatelshopbot`, the main bot; its server has no `extras.php`, no `app/` and its nginx opens only `bot.php`, `pay/` and `settings/subLink.php`.
+
+- **What changed**: `is_file(extras.php)` before the `require_once`; `exEmojiStrip` (premium-emoji tags `{emoji:ID:x}` become their fallback character) and `exOnHoldDays` (`BOT_STATES onHoldState` / `onHoldDays`) are defined only when extras.php did not define them, with the same code. Nothing else in the Mini App changes; the test bot keeps using its extras.php.
+- **Proved**: `tests/miniapp_security/sec.py` scenario ST1 (me, plans, services, buy, apps answer with extras.php removed: HTTP 500 on the old file, all ok on the new; 34 scenarios, 0 holes, the old 159-check e2e passes) and `tests/test_miniapp_security.py::test_a_stock_bot_without_extras_php_still_starts_the_mini_app` (the two helpers run on their own). **Not proved**: on the main bot's real PHP 8.5-FPM and its real database (the next step, with the owner's yes).
+
 ## 1.69.107 - The record form of the CDN page closes at once when Save is pressed
 
 The owner (2026-10-23, with a picture of the "Edit record" box on its dimmed Save): "when we set a DNS or change something here, after Save the box must close".

@@ -893,6 +893,19 @@ def py22():
         problems.append(f"6 buys with unusable keys must be 6 purchases: wallet={wallet()}")
     return bool(problems), "; ".join(problems) if problems else "one key = one payment (buy, renew, volume, days); a refused try can be retried; other keys pay again"
 
+@scn("ST1", "MED", "a stock bot without extras.php (the main bot has none): the Mini App starts and sells, the two helpers it needs are built in")
+def st1():
+    reset(); mk_user(U, wal=500_000)
+    ex = f"{B}/bot/extras.php"
+    os.rename(ex, ex + ".off")
+    try:
+        r = [call("me"), call("plans"), call("services"), call("buy", {"plan_id": 1}), call("apps")]
+    finally:
+        os.rename(ex + ".off", ex)
+    bad = [(c, t[:60]) for c, j, t in r if not ok(j)]
+    return bool(bad), f"without extras.php: {bad}" if bad else "me, plans, services, buy, apps all answer without extras.php"
+
+
 # ===== injection and web basics
 SQLI = ["'", "\"", "' OR '1'='1", "1' OR '1'='1' -- ", "1; DROP TABLE users; -- ", "' UNION SELECT 1,2,3 -- ", "\\", "%27", "1 AND SLEEP(2)", "') OR 1=1 -- ", "0x27", "\x00", "a' or 1=1#", "1) UNION SELECT password FROM server_config -- ", "O'Brien", "%' OR '%'='", "{\"a\":\"'\"}"]
 

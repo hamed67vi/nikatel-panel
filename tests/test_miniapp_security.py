@@ -184,6 +184,19 @@ def test_a_new_customer_row_is_like_the_bots_and_a_second_first_request_is_not_a
     assert "INSERT IGNORE INTO users (userid, name, username, refcode, wallet, date) VALUES" in SRC and "step" not in SRC[at:at + 140]
 
 
+@pytest.mark.skipif(PHP is None, reason="php is not installed here")
+def test_a_stock_bot_without_extras_php_still_starts_the_mini_app(tmp_path):
+    """the main bot has no extras.php (the extras layer lives on the test bot): api.php required it and died with a fatal on the first request"""
+    head = SRC[SRC.index("if (is_file(__DIR__ . '/../extras.php'))"):SRC.index("const GB = ")]
+    assert "require_once __DIR__ . '/../extras.php';" in head and "if (!function_exists('exEmojiStrip'))" in head and "if (!function_exists('exOnHoldDays'))" in head
+    out = _php(tmp_path, textwrap.dedent(r"""
+        $botState = ['onHoldState' => 'on', 'onHoldDays' => 0];
+        """) + head.replace("__DIR__ . '/../extras.php'", "'/nonexistent/extras.php'") + textwrap.dedent(r"""
+        echo json_encode([exEmojiStrip('x {emoji:12345678:🙂} y'), exEmojiStrip('plain'), exOnHoldDays(30), (function () { global $botState; $botState['onHoldState'] = 'off'; return exOnHoldDays(30); })(), (function () { global $botState; $botState['onHoldState'] = 'on'; $botState['onHoldDays'] = 7; return exOnHoldDays(30); })()], JSON_UNESCAPED_UNICODE);
+        """))
+    assert json.loads(out) == ["x 🙂 y", "plain", 30, 0, 7]
+
+
 def test_the_backup_of_a_deploy_is_not_inside_the_web_root():
     """the old copies in app/.prev-<time>/ were served to anybody (app.js, index.html; api.php answered 500 there)"""
     sh = (ROOT / "scripts" / "deploy-miniapp.sh").read_text(encoding="utf-8")

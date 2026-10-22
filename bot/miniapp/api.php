@@ -25,7 +25,22 @@ ini_set('log_errors', '1');
 ini_set('error_log', __DIR__ . '/../settings/miniapp_error.log');
 
 include_once __DIR__ . '/../baseInfo.php';     // $botToken, $admin, $admins_list, $botUsername, $botUrl, db credentials
-require_once __DIR__ . '/../extras.php';       // exEmojiStrip, exOnHoldDays, exFaDigits
+if (is_file(__DIR__ . '/../extras.php')) require_once __DIR__ . '/../extras.php';       // the bot's extras layer: exEmojiStrip, exOnHoldDays
+/* a bot without extras.php (a stock one) still gets the two helpers the Mini App uses: the same as the extras layer's */
+if (!function_exists('exEmojiStrip')) {
+    function exEmojiStrip($s) {
+        if (!is_string($s) || strpos($s, '{emoji:') === false) return $s;
+        return preg_replace_callback('/\{emoji:(\d{5,30})(?::([^}]{0,24}))?\}/u', function ($m) { return isset($m[2]) && $m[2] !== '' ? $m[2] : '⭐'; }, $s);
+    }
+}
+if (!function_exists('exOnHoldDays')) {
+    function exOnHoldDays($days) {
+        global $botState;
+        if (($botState['onHoldState'] ?? 'off') != 'on') return 0;
+        $d = (int) ($botState['onHoldDays'] ?? 0);
+        return $d > 0 ? $d : max(1, (int) $days);
+    }
+}
 
 const GB = 1073741824;
 const MIN_TOPUP = 10000;
@@ -156,7 +171,7 @@ if (!$user) fail($expired ? 'نشست شما منقضی شده؛ مینی‌اپ
 $uid = (int) $user['id'];
 
 $botState = settingJson('BOT_STATES');
-$GLOBALS['botState'] = $botState;           // extras.php (exOnHoldDays) reads it
+$GLOBALS['botState'] = $botState;           // exOnHoldDays reads it
 if (!on('botState', 'on') && $uid !== (int) $admin && !in_array($uid, array_map('intval', (array) ($admins_list ?? [])), true)) fail('ربات موقتاً خاموش است.', 503);
 
 /* the user row (made if missing, like the bot does) */
