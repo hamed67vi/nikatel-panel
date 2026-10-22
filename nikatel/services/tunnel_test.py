@@ -250,8 +250,16 @@ def _worker(aid: int, build_aid: int, name: str, iran_id: int = 0, foreign_id: i
         verdict = f"Stopped: {str(e)[:160]}"
         ok = False
     finally:
-        _cleanup(aid, name, iran_id, foreign_id)
+        _safe_cleanup(aid, name, iran_id, foreign_id)
         _say(aid, verdict or "Finished.", done=True, ok=ok)
+
+
+def _safe_cleanup(aid: int, name: str, iran_id: int = 0, foreign_id: int = 0) -> None:
+    """`_cleanup`, whatever it raises: the story of the test must always be closed after it (an entry left open stays "running" on the page for ever)."""
+    try:
+        _cleanup(aid, name, iran_id, foreign_id)
+    except Exception:  # thread boundary
+        log.exception("tunnel test #%s: the cleanup crashed", aid)
 
 
 def _cleanup(aid: int, name: str, iran_id: int = 0, foreign_id: int = 0) -> None:
@@ -401,6 +409,7 @@ for _link in linkmodels.CARRIER_LINKS:
 
 KIND_KEYS = {k[0] for k in KINDS}
 _COMPARE: dict[str, dict] = {}
+_COMPARE_LOCK = threading.Lock()
 
 
 def kind_link(kind: str) -> str:
@@ -516,7 +525,7 @@ def _other_worker(aid: int, build_aid: int, name: str, iran_id: int = 0, foreign
         log.exception("tunnel test #%s crashed", aid)
         verdict, ok = f"Stopped: {str(e)[:160]}", False
     finally:
-        _cleanup(aid, name, iran_id, foreign_id)
+        _safe_cleanup(aid, name, iran_id, foreign_id)
         _say(aid, verdict or "Finished.", done=True, ok=ok)
 
 
@@ -563,18 +572,28 @@ def compare_start(iran_id: int, foreign_id: int, kinds: list[str], measure: str 
 
     kinds = allowed
 
-    if any(not j["done"] for j in _COMPARE.values()):
-        raise RuntimeError("another tunnel test is still running")
+    with _COMPARE_LOCK:              # (the check and the entry are one step: two repairs that ask in the same moment used to both pass the check and run two tests on the same test port, or share one id)
+        if any(not j["done"] for j in _COMPARE.values()):
+            raise RuntimeError("another tunnel test is still running")
 
-    jid = f"cmp{int(time.time())}"
-    job = {"id": jid, "iran_id": iran_id, "foreign_id": foreign_id, "measure": measure, "source": source, "kinds": kinds, "results": [], "current": "", "current_aid": None, "done": False, "stop": False, "started": int(time.time()),
-           "install_wg": bool(install_wg)}
-    _COMPARE[jid] = job
+        jid = f"cmp{int(time.time())}"
 
-    for old in [k for k, v in _COMPARE.items() if v["done"] and time.time() - v["started"] > 7200]:
-        _COMPARE.pop(old, None)
+        while jid in _COMPARE:
+            jid += "x"
 
-    threading.Thread(target=_compare_worker, args=(job,), name=f"tunnel-compare-{jid}", daemon=True).start()
+        job = {"id": jid, "iran_id": iran_id, "foreign_id": foreign_id, "measure": measure, "source": source, "kinds": kinds, "results": [], "current": "", "current_aid": None, "done": False, "stop": False, "started": int(time.time()),
+               "install_wg": bool(install_wg)}
+        _COMPARE[jid] = job
+
+        for old in [k for k, v in _COMPARE.items() if v["done"] and time.time() - v["started"] > 7200]:
+            _COMPARE.pop(old, None)
+
+    try:
+        threading.Thread(target=_compare_worker, args=(job,), name=f"tunnel-compare-{jid}", daemon=True).start()
+    except BaseException:
+        job["done"] = True                  # (no worker will ever end this job: it must not keep "another tunnel test is still running" true for ever)
+        raise
+
     return jid
 
 

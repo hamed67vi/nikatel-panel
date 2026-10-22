@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.69.100 - The engine can not be wedged: a pair is never left "being built", one tunnel test at a time, a test story always ends
+
+> **به زبان ساده:** وقتی دیتابیس یک لحظه قفل می‌شد، ساخت تانل بین دو سرور می‌توانست تا ری‌استارت بعدی پنل «در حال ساخت» بماند و هیچ تعمیر یا ساخت تازه‌ای بین آن دو سرور شروع نمی‌شد. حالا هر شکستی در شروع یا پایان ساخت، آن دو سرور را آزاد می‌کند. دو تست هم‌زمان هم دیگر هم‌دیگر را خراب نمی‌کنند و گزارش تستی که پاکسازی‌اش خطا بدهد همیشه بسته می‌شود.
+
+> **In short:** a build that failed to start (a locked database at the flush) or ended with an error in its last step used to leave the pair of servers marked "being built" until the panel restarted - no repair or new build could start between them. The pair is given back now. Two tunnel tests asked in the same moment make one test, and the story of a test always ends.
+
+Found while reading the live panel's log (2026-10-21 18:12 - 18:42: one hour of "database is locked" that stopped every job of the panel) and the code of the build engine for the same class of fault.
+
+- **The pair is given back**: `builder.start_build` and `build_other.start_build` put the pair in `_BUILDING` and then flushed the story row; when the flush or the commit raised (a locked database), the key stayed for ever and every later build between the two servers was refused with "already being built" - the repair of such a tunnel as well. The start now gives the key back on any failure after it took it (and never touches a key another build holds). The worker gives the pair back FIRST in its `finally`, then drops the pending rebuild (a locked database there used to skip the release too), and a rollback that crashes does not keep the story open.
+- **One tunnel test at a time, for real**: `tunnel_test.compare_start` checked "another test is running" and then added its job without a lock - two repairs that asked in the same moment both passed and ran two tests on the one test port; and the id was the second of the start, so two tests in the same second shared it. The check and the entry are one step under a lock now, the id is unique, and a test whose thread cannot start no longer blocks every later test.
+- **A story always ends**: `tunnel_test._worker` / `_other_worker` removed the temporary tunnel and only then closed the story; a crash of the cleanup (anything but an SSH error) left the story open for ever.
+- **Not changed**: what the builds do, the order of the types, the rails of the Doctor.
+- **Proved**: `tests/test_engine_qa.py` (10 tests; 7 of them fail on the code of 1.69.86).
+- **Not proved**: the race of two simultaneous tests (the test asks 8 at once; on 1.69.86 it passes too - the GIL hides it - so it guards the lock but did not catch the old code); a real locked database on a real panel.
+
 ## 1.69.99 - the Persian text of the 1.69.97 notes is readable again
 
 > **به زبان ساده:** متن فارسیِ توضیح نسخهٔ 1.69.97 (در CHANGELOG و در صفحهٔ release در GitHub) هنگام ساخت خراب شده بود و فقط علامت‌های بی‌معنی نشان می‌داد؛ حالا درست است. کد برنامه تغییری نکرده است.

@@ -508,37 +508,48 @@ def start_build(iran_id: int, foreign_id: int, ports_text: str, kind: str, trans
 
     ports = parse_ports(ports_text)
 
-    with session() as db:
-        iran, foreign = db.get(Server, iran_id), db.get(Server, foreign_id)
+    added = ""          # the key this call put in _BUILDING: given back when the start fails after that (a locked database at the flush or the commit used to leave the pair "being built" until the panel restarted)
 
-        if iran is None or foreign is None:
-            raise ValueError("choose an Iran server and a foreign server")
+    try:
+        with session() as db:
+            iran, foreign = db.get(Server, iran_id), db.get(Server, foreign_id)
 
-        if iran.role != "iran" or foreign.role != "foreign":
-            raise ValueError("the first server must be an Iran server and the second a foreign one")
+            if iran is None or foreign is None:
+                raise ValueError("choose an Iran server and a foreign server")
 
-        if not iran.enabled or not foreign.enabled:
-            raise ValueError("both servers must be enabled")
+            if iran.role != "iran" or foreign.role != "foreign":
+                raise ValueError("the first server must be an Iran server and the second a foreign one")
 
-        pair = f"{iran.name} ⇄ {foreign.name}"
-        lock = f"{pair} (standby {forced_name})" if standby_of else pair          # a standby is built beside the real tunnel of its pair: its own key, the servers' locks still make the builds wait for each other
+            if not iran.enabled or not foreign.enabled:
+                raise ValueError("both servers must be enabled")
 
-        with _LOCK:
-            if lock in _BUILDING:
-                raise ValueError("a tunnel between these two servers is already being built")
+            pair = f"{iran.name} ⇄ {foreign.name}"
+            lock = f"{pair} (standby {forced_name})" if standby_of else pair          # a standby is built beside the real tunnel of its pair: its own key, the servers' locks still make the builds wait for each other
 
-            _BUILDING.add(lock)
+            with _LOCK:
+                if lock in _BUILDING:
+                    raise ValueError("a tunnel between these two servers is already being built")
 
-        entry = ActionLog(ref=forced_name or pair, action="standby" if standby_of else "build", source="manual",          # (a standby build is not "a build that runs" for the Create window)
-                          story=[f"Building a {KIND_TITLE[kind]} · {transport} tunnel {pair}, ports {', '.join(p.spec() for p in ports)}"])
-        db.add(entry)
-        db.flush()
-        aid = entry.id
-        b = Build(aid, kind, iran, foreign, ports, transport, opts, name=forced_name, measure=measure, standby_of=standby_of)
-        db.expunge(iran)
-        db.expunge(foreign)
+                _BUILDING.add(lock)
+                added = lock
 
-    threading.Thread(target=_worker, args=(b, lock), name=f"build-{lock}", daemon=True).start()
+            entry = ActionLog(ref=forced_name or pair, action="standby" if standby_of else "build", source="manual",          # (a standby build is not "a build that runs" for the Create window)
+                              story=[f"Building a {KIND_TITLE[kind]} · {transport} tunnel {pair}, ports {', '.join(p.spec() for p in ports)}"])
+            db.add(entry)
+            db.flush()
+            aid = entry.id
+            b = Build(aid, kind, iran, foreign, ports, transport, opts, name=forced_name, measure=measure, standby_of=standby_of)
+            db.expunge(iran)
+            db.expunge(foreign)
+
+        threading.Thread(target=_worker, args=(b, lock), name=f"build-{lock}", daemon=True).start()
+    except BaseException:
+        if added:
+            with _LOCK:
+                _BUILDING.discard(added)
+
+        raise
+
     return aid
 
 
@@ -548,15 +559,23 @@ def _worker(b: Build, pair: str) -> None:
             _build(b)
     except Exception as e:  # thread boundary
         log.exception("build #%s crashed", b.aid)
-        _rollback(b)
+
+        try:
+            _rollback(b)
+        except Exception:  # (a rollback that fails must not keep the story open for ever)
+            log.exception("build #%s: the rollback crashed", b.aid)
+
         _say(b.aid, f"Stopped: {str(e)[:220]}. Everything created was removed again.", done=True, ok=False)
     finally:
-        from .builder import pending_drop
-
-        pending_drop(b.name)
-
-        with _LOCK:
+        with _LOCK:                       # (first: the pair must be free again whatever else fails below - a locked database at pending_drop used to leave it "being built" until the next restart)
             _BUILDING.discard(pair)
+
+        try:
+            from .builder import pending_drop
+
+            pending_drop(b.name)
+        except Exception:
+            log.exception("build #%s: the pending rebuild could not be dropped", b.aid)
 
 
 def _engine(kind: str) -> str:
