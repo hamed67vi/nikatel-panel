@@ -56,6 +56,9 @@ Telegram's Menu button is either the command list or ONE Mini App, never both. T
 `--dry-run` checks `php -l` first, `--uninstall` takes the block out byte for byte, the old file is kept in `$BACKUP_DIR`), and `shop` is in the command list
 (the panel's Shop bot page sets it with the others). `/shop` answers with a message and a button that opens `<botUrl>app/`.
 To make the Mini App the Menu button instead: BotFather > Bot Settings > Menu Button > the URL `<botUrl>app/` (this replaces the command list).
+The apps screen of the bot (the button that sends the apps of `needed_sofwares`) can be split by system the same way the Mini App does it: `bash scripts/install-apps-groups.sh /var/www/<bot>` (`--dry-run`, `--uninstall`;
+two marked places of the bot's handler of `reciveApplications` and `bot/menu/apps_groups.php`): one button per system (iPhone / iOS, Android, Windows, Mac), the apps of a system with the recommended ones
+(a title with `(پیشنهادی)`) first. A title names its system with the words iPhone / iOS, Android, Windows, Mac (or their Persian).
 A bot without `extras.php` works too; its web server must let `app/api.php` run (nginx: add `app/api\.php` to the list of allowed php files).
 
 ## Security
