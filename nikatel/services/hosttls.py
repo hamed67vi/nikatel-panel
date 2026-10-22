@@ -359,12 +359,15 @@ def create(c: dict, keys: list[str], port: int = 443, alpn: str = "http/1.1", fi
 
 
 def remove(c: dict, suffix: str = SUFFIX) -> dict:
-    """Remove the copies this tool made: the hosts whose remark ends with the suffix and whose security is tls. The hosts are saved to a file first."""
+    """Remove the copies this tool made: the hosts whose remark ends with the suffix, whose security is tls and whose plain original (the same remark without the suffix, same inbound) is still there. The hosts are saved to a file first."""
     raw, marz, flat = _read(c)
-    gone = [f for f in flat if str(one(f["h"].get("remark"))).endswith(suffix) and f["h"].get("security") == "tls"]
+    plain = {(f["tag"], str(one(f["h"].get("remark")))) for f in flat if f["h"].get("security") != "tls"}
+    named = [f for f in flat if str(one(f["h"].get("remark"))).endswith(suffix) and f["h"].get("security") == "tls"]
+    gone = [f for f in named if (f["tag"], str(one(f["h"].get("remark")))[: -len(suffix)]) in plain]          # a copy has its plain original beside it ("The original hosts stay"); a host the owner made by hand that happens to end with "TLS" has none and is never removed
+    kept = len(named) - len(gone)
 
     if not gone:
-        return {"removed": 0, "backup": ""}
+        return {"removed": 0, "backup": "", **({"kept": kept} if kept else {})}
 
     backup = _backup(c, raw)
 
@@ -379,4 +382,4 @@ def remove(c: dict, suffix: str = SUFFIX) -> dict:
         for f in gone:
             panels.call(c, "DELETE", "/api/host/" + str(f["h"].get("id")))
 
-    return {"removed": len(gone), "backup": backup}
+    return {"removed": len(gone), "backup": backup, **({"kept": kept} if kept else {})}

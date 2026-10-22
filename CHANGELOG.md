@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.69.94 - "Remove the TLS copies" never removes a host you made by hand
+
+> **به زبان ساده:** دکمه‌ی «حذف کپی‌های TLS» در تب Hosts همه‌ی هاست‌هایی را که اسمشان با «TLS» تمام می‌شد و امنیتشان tls بود پاک می‌کرد؛ این شامل هاست‌هایی هم می‌شد که خودِ شما دستی ساخته‌اید و اسمشان اتفاقاً با «TLS» تمام می‌شود. حالا فقط کپی‌ای پاک می‌شود که هاست ساده‌ی اصلی‌اش (همان اسم بدون «TLS»، روی همان inbound) هنوز کنارش هست؛ بقیه دست‌نخورده می‌مانند و پیام می‌گوید چند تا نگه داشته شد. قبل از هر حذف از هاست‌ها نسخه‌ی پشتیبان ذخیره می‌شود (مثل قبل).
+>
+> **In short:** "Remove the TLS copies" (Configs → Hosts) took away every host whose name ends with "TLS" and whose security is tls, which also matched hosts made by hand. A host is removed now only when its plain original (the same name without " TLS", same inbound) is still on the panel; the others stay and the message says how many were kept. The hosts are still saved to a file first.
+
+- **Why**: the name rule alone cannot tell a copy made by the tool from a TLS host the owner made (or moved to TLS) by hand and named the same way.
+- **Not changed**: making copies (the real test, on / off by the result), the backup file before a write, the originals are never touched.
+- **Proved**: `tests/test_qa_cfg_round.py::test_a_host_made_by_hand_that_ends_with_tls_is_never_removed`; the old remove tests of `tests/test_hosttls.py` pass unchanged. **Not proved**: on a real panel.
+
 ## 1.69.93 - Servers check, third part: a restart asked from the panel is no red alarm from the pulse; a refused command is not a rejected key
 
 > بخش سوم کنترل سرورها: وقتی سرور را از پنل ریبوت می‌کنید، «پالس» دیگر رویداد قرمز «سرور جواب نمی‌دهد» نمی‌نویسد و تانل‌ها را بیدار نمی‌کند (نمونه‌برداری کامل از قبل همین قانون را داشت)؛ خطای «Permission denied» یک دستور (مثلاً iptables برای کاربر غیر root) دیگر «کلید پنل پذیرفته نمی‌شود» نیست؛ پیام تغییر host key به دکمه‌ی واقعی اشاره می‌کند.

@@ -3169,8 +3169,8 @@ window.tlsMake = async () => {
   tlsPaint("ready");
 };
 window.pnHostTlsRemove = async () => {
-  if (!await gconfirm("Remove every TLS copy made by this tool (the hosts whose name ends with TLS and whose security is tls)? The hosts are saved to a file first. The original hosts stay.", {danger: true})) return;
-  try { const r = await api(`/api/panels/${tls.id}/hosts-tls/remove`, {method: "POST"}); toast(`✓ ${r.removed} copies removed`, "ok"); closeModal(); pn.hosts = null; refresh(); } catch (e) { toast("✕ " + e.message, "bad"); }
+  if (!await gconfirm("Remove every TLS copy made by this tool (the hosts whose name ends with TLS, whose security is tls and whose plain original is still on the panel)? A host made by hand with such a name but no original is left alone. The hosts are saved to a file first. The original hosts stay.", {danger: true})) return;
+  try { const r = await api(`/api/panels/${tls.id}/hosts-tls/remove`, {method: "POST"}); toast(`✓ ${r.removed} copies removed${r.kept ? " · " + r.kept + " host(s) named TLS were left alone (no plain original)" : ""}`, "ok"); closeModal(); pn.hosts = null; refresh(); } catch (e) { toast("✕ " + e.message, "bad"); }
 };
 window.pnHostClone = async (id, key) => { if (pnType() === "pasarguard" && window.pgHostClone) return pgHostClone(id, +key); try { await api(`/api/panels/${id}/hosts/${encodeURIComponent(key)}/clone`, {method: "POST"}); toast("✓ Cloned", "ok"); pn.hosts = null; refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
 window.pnHostDel = async (id, key, name) => { if (pnType() === "pasarguard" && window.pgHostDelete) return pgHostDelete(id, +key, name); if (!await gconfirm(`Delete host ${name} from the panel? Users lose that address in their links.`)) return; try { await api(`/api/panels/${id}/hosts/${encodeURIComponent(key)}`, {method: "DELETE"}); toast("✓ Deleted", "ok"); pn.hosts = null; refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };

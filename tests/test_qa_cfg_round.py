@@ -76,6 +76,30 @@ def test_a_marzban_host_key_without_a_hash_is_host_not_found(monkeypatch):
             fn()
 
 
+def test_a_host_made_by_hand_that_ends_with_tls_is_never_removed(monkeypatch):
+    """"Remove the TLS copies" took every host named "... TLS" with security tls: the owner's own TLS hosts (made by hand, no plain original) had the same name rule."""
+    from nikatel.services import hosttls
+
+    state = {"hosts": {"VLESS WS": [{"remark": "Turkey", "address": "a.example.test", "port": 80, "security": "none"},
+                                    {"remark": "Turkey TLS", "address": "a.example.test", "port": 443, "security": "tls"},
+                                    {"remark": "Hand made TLS", "address": "b.example.test", "port": 2083, "security": "tls"}]}, "puts": []}
+
+    def call(c, method, path, **kw):
+        if method == "PUT":
+            state["puts"].append(kw["body"])
+            state["hosts"] = json.loads(json.dumps(kw["body"]))
+            return state["hosts"]
+
+        return json.loads(json.dumps(state["hosts"]))
+
+    monkeypatch.setattr(panels, "call", call)
+    out = hosttls.remove(C)
+    assert out["removed"] == 1 and out["kept"] == 1
+    assert [h["remark"] for h in state["hosts"]["VLESS WS"]] == ["Turkey", "Hand made TLS"]
+    out = hosttls.remove(C)
+    assert out["removed"] == 0 and out["kept"] == 1 and len(state["puts"]) == 1          # nothing more to take, nothing written
+
+
 # ------------------------------------------------------------------ the shop bot
 class Db:
     def __init__(self, pay):
