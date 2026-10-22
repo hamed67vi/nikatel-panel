@@ -28,6 +28,24 @@ def test_a_wrong_password_shows_the_servers_sentence_not_not_logged_in():
     assert "api\\/auth" in line and "login" in line and "recover" in line, line          # (the regex of the carve-out: /api/auth/(login|recover) )
 
 
+def test_the_sign_in_form_never_sends_the_password_in_the_address():
+    """A form with no method is a GET: when the script of the page did not start (blocked, an error before the form was wired) Enter sent `/?user=…&password=…` - into the history, the proxy logs, the Referer."""
+    html = (WEB / "index.html").read_text(encoding="utf-8")
+    form = next(ln for ln in html.splitlines() if 'id="login-form"' in ln)
+    assert 'method="post"' in form, form
+    js = (WEB / "app.js").read_text(encoding="utf-8")
+    assert 'document.querySelector("#login-form [name=password]")' in js and "a === document.body" in js          # (the cursor waits in the password box, never taken from a box in use)
+
+
+def test_a_test_of_telegram_that_is_not_set_up_is_the_operators_to_do_not_a_bad_gateway(client):
+    """"Test" on a panel with no Telegram answered 502 and the page showed it with a request id - as if Telegram had failed."""
+    r = client.post("/api/settings/telegram/test")
+    assert r.status_code == 400 and "not configured" in r.json()["error"] and r.json()["code"] == "bad_request", r.text
+    js = (WEB / "app.js").read_text(encoding="utf-8")
+    assert "r.status >= 500 && !msg.includes(rid)" in js          # (an internal error says "(request id …)" itself: the id was shown twice)
+    assert "row.scrollLeft = Math.max(0, on.offsetLeft" in js          # (on a phone the tab that is open scrolls into view in the row of Settings tabs)
+
+
 def test_the_throttle_says_how_long_to_wait(client):
     anon = TestClient(client.app)
 

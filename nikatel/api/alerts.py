@@ -50,7 +50,7 @@ def telegram_test():
     ok, why = send_text("✅ Nikatel panel: Telegram works.", require_enabled=False)
 
     if not ok:
-        raise HTTPException(502, why)
+        raise HTTPException(400 if "not configured" in why else 502, why)          # (nothing is set up yet: the operator's to do, not a failure of Telegram)
 
     return {"ok": True}
 

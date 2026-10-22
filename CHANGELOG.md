@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.69.96 - the sign-in form never puts the password in the address, the cursor waits in the password box, Telegram "not set up" is a 400, the open Settings tab scrolls into view on a phone
+
+> **به زبان ساده:** فرم ورود اگر اسکریپت صفحه شروع نشود رمز را در آدرس می‌گذاشت (روش GET)؛ حالا POST است. مکان‌نما روی کادر رمز می‌ماند. «تست» تلگرام وقتی هنوز تنظیم نشده خطای ۴۰۰ می‌دهد (نه ۵۰۲ «بد گیت‌وی») و شناسه‌ی درخواست دوبار نمی‌آید. در گوشی تبی که باز است در نوار تب‌های تنظیمات دیده می‌شود.
+>
+> **In short:** The sign-in form is a POST (it was a GET: when the script of the page did not start, Enter sent `/?user=…&password=…`); the cursor waits in the password box (never taken from a box in use); the Telegram test on a panel with no Telegram is `400`, not `502`, and the request id is not shown twice in a message; on a phone the Settings tab that is open scrolls into view.
+
+- **Sign-in form** (`index.html`, `app.js`): `<form id="login-form">` had no `method`, so it was a GET. The script of the page wires `onsubmit` and stops it, but a blocked script or an error before the wiring would have put the password in the address bar, the history and the logs of any proxy. `method="post"` now. The page opened with no focus (the user box is filled in with `admin`): `showLogin()` puts the cursor in the password box, only when nothing else has the focus.
+- **Messages** (`app.js`, `alerts.py`): `POST /settings/telegram/test` with no Telegram set up answered `502` (a bad gateway) and the page added `· id …`; now `400`. An internal error already says `(request id …)`, so the page no longer adds the same id again.
+- **Settings on a phone** (`app.js`): the row of tabs scrolls sideways; the tab that was open (About & update, the last) could be out of sight. It is scrolled to the middle of the row.
+- **Walked** (browser, a private panel): every button of the five Settings tabs once (Security, Backups, Api & Key, Appearance, About & update) except the three that start an update or a restore; the errors of the Add account and Maintenance windows windows show inside the window; the Settings tabs at 375 px: no sideways overflow. **Not walked**: Update from GitHub / Update panel (they run `deploy.sh`, which restarts the unit of the machine - never on a test panel), Restore.
+- **Proved**: `tests/test_platform_qa.py`.
+
 ## 1.69.95 - the tunnel list by keyboard, and a long server name ends in an ellipsis
 
 > **به زبان ساده:** ردیف‌های لیست تانل فقط با ماوس باز می‌شدند (در منوی «⋯» هم «باز کردن» نبود). حالا با Tab می‌رسی به ردیف، با Enter یا Space پنجرهٔ تانل باز می‌شود، و با Esc که ببندی فوکوس به همان ردیف برمی‌گردد. اسم بلند سرور در ستون «Iran node / Foreign node» دیگر بدون هیچ نشانه بریده نمی‌شود: با «…» تمام می‌شود، اسم کامل در tooltip است و نشان «⚠ ×2» سالم کنارش می‌ماند.
