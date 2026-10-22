@@ -128,22 +128,22 @@ def decode_subscription(body: bytes) -> list[str]:
 
 # ------------------------------------------------------------------ what a link says (type, address, port, transport, TLS)
 def meta_from_uri(uri: str) -> dict:
-    """{'proto','address','port','network','security'} from a vless / vmess / trojan / ss link. No secret is kept."""
+    """{'proto','address','port','network','security','sni','host'} from a vless / vmess / trojan / ss link. No secret is kept (`sni` and `host` are the names the config asks for: behind a CDN they name OUR record)."""
     from urllib.parse import parse_qs, urlsplit
 
     uri = str(uri).strip()
     proto = uri.split("://", 1)[0].lower() if "://" in uri else ""
-    m = {"proto": proto, "address": "", "port": 0, "network": "tcp", "security": "none"}
+    m = {"proto": proto, "address": "", "port": 0, "network": "tcp", "security": "none", "sni": "", "host": ""}
 
     try:
         if proto == "vmess":
             raw = uri[8:].split("#", 1)[0]
             j = json.loads(base64.b64decode(raw + "=" * (-len(raw) % 4)))
-            m.update(address=str(j.get("add", "")), port=int(j.get("port") or 0), network=str(j.get("net") or "tcp"), security="tls" if str(j.get("tls", "")).lower() == "tls" else "none")
+            m.update(address=str(j.get("add", "")), port=int(j.get("port") or 0), network=str(j.get("net") or "tcp"), security="tls" if str(j.get("tls", "")).lower() == "tls" else "none", sni=str(j.get("sni") or ""), host=str(j.get("host") or ""))
         elif proto in ("vless", "trojan"):
             u = urlsplit(uri)
             q = {k: v[0] for k, v in parse_qs(u.query).items()}
-            m.update(address=u.hostname or "", port=u.port or 0, network=q.get("type", "tcp"), security=q.get("security") or ("tls" if proto == "trojan" else "none"))
+            m.update(address=u.hostname or "", port=u.port or 0, network=q.get("type", "tcp"), security=q.get("security") or ("tls" if proto == "trojan" else "none"), sni=q.get("sni", ""), host=q.get("host", ""))
         elif proto == "ss":
             rest = uri[5:].split("#", 1)[0].split("?", 1)[0]
 
@@ -176,10 +176,10 @@ def assign_groups() -> int:
 
 
 def fill_meta(limit: int = 20) -> int:
-    """Read the link of configs that have no meta yet (from the probe) and keep the readable facts. A few per run."""
+    """Read the link of configs that have no meta yet - or no `sni` / `host` yet (1.69.111) - from the probe and keep the readable facts (the other keys of the meta stay). A few per run."""
     with session() as db:
         names = [c.name for c in db.scalars(select(Config).where(Config.enabled.is_(True)))
-                 if not (c.meta or {}).get("proto")][:limit]
+                 if not (c.meta or {}).get("proto") or "sni" not in (c.meta or {})][:limit]
 
     done = 0
 
@@ -196,7 +196,7 @@ def fill_meta(limit: int = 20) -> int:
             c = db.scalar(select(Config).where(Config.name == name))
 
             if c is not None:
-                c.meta = meta
+                c.meta = {**(c.meta or {}), **meta}
                 done += 1
 
     return done

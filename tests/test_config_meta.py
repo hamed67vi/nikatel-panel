@@ -6,12 +6,12 @@ from nikatel.services import configs, probe
 
 def test_meta_from_links():
     m = configs.meta_from_uri("vless://id@sub.example.net:8443?type=ws&security=tls&path=%2Fx#Name")
-    assert m == {"proto": "vless", "address": "sub.example.net", "port": 8443, "network": "ws", "security": "tls"}
+    assert m == {"proto": "vless", "address": "sub.example.net", "port": 8443, "network": "ws", "security": "tls", "sni": "", "host": ""}
     assert configs.meta_from_uri("vless://id@203.0.113.9:443?type=grpc&security=reality&sni=a.b#n")["security"] == "reality"
     assert configs.meta_from_uri("vless://id@203.0.113.9:443#n")["network"] == "tcp" and configs.meta_from_uri("vless://id@203.0.113.9:443#n")["security"] == "none"
     assert configs.meta_from_uri("trojan://pw@host.example:443?type=tcp#n")["security"] == "tls"
     raw = base64.b64encode(json.dumps({"add": "h.example", "port": "2096", "net": "ws", "tls": "tls", "ps": "x"}).encode()).decode()
-    assert configs.meta_from_uri("vmess://" + raw) == {"proto": "vmess", "address": "h.example", "port": 2096, "network": "ws", "security": "tls"}
+    assert configs.meta_from_uri("vmess://" + raw) == {"proto": "vmess", "address": "h.example", "port": 2096, "network": "ws", "security": "tls", "sni": "", "host": ""}
     ss = base64.urlsafe_b64encode(b"aes-256-gcm:secret").decode().rstrip("=")
     m = configs.meta_from_uri(f"ss://{ss}@198.51.100.7:8388#n")
     assert m["proto"] == "ss" and m["address"] == "198.51.100.7" and m["port"] == 8388 and "secret" not in str(m)

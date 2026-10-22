@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.69.111 - Configs behind a CDN are linked to their tunnel by the name they ask for (SNI / Host)
+
+The owner (2026-10-23, the Doctor page said "38 of the 38 configs ride no known tunnel", and he gave the subscription of his Marzban panel to be linked): the address of a config behind a CDN is the CDN's (`snapp.ir`, `dr.flex.tboo.ir`); the name of OUR record is in its SNI / Host header (`nikaalltrtun.shoptinyis.ir`). The panel looked only at the address, so nothing was ever placed.
+
+- **Placing** (`userq.map_configs`): the names of a config are tried in this order - Host, SNI, address; the first that resolves to a server of ours (its address, its name, or the A record of the name in the DNS accounts, with its origin port) decides; then the tunnel that forwards that port on that Iran server. Nothing is guessed: a name that is not ours places nothing, two tunnels that could carry it leave it unplaced.
+- **Reading** (`configs.meta_from_uri`, `fill_meta`): the meta of a config keeps its `sni` and `host` (no secret). A config read before this version has none: the job that fills the meta reads its link from the probe (a few per round, read only), adds the two names and keeps everything else of its meta.
+- **On the owner's subscription** (28 configs, read only - nothing was imported): 14 of them reach a tunnel by their SNI (each named after a country, one tunnel each), 8 go straight to a foreign server (no tunnel), 3 name a record that does not exist, and one names an Iran server and a port that no tunnel forwards.
+- **Proved**: `tests/test_userq.py` (a config is placed by Host or SNI before its address, a foreign or unknown name places nothing, an old config without the two names is placed as before; the meta of vless / vmess / ss links; `fill_meta` reads only the configs that lack them and keeps the rest of the meta).
+- **Not proved**: the links on the live panel (they appear after it runs this version and the job has read the probe); the subscription itself is not imported - the Configs page has no import button.
 ## 1.69.110 - /shop opens the Mini App from the command list
 
 > **In short:** Telegram's Menu button is either the command list or one Mini App, never both. So the Mini App became a command of the list: `/shop` answers with a message and a button that opens it, and the Menu button stays the normal Menu. `scripts/install-shop-command.sh <bot dir>` adds one block to the bot's `bot.php` (backup, `php -l` before replacing, `--uninstall` takes it out byte for byte); the panel's command list has `shop` too.

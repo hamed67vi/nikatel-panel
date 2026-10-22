@@ -47,7 +47,7 @@ _RUNNING = [False]
 # ------------------------------------------------------------------ pure helpers (tested)
 def map_configs(configs: list[dict], tunnels: list[dict], servers: list[dict], records: list[dict]) -> dict[str, dict]:
     """Which tunnel each config rides: {config name: {"tunnel": id, "how": "label" | "address" | "dns"}}; a config that cannot be placed for sure is left out (nothing is guessed).
-    configs: [{"name", "tunnel" (the label), "address", "port"}]; tunnels: [{"id", "name", "iran_id", "ports": set}]; servers (Iran): [{"id", "name", "host"}]; records: the A records of the DNS accounts [{"fqdn", "ips", "port"}]."""
+    configs: [{"name", "tunnel" (the label), "address", "port", "sni", "host" (the name of the config behind a CDN: tried before the address)}]; tunnels: [{"id", "name", "iran_id", "ports": set}]; servers (Iran): [{"id", "name", "host"}]; records: the A records of the DNS accounts [{"fqdn", "ips", "port"}]."""
     by_name = {t["name"]: t for t in tunnels}
     by_host = {s["host"]: s["id"] for s in servers}
     by_sname = {str(s["name"]).lower(): s["id"] for s in servers}
@@ -66,26 +66,29 @@ def map_configs(configs: list[dict], tunnels: list[dict], servers: list[dict], r
             out[c["name"]] = {"tunnel": by_name[label]["id"], "how": "label"}
             continue
 
-        addr, port = str(c.get("address") or "").lower().strip("."), int(c.get("port") or 0)
-
-        if not addr:
-            continue
-
+        port = int(c.get("port") or 0)
+        names = [x for x in dict.fromkeys(str(c.get(k) or "").lower().strip(".") for k in ("host", "sni", "address")) if x]          # (the name the config really asks for first: behind a CDN the address is the CDN's, the Host / SNI is the name of OUR record - the owner, 2026-10-23: "link the configs of this Marzban subscription")
         sids, origin, how = set(), set(), "address"
 
-        if addr in by_host:
-            sids.add(by_host[addr])
-        elif addr in by_sname:
-            sids.add(by_sname[addr])
-        else:
-            for r in by_fqdn.get(addr, []):
-                for ip in r.get("ips") or []:
-                    if ip in by_host:
-                        sids.add(by_host[ip])
-                        how = "dns"
+        for addr in names:
+            sids, origin, how = set(), set(), "address"
 
-                if r.get("port"):
-                    origin.add(int(r["port"]))                  # a CDN record sends to its own origin port: THAT is the port the tunnel forwards (the port of the config is the CDN's)
+            if addr in by_host:
+                sids.add(by_host[addr])
+            elif addr in by_sname:
+                sids.add(by_sname[addr])
+            else:
+                for r in by_fqdn.get(addr, []):
+                    for ip in r.get("ips") or []:
+                        if ip in by_host:
+                            sids.add(by_host[ip])
+                            how = "dns"
+
+                    if r.get("port"):
+                        origin.add(int(r["port"]))                  # a CDN record sends to its own origin port: THAT is the port the tunnel forwards (the port of the config is the CDN's)
+
+            if sids:
+                break
 
         if not sids:
             continue
@@ -95,7 +98,6 @@ def map_configs(configs: list[dict], tunnels: list[dict], servers: list[dict], r
 
         if len(hits) == 1:
             out[c["name"]] = {"tunnel": hits[0]["id"], "how": how}
-
     return out
 
 
@@ -246,7 +248,7 @@ def _placement(db) -> tuple[list[Config], dict[str, dict]]:
                for t in db.scalars(select(Tunnel).where(Tunnel.enabled.is_(True))) if not is_temp(t.name)]
     servers = [{"id": s.id, "name": s.name, "host": s.host} for s in db.scalars(select(Server).where(Server.role == "iran"))]
     cfgs = list(db.scalars(select(Config).where(Config.enabled.is_(True))))
-    by_cfg = [{"name": c.name, "tunnel": c.tunnel, "address": (c.meta or {}).get("address", ""), "port": (c.meta or {}).get("port", 0)} for c in cfgs]
+    by_cfg = [{"name": c.name, "tunnel": c.tunnel, "address": (c.meta or {}).get("address", ""), "port": (c.meta or {}).get("port", 0), "sni": (c.meta or {}).get("sni", ""), "host": (c.meta or {}).get("host", "")} for c in cfgs]
     return cfgs, map_configs(by_cfg, tunnels, servers, list(dnscache.CACHE.get("rows") or []))
 
 

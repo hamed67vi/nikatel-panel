@@ -35,6 +35,42 @@ def test_two_tunnels_that_could_both_carry_a_config_leave_it_unplaced():
     assert userq.map_configs([cfg("c", "203.0.113.10", 80)], tunnels, SERVERS, []) == {}
 
 
+def test_a_config_behind_a_cdn_is_placed_by_its_host_or_sni_before_its_address():
+    """The owner, 2026-10-23, with the subscription of his Marzban panel: the address of a config is the CDN's (`snapp.ir`, `dr.flex.tboo.ir`), the NAME of our record is in its SNI / Host header."""
+    recs = RECORDS + [{"fqdn": "origin.ir-beta.example", "type": "A", "ips": ["203.0.113.20"], "port": 8072}]
+    c = {"name": "cdn-front", "tunnel": "", "address": "front.cdn.example", "port": 2083, "sni": "origin.ir-beta.example", "host": ""}
+    got = userq.map_configs([c, {**c, "name": "by-host", "sni": "", "host": "ORIGIN.ir-beta.example."}, {**c, "name": "nothing", "sni": "nowhere.example"}, {**c, "name": "foreign-sni", "sni": "mx.cdn.example.com"},
+                             {**c, "name": "sni-then-address", "sni": "nowhere.example", "address": "gt.cdn.example.com", "port": 80}], TUNNELS, SERVERS, recs)
+    assert got["cdn-front"] == {"tunnel": 12, "how": "dns"} and got["by-host"] == {"tunnel": 12, "how": "dns"}          # the record sends to 8072 on ir-beta: the tunnel that forwards 8072, not the CDN's 2083
+    assert "nothing" not in got and "foreign-sni" not in got                                                           # a name that is not ours places nothing; the address is tried when the names say nothing
+    assert got["sni-then-address"] == {"tunnel": 10, "how": "dns"}
+    assert userq.map_configs([{"name": "old", "tunnel": "", "address": "gt.cdn.example.com", "port": 80}], TUNNELS, SERVERS, RECORDS)["old"] == {"tunnel": 10, "how": "dns"}      # (a config read before 1.69.111 has no sni / host: placed as before)
+
+
+def test_the_meta_of_a_link_keeps_its_sni_and_host_and_fill_meta_adds_them_to_the_configs_that_lack_them(monkeypatch):
+    import base64
+    import json
+
+    v = configs.meta_from_uri("vless://11111111-2222-3333-4444-555555555555@dr.flex.example:2083?type=ws&security=tls&sni=origin.example&host=h.example#Turkey-1")
+    assert v == {"proto": "vless", "address": "dr.flex.example", "port": 2083, "network": "ws", "security": "tls", "sni": "origin.example", "host": "h.example"}
+    raw = base64.b64encode(json.dumps({"add": "a.example", "port": "443", "net": "ws", "tls": "tls", "sni": "s.example", "host": "h2.example"}).encode()).decode()
+    m = configs.meta_from_uri("vmess://" + raw)
+    assert m["sni"] == "s.example" and m["host"] == "h2.example" and configs.meta_from_uri("ss://YWVzLTEyOC1nY206cGFzc0AxLjIuMy40OjgwODA#x")["sni"] == ""
+
+    with session() as db:
+        db.add(Config(name="old-cfg", group="g", status="up", status_since=1, meta={"proto": "vless", "address": "dr.flex.example", "port": 80, "network": "ws", "security": "none", "flips": 3, "speed_hist": [[1, 2.0]]}))
+        db.add(Config(name="new-cfg", group="g", status="up", status_since=1, meta={**v}))
+
+    asked = []
+    monkeypatch.setattr(probe, "config_uri", lambda name: asked.append(name) or "vless://11111111-2222-3333-4444-555555555555@dr.flex.example:80?type=ws&security=none&host=origin2.example#x")
+    assert configs.fill_meta() == 1 and asked == ["old-cfg"]                                                        # only the config that lacks sni / host is read from the probe
+
+    with session() as db:
+        meta = db.scalar(select(Config).where(Config.name == "old-cfg")).meta
+
+    assert meta["host"] == "origin2.example" and meta["sni"] == "" and meta["flips"] == 3 and meta["speed_hist"] == [[1, 2.0]]      # what the sync wrote before stays
+    assert configs.fill_meta() == 0
+
 def samples(up_pattern, ping=500.0, step=120, now=NOW):
     """Tests of the last two hours, the newest last: up_pattern is a string of 1 (answered) and 0."""
     n = len(up_pattern)
