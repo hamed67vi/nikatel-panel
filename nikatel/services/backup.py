@@ -37,6 +37,11 @@ def pass_file() -> Path:
 
 
 def set_passphrase(p: str) -> None:
+    if any(c in p for c in "\r\n\x00"):          # (openssl reads the passphrase from the first line of its input and the file after it: a second line was taken for the first bytes of the FILE - every backup made with it could not be opened)
+        raise ValueError("the backup passphrase must be one line")
+
+    p = p.strip()          # (the passphrase is read back stripped: twelve spaces were "set" and then no passphrase at all)
+
     if len(p) < 12:
         raise ValueError("the backup passphrase needs at least 12 characters")
 

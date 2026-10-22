@@ -126,7 +126,7 @@ the token is shown once; the panel keeps only its hash) and sent on every reques
 | scope | may |
 |---|---|
 | `read` | every GET except the settings, the sign-in, the tokens, the log and the licence |
-| `act` | `read`, plus the routes that start work: checks, repairs, builds, tests, DNS records - but not adding, changing or removing a Marzban / PasarGuard panel (its key, login and address: `admin` only) |
+| `act` | `read`, plus the routes that start work: checks, repairs, builds, tests, DNS records - but not adding, changing or removing a Marzban / PasarGuard panel (its key, login and address: `admin` only), not changing the SSH password of a server and not pausing a background job (`admin` only) |
 | `admin` | everything, including settings, tokens (it may make tokens without a password), the log |
 
 A token that is revoked stops at once. Every use is logged on the token (`last_used_at`); making and revoking are written to the

@@ -1,5 +1,5 @@
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, select
 
 from ..auth import current_user
@@ -10,10 +10,10 @@ router = APIRouter(tags=["events"], dependencies=[Depends(current_user)])
 
 
 @router.get("/events")
-def list_events(limit: int = 100, domain: str | None = None, level: str | None = None, after: int = 0):
+def list_events(limit: int = Query(100, ge=1, le=500), domain: str | None = Query(None, max_length=32), level: str | None = Query(None, max_length=8), after: int = Query(0, ge=0)):
     """The events the operator reads (what happened to servers, tunnels, configs, repairs), newest first; filters by domain, level and id."""
     with session() as db:
-        q = select(Event).order_by(Event.id.desc()).limit(min(limit, 500))
+        q = select(Event).order_by(Event.id.desc()).limit(limit)       # (`limit=-1` used to be SQLite's "no limit": the whole table, 19,000 rows on the live panel)
 
         if domain:
             q = q.where(Event.domain == domain)

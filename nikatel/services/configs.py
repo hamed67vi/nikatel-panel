@@ -616,8 +616,20 @@ def fetch_subscription(url: str) -> list[dict]:
     if not re.match(r"^https?://", url or ""):
         raise ValueError("the subscription link must start with http:// or https://")
 
+    from .. import netguard
+
     try:
-        r = httpx.get(url, timeout=40, follow_redirects=True, headers={"User-Agent": "v2rayN/6.0"})
+        for _ in range(6):          # (the redirects are followed here, not by httpx: every address on the way is looked at - a public link that redirects to 127.0.0.1 is the same look inside)
+            netguard.check_public_url(url)
+            r = httpx.get(url, timeout=40, follow_redirects=False, headers={"User-Agent": "v2rayN/6.0"})
+            where = getattr(r, "headers", {}).get("location") if getattr(r, "is_redirect", False) else None
+
+            if not where:
+                break
+
+            url = urllib.parse.urljoin(url, where)
+        else:
+            raise RuntimeError("the subscription link redirects too many times")
     except httpx.HTTPError as e:
         raise RuntimeError(f"could not download the subscription: {str(e)[:80]}")
 

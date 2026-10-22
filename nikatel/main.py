@@ -71,6 +71,35 @@ SLOW_MS = 3000          # an API answer slower than this is written to the log, 
 MAX_BODY = 8 * 1024 * 1024      # a request body this big is never a real one (the biggest honest JSON is a core config); the backup upload has its own, larger limit
 
 
+class _BodyLimit:
+    """The limit of MAX_BODY for the requests that do not SAY how big they are. The look at `Content-Length` (in the middleware below) cannot see a body sent in chunks: 40 MB of it, before any sign-in, was read into memory
+    whole and parsed (+88 MB), and a gigabyte of it would take the machine's memory - there is no swap on the panel's server. Here the bytes are counted as the route reads them; the one over the limit is a 413."""
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            return await self.app(scope, receive, send)
+
+        limit = backup.MAX_RESTORE + 1_000_000 if scope.get("path") == "/api/backup/restore-upload" else MAX_BODY
+        seen = 0
+
+        async def counted():
+            nonlocal seen
+            msg = await receive()
+
+            if msg["type"] == "http.request":
+                seen += len(msg.get("body") or b"")
+
+                if seen > limit:
+                    raise StarletteHTTPException(413, "the request is too big")
+
+            return msg
+
+        await self.app(scope, counted, send)
+
+
 def _index_html() -> str:
     """index.html; the script and stylesheet links carry their change time, so a deploy never shows an old copy."""
     html = (WEB / "index.html").read_text(encoding="utf-8")
@@ -244,6 +273,7 @@ def create_app(run_jobs: bool = True) -> FastAPI:
     # (FastAPI's other two documentation pages - /redoc and /docs/oauth2-redirect - are switched off: they were answered to everyone, signed in or not, and nothing links to them)
     app = FastAPI(title="Nikatel panel", version=__version__, lifespan=_lifespan, docs_url="/api/docs", openapi_url="/api/openapi.json", redoc_url=None, swagger_ui_oauth2_redirect_url=None)
     app.state.run_jobs = run_jobs
+    app.add_middleware(_BodyLimit)
     app.include_router(api_router)
     app.include_router(sub_api.router)                 # /sub/<token>: outside /api, public, signed
 

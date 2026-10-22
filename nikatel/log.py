@@ -17,10 +17,10 @@ from pathlib import Path
 request_id: contextvars.ContextVar[str] = contextvars.ContextVar("request_id", default="-")
 
 _SECRET_PATTERNS = [
-    re.compile(r"\b\d{8,10}:[A-Za-z0-9_-]{30,}\b"),          # telegram bot token
+    re.compile(r"(?<!\d)\d{6,12}:[A-Za-z0-9_-]{30,}\b"),      # telegram bot token (also inside a URL: .../bot123456789:AAH.../sendMessage - there no word boundary stands before the digits)
     re.compile(r"\bsk-ant-[A-Za-z0-9_-]{10,}"),               # anthropic key
     re.compile(r"(?i)(bearer\s+)[A-Za-z0-9._-]{12,}"),
-    re.compile(r"(?i)(password|passwd|token|secret|api_key)(=|: ?)(\S+)"),
+    re.compile(r"(?i)(password|passwd|token|secret|api_?key)([\"']?(?:=|\s*:)\s?[\"']?)([^\s\"',}&]+)"),      # key=value, key: value and the quoted forms of a dict or JSON: "token": "abc" (a database error prints the whole settings document)
     re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----.*?-----END [A-Z ]*PRIVATE KEY-----", re.DOTALL),
     re.compile(r"\bpg_key_[A-Za-z0-9_-]{8,}"),                 # a PasarGuard API key
     re.compile(r"\bnkt_[A-Za-z0-9]{12,}"),                    # a token of this panel's own API
@@ -40,16 +40,27 @@ def mask(text: str) -> str:
     return t
 
 
+_BREAKS = re.compile(r"[\r\x0b\x0c\x1c\x1d\x1e\x85  ]")      # what a reader of the log may take for the end of a line besides "\n"
+_LOOKS_LIKE_A_RECORD = re.compile(r"^\d{4}-\d\d-\d\dT[\d:]+Z ")
+
+
+def tame(text: str) -> str:
+    """A text that a stranger can write (a request path, a header, a browser message, a server's answer) must never make a line that looks like a record of the log: the logs page reads the file line by line, so
+    `GET /api/x%0a2026-10-22T00:00:00Z ERROR jobs job alerts failed` would have shown a fake ERROR. A line break inside a message stays (a tidy multi-line answer is useful) but the next line is pushed in by two spaces."""
+    text = _BREAKS.sub(" ", text)
+    return "\n".join(ln if i == 0 or not _LOOKS_LIKE_A_RECORD.match(ln) else "  " + ln for i, ln in enumerate(text.split("\n")))
+
+
 class _Formatter(logging.Formatter):
     converter = time.gmtime
 
     def format(self, record: logging.LogRecord) -> str:
         ts = time.strftime("%Y-%m-%dT%H:%M:%SZ", self.converter(record.created))
-        msg = mask(record.getMessage())
+        msg = tame(mask(record.getMessage()))
         line = f"{ts} {record.levelname:<7} {record.name:<10} {msg} rid={request_id.get()}"
 
         if record.exc_info:
-            line += "\n" + mask(self.formatException(record.exc_info))
+            line += "\n" + tame("\n" + mask(self.formatException(record.exc_info)))[1:]
 
         return line
 

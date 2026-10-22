@@ -16,6 +16,7 @@ import os
 import re
 import shlex
 import subprocess
+import threading
 import time
 from pathlib import Path
 
@@ -35,6 +36,7 @@ STEPS = {                    # step: (percent where it starts, percent where the
     "download": (2, 12, 3), "checks": (12, 30, 4), "install": (30, 55, 6), "restart": (55, 85, 8), "health": (85, 99, 6), "rollback": (90, 98, 20),
 }
 _remote: dict = {"at": 0.0, "head": "", "tag": "", "ok": False}
+_START_LOCK = threading.Lock()
 
 
 def percent_of(step: str, age: float) -> float:
@@ -157,7 +159,7 @@ def status() -> dict:
 
 def _failed(rec: dict, why: str) -> dict:
     write_progress({**rec, "step": "failed", "at": time.time(), "reason": why})
-    return {"ok": False, "error": why}
+    return {"ok": False, "error": why, "code": "upstream_failed"}
 
 
 def _tree_version() -> str:
@@ -172,12 +174,13 @@ def _tree_version() -> str:
 
 def start() -> dict:
     """Start an update: no second run, download the new version, write the first step, run deploy.sh in its own unit (the panel restarts under it). A download that fails answers at once, with git's own words."""
-    if read_progress()["state"] == "running":
-        return {"ok": False, "error": "An update is already running"}
+    with _START_LOCK:          # (the look and the first write are one step: two presses at one moment - two tabs, a double click that got past the question - started two runs with ONE unit name, the second `systemd-run` failed and wrote "failed" over the run that was going)
+        if read_progress()["state"] == "running":
+            return {"ok": False, "error": "An update is already running", "code": "conflict"}
 
-    run = int(time.time())
-    rec = {"run": run, "step": "download", "at": run, "from": __version__, "to": "", "reason": ""}
-    write_progress(rec)
+        run = int(time.time())
+        rec = {"run": run, "step": "download", "at": run, "from": __version__, "to": "", "reason": ""}
+        write_progress(rec)
 
     try:
         pull = subprocess.run(["git", "-C", str(SRC), "pull", "-q", "--ff-only", "origin", "main"], check=False, capture_output=True, text=True, timeout=90)

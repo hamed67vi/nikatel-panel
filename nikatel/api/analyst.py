@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
 from ..auth import current_user
@@ -10,7 +10,7 @@ router = APIRouter(tags=["analyst"], dependencies=[Depends(current_user)])
 
 
 @router.get("/analyst")
-def analyst_overview(days: int = 7):
+def analyst_overview(days: int = Query(7, ge=1, le=90)):
     """What the history says: tunnel profiles, the ones at risk, outages that come together, what fixes what, the servers' load and redundancy."""
     return {"ok": True, **analyst.overview(days), "underuse_auto": bool((st.get("underuse") or {}).get("auto", True))}
 

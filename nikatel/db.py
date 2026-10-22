@@ -6,8 +6,12 @@ upgrades in place. Keep migrations small and idempotent.
 """
 from __future__ import annotations
 
+import sys
+import threading
+import time
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
+from pathlib import Path
 
 from sqlalchemy import create_engine, event, text
 from sqlalchemy.engine import Engine
@@ -86,7 +90,8 @@ def engine() -> Engine:
         s = get_settings()
         s.data_dir.mkdir(parents=True, exist_ok=True)
         # the pool: ~20 job threads, the page requests (a pool of 40) and the pools inside the jobs all ask for a connection; SQLAlchemy's default (5 + 10 overflow) made the 16th wait 30 s and then fail
-        _engine = create_engine(s.db_url, connect_args={"check_same_thread": False, "timeout": 30}, future=True, pool_size=20, max_overflow=40, pool_timeout=30)
+        _engine = create_engine(s.db_url, connect_args={"check_same_thread": False, "timeout": 30}, future=True, pool_size=20, max_overflow=40, pool_timeout=30,
+                                hide_parameters=True)          # a failed statement printed its VALUES into the log: for `UPDATE settings SET value=?` that is the whole document - a bot token, an AI key, the license token
 
         @event.listens_for(_engine, "connect")
         def _pragmas(conn, _):
@@ -101,12 +106,26 @@ def engine() -> Engine:
     return _engine
 
 
+SLOW_SESSION = 8.0          # seconds a session may stay open before the log says so (the busy timeout of SQLite is 30 s)
+
+
+def _opened_at() -> str:
+    """"file:line function" of the code that opened the session (two frames up: the context manager's own)."""
+    try:
+        f = sys._getframe(3)
+        return f"{Path(f.f_code.co_filename).name}:{f.f_lineno} {f.f_code.co_name}"
+    except ValueError:
+        return "?"
+
+
 @contextmanager
 def session() -> Iterator[Session]:
     """`with session() as db:` - commits on success, rolls back on error."""
     engine()
     assert _Session is not None
     db = _Session()
+    t0 = time.monotonic()
+    where = _opened_at()
 
     try:
         yield db
@@ -116,6 +135,10 @@ def session() -> Iterator[Session]:
         raise
     finally:
         db.close()
+        held = time.monotonic() - t0
+
+        if held > SLOW_SESSION:      # (a connection - and, after a first write, the one write lock of SQLite - kept this long is how every other thread ends in "database is locked": the log now says WHO)
+            log.warning("a database session was held for %.1f s (thread %s, opened at %s)", held, threading.current_thread().name, where)
 
 
 def init_db() -> int:

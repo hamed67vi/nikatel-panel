@@ -288,8 +288,8 @@ def throttle_check(ip: str) -> None:
     _FAILS[ip] = hits
 
     if len(hits) >= LIMIT:
-        wait = int(WINDOW - (now - hits[0])) // 60 + 1
-        raise HTTPException(429, f"too many wrong attempts - try again in {wait} min")
+        left = max(1, int(WINDOW - (now - hits[0])))
+        raise HTTPException(429, f"too many wrong attempts - try again in {left // 60 + 1} min", headers={"Retry-After": str(left)})      # (a script knows how long to wait)
 
 
 def throttle_fail(ip: str) -> None:

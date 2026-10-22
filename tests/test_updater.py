@@ -176,7 +176,7 @@ def test_a_second_run_is_refused_and_a_failed_download_is_told_at_once(files, mo
     p = updater.read_progress()
     assert p["state"] == "failed" and "Not possible to fast-forward" in p["reason"]      # (the card shows it after a refresh too)
     put(step="install")
-    assert updater.start() == {"ok": False, "error": "An update is already running"} and len(ran) == 1
+    assert updater.start() == {"ok": False, "error": "An update is already running", "code": "conflict"} and len(ran) == 1
 
 
 def test_a_run_downloads_writes_its_first_step_and_starts_deploy_in_its_own_unit(files, monkeypatch, tmp_path):

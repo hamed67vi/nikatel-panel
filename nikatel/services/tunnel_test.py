@@ -588,7 +588,7 @@ def _compare_worker(job: dict) -> None:
 
             try:
                 aid = start(job["iran_id"], job["foreign_id"], kind_parts(kind)[1], kind_link(kind), bool(job.get("install_wg"))) if kind_parts(kind)[0] == "backhaul" else start_other(job["iran_id"], job["foreign_id"], kind, job.get("measure", "full"))
-            except (ValueError, RuntimeError) as e:
+            except (ValueError, RuntimeError, OverflowError) as e:          # (an id the database cannot hold killed this thread: the comparison stayed "running" for ever)
                 job["results"].append({"kind": kind, "ok": False, "error": str(e)[:160]})
                 continue
 

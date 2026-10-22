@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from ..auth import current_user
@@ -40,9 +40,9 @@ def action_status(aid: int):
 
 
 @router.get("/actions")
-def action_history(ref: str | None = None, limit: int = 50, kinds: str = ""):
+def action_history(ref: str | None = Query(None, max_length=120), limit: int = Query(50, ge=1, le=200), kinds: str = Query("", max_length=200)):
     """The history of actions (repairs, builds, tests, checks), newest first; `ref` filters by tunnel or server, `kinds` (comma list: fix, autopilot, build, ...) by what was done."""
-    return {"ok": True, "actions": actions.history(ref, min(limit, 200), [k for k in kinds.split(",") if k]), "read_only": get_settings().read_only}
+    return {"ok": True, "actions": actions.history(ref, limit, [k for k in kinds.split(",") if k]), "read_only": get_settings().read_only}       # (`limit=-1` was SQLite's "no limit": every action of the table, each read again one by one)
 
 
 @router.get("/settings/repair")

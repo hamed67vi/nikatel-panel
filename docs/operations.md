@@ -33,7 +33,7 @@ Every value of `nikatel/config.py` can be set as `NIKATEL_<NAME>`; a change need
 | `NIKATEL_SESSION_HOURS` | `24` | how long a browser session lives |
 | `NIKATEL_LOG_LEVEL` | `INFO` | `DEBUG` shows every SSH call |
 | `NIKATEL_LICENSE` | empty | `owner` on the vendor's own installs; empty = a token from Settings or the free tier |
-| `NIKATEL_TRUSTED_PROXIES` | empty | addresses of reverse proxies whose `X-Forwarded-For` / `-Proto` are believed (the local machine always is) |
+| `NIKATEL_TRUSTED_PROXIES` | empty | addresses of reverse proxies whose `X-Forwarded-For` / `-Proto` are believed (the local machine always is). The FIRST value of `X-Forwarded-For` is taken as the client - the proxy must SET the header (nginx: `proxy_set_header X-Forwarded-For $remote_addr;`), never add to one the client sent (`$proxy_add_x_forwarded_for`): a client could then name any address and the sign-in lockout would count that name |
 | `NIKATEL_DEMO` | `false` | the public demo with invented data and no sign-in - never on a real install (`docs/demo.md`) |
 
 ## Install / recover

@@ -3,7 +3,7 @@ import threading
 import time
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
@@ -76,13 +76,23 @@ def alerts_put(body: RulesIn):
     return {"ok": True, **st.put("alerts", body.model_dump())}
 
 
+_MUTE_LOCK = threading.Lock()
+MAX_MUTES = 500
+
+
 @router.post("/settings/alerts/mute")
-def mute(ref: str, muted: bool = True):
+def mute(ref: str = Query(min_length=1, max_length=120), muted: bool = True):
     """Mute or unmute one tunnel, server or config."""
-    conf = st.get("alerts")
-    m = set(conf.get("muted") or [])
-    (m.add if muted else m.discard)(ref)
-    st.put("alerts", {"muted": sorted(m)})
+    with _MUTE_LOCK:          # (the list is read, changed and written back: two clicks at one moment - or a script - must not lose each other's name)
+        conf = st.get("alerts")
+        m = set(conf.get("muted") or [])
+
+        if muted and ref not in m and len(m) >= MAX_MUTES:
+            raise HTTPException(400, f"at most {MAX_MUTES} things can be muted - unmute some first")
+
+        (m.add if muted else m.discard)(ref)
+        st.put("alerts", {"muted": sorted(m)})
+
     return {"ok": True, "muted": sorted(m)}
 
 
