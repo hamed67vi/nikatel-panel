@@ -370,6 +370,12 @@ def run(now: int | None = None) -> None:
         tunnels = [t for t in db.scalars(select(Tunnel).where(Tunnel.enabled.is_(True))) if t.state not in ("unknown", "starting")]      # (not a verdict about the tunnel)
         servers = [s for s in db.scalars(select(Server).where(Server.enabled.is_(True))) if s.online is not None]
         configs = [c for c in db.scalars(select(Config).where(Config.enabled.is_(True))) if c.status != "unknown"]
+        # ONE message for a server that goes off (the owner, 2026-10-23, after he switched a test server off: "only that the server went off - not the tunnel, not the node, not the rest"): what fails only BECAUSE the
+        # server is off - its tunnels, the configs that point at its address, the nodes of a panel that point at it - is not judged while it is off. When it is back and one of them is still bad, it is told then, with its own reason.
+        off_ids = {s.id for s in servers if s.online is False}
+        off_hosts = {str(s.host or "").strip().lower() for s in servers if s.online is False} - {""}
+        tunnels = [t for t in tunnels if t.iran_server_id not in off_ids and t.foreign_server_id not in off_ids]
+        configs = [c for c in configs if str((c.meta or {}).get("address") or "").strip().lower() not in off_hosts]
 
         def since_of(kind: str, ref: str) -> int:
             a = tracks.get((kind, ref))
@@ -467,6 +473,9 @@ def run(now: int | None = None) -> None:
                 say(verdict, a, "panel", p.name, f"panel {p.name}", p.last_error or "does not answer")
 
             for n in p.nodes or []:
+                if str(n.get("address") or "").strip().lower() in off_hosts:
+                    continue          # (the node points at a server that is off: the server's own message says it)
+
                 a, verdict = judge("node", f"{p.name}/{n.get('name', '')}", int(n.get("fails", 0)) >= 2)
 
                 if p.name not in muted and not quiet:

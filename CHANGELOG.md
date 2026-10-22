@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.69.106 - A server that goes off is one Telegram message, not five
+
+> **به زبان ساده:** سرور که خاموش شود فقط یک پیام می‌آید؛ تانل‌ها، کانفیگ‌ها و نودهای وابسته‌اش ساکت می‌مانند.
+>
+> **In short:** a server that goes off is told once; its tunnels, configs and nodes stay quiet while it is off.
+
+The owner (2026-10-23, a picture of the Telegram chat): he switched a test foreign server off and got the server, a node of a PasarGuard panel, the tunnel and their UP messages - "only that the server went off should come, not the rest; if a tunnel is cut tell which one and why".
+
+- **`alerts.run`**: the servers that are off now (`online is False`) make a set of ids and addresses; the tunnels that end on one of them, the configs whose `meta.address` is one of the addresses and the nodes of a panel whose `address` is one are not judged while the server is off (they are also left out of the mass count). When the server is back and one of them is still bad it is judged and told then - with its own reason (for a tunnel: what its check says). The way back: the server's UP only.
+- **Not changed**: a tunnel that is cut with both servers up (its reason as before), a server alert (its text), mutes, maintenance windows, the Events page (the panel's own log still records everything).
+- **Proved**: `tests/test_alert_server_off_alone.py` (a server off with a tunnel, a config and a node falling together = one message and no word of the others; the way back; a tunnel cut with both servers up is told) and the alert test files. **Not proved**: with the real Telegram and a real server switched off (the test panel shows it next time the owner does it). A node whose address is a domain name, not the server's address, is still told on its own.
+
 ## 1.69.105 - The shop-bot Mini App audited from zero to 100: no double payment, no free service, no orphan account, the receipt and the panel agree with the bot
 
 > **In short:** the Mini App of the shop bot was attacked on a private copy (forged and replayed sign-ins, 12 payments at once, odd amounts, injection, uploads, a lost answer followed by "try again"). It held on sign-in, double spending, amounts, injection and IDOR; 13 payment and safety problems were found and fixed (an agent percentage above 100 paid the customer, a free test plan could be taken again and again, a lost answer paid twice, five uploads of one receipt gave the admins five Approve buttons, accounts were left on the panel when the order could not be saved, ...). The panel's Approve could credit a purchase. The folder of the test bot is served whole (logs, traces, backups): needs the owner's yes.
