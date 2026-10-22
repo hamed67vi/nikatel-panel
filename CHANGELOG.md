@@ -1,5 +1,25 @@
 # Changelog
 
+## 1.69.87 - Servers check: the page fits a 1200-1536 px window; a renamed server keeps its mute; no role change under a tunnel; no key put on a server in read-only
+
+> کنترل کامل بخش سرورها: صفحه‌ی سرورها در پنجره‌های ۱۲۰۰ تا ۱۵۳۶ پیکسل دیگر از سمت راست بریده نمی‌شد (دکمه‌ی Add server دیده نمی‌شد)؛ سرور تغییرنام‌داده mute و وضعیت هشدارش را نگه می‌دارد؛ نقش سرور زیر تانل عوض نمی‌شود؛ Connect با رمز در حالت فقط‌خواندنی کلید نمی‌گذارد.
+> Full check of the servers: the Servers page was 1659 px wide in windows of 1200-1536 px (the right side, with Add server, was out of sight); a renamed server keeps its alert mute and alert state; a server under a tunnel cannot change its role; Connect with a password no longer breaks the read-only rule.
+
+The owner (2026-10-22): "one full zero-to-hundred check and test of the whole panel, in parallel by area, fixing any bug found" - this is the servers and nodes part.
+
+- **The page was wider than the window** (found in the browser, not in the code): since 2026-10-21 `.main:has(.lbox)` is `overflow: clip`, and a clipped box has no automatic minimum width of 0, so the grid column grew to the widest nowrap text - 1385 px - and the page was 1659 px wide at windows of 1200-1536 px (1920 px was fine, below ~1100 px the compact layout is used). The right of the page, with Add server and the search, was out of sight. `min-width: 0` on that rule; measured at 1200, 1280, 1366, 1536 and 1920 px: no overflow. The same rule holds the lists of the other pages that have a list box.
+- **A renamed server keeps what the panel knows by its name**: its alert mute (a muted server started to call again after a rename) and its alert state (a server that is down stayed "told" under the old name and called again under the new one). Written in the same database session as the rename (no second connection: no "database is locked").
+- **A deleted server takes its mute with it**: a mute of a server that is gone stayed in the list and kept a NEW server of the same name silent.
+- **The role of a server is not changed under a tunnel**: PUT /api/servers/<id> with the other role was accepted while a tunnel used the server (the tunnel then had two foreign ends); it is a 409 that names the tunnels. A server with no tunnel may still be corrected.
+- **An address is one address**: `Example.COM`, `example.com` and `example.com.` were three servers; the check ignores capitals and a dot at the end.
+- **Two adds of one name at the same moment** are a 409 with a sentence, not a 500.
+- **Connect with a password in read-only mode**: it logs in with `sshpass` itself (not through `ssh.run_action`), so the read-only rule did not reach it and it put the panel's key on the server; it is refused now, before the row says "connecting".
+- **Add several servers**: a port outside 1-65535 and an address over 128 characters are told per line (the port field of the request is bounded too).
+- **Spoof test with a typo in the address** ("999.1.1.1") said "no target could be used - <server>: the forged source must be ..."; it is told as a typo first, before any server is chosen. **Onboard with no step** is a 400.
+- **Not changed**: the tunnel judge, the Doctor, the tunnel pages, the configs / DNS, the platform.
+- **Proved**: `tests/test_qa_servers.py` (rename with muted tunnel + muted server + alert states, delete, role change with and without a tunnel, address in capitals and with a dot, the double add, Connect in read-only with `subprocess.run` guarded, add-many, spoof typo, onboard with no step, the css rule); in the browser on a private panel: the page at 1200 / 1280 / 1366 / 1536 / 1920 px before and after, the window of a server (Overview, Monitor, menus, Edit, Console, the confirm boxes of every menu item), Add server with wrong values, 62 servers with a 70-character name, the Dashboard, 30 API calls with wrong input (no 500).
+- **Not proved**: anything over SSH on a real server (the test panel is read-only and its servers are invented): installs, Abuse-Defender, Connect with a password, reboot, the real pulse; the Marzban / PasarGuard node installs; Persian (paused).
+
 ## 1.69.86 - No more type suggestions: a steady, better type is taken by the Doctor itself; Active Tasks is calm
 
 The owner (2026-10-22, on the Doctor page: three "speed" suggestions with "Change type" buttons, red sentences and "watching" chips on every tunnel): "declutter this, make it MacBook-like - and no more suggestions: when it sees a steady tunnel with better quality, do it by itself".

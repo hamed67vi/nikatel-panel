@@ -3,14 +3,16 @@ import time
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import delete, select
+from sqlalchemy.exc import IntegrityError
 
 from ..auth import current_user
 from ..config import get_settings
 from ..db import session
 from ..log import get_logger
-from ..models import Server, ServerSample, Tunnel, is_standby
+from ..models import AlertState, Server, ServerSample, Setting, Tunnel, is_standby
 from ..services import profiles, uptime
+from ..services import settings as st
 from ..services.events import emit
 from ..services.facts import sample_server
 from ..services.nodes import server_conflict
@@ -125,9 +127,20 @@ def samples(server_id: int, hours: int = Query(24, ge=1, le=720)):
                 "samples": [[r.ts, r.cpu, r.ram, r.disk, r.load1, r.rx_mbps, r.tx_mbps, r.conn] for r in rows]}
 
 
+def _taken() -> HTTPException:
+    return HTTPException(409, "A server with this name or address was added a moment ago: choose another name or address")
+
+
 @router.post("/servers", response_model=ServerOut, status_code=201)
 def add_server(body: ServerIn):
     """Add a server (name, address, role, SSH user and port); it is sampled at the next round."""
+    try:
+        return _add_server(body)
+    except IntegrityError:          # (two adds of the same name at the same moment: the second one meets the UNIQUE of the table, not a 500)
+        raise _taken() from None
+
+
+def _add_server(body: ServerIn):
     with session() as db:
         why = server_conflict(db, body.name, body.host)
 
@@ -166,6 +179,29 @@ def add_server(body: ServerIn):
 @router.put("/servers/{server_id}", response_model=ServerOut)
 def update_server(server_id: int, body: ServerIn):
     """Change a server; a new address rebuilds its tunnels and moves its DNS records."""
+    try:
+        return _update_server(server_id, body)
+    except IntegrityError:
+        raise _taken() from None
+
+
+def _follow_name(db, old: str, new: str) -> None:
+    """A renamed server keeps what the panel knows about it by NAME: its alert state (a server that is down stays "told", its UP message still comes) and its alert mute (a muted server must not start to call again).
+    Written in THIS session - settings.put opens another connection that would wait for the write lock this one holds."""
+    db.execute(delete(AlertState).where(AlertState.kind == "server", AlertState.ref == new))          # (what an old, gone server of that name left)
+    row = db.scalar(select(AlertState).where(AlertState.kind == "server", AlertState.ref == old))
+
+    if row is not None:
+        row.ref = new
+
+    doc = db.get(Setting, "alerts")
+    muted = list(doc.value.get("muted") or []) if doc is not None and isinstance(doc.value, dict) else []
+
+    if old in muted:
+        doc.value = {**doc.value, "muted": sorted({new if m == old else m for m in muted})}
+
+
+def _update_server(server_id: int, body: ServerIn):
     with session() as db:
         s = db.get(Server, server_id)
 
@@ -185,6 +221,12 @@ def update_server(server_id: int, body: ServerIn):
         if not data["role"]:
             data["role"] = s.role                    # an edit without a role keeps the one the server has
 
+        if data["role"] != s.role:
+            used = [t.name for t in _tunnels_of(db, server_id) if not is_standby(t)]
+
+            if used:
+                raise HTTPException(409, f"the tunnel {', '.join(used)} uses this server as {'an Iran' if s.role == 'iran' else 'a foreign'} server: delete the tunnel first, then change where the server is")
+
         for k, v in data.items():
             setattr(s, k, v)
 
@@ -197,6 +239,8 @@ def update_server(server_id: int, body: ServerIn):
 
             for line in builder.follow_server_rename(db, s, old_name):
                 emit(db, "info", "servers", f"Tunnel name follows the server: {line}.", s.name)
+
+            _follow_name(db, old_name, s.name)
 
         if was_enabled and not s.enabled:
             emit(db, "info", "servers", f"Server {s.name} disabled: it is no longer checked.", s.name)
@@ -273,7 +317,13 @@ def delete_server(server_id: int, tunnels: bool = False):
 
         emit(db, "warn", "servers", f"Server {s.name} removed from the panel (nothing was changed on the server)" + (f", with its tunnel{'s' if len(gone) > 1 else ''} {', '.join(gone)}." if gone else "."), s.name)
         profiles.drop_server(db, server_id)          # (its profile on the Lab page goes with it)
+        gone_name = s.name
         db.delete(s)
+
+    muted = list(st.get("alerts").get("muted") or [])
+
+    if gone_name in muted:          # (a mute of a server that is gone must not wait for a new server of that name and keep it silent)
+        st.put("alerts", {"muted": [m for m in muted if m != gone_name]})
 
     from ..services import knowledge
 
@@ -302,6 +352,9 @@ def onboard_server(server_id: int, body: OnboardIn):
 
     if bad:
         raise HTTPException(400, f"the steps are {', '.join(onboard.ALL_STEPS)} (not {bad[0]})")
+
+    if not body.steps:
+        raise HTTPException(400, f"choose at least one step: {', '.join(onboard.ALL_STEPS)}")
 
     with session() as db:
         if db.get(Server, server_id) is None:

@@ -144,6 +144,7 @@ def test_a_wrong_password_is_remembered_as_the_servers_error(client, monkeypatch
     from nikatel.services import nodes
 
     sid = _server()
+    monkeypatch.setattr(nodes.get_settings(), "read_only", False)          # (the key is put on a server only when the panel may change servers: 1.69.87)
     monkeypatch.setattr(nodes.shutil if hasattr(nodes, "shutil") else subprocess, "which", lambda x: "/usr/bin/" + x, raising=False)
     monkeypatch.setattr(nodes, "_pubkey", lambda: "ssh-ed25519 AAAA test")
     monkeypatch.setattr(subprocess, "run", lambda *a, **k: subprocess.CompletedProcess(a, 255, stdout="Permission denied, please try again.\n"))

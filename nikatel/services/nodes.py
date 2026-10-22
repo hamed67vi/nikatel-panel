@@ -10,7 +10,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 
 import httpx
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from ..config import get_settings
 from ..db import session
@@ -132,9 +132,13 @@ def _connect(server_id: int, password: str) -> dict:
     if not password:
         raise ValueError("enter the SSH password of the server")
 
-    node, name, _role, host = _srv(server_id)
     s = get_settings()
+    node, name, _role, host = _srv(server_id)
     pub = _pubkey()
+
+    if s.read_only:          # (this logs in with sshpass itself, not through ssh.run_action: the read-only rule has to be kept here)
+        raise RuntimeError("the panel is in read-only mode: it does not put its key on a server; set NIKATEL_READ_ONLY=false on the panel server to allow it")
+
     script = ("umask 077; mkdir -p ~/.ssh; touch ~/.ssh/authorized_keys; chmod 700 ~/.ssh; chmod 600 ~/.ssh/authorized_keys; "
               f"grep -qxF '{pub}' ~/.ssh/authorized_keys || echo '{pub}' >> ~/.ssh/authorized_keys; echo KEY_INSTALLED")
     env = dict(os.environ, SSHPASS=password)
@@ -214,14 +218,13 @@ def jump_candidates(target: Node) -> list[Node]:
 
 def server_conflict(db, name: str, host: str, exclude_id: int = 0) -> str:
     """"" when the name and the address are free, else the sentence that says what is taken. Names are compared without capitals: TR1 and tr1 are the same name."""
-    from sqlalchemy import func
-
     by_name = db.scalar(select(Server).where(func.lower(Server.name) == str(name).lower(), Server.id != exclude_id))
 
     if by_name is not None:
         return f"a server named {by_name.name} already exists ({'Iran' if by_name.role == 'iran' else 'foreign'}): choose another name"
 
-    by_host = db.scalar(select(Server).where(Server.host == host, Server.id != exclude_id))
+    h = str(host).strip().lower().rstrip(".")          # (a host name has no case and may end in a dot: Example.COM, example.com and example.com. are ONE address)
+    by_host = db.scalar(select(Server).where(func.rtrim(func.lower(Server.host), ".") == h, Server.id != exclude_id))
 
     if by_host is not None:
         return f"the address {host} already belongs to the server {by_host.name}"
@@ -251,6 +254,14 @@ def add_many(role: str, lines: str, password: str = "", ssh_user: str = "root", 
 
         if not re.fullmatch(r"[a-z_][a-z0-9_-]{0,31}", user):
             items.append({"name": name, "host": host, "ok": False, "error": "bad ssh user"})
+            continue
+
+        if not 1 <= port <= 65535:
+            items.append({"name": name, "host": host, "ok": False, "error": "bad ssh port (1 to 65535)"})
+            continue
+
+        if len(host) > 128 or len(name) > 64:
+            items.append({"name": name[:64], "host": host[:128], "ok": False, "error": "the name is up to 64 characters and the address up to 128"})
             continue
 
         if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", name) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9.\-]*", host):
@@ -973,11 +984,9 @@ def _spoof_ready(node: Node, role: str, name: str) -> str:
     return tried.group(1).strip() if tried and "READY" in out else ""
 
 
-def spoof_test(server_id: int, target_id: int, spoof_ip: str) -> dict:
-    """Does the provider of this server let packets with a forged source address out? This server pings the target five times as it is and ten times with the source rewritten to `spoof_ip` (a tagged SNAT rule for ICMP echo
-    requests to the target only, taken out again whatever happens); the target listens with tcpdump and says what arrived. The answer is kept in the extra data of the server."""
+def spoof_source(spoof_ip: str):
+    """Pure: the address to forge, as an IPv4Address - ValueError with the sentence that says what is wrong with it (asked before any server is touched, so a typo is told as a typo and not as "no target could be used")."""
     import ipaddress
-    import threading
 
     try:
         ip = ipaddress.IPv4Address(str(spoof_ip).strip())
@@ -986,6 +995,16 @@ def spoof_test(server_id: int, target_id: int, spoof_ip: str) -> dict:
 
     if ip.is_loopback or ip.is_multicast or ip.is_unspecified or ip.is_reserved or ip.is_link_local:
         raise ValueError("choose an ordinary address to forge (not loopback, multicast, link-local or reserved)")
+
+    return ip
+
+
+def spoof_test(server_id: int, target_id: int, spoof_ip: str) -> dict:
+    """Does the provider of this server let packets with a forged source address out? This server pings the target five times as it is and ten times with the source rewritten to `spoof_ip` (a tagged SNAT rule for ICMP echo
+    requests to the target only, taken out again whatever happens); the target listens with tcpdump and says what arrived. The answer is kept in the extra data of the server."""
+    import threading
+
+    ip = spoof_source(spoof_ip)
 
     if server_id == target_id:
         raise ValueError("choose another server as the target")
@@ -1066,6 +1085,8 @@ def spoof_candidates(sender: dict, servers: list[dict]) -> list[int]:
 def spoof_auto(server_id: int, spoof_ip: str) -> dict:
     """The spoof test with the target chosen BY THE SYSTEM (no list for the owner to pick from): the candidates of `spoof_candidates` one after the other - at most SPOOF_TRIES - until a test gives an answer about THIS server
     (it spoofs / only in part / it does not / the rewrite did not happen). A target that cannot listen or that no ping reaches (ICMP filtered between the two) is left and the next one is tried. The answer says which target it came from."""
+    spoof_source(spoof_ip)
+
     with session() as db:
         s = db.get(Server, server_id)
 
