@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.69.92 - Servers check, second part: the torrent block puts cron on a server that has none
+
+> بخش دوم کنترل سرورها: «بلاک تورنت» روی سروری که cron ندارد (دبیان/اوبونتوی مینیمال) حالا cron را هم نصب می‌کند؛ پیش از این خط شبانه و خط @reboot هیچ‌وقت اجرا نمی‌شد و بعد از اولین ریستارت سرور قاعده‌ها از بین می‌رفتند.
+> Second part of the servers check: the torrent block now puts cron on a server that has none (a minimal Debian / Ubuntu): the nightly refresh and the @reboot line never ran there, and the rules, kept nowhere else, were gone after the first restart.
+
+The owner (2026-10-22): "one full zero-to-hundred check and test of the whole panel, fixing any bug found" - servers and nodes; this part came from reading the install scripts for a minimal server (no python3, no cron, no curl).
+
+- **Torrent block, no cron**: `install_btblock` installed curl, iptables, ipset and python3 when they were missing, but not cron - and it writes `/etc/cron.daily/denypublic` and `/etc/cron.d/nikatel-btblock` (@reboot). The ipset and the iptables rules are not saved anywhere else, so on a server without cron they were gone at the first restart and the list was never refreshed - and the panel said "installed". `cron` is installed and started first (as the Abuse-Defender install already does); when it cannot be installed the install still goes on, as before.
+- **Checked, nothing to change**: the Abuse-Defender install (curl, iptables, cron are put when missing, the old rules go only after the list was downloaded, the systemd timer replaces cron when there is none), the Marzban / PasarGuard node installs (curl is put when missing; Docker comes with the official installers), the system update (`NO_APT` is told), Set SSH password, Reboot.
+- **Pulse text**: the comment of `pulse.py` said every 5 seconds and "~12 s"; the job runs every 3 seconds and a server is off after two misses (~8 s). Words only.
+- **Not changed**: the tunnel judge, the Doctor, the tunnel pages, the configs / DNS, the platform.
+- **Proved**: `tests/test_qa_servers.py::test_the_torrent_block_puts_cron_on_a_server_that_has_none` (the rendered script puts cron before the lines that need it). **Not proved**: the script on a real minimal server (the test panel has no real server).
+
 ## 1.69.91 - the platform audit: a wrong password says so, a body with no length is limited, lists have bounds, a log cannot be forged or leak a key, a token that starts work cannot change a password
 
 > **به زبان ساده:** این نسخه نتیجه‌ی بررسی «زیرساخت» پنل است (ورود، توکن‌ها، به‌روزرسانی، لاگ، پایگاه داده، امنیت). زیر صفحه‌ی ورود، رمز اشتباه حالا همان جمله‌ی درست را می‌گوید (نه «وارد نشده‌اید»)؛ درخواستی که طولش را نمی‌گوید دیگر نمی‌تواند حافظه‌ی سرور را پر کند (بدون ورود هم)؛ فهرست‌ها حدّ دارند؛ در لاگ نه خط جعلی می‌ماند و نه کلید و توکن؛ توکنی که فقط «کار شروع می‌کند» نمی‌تواند رمز SSH سرور را عوض کند یا کار پس‌زمینه را متوقف کند؛ آدرس اشتراک نمی‌تواند به خود سرور پنل اشاره کند؛ دو بار فشردن «به‌روزرسانی» همزمان دو اجرا نمی‌سازد؛ و لاگ حالا می‌گوید کدام کد پایگاه داده را بیش از ۸ ثانیه نگه داشته.

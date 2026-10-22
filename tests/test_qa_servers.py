@@ -128,6 +128,14 @@ def test_onboard_without_a_step_is_refused(client):
     assert r.status_code == 400 and "at least one step" in r.json()["error"]
 
 
+def test_the_torrent_block_puts_cron_on_a_server_that_has_none():
+    from nikatel.ssh import render_action
+
+    script = render_action("install_btblock", {})
+    assert "command -v crontab" in script and "apt-get install -y -qq cron" in script and "systemctl enable --now cron" in script
+    assert script.index("command -v crontab") < script.index("ln -sf /usr/local/sbin/nikatel-btblock /etc/cron.daily/denypublic")          # (cron is there before the nightly line and the @reboot line are written)
+
+
 def test_the_page_is_not_wider_than_the_window():
     css = (WEB / "app.css").read_text(encoding="utf-8")
     rule = next(ln for ln in css.splitlines() if ".main:has(.lbox) {" in ln)

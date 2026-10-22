@@ -1665,6 +1665,8 @@ cat > $d/btblock.sh <<'EOS'
 set -e; export DEBIAN_FRONTEND=noninteractive; d=/var/lib/nikatel-install
 need() { command -v "$1" >/dev/null 2>&1 || { apt-get update -qq >/dev/null; apt-get install -y -qq "$2" >/dev/null; }; }
 need curl curl; need iptables iptables; need ipset ipset; need python3 python3-minimal
+command -v crontab >/dev/null 2>&1 || { apt-get update -qq >/dev/null; apt-get install -y -qq cron >/dev/null 2>&1 || true; }          # (a minimal server has no cron: the nightly refresh and the @reboot line below would never run, and the rules - not saved anywhere - would be gone after the first restart)
+systemctl enable --now cron >/dev/null 2>&1 || true
 command -v ipset >/dev/null 2>&1 || { echo "BT_FAILED: ipset could not be installed"; exit 1; }
 cat > /usr/local/sbin/nikatel-btblock <<'EOF'
 #!/bin/bash

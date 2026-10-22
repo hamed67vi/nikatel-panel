@@ -1,7 +1,7 @@
-"""The pulse: a quick liveness check of every server, every 5 seconds - one TCP connection to its SSH port (2 s).
+"""The pulse: a quick liveness check of every server, every 3 seconds - one TCP connection to its SSH port (2 s).
 
 The full SSH sample runs every two minutes and is the one that reads cpu, ram and disk; it is far too slow to notice a server that was switched off or
-that came back. Two misses in a row mark the server off (~12 s); a hit on a server that is marked off puts it back at once when the pulse itself marked
+that came back. Two misses in a row mark the server off (~8 s); a hit on a server that is marked off puts it back at once when the pulse itself marked
 it, and otherwise (the full sample marked it, with an SSH error) asks the server over SSH right now - once per 15 s per server - so the answer comes in
 seconds, not at the next full sample. A server whose SSH login is really broken stays off (the SSH answer says so). Every change of state wakes the fast
 lane of the tunnels, so the tunnels of the server are looked at in the same moment."""
