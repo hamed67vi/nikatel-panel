@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.69.104 - A tunnel installs only its own core
+
+The owner (2026-10-23, on the story of a build of a Backhaul tunnel that said "Tunnel cores on NL: Backhaul 1 of 5, BackPack 2 of 5, Paqet 3 of 5, Chisel 4 of 5, Xray 5 of 5"): "when it makes a Backhaul tunnel it installs only the Backhaul core; when it makes a Paqet tunnel it installs the Paqet core".
+
+- **Changed**: the first tunnel built on a server no longer brings every core to it (`onboard.ensure_all_cores` is gone; it came with 1.69.23 / 2026-10-19). A build installs the core of its own type on its two servers - Backhaul, BackPack, Paqet or Chisel - and nothing else. A core that is on a server already is left alone, as before. The two lines "Tunnel cores on ..." leave the story.
+- **Not changed**: adding a server still installs no core; cores that servers carry already are not removed; the night survey and "Test this pair" install the core of each type they test, when they test it.
+- **Not done (asked, not decided)**: removing the core of the previous tunnel type when a new tunnel replaces it. A core is a separate program (`/usr/local/bin/...`) that does not touch the others, and other tunnels of the server may run on it; the owner is asked before anything is removed.
+- **Proved**: `tests/test_server_prep.py::test_a_tunnel_brings_only_its_own_core_never_all_of_them` (the function is gone, neither build calls it, each build installs the engine of its type).
+- **Not proved**: a build on a real server that had no core (the install of the core of the type is the old, unchanged step).
 ## 1.69.103 - The page is drawn in place: a refresh no longer rebuilds the whole page, so it does not look as if the page reloads itself
 
 > **به زبان ساده:** تا حالا هر بار که صفحه خودش را تازه می‌کرد (هر ۸ تا ۱۵ ثانیه، یا وقتی حالت یک سرور یا تانل عوض می‌شد، یا وقتی یک تانل در حال تعمیر بود) کل صفحه دور ریخته و از نو ساخته می‌شد؛ برای همین انگار صفحه دائم «رفرش» می‌شد و می‌پرید؛ مرورگر هر بار حدود ۰٫۱۲ ثانیه (با ۳۹ سرور؛ در حالت فارسی بیشتر) قفل می‌شد چون باید همهٔ کارهای ترجمه و چیدمان را از نو برای کل صفحه انجام می‌داد. حالا صفحه فقط همان چیزی را که عوض شده (یک عدد، یک متن، یک ردیف) سر جایش عوض می‌کند و بقیه دست نمی‌خورد. نسخهٔ قبلی همه‌چیز را دوباره می‌ساخت؛ اگر جایی مشکل داشت، `localStorage.setItem("nk.patch","0")` در کنسول مرورگر روش قدیمی را برمی‌گرداند.

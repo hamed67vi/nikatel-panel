@@ -14,7 +14,7 @@ and the probe, the survey and the Doctor never install a package - so every prob
 | a server's menu -> Install -> **WireGuard tools…** (`POST /api/servers/<id>/onboard` with `{"steps": ["wg"]}`) | the same, for that one server; the step is on its row while it runs |
 | Create tunnel / Compare / Smart test / a survey started by hand, with a WireGuard type | the build installs the tools on the servers that lack them (the existing `install_wg` option), as before |
 
-Adding a server never installs them (`onboard.STEPS` is unchanged; `wg` is an extra step, `ALL_STEPS`), and they are not in the cores that come with the first tunnel (`onboard.ensure_all_cores`): `apt` on a server inside
+Adding a server never installs them (`onboard.STEPS` is unchanged; `wg` is an extra step, `ALL_STEPS`), and they are not a core of any tunnel type that a build installs by itself (a tunnel installs only its own core since 1.69.104): `apt` on a server inside
 Iran can take minutes or be blocked, and it changes the packages of the server - that is the owner's call, with a button.
 
 The install is `apt` only (the reviewed action `wg_install`; nothing is downloaded or copied from another machine). It says plainly what went wrong: no `apt-get` on the server, apt failed (its last lines), or the kernel

@@ -7,7 +7,7 @@ from sqlalchemy import select
 
 from nikatel.db import session
 from nikatel.models import Server
-from nikatel.services import engines, nodes, onboard
+from nikatel.services import nodes, onboard
 
 HOSTS = itertools.count(10)
 
@@ -87,29 +87,20 @@ def test_the_spoof_test_tries_the_next_target_when_one_cannot_be_used_and_stops_
         nodes.spoof_auto(ir, "10.10.10.10")
 
 
-def test_the_cores_come_with_the_first_tunnel_all_of_them_and_only_once(monkeypatch):
-    a, b = srv("co-a", "iran"), srv("co-b", "foreign")
-    installed, said = [], []
-    monkeypatch.setattr(engines, "install_on", lambda sid, names=None, step=None: installed.append(sid) or {"backhaul": "installed", "paqet": "present"})
-    onboard.ensure_all_cores([a, b], said.append)
-    assert installed == [a, b] and any("all in place" in s for s in said)
+def test_a_tunnel_brings_only_its_own_core_never_all_of_them():
+    """1.69.104 (the owner, 2026-10-23, looking at a build that installed Backhaul, BackPack, Paqet, Chisel and Xray on a server for one Backhaul tunnel): "when it makes a Backhaul tunnel it installs only the Backhaul core; a Paqet
+    tunnel only the Paqet core". The old rule (2026-10-19: the first tunnel of a server brings every core) is gone: each build installs the core of its own type."""
+    from pathlib import Path
 
-    with session() as db:
-        assert db.get(Server, a).extra.get("cores_all") and db.get(Server, b).extra.get("cores_all")
+    from nikatel.services import build_other, builder
 
-    installed.clear()
-    onboard.ensure_all_cores([a, b], said.append)
-    assert installed == []                                                                                          # the second tunnel finds them there
-    c = srv("co-c", "iran")
-    monkeypatch.setattr(engines, "install_on", lambda sid, names=None, step=None: {"backhaul": "failed: no cache", "paqet": "installed"})
-    onboard.ensure_all_cores([c], said.append)
-
-    with session() as db:
-        assert not db.get(Server, c).extra.get("cores_all")                                                         # a core that failed: not marked, the next tunnel tries again, the build was not stopped
-
-    monkeypatch.setattr(engines, "install_on", lambda sid, names=None, step=None: (_ for _ in ()).throw(ValueError("the panel is read-only")))
-    onboard.ensure_all_cores([c], said.append)                                                                      # (never raises into the build)
-
+    assert not hasattr(onboard, "ensure_all_cores")
+    root = Path(onboard.__file__).resolve().parent
+    other, bh = (root / "build_other.py").read_text(encoding="utf-8"), (root / "builder.py").read_text(encoding="utf-8")
+    assert "ensure_all_cores" not in other and "ensure_all_cores" not in bh and "Tunnel cores on" not in other + bh
+    assert "engines.ensure_on_node(node, eng)" in other and "ensure_backhaul(iran, foreign, fi, ff, aid)" in bh          # (the core of the type being built, on both servers)
+    assert {build_other._engine(k) for k in ("backpack", "backpack_direct")} == {"backpack"} and build_other._engine("paqet") == "paqet" and build_other._engine("chisel") == "chisel"
+    assert builder is not None
 
 def test_the_page_has_no_target_list_for_the_spoof_test_and_does_not_put_the_cores_on_by_default():
     from pathlib import Path

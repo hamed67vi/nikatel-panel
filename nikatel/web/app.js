@@ -1443,7 +1443,7 @@ window.saveServer = async (e, id) => {
     if (!id && window.labOn && labOn()) closeModal();      // (the box of the Lab closes: the new row appears on the page)
     if (!id) { refresh(); if (window.labFollow) labFollow(30); }          // the new row appears at once and says what the panel is doing with it ("Waiting for the first reading…", then every step); the page follows it quietly - rows rewritten where they stand, no redraw of the page (the owner, 2026-10-16: "the page jumps several times" and "the status is not clear: show what is being done from the very first moment")
     const prep = steps => api(`/api/servers/${saved.id}/onboard`, {method: "POST", body: JSON.stringify({steps})}).then(() => { if (window.labFollow) labFollow(20); }).catch(() => {});      // read it now, check its GRE links, put the cores on it: in the background, each step written on its row
-    const first = id ? ["gre"] : ["read", "gre"], rest = cores && !later ? ["cores"] : [];      // (1.69.23, the owner: "when a server is added the cores are not installed - only when its first tunnel is made, and then all of them": the box is NOT ticked any more; see onboard.ensure_all_cores)
+    const first = id ? ["gre"] : ["read", "gre"], rest = cores && !later ? ["cores"] : [];      // (1.69.23, the owner: "when a server is added the cores are not installed - only when its first tunnel is made"; 1.69.104, 2026-10-23: and then only the core of THAT tunnel's type, not all of them: the box is NOT ticked any more)
     let connected = true;
     if (id && !pw) toast("✓ Saved", "ok");
     else if (pw) {   // a password: the panel logs in once with it and installs its own key (the password is not kept)

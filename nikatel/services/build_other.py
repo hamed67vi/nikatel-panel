@@ -825,11 +825,6 @@ def _build(b: Build) -> None:
         if engines.ensure_on_node(node, eng):
             _say(aid, f"{engines.ENGINES[eng]['title']} installed on the {label} server")
 
-    if not is_temp(b.name):
-        from . import onboard
-
-        onboard.ensure_all_cores([b.iran.id, b.foreign.id], lambda line: _say(aid, line))      # (the first tunnel of a server brings every core to it - not the adding of the server)
-
     token, key = secrets.token_hex(24), secrets.token_hex(8)
     proto = "udp" if b.udp else "tcp"
 

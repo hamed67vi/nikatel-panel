@@ -103,32 +103,6 @@ def _finish(server_id: int, out: dict, t0: int) -> None:
         log.exception("onboard: could not keep the outcome of server %s", server_id)
 
 
-def ensure_all_cores(server_ids: list[int], say=None) -> None:
-    """At the FIRST tunnel built on a server every tunnel core is put on it (the owner, 2026-10-19: "when a server is added the cores must not be installed; only when the first tunnel is made - and then, even if it is a
-    Backhaul tunnel, the other cores too"). What is there already is left alone (`engines.install_on`); a server that has been through it once carries the mark `cores_all` and is not asked again. A failure never stops
-    the build - the core the tunnel needs is installed by the build itself; it is told and the next tunnel tries again."""
-    for sid in server_ids:
-        try:
-            with session() as db:
-                s = db.get(Server, sid)
-
-                if s is None or (s.extra or {}).get("cores_all"):
-                    continue
-
-                name = s.name
-
-            res = engines.install_on(sid, step=(lambda title, i, n, nm=name: say(f"Tunnel cores on {nm}: {title} · {i} of {n}")) if say else None)
-            bad = {k: v for k, v in res.items() if str(v).startswith("failed")}
-
-            if say:
-                say(f"Tunnel cores on {name}: " + ("all in place" if not bad else "; ".join(f"{k} {v[8:][:60]}" for k, v in bad.items())))
-
-            if not bad:
-                nodes._set_extra(sid, cores_all=int(time.time()))
-        except (ValueError, RuntimeError, SSHError) as e:
-            log.info("cores of server %s not put on at its first tunnel: %s", sid, str(e)[:120])
-
-
 def start(server_id: int, steps=STEPS) -> bool:
     """Run the steps in the background; False when this server is being prepared already."""
     with _LOCK:
