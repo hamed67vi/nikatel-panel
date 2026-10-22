@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.69.99 - the Persian text of the 1.69.97 notes is readable again
+
+> **به زبان ساده:** متن فارسیِ توضیح نسخهٔ 1.69.97 (در CHANGELOG و در صفحهٔ release در GitHub) هنگام ساخت خراب شده بود و فقط علامت‌های بی‌معنی نشان می‌داد؛ حالا درست است. کد برنامه تغییری نکرده است.
+>
+> **In short:** the Persian paragraph of the 1.69.97 entry (CHANGELOG and the GitHub release) had been written with a wrong text encoding and showed only noise; it is readable again. No change in the program.
+
+- **What happened**: the notes of 1.69.97 were passed through a Windows PowerShell `Get-Content` / `Set-Content` pair without `-Encoding utf8`, which read UTF-8 as ANSI and wrote it back as UTF-8 twice over. Fixed in `CHANGELOG.md` (the first line of the 1.69.97 summary) and in the GitHub release notes (`gh_release.py --update`).
+- **Proved**: the file was read back after the change; no code was touched.
+
 ## 1.69.98 - a wrong verb has its own error code; the changelog of 1.69.91 says which way the log was forged
 
 > **به زبان ساده:** خطای «روش درخواست اشتباه» (405) کد اختصاصی `method_not_allowed` دارد (قبلاً کد کلی `error`). و توضیح نسخه‌ی ۱.۶۹.۹۱ درباره‌ی جعل خط لاگ اصلاح شد: راهِ واقعی پیام `POST /client-error` بود، نه مسیر آدرس.
@@ -12,7 +21,7 @@
 
 ## 1.69.97 - app.js put back: the 1.69.9x release had replaced it with an old copy
 
-> **Ø¨Ù‡ Ø²Ø¨Ø§Ù† Ø³Ø§Ø¯Ù‡:** Ù†Ø³Ø®Ù‡Ù” 1.69.9x (ÙØ±Ù… ÙˆØ±ÙˆØ¯ Ø¨Ø§ POST) Ú©Ù„ ÙØ§ÛŒÙ„ app.js Ø±Ø§ Ø§Ø² ÛŒÚ© Ù†Ø³Ø®Ù‡Ù” Ù‚Ø¯ÛŒÙ…ÛŒ Ø¬Ø§ÛŒÚ¯Ø²ÛŒÙ† Ú©Ø±Ø¯Ù‡ Ø¨ÙˆØ¯ Ùˆ Ú†Ù†Ø¯ Ø§ØµÙ„Ø§Ø­ Ù‚Ø¨Ù„ÛŒ Ø±Ø§ Ø¨Ø±Ú¯Ø±Ø¯Ø§Ù†Ø¯: Ù…ØªÙ†â€ŒÙ‡Ø§ÛŒ Â«RestoreÂ» Ø¯Ø± ØµÙØ­Ù‡Ù” DNSØŒ Ø§Ù†ØªØ®Ø§Ø¨ Ù¾Ù†Ù„ Ø¢Ù†Ù„Ø§ÛŒÙ† Ø¯Ø± ØµÙØ­Ù‡Ù” PanelØŒ Ùˆ Ø§ØµÙ„Ø§Ø­â€ŒÙ‡Ø§ÛŒ ØµÙØ­Ù‡Ù” ØªØ§Ù†Ù„ (Ù…Ù†ÙˆÛŒ Ø±Ø¯ÛŒÙØŒ Ø¬Ø³ØªØ¬ÙˆÛŒ Ø¨Ø¯ÙˆÙ† Ù†ØªÛŒØ¬Ù‡ØŒ Ø¨Ø³ØªÙ‡â€ŒÙ†Ø´Ø¯Ù† Ù¾Ù†Ø¬Ø±Ù‡â€ŒÙ‡Ø§ØŒ Ù¾Ø±Ø³ÛŒØ¯Ù† Ù‚Ø¨Ù„ Ø§Ø² RestartØŒ Ø´Ù…Ø±Ø¯Ù† ØªØ§Ù†Ù„â€ŒÙ‡Ø§ÛŒ Ø¨ÛŒâ€ŒØ¬ÙˆØ§Ø¨ Ø¯Ø± Check all). Ø§ÛŒÙ† Ù†Ø³Ø®Ù‡ Ù‡Ù…Ù‡Ù” Ø¢Ù†Ù‡Ø§ Ø±Ø§ Ø¯ÙˆØ¨Ø§Ø±Ù‡ Ù…ÛŒâ€ŒÚ¯Ø°Ø§Ø±Ø¯ Ùˆ Ø³Ù‡ ØªØºÛŒÛŒØ± Ø®ÙˆØ¯ 1.69.9x (ÙˆØ±ÙˆØ¯ØŒ Ø®Ø·Ø§ÛŒ idØŒ Ø§Ø³Ú©Ø±ÙˆÙ„ ØªØ¨â€ŒÙ‡Ø§ÛŒ ØªÙ†Ø¸ÛŒÙ…Ø§Øª) Ø±Ø§ Ù†Ú¯Ù‡ Ù…ÛŒâ€ŒØ¯Ø§Ø±Ø¯.
+> **به زبان ساده:** نسخهٔ 1.69.96 (فرم ورود با POST) کل فایل app.js را از یک نسخهٔ قدیمی جایگزین کرده بود و چند اصلاح قبلی را برگرداند: متن‌های «Restore» در صفحهٔ DNS، انتخاب پنل آنلاین در صفحهٔ Panel، و اصلاح‌های صفحهٔ تانل (منوی ردیف، جستجوی بدون نتیجه، بسته‌نشدن پنجره‌ها، پرسیدن قبل از Restart، شمردن تانل‌های بی‌جواب در Check all). این نسخه همهٔ آنها را دوباره می‌گذارد و سه تغییر خود 1.69.96 (ورود، شناسهٔ درخواست در خطا، اسکرول تب‌های تنظیمات) را نگه می‌دارد.
 >
 > **In short:** the 1.69.9x release (sign-in as a POST) shipped a whole `app.js` built from an old copy and undid parts of 1.69.88 / .89 / .90: the DNS Restore texts, the Panel page picking an online panel, and the tunnel-page fixes (row menu, search with no hit, windows not drawn away, Restart asks, Check all counts unanswered tunnels, Create window starts on an online foreign server). This release puts them all back and keeps the three changes of 1.69.9x (sign-in focus, the request id in an error, the Settings tab scroll).
 
