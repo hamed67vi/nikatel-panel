@@ -354,7 +354,7 @@ def test_a_panel_page_without_a_panel_is_one_fixed_card_with_nothing_to_press():
     app = _web("app.js")
     assert "const pnEmptyPage = () =>" in app and "pnEmptyPage()" in app
     page = app.split("const pnEmptyPage = () =>", 1)[1].split("const pnBar = ", 1)[0]
-    assert '<div class="card pn-first fx-box">' in page and "No panel connected" in page and "button" not in page.split("`<div id=\"pn-body\">", 1)[1] and "Add a panel in General" not in app and "usr-tbl" not in page
+    assert '<div class="card pn-first fx-box">' in page and "No panel connected" in page and "button" not in page.split("`<div id=\"pn-body\" data-own>", 1)[1] and "Add a panel in General" not in app and "usr-tbl" not in page
     assert "if (!manage) pnFuse(); if (typeof fxFit === \"function\") fxFit(); return; }" in app
 
 
@@ -851,9 +851,9 @@ def test_one_draw_at_a_time_the_bar_with_its_page_and_no_spinner_between_panel_t
     """The whole-panel smoothness review, 2026-10-16: one draw at a time per page and tab; the bar of tabs shows together with its page; the Panel keeps the tab that was open, dimmed, until the new one has its data;
     a late answer never paints the users of the panel that was left; one poll per action; the engines box follows a check with a flag that dies with the box."""
     app, com, css = _web("app.js"), _web("pg_common.js"), _web("lab.css")
-    assert "if (refresh.p && refresh.seq === navSeq) { refresh.again = true; return refresh.p; }" in app and "async function refreshNow() {" in app and app.count("async function refresh() {") == 1
+    assert "if (refresh.p && refresh.seq === navSeq) { refresh.again = true; if (quiet !== true) refresh.quiet = false; return refresh.p; }" in app and "async function refreshNow() {" in app and app.count("async function refresh(quiet) {") == 1      # (1.69.76: refresh(true) is a round nobody asked for - drawn in place)
     assert '$("#subnav").classList.toggle("hidden", !subBarOn(state.page));      // the bar of tabs shows (or goes) together with the page' in app and '$("#subnav").classList.toggle("hidden", !subBarOn(page));' not in app and 'box.classList.toggle("hidden", !subBarOn(state.page));' not in app
-    assert '<div id="pn-body" class="${keep && changed ? "pn-busy" : ""}">' in app and 'c.querySelectorAll(":scope > .pn-bars").forEach(x => x.remove()); return c.innerHTML;' in app
+    assert '<div id="pn-body" data-own class="${keep && changed ? "pn-busy" : ""}">' in app and 'c.querySelectorAll(":scope > .pn-bars").forEach(x => x.remove()); return c.innerHTML;' in app
     assert 'if (!box.isConnected || String(pn.id) !== String(id) || pn.tab !== "users") return;' in app and "const FOLLOWING = new Map();" in app and "if (FOLLOWING.has(aid)) { const f = FOLLOWING.get(aid); f.box = box; return f.p; }" in app
     assert "if (d.checking) { if (!box._follow) { box._follow = true; engineFollow(); } }" in app and 'finally { const b = $("#eng-box"); if (b) b._follow = false; }' in app
     assert "if (box.dataset.tab === pn.tab) return;" in com and "box._lt = setTimeout(() => { if (box.isConnected && box.classList.contains(\"pn-busy\")) pgSpin(box, text); }, 350);" in com and 'box.classList.remove("pn-busy"); box.dataset.tab = pn.tab;' in com
@@ -1104,7 +1104,7 @@ def test_adding_a_server_moves_nothing_and_says_what_is_being_done_from_the_firs
     lab, css, app = _web("lab.js"), _web("lab.css"), _web("app.js")
     assert 'class="lbox lab-box0"' in lab and "const labBox = shown =>" in lab and '<div id="lab-list">${labBox(shown)}</div>' in lab and ".lab-box0 { display: grid; place-items: center; }" in css      # the empty page is a box like the list: the first row changes nothing around it
     assert 'class="lab-list"' not in lab and '"lab-list"' not in lab.replace('id="lab-list"', "") and "\n.lab-list {" not in css      # (no second look for the empty page)
-    assert "function labPatch()" in lab and "morphNode(tr, tpl.firstElementChild)" in lab and "morphHtml(st, labStatsHtml(shown))" in lab and "async function labTick()" in lab and "if (!labPatch()) refresh();" in lab      # the rows are rewritten where they stand
+    assert "function labPatch()" in lab and "morphNode(tr, tpl.firstElementChild)" in lab and "morphHtml(st, labStatsHtml(shown))" in lab and "async function labTick()" in lab and "if (!labPatch()) refresh(true);" in lab      # the rows are rewritten where they stand
     assert "window.labFollow = (secs = 0) =>" in lab and "async function labFollowStep()" in lab and "setTimeout(labFollowStep, 1500)" in lab and "const labWaiting = s =>" in lab
     assert 'labBusyHtml({what: "node", detail: "Waiting for the first reading…"})' in lab and "labUnread(s) && !noLogin(s)" in lab      # a server that was never read says so
     assert ".lab-chip b { display: inline-block; min-width: var(--cw, 3ch);" in css and ".lab-chip.c-cpu b { --cw: 4ch; }" in css      # the numbers of the chips have their own room

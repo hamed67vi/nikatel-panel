@@ -41,7 +41,7 @@ def test_a_search_that_finds_nothing_says_so():
 
 def test_a_window_that_is_open_is_not_drawn_away_by_the_round_of_the_page_behind():
     tick = APP.split("let lastTick = Date.now();", 1)[1].split("\n", 2)[1]
-    assert '#modal .modal:not(.keep)' in tick and "refresh();" in tick
+    assert '#modal .modal:not(.keep)' in tick and "refresh(true);" in tick
     fn = APP.split("window.trashRestore = async id => {", 1)[1].split("window.trashForget", 1)[0]
     assert fn.index("showModal(") < fn.index("state.keepWin = true") < fn.index("try {") < fn.index("refresh();")          # (the error of a restore stayed on the screen for a blink)
 

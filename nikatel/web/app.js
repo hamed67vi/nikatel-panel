@@ -405,7 +405,7 @@ function isPhone() { return matchMedia("(max-width: 760px) and (pointer: coarse)
   let q = 0;
   const fit = () => { if (isPhone()) return; const fixed = !!pg.querySelector(".cf-top, .lab-root"); /* (the Lab list is a box of ONE fixed height too, whatever the number of its rows: the owner, 2026-10-15) */ const mn = pg.closest(".main"), room = mn ? Math.min(window.innerHeight - 24, mn.getBoundingClientRect().bottom - (parseFloat(getComputedStyle(mn).paddingBottom) || 0)) : window.innerHeight - 24; /* (the box ends where the page area ends - the padding under it counts: the window bottom alone left the page taller than its area, and a page area that cannot scroll could still be scrolled by a focus: the header went away, 2026-10-21) */ pg.querySelectorAll(".lbox").forEach(b => { if (b.matches(".fx-box")) return; const mh = Math.max(150, Math.floor(room - b.getBoundingClientRect().top)); b.style.maxHeight = mh + "px"; if (fixed) { b.style.height = mh + "px"; b.style.minHeight = ""; } }); };      // the configs box keeps ONE height for every group, so switching groups never makes it jump   // the box ends exactly at the bottom of the window: the page itself never scrolls, only the list does
   const labelCells = () => { if (!isPhone()) return; pg.querySelectorAll("table.tbl").forEach(tb => { const hs = [...tb.querySelectorAll("thead th")].map(h => h.textContent.trim()); if (!hs.length) return; tb.querySelectorAll("tbody tr").forEach(tr => { let i = 0; for (const td of tr.children) { if (td.tagName !== "TD") continue; if (!td.hasAttribute("data-l")) td.setAttribute("data-l", hs[i] || ""); i += +td.getAttribute("colspan") || 1; } }); }); };
-  const run = () => { q = 0; pg.querySelectorAll("table.tbl, .cf-grid").forEach(tb => { if (tb.closest(".lbox, .modal, .card, .ibox, .gw-out, .fix, .sbox")) return; const w = document.createElement("div"); w.className = "lbox" + (tb.classList.contains("joined") ? "" : " full"); tb.replaceWith(w); w.appendChild(tb); }); fit(); labelCells(); if (pendScroll) { scrollRestore(pendScroll); pendScroll = null; } };
+  const run = () => { q = 0; pg.querySelectorAll("table.tbl, .cf-grid").forEach(tb => { if (tb.closest(".lbox, .modal, .card, .ibox, .gw-out, .fix, .sbox")) return; const w = document.createElement("div"); w.className = "lbox" + (tb.classList.contains("joined") ? "" : " full"); w.setAttribute("data-wrap", ""); tb.replaceWith(w); w.appendChild(tb); }); fit(); labelCells(); if (pendScroll) { scrollRestore(pendScroll); pendScroll = null; } };
   new MutationObserver(() => { if (!q) q = requestAnimationFrame(run); }).observe(pg, {childList: true, subtree: true});
   window.addEventListener("resize", () => requestAnimationFrame(fit));
   if (window.ResizeObserver) { const ro = new ResizeObserver(() => requestAnimationFrame(fit)); [".main > .head", "#statusbar", "#subnav"].forEach(s => { const el = document.querySelector(s); if (el) ro.observe(el); }); }      // (the bar above the page changes height - a status line, a sub-menu that opens, a title that wraps - and the box under it follows at once)
@@ -435,20 +435,39 @@ const focusBack = s => {
 (() => {
   const pg = $("#page"), d = Object.getOwnPropertyDescriptor(Element.prototype, "innerHTML");
   if (!pg || !d) return;
-  let last = null, lastDom = null;
-  // the same HTML again is skipped (no flicker) - but only while the page has not changed its own DOM since (Settings, Tools, lazy boxes do)
-  Object.defineProperty(pg, "innerHTML", {get() { return d.get.call(pg); }, set(v) { if (v === last && lastDom !== null && d.get.call(pg) === lastDom && pg.childElementCount && !pg.querySelector(".loading, .page-err")) return; last = v; d.set.call(pg, v); lastDom = d.get.call(pg); }});
+  let last = null, lastDom = null, lastSig = "";
+  /* A refresh nobody asked for (the ticker, a tunnel that changed its state, a page that follows a job: refresh(true)) is drawn IN PLACE (patch.js): only what the page changed between this draw and the one before is done
+     to the live nodes, so the lists keep their scroll, the pointer its button, the flags and the animations are not made again - the page no longer looks as if it reloads itself (the owner, 2026-10-21). A draw that a person
+     asked for (a click, a page or a tab opened, a window closed) and a page that is not the one of the draw before is made from scratch, as it always was. */
+  const off = (() => { try { return localStorage.getItem("nk.patch") === "0"; } catch (e) { return false; } })(), draw = window.NKPatch && !off ? NKPatch.make(pg, d.set) : null, stat = window.NK_DRAWS = {same: 0, patched: 0, full: 0, why: {}};      // (localStorage "nk.patch" = "0": every draw from scratch, as before 1.69.73)
+  const sigNow = () => state.page + "|" + (typeof sub === "function" ? sub(state.page) : "");
+  let lastInput = 0;      // (a person touched the page - a click, a key, a field - after a quiet round began: that draw is from scratch, whatever started it)
+  ["pointerdown", "keydown", "input", "change"].forEach(t => document.addEventListener(t, () => { lastInput = Date.now(); }, true));
+  window.nkInputAfter = t => lastInput > t;
+  window.nkQuietDraw = () => refresh.quiet === true && !nkInputAfter(refresh.qStart || 0);
+  Object.defineProperty(pg, "innerHTML", {get() { return d.get.call(pg); }, set(v) {
+    const sig = sigNow(), busy = !pg.childElementCount || !!pg.querySelector(".loading, .page-err"), quiet = !!draw && nkQuietDraw() && !busy && sig === lastSig;
+    if (quiet && v === last) { stat.same++; return; }      // (nothing the page says is different: nothing is touched)
+    // the same HTML again is skipped (no flicker) - but only while the page has not changed its own DOM since (Settings, Tools, lazy boxes do)
+    if (!quiet && v === last && lastDom !== null && d.get.call(pg) === lastDom && !busy) return;
+    last = v; lastSig = sig;
+    if (draw) { const r = draw(v, quiet); stat[r]++; if (draw.why) stat.why[draw.why] = (stat.why[draw.why] || 0) + 1; if (window.NK_DRAW_DEBUG) { stat.html = v; stat.last = r; } } else d.set.call(pg, v);
+    lastDom = quiet ? null : d.get.call(pg);
+  }});
 })();
 let navSeq = 0, retryT = null, retries = 0;
 const loadingBox = page => `<div class="loading"><i class="spin"></i><span>Loading ${esc((INFO[page] || ["…"])[0])}…</span></div>`;
 const errorBox = (msg, transient) => `<div class="page-err"><b>${transient ? "The panel does not answer right now" : "This page could not be loaded"}</b><span>${esc(msg)}</span><small class="mut">${transient ? "It is probably restarting after an update; trying again by itself…" : ""}</small><button class="sm" onclick="retries=0;refresh()">Try again</button></div>`;
 /* every tab, sub-tab and range switch of the panel: the content that follows comes in softly (see .soft-in, and the animation of a tab panel in app.css) instead of jumping */
 document.addEventListener("click", e => { if (e.target.closest && e.target.closest(".tabs button, #subnav button, .set-tabs button, .tf-tabs button, .srv-tabs button, .act-cats button, .ap-ttabs button")) state.softSwap = true; }, true);
-async function refresh() {      // one draw at a time for the page and tab that are open: a second call while that draw runs (the ticker, the Lab's busy timer, a window that closed) asks for ONE more draw after it, with the newest state - never two at once, never out of order (review 2026-10-16)
-  if (refresh.p && refresh.seq === navSeq) { refresh.again = true; return refresh.p; }
-  const seq = navSeq, p = (async () => { do { refresh.again = false; await refreshNow(); } while (refresh.again && seq === navSeq); })();
+async function refresh(quiet) {      // one draw at a time for the page and tab that are open: a second call while that draw runs (the ticker, the Lab's busy timer, a window that closed) asks for ONE more draw after it, with the newest state - never two at once, never out of order (review 2026-10-16)
+  /* quiet = true: nobody asked for this draw (a timer, a change of state seen by the ticker): it is made in place (the setter of #page, patch.js). Any call that is not `true` - a click, a window that closed - makes the draw from scratch,
+     also when it joins a quiet one that is running: a person's draw is never weaker than a timer's. */
+  if (refresh.p && refresh.seq === navSeq) { refresh.again = true; if (quiet !== true) refresh.quiet = false; return refresh.p; }
+  refresh.quiet = quiet === true;
+  const seq = navSeq, p = (async () => { do { refresh.again = false; if (refresh.quiet) refresh.qStart = Date.now(); await refreshNow(); } while (refresh.again && seq === navSeq); })();
   refresh.p = p; refresh.seq = seq;
-  try { await p; } finally { if (refresh.p === p) refresh.p = null; }
+  try { await p; } finally { if (refresh.p === p) { refresh.p = null; refresh.quiet = false; } }
 }
 async function refreshNow() {
   routeWrite();      // (the address of the section that is open: a string compare)
@@ -488,7 +507,7 @@ async function refreshNow() {
   }
 }
 let lastTick = Date.now();
-setInterval(() => { if (Date.now() - lastTick < (state.page === "nodes" ? 8000 : 15000)) return; if (!document.hidden && !$("#app").classList.contains("hidden") && !state.edit && !state.open && !state.nodeWin && !state.build && !["bot", "settings"].includes(state.page) && !cf.open && !cf.edit && !cf.add && !cf.sub && !cf.subEdit && !document.activeElement.matches("input, textarea, select") && !document.querySelector(".nk-dd, .lab-menu, .pn-uchk:checked, .pn-hchk:checked, #modal .modal:not(.keep)")) { lastTick = Date.now(); refresh(); } }, 2000);      // (a window that is open - Messages, Explain, a restore - is not drawn away by the round of the page behind: the tunnels page closed them within seconds)   // the servers page follows the pulse (every 10 s on the server)
+setInterval(() => { if (Date.now() - lastTick < (state.page === "nodes" ? 8000 : 15000)) return; if (!document.hidden && !$("#app").classList.contains("hidden") && !state.edit && !state.open && !state.nodeWin && !state.build && !["bot", "settings"].includes(state.page) && !cf.open && !cf.edit && !cf.add && !cf.sub && !cf.subEdit && !document.activeElement.matches("input, textarea, select") && !document.querySelector(".nk-dd, .lab-menu, .pn-uchk:checked, .pn-hchk:checked, #modal .modal:not(.keep)")) { lastTick = Date.now(); refresh(true); } }, 2000);      // (a window that is open - Messages, Explain, a restore - is not drawn away by the round of the page behind: the tunnels page closed them within seconds)   // the servers page follows the pulse (every 10 s on the server)
 /* a change of the STATE of a server (on / off) or a tunnel (up, down ...) shows within ~2 s (the owner, 2026-10-20: "it detected very late - show it at once when a tunnel or a server is cut"): one signature of the
    states is asked every 2 s; when it changes the round of the page above is made due (lastTick = 0), so it redraws at once, under the same guards (no window open, nothing typed). */
 let briefSig = null;
@@ -1622,7 +1641,7 @@ PAGES.tunnelsList = async () => {
   const all = list.concat(tunGhosts(list, (outageRes || {}).working, state.tunRowCache || (state.tunRowCache = new Map())));      // (the list as drawn: the real rows and the placeholders of the tunnels a repair has just removed)
   const tmode = localStorage.getItem("nk.tf") === "problems" ? "problems" : "all", nProblems = all.filter(tunSev).length;
   const workList = (outageRes || {}).working || [], fixing = new Set(workList.filter(w => w.mode !== "look").map(w => w.name)), workMap = new Map(workList.map(w => [w.name, w]));
-  if (workList.length) { clearTimeout(window.__workT); window.__workT = setTimeout(() => { if (state.page === "tunnels" && !state.open && !state.build) refresh(); }, 4000); }
+  if (workList.length) { clearTimeout(window.__workT); window.__workT = setTimeout(() => { if (state.page === "tunnels" && !state.open && !state.build) refresh(true); }, 4000); }
   const shortWhy = t => { const e = t.last_error || "", l = (t.detail || {}).loss_pct; return /flaps|lost packets/.test(e) ? "keeps dropping" : /loss/.test(e) ? `${l || ""}% packets lost` : /not listening/.test(e) ? "port closed" : /no data/.test(e) ? "no data" : e.slice(0, 24); };
   const fcount = {}; all.forEach(t => { fcount[t.foreign_name] = (fcount[t.foreign_name] || 0) + 1; });   // how many tunnels end on the same foreign server
   const dupMark = t => fcount[t.foreign_name] > 1 ? `<span class="dup" title="This foreign server ends ${fcount[t.foreign_name]} tunnels (${esc(all.filter(x => x.foreign_name === t.foreign_name).map(x => x.name).join(", "))}). Is that on purpose?">⚠ ×${fcount[t.foreign_name]}</span>` : "";
@@ -2705,14 +2724,14 @@ PAGES.panels = async () => {
   const ob = $("#pn-body"), changed = pn.lastTab !== pn.tab || pn.lastId !== String(p.id); pn.lastTab = pn.tab; pn.lastId = String(p.id);
   const keep = ob && !ob.querySelector(":scope > .loading") ? (() => { const c = ob.cloneNode(true); c.querySelectorAll(":scope > .pn-bars").forEach(x => x.remove()); return c.innerHTML; })() : "";      // what the tab that was open showed stays on the screen - dimmed when another tab or panel was chosen - until the new one has its data: no spinner between the tabs of the Panel (the owner, 2026-10-16)
   $("#page").innerHTML = pnBar(list, p.id, manage ? facts : "", manage ? "manage" : "pick") + `    ${p.last_error && p.status === "down" ? `<div class="gw-out bad">✕ ${esc(p.last_error)}</div>` : ""}
-    <div id="pn-body" class="${keep && changed ? "pn-busy" : ""}"><div class="pn-bars">${pnTabs()}</div>${keep || '<div class="loading"><i class="spin"></i><span>Loading…</span></div>'}</div><div id="pn-foot" class="fstrip pn-foot"></div>`;
+    <div id="pn-body" data-own class="${keep && changed ? "pn-busy" : ""}"><div class="pn-bars">${pnTabs()}</div>${keep || '<div class="loading"><i class="spin"></i><span>Loading…</span></div>'}</div><div id="pn-foot" class="fstrip pn-foot"></div>`;
   pnFuseWatch();
   const tdef = window.pgTabs && window.pgTabs[pn.tab], here = $("#pn-body");
   if (here && tdef && tdef.types && !tdef.types.includes(p.type)) { here.innerHTML = `<div class="pn-bars">${pnTabs()}</div><div class="empty">${esc(tdef.label)} is a part of PasarGuard panels; ${esc(p.name)} is a ${esc(p.type)} panel. Pick a PasarGuard panel in the bar above.</div>`; return; }
   // the heavy lists are read from the panel only when their tab is open (and kept until something changes)
   if (pn.tab === "users") pnUsersLoad(p.id);
   if (pn.tab === "hosts") pnHostsLoad(p.id);
-  if (window.pgTabs && window.pgTabs[pn.tab]) { const box = $("#pn-body"); if (box) window.pgTabs[pn.tab].render(p.id, box).catch(e => pgError(box, e)); }      // a tab of a pg_*.js file draws itself
+  if (window.pgTabs && window.pgTabs[pn.tab]) { const box = $("#pn-body"); if (box) { box._qs = nkQuietDraw() ? refresh.qStart : 0; window.pgTabs[pn.tab].render(p.id, box).catch(e => pgError(box, e)); } }      // (box._qs: this tab is read again by a timer, nobody touched the page since - pgPaint then draws nothing when the tab says the same)      // a tab of a pg_*.js file draws itself
 };
 function pnOverviewHtml(p) {
   const s = p.stats || {}, nodes = p.nodes || [], bad = nodes.filter(n => !["connected", "healthy", "disabled"].includes(n.status));
@@ -2830,14 +2849,14 @@ window.pnNodeLogs = async (id, nid) => { const pl = Array.isArray(state.panelsCa
 /* ---- All panels: one account = the same person on every panel (same username, or a link made by hand); every panel is asked through its API when you look */
 /* the bar on top of the Panels pages is the one of the CDN page: a row of chips (one per panel, "All panels", and the dashed "＋ Add panel" chip) and a row of facts and buttons */
 const pnFirstCard = () => `<div class="card pn-first fx-box"><div class="pn-first-ic">${SI.cube}</div><h2>No panel yet</h2><p class="mut">Add one with its API key or access token: its usage, its settings and its users then show here.</p><button type="button" class="cta cta-server" onclick="pnAddWin()" title="Add a Marzban or PasarGuard panel"><i class="cta-ic">＋</i>Add panel</button></div>`;      // (the empty General page: ONE card of a fixed size with the way to add a panel - the owner, 2026-10-15)
-const pnEmptyPage = () => pnBar([], "", "", "pick") + `<div id="pn-body"><div class="card pn-first fx-box"><div class="pn-first-ic">${SI.cube}</div><h2>No panel connected</h2><p class="mut">Panels are added in General (Panel > General). This section fills in as soon as one is connected.</p></div></div>`;      // a tab of the Panel page while no PasarGuard panel is connected: ONE card of a fixed size, nothing to press in the middle of the page (the owner, 2026-10-15)
+const pnEmptyPage = () => pnBar([], "", "", "pick") + `<div id="pn-body" data-own><div class="card pn-first fx-box"><div class="pn-first-ic">${SI.cube}</div><h2>No panel connected</h2><p class="mut">Panels are added in General (Panel > General). This section fills in as soon as one is connected.</p></div></div>`;      // a tab of the Panel page while no PasarGuard panel is connected: ONE card of a fixed size, nothing to press in the middle of the page (the owner, 2026-10-15)
 const pnBar = (list, cur, row2, mode = "manage") => {      // the bar of the panels, built like the bar of the profiles in the Lab (the owner, 2026-10-15: "like the Profile section, no edit button, a locked box"): the panels are a segmented control (the open one lifted), "+" adds a panel, the bin takes the open one off the list; mode "pick": only switches between the panels, and the room beside them (#pn-ctl) holds what the tab has (pnFuse)
   const pick = mode === "pick", dot = p => p.status === "up" ? "ok" : p.status === "down" ? "bad" : "";
   const IB = d => `<svg viewBox="0 0 24 24" aria-hidden="true">${d}</svg>`, curP = list.find(p => String(p.id) === String(cur));
   const tabs = list.map(p => `<button type="button" class="${String(p.id) === String(cur) ? "on" : ""}" onclick="pnPick('${p.id}')" title="${esc(p.url || "")}${p.status === "down" ? " · down" : ""}"><i class="dot ${dot(p)}"></i><span class="lab-kn">${esc(p.name)}</span></button>`).join("");
   const acts = pick ? "" : `<span class="lab-tabact"><button type="button" class="lab-ib" onclick="pnAddWin()" title="Add a Marzban or PasarGuard panel" aria-label="Add panel">${IB('<path d="M12 5v14M5 12h14"/>')}</button>${curP ? `<button type="button" class="lab-ib danger" onclick="pnDel(${curP.id}, '${esc(curP.name)}')" title="Take the panel ${esc(curP.name)} off this list (nothing changes on the panel itself)" aria-label="Remove ${esc(curP.name)}">${IB('<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6"/>')}</button>` : ""}</span>`;
   const box = list.length ? `<span class="lab-ksw pn-ksw"><div class="tabs lab-kinds pn-seg">${tabs}</div>${acts}</span>` : '<span class="pn-none mut">No panel yet</span>';      // (no panel yet: the page says it in one card, the bar only names it)
-  if (pick) return `<div class="toolbar joined srv-bar dns-bar pn-top pn-bar pn-pick"><div class="dns-r dns-accbar pn-one">${box}<div id="pn-ctl" class="pn-ctl"></div></div></div>`;
+  if (pick) return `<div class="toolbar joined srv-bar dns-bar pn-top pn-bar pn-pick"><div class="dns-r dns-accbar pn-one">${box}<div id="pn-ctl" class="pn-ctl" data-own></div></div></div>`;
   return `<div class="toolbar joined srv-bar dns-bar pn-top pn-bar"><div class="dns-r dns-accbar pn-one">${box}<span class="sp"></span><div class="pn-facts">${row2}</div></div></div>`;
 };
 /* outside General what a tab paints at its top - the strip of its tab buttons (.pn-bars) and its own bar of search, filters and buttons (.pg-bar) - is moved into the room beside the panels, so the top is ONE row (the owner, 2026-10-15) */

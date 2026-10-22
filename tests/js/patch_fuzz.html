@@ -1,0 +1,130 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>patch fuzz</title>
+<!-- The fuzz test of nikatel/web/patch.js (tests/test_page_patch.py runs it in a headless Chrome when there is one): random pages, random changes between two draws, the layers of the panel (the Persian text,
+     the box around a table, a class and a style on cells) done by hand after every draw; after every in-place draw the page must be exactly what a draw from scratch gives. The result is in the data-result attribute. -->
+<section id="page"></section>
+<script src="../../nikatel/web/patch.js"></script>
+<script>
+// ---- a seeded random
+let seed = 12345;
+const rnd = () => (seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296;
+const pick = a => a[Math.floor(rnd() * a.length)];
+const WORDS = ["alpha", "beta", "gamma", "delta", "up", "down", "12 ms", "3.5 Mb/s", "ir-north-1", "OK", "Warn", "a < b & c", "quote\"s", "ünï", "", " "];
+
+// ---- the layers around the page (emulated): the Persian text, the list box, a class and a style on cells
+const nativeSet = Object.getOwnPropertyDescriptor(Element.prototype, "innerHTML").set;
+function post(root) {
+  root.querySelectorAll("table").forEach(t => { if (!t.closest("[data-wrap]")) { const w = document.createElement("div"); w.className = "lbox"; w.setAttribute("data-wrap", ""); t.replaceWith(w); w.appendChild(t); w.style.maxHeight = "300px"; } });
+  root.querySelectorAll("td").forEach(td => { td.classList.add("pp"); });
+  root.querySelectorAll("tr").forEach(tr => { tr.style.setProperty("--pp", "1"); });
+  const w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  for (let n = w.nextNode(); n; n = w.nextNode()) if (n.data.trim() && !n.data.startsWith("§") && !n.parentElement.closest("textarea, script")) n.data = "§" + n.data;
+}
+function norm(root) {      // what the page said: the layers taken off
+  const c = root.cloneNode(true);
+  c.querySelectorAll("[data-wrap]").forEach(w => { while (w.firstChild) w.parentNode.insertBefore(w.firstChild, w); w.remove(); });
+  c.querySelectorAll(".pp").forEach(e => { e.classList.remove("pp"); if (!e.getAttribute("class")) e.removeAttribute("class"); });
+  c.querySelectorAll("tr").forEach(tr => { tr.style.removeProperty("--pp"); if (!tr.getAttribute("style")) tr.removeAttribute("style"); });
+  const w = document.createTreeWalker(c, NodeFilter.SHOW_TEXT), ns = [];
+  for (let n = w.nextNode(); n; n = w.nextNode()) ns.push(n);
+  ns.forEach(n => { if (n.data.startsWith("§")) n.data = n.data.slice(1); });
+  // attribute order and class order do not matter
+  const ser = n => {
+    if (n.nodeType === 3) return JSON.stringify(n.data);
+    if (n.nodeType !== 1) return "";
+    const at = [...n.attributes].map(a => { let v = a.value; if (a.name === "class") v = v.split(/\s+/).filter(Boolean).sort().join(" "); if (a.name === "style") v = NKPatch.decls(v).map(d => d[0] + ":" + d[1].replace(/^\./, "0.").replace(/^0\.5$/, ".5")).sort().join(";"); return a.name + "=" + v; }).filter(s => !/^(class|style)=$/.test(s)).sort().join(" ");
+    let extra = "";
+    if (n.tagName === "INPUT") extra = "|v=" + n.value + "|c=" + n.checked;
+    if (n.tagName === "TEXTAREA") extra = "|v=" + n.value;
+    if (n.tagName === "SELECT") extra = "|v=" + n.value;
+    return "<" + n.tagName + " " + at + extra + ">" + [...n.childNodes].map(ser).join("") + "</>";
+  };
+  return [...c.childNodes].map(ser).join("");
+}
+
+// ---- a model of a page
+function model() {
+  const m = {title: pick(WORDS), tables: [], blocks: [], form: null};
+  const nt = 1 + Math.floor(rnd() * 2);
+  for (let t = 0; t < nt; t++) {
+    const rows = []; const nr = Math.floor(rnd() * 8);
+    for (let r = 0; r < nr; r++) rows.push(row(r * 7 + t * 100 + Math.floor(rnd() * 5)));
+    m.tables.push({id: "t" + t, cols: 2 + Math.floor(rnd() * 3), rows, keyed: rnd() < 0.7});
+  }
+  const nb = Math.floor(rnd() * 5);
+  for (let b = 0; b < nb; b++) m.blocks.push(blk());
+  if (rnd() < 0.7) m.form = {val: pick(WORDS), checked: rnd() < 0.5, ta: pick(WORDS), opts: ["a", "b", "c"], sel: pick(["a", "b", "c"])};
+  return m;
+}
+const row = id => ({id, cells: [pick(WORDS), pick(WORDS), pick(WORDS), pick(WORDS)], cls: pick(["", "ok", "bad", "ok clk"]), st: pick(["", "color:red", "opacity:.5;--x:url(a;b)"]), title: rnd() < 0.5 ? pick(WORDS) : null});
+const blk = () => ({tag: pick(["div", "p", "section", "span"]), text: pick(WORDS), cls: pick(["", "card", "mut", "card mut"]), kids: rnd() < 0.5 ? [pick(WORDS), pick(WORDS)] : []});
+const esc = s => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
+function html(m) {
+  let h = `<h2 class="${m.title.length % 2 ? "a" : "b"}">${esc(m.title)}</h2>`;
+  m.tables.forEach(t => {
+    h += `<table class="tbl" id="${t.id}"><thead><tr>${"<th>H</th>".repeat(t.cols)}</tr></thead><tbody>`;
+    t.rows.forEach(r => { h += `<tr ${t.keyed ? `data-id="${r.id}"` : ""} class="${r.cls}" ${r.st ? `style="${r.st}"` : ""} ${r.title ? `title="${esc(r.title)}"` : ""}>${r.cells.slice(0, t.cols).map((c, i) => `<td>${i === 1 ? `<b>${esc(c)}</b>` : esc(c)}</td>`).join("")}</tr>`; });
+    h += `</tbody></table>`;
+  });
+  m.blocks.forEach(b => { h += `<${b.tag} class="${b.cls}">${esc(b.text)}${b.kids.map(k => `<i>${esc(k)}</i>`).join("")}</${b.tag}>`; });
+  if (m.form) h += `<form><input type="text" id="in1" value="${esc(m.form.val)}"><input type="checkbox" id="ck" ${m.form.checked ? "checked" : ""}><textarea id="ta">${esc(m.form.ta)}</textarea><select id="se">${m.form.opts.map(o => `<option value="${o}" ${o === m.form.sel ? "selected" : ""}>${o}</option>`).join("")}</select></form>`;
+  return h;
+}
+function mutate(m) {
+  const n = JSON.parse(JSON.stringify(m));
+  const ops = 1 + Math.floor(rnd() * 5);
+  for (let k = 0; k < ops; k++) {
+    const o = Math.floor(rnd() * 14), t = n.tables.length ? pick(n.tables) : null;
+    if (o === 0) n.title = pick(WORDS);
+    else if (o === 1 && t && t.rows.length) pick(t.rows).cells[Math.floor(rnd() * 4)] = pick(WORDS);
+    else if (o === 2 && t && t.rows.length) t.rows.splice(Math.floor(rnd() * t.rows.length), 1);
+    else if (o === 3 && t) t.rows.splice(Math.floor(rnd() * (t.rows.length + 1)), 0, row(1000 + Math.floor(rnd() * 1e6)));
+    else if (o === 4 && t && t.rows.length > 1) { const i = Math.floor(rnd() * t.rows.length), j = Math.floor(rnd() * t.rows.length); [t.rows[i], t.rows[j]] = [t.rows[j], t.rows[i]]; }
+    else if (o === 5 && t && t.rows.length) { const r = pick(t.rows); r.cls = pick(["", "ok", "bad", "ok clk"]); }
+    else if (o === 6 && t && t.rows.length) { const r = pick(t.rows); r.st = pick(["", "color:red", "opacity:.5;--x:url(a;b)"]); }
+    else if (o === 7 && t && t.rows.length) { const r = pick(t.rows); r.title = rnd() < 0.5 ? pick(WORDS) : null; }
+    else if (o === 8 && n.blocks.length) n.blocks.splice(Math.floor(rnd() * n.blocks.length), 1);
+    else if (o === 9) n.blocks.splice(Math.floor(rnd() * (n.blocks.length + 1)), 0, blk());
+    else if (o === 10 && n.blocks.length) { const b = pick(n.blocks); b.text = pick(WORDS); b.tag = rnd() < 0.3 ? pick(["div", "p", "span"]) : b.tag; }
+    else if (o === 11 && n.blocks.length) pick(n.blocks).kids = rnd() < 0.5 ? [pick(WORDS)] : [];
+    else if (o === 12 && n.tables.length > 1 && rnd() < 0.5) n.tables.pop();
+    else if (o === 13) { if (n.form && rnd() < 0.3) n.form = null; else if (n.form) { n.form.val = pick(WORDS); n.form.checked = rnd() < 0.5; n.form.ta = pick(WORDS); n.form.sel = pick(["a", "b", "c"]); } else n.form = {val: "x", checked: true, ta: "t", opts: ["a", "b"], sel: "b"}; }
+  }
+  return n;
+}
+
+// ---- the run
+const out = {runs: 0, fail: 0, patched: 0, full: 0, kept: 0, keptTotal: 0, examples: []};
+function run(i) {
+  const pg = document.querySelector("#page"); nativeSet.call(pg, "");
+  const draw = NKPatch.make(pg, nativeSet);
+  let m = model(), h = html(m);
+  draw(h, false); post(pg);
+  for (let step = 0; step < 6; step++) {
+    const nm = mutate(m), nh = html(nm);
+    // identity: a keyed row whose HTML did not change must be the very same node afterwards
+    const before = new Map(); pg.querySelectorAll("tr[data-id]").forEach(tr => before.set(tr.dataset.id + "|" + tr.innerHTML.length, tr));
+    let tampered = false;
+    if (rnd() < 0.25) {      // the page changes its own DOM in between (outerHTML, innerHTML, remove): the next draw must not trust the raw tree
+      const els = [...pg.querySelectorAll("*")].filter(e => !e.closest("[data-wrap]") || e.hasAttribute("data-wrap") === false);
+      if (els.length) { const e = pick(els); const how = Math.floor(rnd() * 4); if (how === 3) { e.appendChild(document.createElement("i")); } else if (how === 0) e.replaceWith(e.cloneNode(true)); else if (how === 1) { e.innerHTML = e.innerHTML; tampered = e.childNodes.length > 0; if (!tampered) tampered = false; } else { if (e.tagName !== "TBODY" && e.tagName !== "THEAD") { e.remove(); } } tampered = tampered || how !== 1; }
+    }
+    const res = draw(nh, true);
+    if (tampered) { out.tamper = (out.tamper || 0) + 1; if (res !== "full") out.tamperMiss = (out.tamperMiss || 0) + 1; }
+    post(pg);
+    out[res]++;
+    // the control: the same page drawn from scratch with the same layers
+    const ctl = document.createElement("section"); nativeSet.call(ctl, nh); document.body.appendChild(ctl); post(ctl);
+    const a = norm(pg), b = norm(ctl); ctl.remove();
+    if (a !== b) { out.fail++; let k = 0; while (k < a.length && a[k] === b[k]) k++; if (out.examples.length < 4) out.examples.push({i, step, res, why: draw.why, at: k, a: a.slice(Math.max(0, k - 120), k + 160), b: b.slice(Math.max(0, k - 120), k + 160)}); }
+    if (res === "patched") pg.querySelectorAll("tr[data-id]").forEach(tr => { const k = tr.dataset.id + "|" + tr.innerHTML.length; if (before.has(k)) { out.keptTotal++; if (before.get(k) === tr) out.kept++; } });
+    m = nm; h = nh;
+    out.runs++;
+  }
+}
+for (let i = 0; i < 400; i++) run(i);
+window.RESULT = out;
+document.title = "done";
+document.documentElement.setAttribute("data-result", JSON.stringify(out));
+</script>

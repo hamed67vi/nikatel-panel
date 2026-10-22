@@ -256,7 +256,7 @@ async function labTick() {      // a quiet look at the servers: what was read is
   const [list, pr] = await Promise.all([api("/api/servers"), api("/api/profiles")]);
   if (!labOn()) return;
   state.serversCache = list; LAB.profiles = pr.profiles; LAB.tags = pr.tags || [];
-  if (!labPatch()) refresh();
+  if (!labPatch()) refresh(true);
 }
 window.srvCores = async (id, name) => {      // ⋯ → Install → Tunnel cores…: the cores (Backhaul, BackPack, Paqet, Chisel, Xray) are put on ONE server from the panel's cache; the steps are on its row
   if (!await gconfirm(`Put the tunnel cores on ${name}?\n\nBackhaul, BackPack, Paqet, Chisel and Xray are copied from the panel's cache (downloaded first when the panel has not got them yet). A core that is there already is left alone; no tunnel is restarted.`)) return;
@@ -274,7 +274,7 @@ window.srvSpoof = async (id, name) => {      // ⋯ → Tests → Spoof test…:
   refresh();
 };
 let labFollowT = null, labFollowUntil = 0;
-const labSchedule = () => { clearTimeout(labAutoT); labAutoT = setTimeout(() => { if (labOn() && !state.open && !state.nodeWin && !document.querySelector("#modal .modal")) refresh(); }, 30000); };      // a full look every 30 s while nothing is going on
+const labSchedule = () => { clearTimeout(labAutoT); labAutoT = setTimeout(() => { if (labOn() && !state.open && !state.nodeWin && !document.querySelector("#modal .modal")) refresh(true); }, 30000); };      // a full look every 30 s while nothing is going on
 window.labFollow = (secs = 0) => {      // follow the servers closely: a quiet look every second and a half while one is busy or has not been read yet - and for `secs` seconds at least (a server that was just added)
   labFollowUntil = Math.max(labFollowUntil, Date.now() + secs * 1000); clearTimeout(labAutoT);
   if (!labFollowT) labFollowT = setTimeout(labFollowStep, 400);
