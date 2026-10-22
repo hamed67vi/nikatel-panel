@@ -2691,7 +2691,7 @@ PAGES.panels = async () => {
   const manage = pnManage(), list = manage ? every : every.filter(x => x.type === "pasarguard");      // outside General the bar switches between the PasarGuard panels only
   if (pn.id === "*" && list.length > 1 && pnIsUsers()) return pnAllRender(list);       // "All panels": the accounts over every panel (roadmap M12)
   if (pn.id === "*") pn.id = "";
-  const sel = list.find(p => String(p.id) === pn.id) || list[0];
+  const sel = list.find(p => String(p.id) === pn.id) || list.find(p => p.status === "up") || list[0];      // (no panel picked yet: one that answers, not the first by name - a panel that is down opened every page with an error)
   if (sel && String(sel.id) !== pn.id) { pn.id = String(sel.id); pn.users = pn.hosts = pn.core = pn.user = pn.logs = null; }
   const chip = p => p.status === "up" ? `<span class="pill ok" title="${esc((p.version ? "version " + p.version + " · " : "") + (p.checked_at ? "checked " + ago(p.checked_at) + " ago" : ""))}">●<span class="up"> up ·</span> ${p.latency_ms != null ? p.latency_ms + " ms" : "answers"}</span>` : p.status === "down" ? `<span class="pill err" title="${esc(p.last_error || "")}">● down</span>` : '<span class="pill">not checked yet</span>';
   if (!list.length) { $("#page").innerHTML = manage ? pnBar([], "", "") + pnFirstCard() : pnEmptyPage(); if (!manage) pnFuse(); if (typeof fxFit === "function") fxFit(); return; }      // (no panel: the boxes of the tab stay, empty, with the way to add one - the owner, 2026-10-15)

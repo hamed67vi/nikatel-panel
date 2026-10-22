@@ -319,15 +319,17 @@ def _clean(fields: dict, allowed: dict) -> dict:
 
             out[k] = f
         else:
-            s, cap = str(v if v is not None else ""), LONG_TEXT.get(k, 2000)
+            s = str(v if v is not None else "")
+            is_json = k == "custom_sni" and s.lstrip().startswith(("{", "["))          # (an older plan of the bot may keep a plain SNI host name here: that stays as it was)
+            cap = LONG_TEXT.get(k, 2000) if is_json or k != "custom_sni" else 2000
 
             if len(s) > cap:
-                if k == "custom_sni":
+                if is_json:
                     raise ValueError(f"the inbounds of a plan are longer than {cap} characters: they would be cut in the middle")
 
                 s = s[:cap]
 
-            if k == "custom_sni" and s.strip():
+            if is_json:
                 try:
                     ok = isinstance(json.loads(s), dict)
                 except ValueError:

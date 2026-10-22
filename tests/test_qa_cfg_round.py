@@ -18,6 +18,11 @@ def test_the_restore_of_a_dns_change_by_hand_says_what_it_does():
     assert "foRestore('${esc(e.id)}', '${esc(e.op || \"\")}')" in js          # the Changes table hands the kind of change over
 
 
+def test_the_panel_page_opens_on_a_panel_that_answers_when_none_was_picked():
+    js = (WEB / "app.js").read_text(encoding="utf-8")
+    assert '|| list.find(p => p.status === "up") || list[0];' in js
+
+
 def test_a_panel_without_a_latency_is_not_called_null_ms():
     js = (WEB / "app.js").read_text(encoding="utf-8")
     assert "${p.latency_ms} ms</span>" not in js
@@ -152,7 +157,9 @@ def test_the_inbounds_of_a_plan_are_never_cut_in_the_middle():
     assert adm._clean({"custom_sni": big}, adm.PLAN_FIELDS)["custom_sni"] == big
     assert adm._clean({"custom_sni": ""}, adm.PLAN_FIELDS)["custom_sni"] == ""
 
-    for bad in ("x" * 20001, "not json", "[1, 2]"):
+    assert adm._clean({"custom_sni": "sni.example.com"}, adm.PLAN_FIELDS)["custom_sni"] == "sni.example.com"          # an older plan keeps a plain host name: untouched
+
+    for bad in ('{"inbounds": ' + "x" * 20001, '{"inbounds": ', "[1, 2]"):
         with pytest.raises(ValueError, match="custom_sni|inbounds"):
             adm._clean({"custom_sni": bad}, adm.PLAN_FIELDS)
 

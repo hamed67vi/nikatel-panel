@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.69.90 - A plan with a plain SNI text keeps it; the Panel page opens on a panel that answers
+
+> **به زبان ساده:** در ربات فروش، پلنی که در ستون «custom_sni» فقط یک نام دامنه‌ی ساده دارد (نه JSON) مثل قبل ذخیره می‌شود؛ فقط وقتی مقدار با «{» شروع شود لازم است JSON درست باشد و بریده نشود. صفحه‌ی «پنل» اگر هنوز پنلی انتخاب نشده باشد، روی پنلی باز می‌شود که جواب می‌دهد، نه اولین پنل به ترتیب حروف که شاید از کار افتاده باشد.
+>
+> **In short:** a bot plan whose `custom_sni` holds a plain host name (not JSON) is saved as it always was; only a value that starts with "{" must be a whole JSON object and is never cut. The Panel page opens on a panel that answers when none was picked, not on the first by name (which may be down).
+
+- **Shop bot, plans**: 1.69.88 refused a `custom_sni` that is not JSON; an older plan of the bot may keep a plain SNI host name there, so a value that does not start with "{" / "[" is kept as before (cut at 2000 characters like every text). A JSON value must be an object and fits 20000 characters, else a sentence says so.
+- **Panel page**: with no panel picked (a first visit, a removed panel) the page chose the first panel by name, so a down panel opened every tab with an error; it now chooses one that is up.
+- **Proved**: `tests/test_qa_cfg_round.py`.
+
 ## 1.69.89 - the tunnel pages walked in a browser: the row menu works, a search that finds nothing says so, windows stay open, a refused rebuild leaves no ghost
 
 > **به زبان ساده:** صفحه‌های تانل در مرورگر واقعی دکمه به دکمه تست شد. منوی «⋯» هر ردیف لیست تانل: «تعمیر»، «تست خشک»، «تست سرعت»، «تاریخچه» و «ساخت دوباره» اگر پنجرهٔ تانل باز نبود هیچ کاری نمی‌کردند، حالا اول پنجره را باز می‌کنند. جستجویی که چیزی پیدا نمی‌کند حالا می‌گوید «چیزی پیدا نشد» (قبلاً یک جعبهٔ خالی بود). پنجرهٔ «پیام‌ها» و پنجرهٔ «برگرداندن تانل» چند ثانیه بعد با تازه‌شدن صفحهٔ پشتشان بسته می‌شدند و خطای برگرداندن همان لحظه محو می‌شد؛ حالا باز می‌مانند. «ساخت دوباره» که رد شود دیگر یادداشت «در حال ساخت» باقی نمی‌گذارد (با ری‌استارت تانلی را می‌ساخت که کسی نخواسته بود). «Restart» یک تانل حالا مثل «Restart all» اول می‌پرسد، «Check all» تانل‌هایی که سرورشان جواب نداد را هم می‌شمارد، و در پنجرهٔ ساخت تانل سرور خارجیِ آنلاین از پیش انتخاب می‌شود.
