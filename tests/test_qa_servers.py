@@ -136,6 +136,65 @@ def test_the_torrent_block_puts_cron_on_a_server_that_has_none():
     assert script.index("command -v crontab") < script.index("ln -sf /usr/local/sbin/nikatel-btblock /etc/cron.daily/denypublic")          # (cron is there before the nightly line and the @reboot line are written)
 
 
+def test_a_refused_command_is_not_called_a_rejected_key():
+    import subprocess
+
+    import pytest
+
+    from nikatel import ssh
+
+    node = ssh.Node("203.0.113.9", "ops", 22)
+
+    def fake(out, code):
+        return lambda *a, **k: subprocess.CompletedProcess(a, code, stdout=out.encode())
+
+    real = ssh.subprocess.run
+
+    try:
+        ssh.subprocess.run = fake("iptables: Permission denied (you must be root).\n", 4)
+        with pytest.raises(ssh.SSHError) as e:
+            ssh._exec_once(node, "x", 5)
+
+        assert "must be root" in str(e.value) and "key is not accepted" not in str(e.value)
+        ssh.subprocess.run = fake("ops@203.0.113.9: Permission denied (publickey,password).\n", 255)
+        with pytest.raises(ssh.SSHError) as e:
+            ssh._exec_once(node, "x", 5)
+
+        assert "key is not accepted" in str(e.value)
+        ssh.subprocess.run = fake("Host key verification failed.\n", 255)
+        with pytest.raises(ssh.SSHError) as e:
+            ssh._exec_once(node, "x", 5)
+
+        assert "host key" in str(e.value) and "Trust the new server" in str(e.value) and "Settings" not in str(e.value)          # (there is no such item in Settings: the button is in the window of the server)
+    finally:
+        ssh.subprocess.run = real
+
+
+def test_the_pulse_does_not_raise_an_alarm_for_a_restart_asked_from_the_panel(client, monkeypatch):
+    from nikatel.models import Event, Server
+    from nikatel.services import pulse
+
+    pulse._miss.clear()
+    woken = []
+    monkeypatch.setattr(pulse, "_wake_tunnels", lambda ids=None: woken.append(ids))
+    monkeypatch.setattr(pulse, "tcp_open", lambda h, p, timeout=2.0: False)
+
+    with session() as db:
+        db.add_all([Server(name="rb1", host="203.0.113.71", role="foreign", online=True, extra={"busy": {"what": "Rebooting", "detail": "x", "at": 4_000_000_000}}),
+                    Server(name="dn1", host="203.0.113.72", role="foreign", online=True)])
+
+    pulse.run()
+    pulse.run()
+
+    with session() as db:
+        state = {s.name: s.online for s in db.query(Server)}
+        bad = [e.text for e in db.query(Event) if e.level == "bad"]
+
+    assert state == {"rb1": False, "dn1": False}          # (both are off: the row says so)
+    assert len(bad) == 1 and "dn1" in bad[0] and not any("rb1" in t for t in bad)          # (but only the one nobody restarted is an alarm)
+    assert woken == [[2]]                                  # (and only its tunnels are looked at)
+
+
 def test_the_page_is_not_wider_than_the_window():
     css = (WEB / "app.css").read_text(encoding="utf-8")
     rule = next(ln for ln in css.splitlines() if ".main:has(.lbox) {" in ln)

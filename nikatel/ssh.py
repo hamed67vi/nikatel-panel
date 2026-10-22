@@ -742,10 +742,10 @@ def _exec_once(node: Node, script: str, timeout: int, jump: Node | None = None) 
         tail = out.strip().splitlines()[-1] if out.strip() else f"exit {r.returncode}"
         log.debug("ssh %s exit %s: %s", node.host, r.returncode, out.strip().replace("\n", " | ")[-400:])      # the caller logs what it was doing and why it failed; the raw output is for debugging
 
-        if "Permission denied" in out:
+        if re.search(r"Permission denied \((publickey|password|keyboard-interactive|gssapi)", out):          # (ssh's own refusal of the login; a command of the script that was refused - "iptables: Permission denied (you must be root)" - is not a rejected key)
             tail = "the panel's key is not accepted (authorized_keys)"
         elif "Host key verification failed" in out or "IDENTIFICATION HAS CHANGED" in out:
-            tail = "the host key of this server changed (reinstalled?) - forget it in Settings"
+            tail = "the host key of this server changed (reinstalled?) - press Trust the new server in its window, or menu Access → Forget host key"
         elif r.returncode == 255:
             why = re.search(r"(Timeout, server[^|]*|Connection (reset|closed|timed out)[^|]*|kex_exchange_identification[^|]*|Broken pipe)", out)
             tail = "ssh connection lost (" + (why.group(0).strip() if why else "network") + ")"

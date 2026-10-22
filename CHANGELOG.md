@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.69.93 - Servers check, third part: a restart asked from the panel is no red alarm from the pulse; a refused command is not a rejected key
+
+> بخش سوم کنترل سرورها: وقتی سرور را از پنل ریبوت می‌کنید، «پالس» دیگر رویداد قرمز «سرور جواب نمی‌دهد» نمی‌نویسد و تانل‌ها را بیدار نمی‌کند (نمونه‌برداری کامل از قبل همین قانون را داشت)؛ خطای «Permission denied» یک دستور (مثلاً iptables برای کاربر غیر root) دیگر «کلید پنل پذیرفته نمی‌شود» نیست؛ پیام تغییر host key به دکمه‌ی واقعی اشاره می‌کند.
+> Third part of the servers check: a restart asked from the panel no longer gets a red "does not answer" event and a wake of the tunnels from the pulse (the full sample already had this rule); a "Permission denied" printed by a command of a script (iptables for a non-root user) is no longer called "the panel's key is not accepted"; the changed-host-key message points at the button that exists.
+
+The owner (2026-10-22): "one full zero-to-hundred check and test of the whole panel, fixing any bug found" - servers and nodes.
+
+- **The pulse and a restart from the panel**: `facts.sample_server` marks a server that is being restarted (busy mark `Rebooting`) off WITHOUT a red event and without waking the tunnels ("a restart asked from the panel is no alarm"); the pulse (1.69.49, every 3 s) did not know it and, two misses later, wrote "Server X does not answer" (red) and woke the tunnel look for every reboot. It marks the server off quietly now; a server that nobody restarted is as before. The "answers again" event is kept.
+- **"Permission denied" is not always the key**: `ssh._exec_once` turned ANY output with those words into "the panel's key is not accepted (authorized_keys)". A script command that was refused - `iptables: Permission denied (you must be root)` for an SSH user that is not root, a file that cannot be written - sent the owner to authorized_keys. Only ssh's own refusal (`Permission denied (publickey,password)`) is called a rejected key now; the other error shows its own last line.
+- **The changed-host-key message** said "forget it in Settings"; there is no such item. It says: press Trust the new server in its window, or menu Access → Forget host key.
+- **Not changed**: the Telegram alert of a server that is off while it restarts (services/alerts.py - the alerts are the platform part: reported, not touched); the tunnel judge, the Doctor, the pages of the tunnels, configs / DNS.
+- **Proved**: `tests/test_qa_servers.py` (a pulse round with one server marked Rebooting and one not: one red event, one wake; the three ssh outputs: refused command, rejected key, changed host key).
+- **Not proved**: on a real server (no real reboot was made); Persian text of the two changed messages (Persian is paused: the old Persian lines no longer match the new English).
+
 ## 1.69.92 - Servers check, second part: the torrent block puts cron on a server that has none
 
 > بخش دوم کنترل سرورها: «بلاک تورنت» روی سروری که cron ندارد (دبیان/اوبونتوی مینیمال) حالا cron را هم نصب می‌کند؛ پیش از این خط شبانه و خط @reboot هیچ‌وقت اجرا نمی‌شد و بعد از اولین ریستارت سرور قاعده‌ها از بین می‌رفتند.

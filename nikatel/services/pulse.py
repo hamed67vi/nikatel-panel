@@ -76,6 +76,12 @@ def _ask_over_ssh(sid: int) -> None:
         _ASKING.discard(sid)
 
 
+def _rebooting(srv) -> bool:
+    from . import facts
+
+    return facts._rebooting(srv)
+
+
 def run() -> None:
     with session() as db:
         rows = [(s.id, s.host, s.ssh_port) for s in db.scalars(select(Server).where(Server.enabled.is_(True)))]
@@ -119,6 +125,11 @@ def run() -> None:
             if _miss[sid] >= MISSES and s.online is not False:
                 s.online = False
                 s.last_error = f"{TAG} {s.ssh_port}: {_miss[sid]} quick checks in a row got no connection"
+
+                if _rebooting(s):          # (a restart asked from the panel is no alarm - the full sample (facts.sample_server) keeps the same rule: the row says Rebooting, no red event, the tunnels are not woken)
+                    log.info("pulse: %s is rebooting (asked from the panel)", s.name)
+                    continue
+
                 emit(db, "bad", "servers", f"Server {s.name} does not answer: {s.last_error}", s.name)
                 log.warning("pulse: %s does not answer on port %s", s.name, s.ssh_port)
                 changed = True
