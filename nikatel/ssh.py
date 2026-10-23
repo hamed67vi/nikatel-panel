@@ -401,6 +401,13 @@ echo "NOW $(date +%s)"
 echo "NOW $(date +%s)"
 """, {}),
 
+    # the WEATHER of a route (services/weather.py), read-only: from the Iran server, five pings and three TCP handshakes to the foreign server - does ICMP pass, does TCP pass - "REACH icmp <came back>/5 tcp <ok>/3".
+    "reach_probe": (r"""h='@HOST@'; p='@PORT@'
+pi=$(ping -c 5 -i 0.3 -W 1 -q "$h" 2>/dev/null | grep -o '[0-9]* received' | cut -d' ' -f1); pi=${pi:-0}
+pt=0; for i in 1 2 3; do timeout 3 bash -c "exec 3<>/dev/tcp/$h/$p" 2>/dev/null && pt=$((pt+1)); done
+echo "REACH icmp $pi/5 tcp $pt/3"
+""", {"HOST": r"^\d{1,3}(\.\d{1,3}){3}$", "PORT": r"^\d{1,5}$"}),
+
     # the TRIDENT (services/trident.py), read-only: "TRULE <name> <tcp|udp> <users' port> <shifted port> <probability>" for every redirect inside a trident chain (a chain NKTR_*, rules tagged "nikatel-trident-<name>"; the
     # probability is the kernel's number, 0.29999999981 for 30 %, and "1" for a rule with no statistic match: everything that reaches it goes there) and "TJUMP <name> <proto> <users' port> <chain> <shadowed>" for every jump to
     # such a chain from PREROUTING (`shadowed`: terminating rules of anybody else - a handover, a lane, a DNAT - that stand ABOVE the jump for the same port: they take the first packet before the trident sees it).

@@ -150,10 +150,13 @@ def carrier(kind: str) -> str:
     return kind.split(":", 1)[0]
 
 
-def choose_kind(kinds: list[str], primary_kind: str, pair: dict | None, now: int, allowed=lambda k: True, skip: frozenset | set = frozenset()) -> tuple[str, str]:
+def choose_kind(kinds: list[str], primary_kind: str, pair: dict | None, now: int, allowed=lambda k: True, skip: frozenset | set = frozenset(), blocked_families: frozenset | set = frozenset()) -> tuple[str, str]:
     """(the type of the standby, the sentence that says why) - ('', why not) when none can be. `kinds`: the Doctor's candidates for this pair, best first (`knowledge.plan_for`). Left out: the tunnel's own type, what
-    failed on this pair lately, what the licence does not allow, what a standby build failed with lately (`skip`). Chosen: a type known to connect on this pair before an unknown one, and in each of the two
-    groups one with ANOTHER carrier than the tunnel's before one with the same (a standby that falls with the tunnel is no standby)."""
+    failed on this pair lately, what the licence does not allow, what a standby build failed with lately (`skip`). Chosen: a type whose family of carriers is not BLOCKED on the route today (`blocked_families`, the
+    weather of services/weather.py; a blocked one only when nothing else is left), then a type known to connect on this pair before an unknown one, and in each of the two groups one with ANOTHER carrier than the
+    tunnel's before one with the same (a standby that falls with the tunnel is no standby)."""
+    from . import weather
+
     bad = set(knowledge.blocked(pair, now))
     pool = [k for k in kinds if k != primary_kind and k not in bad and k not in skip and allowed(k)]
 
@@ -162,8 +165,9 @@ def choose_kind(kinds: list[str], primary_kind: str, pair: dict | None, now: int
 
     known = {r["kind"] for r in knowledge.ranked(pair, now, include_poor=True)}
     mine = carrier(primary_kind)
-    best = min(enumerate(pool), key=lambda it: (carrier(it[1]) == mine, it[1] not in known, it[0]))[1]
+    best = min(enumerate(pool), key=lambda it: (weather.family_of_kind(it[1]) in blocked_families, carrier(it[1]) == mine, it[1] not in known, it[0]))[1]
     note = ("known to connect on this pair" if best in known else "not tested on this pair yet") + (", another carrier than the tunnel's" if carrier(best) != mine else ", the same carrier as the tunnel (nothing else was left)")
+    note += " (its family is blocked on this route today: nothing else was left)" if weather.family_of_kind(best) in blocked_families else ""
     return best, f"{best}: {note}"
 
 
@@ -740,7 +744,10 @@ def build_plan(name: str, kind: str = "") -> dict:
         pair = knowledge.pair(p["iran_id"], p["foreign_id"])
         kinds, _ = knowledge.plan_for(p["iran_id"], p["foreign_id"], p["kind"], False, False, now=now)
         skip = {k for k, at in (_failed(name).get("kinds") or {}).items() if now - int(at) < KIND_SKIP}
-        kind, note = choose_kind(kinds, p["kind"], pair, now, allowed=license.tunnel_kind_allowed, skip=skip)
+
+        from . import weather
+
+        kind, note = choose_kind(kinds, p["kind"], pair, now, allowed=license.tunnel_kind_allowed, skip=skip, blocked_families=weather.blocked_families(p["iran_id"], p["foreign_id"], now))
 
         if not kind:
             raise ValueError(note)

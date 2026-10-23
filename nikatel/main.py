@@ -55,6 +55,7 @@ from .services import (
     tunnels,
     underuse,
     userq,
+    weather,
 )
 
 log = logmod.get_logger("http")
@@ -192,6 +193,7 @@ def _register_jobs() -> None:
     jobs.register("standby", 5, standby.run)                    # the warm standby of the tunnels the owner marked (services/standby.py): built beside the tunnel on shifted ports, looked at every 15 s, the users' ports handed to it a few seconds after the tunnel is cut (and at once when a tunnel falls) and back when the tunnel has held for a minute; nothing happens while no tunnel is marked
     jobs.register("lanes", 10, lanes.run)                       # the lanes (services/lanes.py): a tunnel that is nearly full shares its NEW connections with its warm standby (a NAT rule on the Iran server; nobody is cut); OFF until the owner switches it on, nothing happens while no tunnel has a standby
     jobs.register("trident", 5, trident.run)                        # the Trident (services/trident.py): a marked tunnel and its strands (tunnels of other kinds between the same two servers) share the users' NEW connections by live quality - one NAT chain on the Iran server, replaced in one transaction; OFF until the owner marks a tunnel, nothing happens while none is marked
+    jobs.register("weather", 60, weather.run)                   # the weather of the routes (services/weather.py): what each family of carriers does on each route now, from the fleet, the probes and the builds - the Trident's weights and choices read it; a light probe of one Trident pair every ten minutes while calm
     jobs.register("netwatch", 300, netwatch.probe_all)
     jobs.register("cpu-balance", 600, balance.run)              # a busy server whose network work sits on one core gets RPS (the Doctor does it by itself; no tunnel is touched)
     jobs.register("underuse", 1800, underuse.run)               # a server that carries little is looked at: its own network may be the reason; what the kernel settings can fix is fixed

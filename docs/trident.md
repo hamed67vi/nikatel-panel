@@ -61,6 +61,28 @@ Every few seconds, for each strand that is usable (up or degraded, fitting the t
 
 A rewrite of the rules is not made for a small drift (`should_apply`): at once when a strand fell, came back or took a step; a drift of 25 points after a minute; of 8 points after ten minutes.
 
+## What it learns from the day (`services/weather.py`, 1.69.126)
+
+The owner, 2026-10-24: "I want the tunnel to be strong against the day's data. I do not want a radar to look at - I only want its data to help the Trident tunnel. Take help from any source needed." So there is no page: every minute the panel works out **the weather of every route** - what each family of carriers (gre · udp · tcp · icmp · esp · ipip) does between that Iran server and that foreign server *right now*: **open**, **under pressure** or **blocked**, and since when - and the Trident reads it.
+
+| source | what it says | strength |
+|---|---|---|
+| **the fleet** - every real tunnel and every hidden strand of the panel is a sensor | on one route, a tunnel of a family down with a cut-like cause while a tunnel of another family on the same route carries = that family is blocked there; on one Iran server (any foreign server), the Doctor's kind_wide rule (≥ 2 and ≥ 60 % of the family's tunnels down while another family is fine) = blocked on the server's other routes, one down = pressure. A server that is off is no evidence | strong on the route, weaker from the server |
+| **the probes** | the link probe (gre, fou = udp, ipip, ipsec = esp; nothing stays on the servers) and the reach probe (`ssh.py reach_probe`: five pings and three TCP handshakes from the Iran server to the foreign server), asked for every pair that carries a Trident every 10 minutes, one pair at a time, only while both servers are under 60 % CPU and no repair runs | strong |
+| **the builds** | a kind that failed on the pair because its carrier is filtered ("probably filtered", "cannot pass", "no data passes") = pressure on its family, blocked when two kinds of the family failed | medium |
+| **open** | a tunnel of the family up on the route, a probe that passed - and open evidence newer than every failure wins: what carries now beats what failed an hour ago | - |
+
+A block seen within two hours stands, pressure within one hour, open evidence must be younger than an hour; nothing known = nothing changes. Per route and family the panel also keeps the **pattern**: the minutes seen and blocked in each hour of the day (Iran time) over the last seven days - "usually blocked at this hour" = blocked in half of the minutes seen, an hour seen at least.
+
+What the Trident does with it:
+
+* **the weights** - a strand whose family is under pressure on its route counts × 0.5, blocked × 0.1 (never 0: the strand's own check decides death), and when the family is *usually* blocked within the next 30 minutes × 0.7 - **before** anything falls (`weather.factor`, `target_weights` item `wx`);
+* **the choice of a kind** - a new strand is never a kind of a blocked family while another is left, a family under pressure comes after an open one (`pick_kind(states=…)`); *Best of the day* and the standby's choice put blocked families last too (`knowledge.weather_last`, `standby.choose_kind(blocked_families=…)`);
+* **the renewal** - an extra strand whose family has been under pressure or blocked on the route for two hours while another family that no strand uses is open is removed and built again (the normal build path picks the kind; at most once in six hours per tunnel; `renew_due`);
+* **the words** - the only place it shows: under the Trident bar, "udp blocked on this route for 2 h", and in the strands' rows (`weather` per strand).
+
+Without weather every one of these does exactly what it did before.
+
 ## Running it (`trident.run`, every 5 s)
 
 1. The tunnel must be marked, the Doctor not *off*, the panel not read-only.
@@ -107,6 +129,7 @@ A rewrite of the rules is not made for a small drift (`should_apply`): at once w
 
 ## Not proved - read before trusting it with users
 
+* **The weather is new (1.69.126).** Its rules are proved on made-up fleets and pairs (`tests/test_weather.py`), not yet on the real panel over days: whether a service crash is told from a filter quickly enough (a crash marks the family blocked until the Doctor's restart brings open evidence - a minute), whether 0.5 / 0.1 / 0.7 are the right factors (`weather.FACTOR`, one place), and whether the hourly pattern says anything useful after a week. A replay of the live panel's history through the fusion needs the owner's read-only yes. The fourth "refuge" strand (a WireGuard-in-Chisel kind on one TCP port when two families are blocked) is not built yet.
 * **One route, one day.** The real-pair drill above ran once, on one route (GRE and UDP filtered), with short connections only; long downloads over a strand that falls, a route that flaps, and weeks of running are not measured. The three kinds of that route were chosen by the panel; a route that passes GRE gets other kinds.
 * The failures of a cut are bounded by the detection window (the sentinel 5 s for the tunnel, 10 - 15 s for a strand) times the share of what fell; a strand with a big share costs more in those seconds. The two "young" strands that carried alone for 20 s lost 16 of 238 connections (an ICMP strand of one minute): a new strand is cheap insurance, not yet a proven road.
 * The shares are by **new connection**, not by byte or packet: a long download stays on the strand it began on. The capacity numbers are light tests (3 s), not the day's speed.

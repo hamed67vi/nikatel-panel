@@ -42,6 +42,7 @@ from . import (
     standby,
     tunnel_test,
     tunnels,
+    weather,
 )
 from . import settings as st
 from .events import emit
@@ -77,6 +78,8 @@ ALIVE_FOR = 60                 # the Trident "owns" the users' ports only while 
 RECONCILE_EVERY = 120
 PARK_CLEAN_EVERY = 180
 KIND_SKIP = 6 * 3600           # a kind whose build failed as a strand is not chosen again for this long
+RENEW_AFTER = 2 * 3600         # an extra strand whose family has been under pressure or blocked on the route this long, while another family is open, is built again as a kind of that family ...
+RENEW_EVERY = 6 * 3600         # ... at most this often per tunnel
 MISSING_GRACE = 3 * 3600       # a marked tunnel whose row is gone this long is not coming back
 MAX_PLAN = 1199                # the entries of one trident_set plan (ssh.py allows 1200)
 _LOCK = threading.Lock()
@@ -142,10 +145,11 @@ def clash(kind: str, chosen: list[str]) -> tuple[int, int, int]:
     return (sum(t["family"] == o["family"] for o in others), sum(t["dial"] == o["dial"] for o in others), sum(t["l4"] == o["l4"] for o in others))
 
 
-def pick_kind(kinds: list[str], chosen: list[str], pair: dict | None, now: int, allowed=lambda k: True, skip: frozenset | set = frozenset()) -> tuple[str, str]:
+def pick_kind(kinds: list[str], chosen: list[str], pair: dict | None, now: int, allowed=lambda k: True, skip: frozenset | set = frozenset(), states: dict | None = None) -> tuple[str, str]:
     """(the kind of the next strand, the sentence that says why) - ('', why not) when none can be. `kinds`: the Doctor's candidates for this pair, best first (`knowledge.plan_for`); `chosen`: the kinds the tunnel
-    and its other strands already have. Left out: those, what failed on this pair lately, what the licence does not allow and what a strand build failed with lately (`skip`). Chosen: the kind that shares the least
-    fate with the chosen ones (another family first, then another side that dials, then other packets); among those a kind known to connect on this pair before one nobody tried; then the order of `kinds`."""
+    and its other strands already have. Left out: those, what failed on this pair lately, what the licence does not allow and what a strand build failed with lately (`skip`). Chosen: a kind whose family is not
+    BLOCKED on the route today (`states`: the weather, {family: open | pressure | blocked}; a blocked family only when nothing else is left), then the kind that shares the least fate with the chosen ones (another
+    family first, then another side that dials, then other packets), a family under pressure after one that is open; among those a kind known to connect on this pair before one nobody tried; then the order of `kinds`."""
     bad = set(knowledge.blocked(pair, now))
     pool = [k for k in kinds if k not in chosen and k not in bad and k not in skip and allowed(k)]
 
@@ -153,9 +157,12 @@ def pick_kind(kinds: list[str], chosen: list[str], pair: dict | None, now: int, 
         return "", "no other tunnel type is left for a strand (every one is taken, failed on this pair lately, is not allowed by the licence or failed as a strand)"
 
     known = {r["kind"] for r in knowledge.ranked(pair, now, include_poor=True)}
-    best = min(enumerate(pool), key=lambda it: (clash(it[1], chosen), it[1] not in known, it[0]))[1]
+    wx = states or {}
+    best = min(enumerate(pool), key=lambda it: (wx.get(traits(it[1])["family"]) == "blocked", clash(it[1], chosen), wx.get(traits(it[1])["family"]) == "pressure", it[1] not in known, it[0]))[1]
     c = clash(best, chosen)
+    state = wx.get(traits(best)["family"])
     note = ("known to connect on this pair" if best in known else "not tested on this pair yet") + (", another family than the others (a filter that cuts one does not cut this)" if c[0] == 0 else ", the same family as another strand (nothing better was left)")
+    note += f"; its family is {'under pressure' if state == 'pressure' else 'blocked'} on this route today" if state in ("pressure", "blocked") else ""
     return best, f"{best}: {note}"
 
 
@@ -193,7 +200,7 @@ def target_weights(items: list[dict]) -> list[float]:
     default = caps[len(caps) // 2] if caps else CAP_DEFAULT
     rtts = [float(items[i]["rtt"]) for i in use if items[i].get("rtt") is not None]
     best = min(rtts) if rtts else None
-    raw = {i: float(items[i].get("cap") or default) * quality(items[i].get("loss"), items[i].get("rtt"), best, items[i].get("stab")) for i in use}
+    raw = {i: float(items[i].get("cap") or default) * quality(items[i].get("loss"), items[i].get("rtt"), best, items[i].get("stab")) * float(items[i].get("wx") or 1.0) for i in use}      # wx: the weather of the strand's family on the route (services/weather.py) - 1 when nothing is known
     top = CEIL_TWO if len(use) == 2 else CEIL_MANY
     ceil = {i: min(top, RAMP[max(0, min(3, int(items[i].get("stage", 3))))]) for i in use}
     floor = {i: min(FLOOR, ceil[i]) for i in use}
@@ -540,7 +547,7 @@ def build_plan(name: str, kind: str = "") -> dict:
         pair = knowledge.pair(p["iran_id"], p["foreign_id"])
         kinds, _ = knowledge.plan_for(p["iran_id"], p["foreign_id"], p["kind"], False, False, now=now)
         skip = {x for x, at in (_failed(name).get("kinds") or {}).items() if now - int(at) < KIND_SKIP}
-        k, note = pick_kind(kinds, chosen, pair, now, allowed=license.tunnel_kind_allowed, skip=skip)
+        k, note = pick_kind(kinds, chosen, pair, now, allowed=license.tunnel_kind_allowed, skip=skip, states=weather.states_for(p["iran_id"], p["foreign_id"]))
 
         if not k:
             raise ValueError(note)
@@ -757,6 +764,7 @@ def _items(name: str, v: dict, applied: dict, now: int) -> list[dict]:
         item = {"idx": idx, "id": row["id"], "name": row["name"], "kind": row["kind"], "state": row["state"], "up_for": up_for, "usable": usable, "rtt": row["rtt"], "loss": row["loss"],
                 "ports": row["ports"], "udp": row["udp"], "bw": row.get("bw"), "stab": _stab_of(pair, row["kind"], now), "stage": stage, "stage_at": stage_at, "iran": row["iran"], "last_error": row["last_error"]}
         item["cap"] = _cap_of(item, applied, now)
+        item["wx"], item["wx_word"] = weather.factor_for(row["iran_id"], row["foreign_id"], row["kind"], now)          # the weather of its family on the route: 1.0 and "" when nothing is known
         out.append(item)
 
     return out
@@ -941,7 +949,40 @@ def _step(name: str) -> None:
         _NOTE.pop(name, None)
 
     _mend_strand(name, p, s2, now)          # (last: a strand that is to be removed has had its share taken away by the plan above)
+    _renew_if_due(name, v, applied, now)
     _ALIVE[name] = time.time()
+
+
+def renew_due(fam: str, states: dict[str, dict], used: set[str], renewed_at: int, now: int) -> str:
+    """Pure: the open family an extra strand of family `fam` should be built again from ('' = leave it): its family has been under pressure or blocked on the route for RENEW_AFTER, another family that no other strand
+    uses is open, and the last renewal is older than RENEW_EVERY. `states`: the weather of the route {family: {"state", "since"}}."""
+    e = states.get(fam) or {}
+
+    if e.get("state") not in ("pressure", "blocked") or now - int(e.get("since") or now) < RENEW_AFTER or now - int(renewed_at or 0) < RENEW_EVERY:
+        return ""
+
+    open_fams = sorted(f for f, x in states.items() if x.get("state") == "open" and f not in used and f != fam)
+    return open_fams[0] if open_fams else ""
+
+
+def _renew_if_due(name: str, v: dict, applied: dict, now: int) -> None:
+    """The extra strand is built again as a kind of an open family when its own family has been bad on the route for hours (`renew_due`); the normal build path picks the kind (pick_kind reads the weather)."""
+    p, s1, s2 = v["p"], v["s1"], v["s2"]
+
+    if s2 is None or name in _REMOVING or s2["state"] not in ("up", "degraded") or p is None:
+        return
+
+    states = weather.weather_of(p["iran_id"], p["foreign_id"])
+    fam = weather.family_of_kind(s2["kind"])
+    used = {weather.family_of_kind(p["kind"])} | ({weather.family_of_kind(s1["kind"])} if s1 else set())
+    to = renew_due(fam, states, used, int(applied.get("renewed_at") or 0), now)
+
+    if not to:
+        return
+
+    since = int((states.get(fam) or {}).get("since") or now)
+    _merge_applied(name, {"renewed_at": now})
+    _remove_async(name, f"its family {fam} has been {states[fam]['state']} on this route for {max(1, (now - since) // 3600)} h while {to} is open: built again as another kind")
 
 
 def _gone_share(name: str, v: dict, now: int) -> None:
@@ -1284,6 +1325,7 @@ def status(name: str) -> dict:
     a = _applied(name)
     state, why = _state_of(name, marked, None, now)
     strands = []
+    v: dict = {}
 
     if marked or a.get("at"):
         try:
@@ -1300,7 +1342,10 @@ def status(name: str) -> dict:
                 continue
 
             strands.append({"idx": it["idx"], "role": ("tunnel", "standby", "strand")[it["idx"]], "kind": it["kind"], "name": it["name"], "state": it["state"], "usable": it["usable"],
-                            "weight": round(100 * float(w[it["idx"]])) if it["idx"] < len(w) else None, "step": it["stage"], "capacity": it["cap"], "delay": it["rtt"], "loss": it["loss"]})
+                            "weight": round(100 * float(w[it["idx"]])) if it["idx"] < len(w) else None, "step": it["stage"], "capacity": it["cap"], "delay": it["rtt"], "loss": it["loss"], "weather": it.get("wx_word", "")})
+
+        if state == "active" and not why and v.get("p"):
+            why = weather.words(v["p"]["iran_id"], v["p"]["foreign_id"], now)          # (the only place the weather shows: a few words under the bar, e.g. "udp blocked on this route for 2 h")
 
     return {"on": marked, "state": state, "why": why, "since": int((marks().get(name) or {}).get("since") or 0), "strands": strands, "applied_at": int(a.get("at") or 0)}
 
@@ -1320,7 +1365,9 @@ def summaries(names: list[str]) -> dict[str, dict]:
             if a.get("w"):
                 out[n]["weights"] = [round(100 * float(x)) for x in a["w"]]
 
-            out[n]["strands"] = status(n)["strands"]
+            full = status(n)
+            out[n]["strands"] = full["strands"]
+            out[n]["why"] = out[n]["why"] or full["why"]
 
     return out
 

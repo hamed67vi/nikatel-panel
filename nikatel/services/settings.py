@@ -68,7 +68,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
     "lanes": {"on": False, "tunnels": {}, "touched": []},
     # the TRIDENT (services/trident.py): a tunnel shared between itself and other tunnels of other kinds between the same two servers (its strands), the users' new connections spread by live quality. tunnels: the owner's mark by
     # tunnel NAME ({"on", "since", "manual"}); applied: what stands on the Iran server by tunnel name (weights, ramp stages, the plan, when); failed: strand builds that failed; touched: the Iran servers a trident was ever put on
-    "trident": {"tunnels": {}, "applied": {}, "failed": {}, "touched": []},
+    "trident": {"tunnels": {}, "applied": {}, "failed": {}, "touched": [], "weather": {}, "pattern": {}, "probed": {}, "reach": {}},      # weather / pattern / probed / reach: services/weather.py - what each family of carriers does on each route now, the hourly pattern, when a pair was last probed, the reach probe's answers
     # what the Doctor knows about every pair of servers (services/knowledge.py): the night survey (on, the local hours it may run in) and the tests kept per pair and tunnel kind
     "knowledge": {"on": True, "from_hour": 2, "to_hour": 6, "pairs": {}, "incidents": []},      # the night survey (temporary tunnels, tested one pair at a time, only at night, only on quiet servers) and what the Doctor remembers of every cut
     # the way back to the better tunnel type (services/comeback.py): a cut tunnel swapped to an emergency type is tested again for its old type, with growing waits, and swapped back when it is clearly better

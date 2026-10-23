@@ -210,8 +210,21 @@ def best_kinds(iran_id: int, foreign_id: int, allowed=lambda k: True, now: int |
     # ONE GRE kind at most among the tries: the standard order starts with the four Backhaul-over-GRE kinds, and when GRE is filtered on the pair (seen for real on 2026-10-23: a Trident between an Iran server
     # and the build server tried tcpmux, wssmux, tcp - all GRE - and gave up) every try fails the same way; the tries after the first are the kinds of other families, in their order
     pool = pool[:1] + [k for k in pool[1:] if k not in GRE_KINDS] + [k for k in pool[1:] if k in GRE_KINDS]
+    pool = weather_last(pool, iran_id, foreign_id, now)
     first = [(k, f"{k}: nothing is measured between these two servers yet - the Doctor's first choice for a new pair") for k in pool][:limit]
     return first, ("" if first else "no tunnel type may be built here (the licence)")
+
+
+def weather_last(kinds: list[str], iran_id: int, foreign_id: int, now: int) -> list[str]:
+    """The kinds in the same order, but those whose family of carriers is BLOCKED on the route today (services/weather.py) at the end: a pair nobody measured still has today's weather. Without weather: unchanged."""
+    from . import weather
+
+    bad = weather.blocked_families(iran_id, foreign_id, now)
+
+    if not bad:
+        return list(kinds)
+
+    return [k for k in kinds if weather.family_of_kind(k) not in bad] + [k for k in kinds if weather.family_of_kind(k) in bad]
 
 
 def note_gre_filtered(iran_id: int, foreign_id: int, why: str, now: int | None = None) -> None:
