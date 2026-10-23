@@ -1283,3 +1283,21 @@ html body #page .tun-tbl td.td-node > b > :not(.nm) { flex: none; }
 
 /* the Marzban node card of a server: "Node installed" is a quiet green button that does nothing */
 html body #modal .ins-btn.ok, html body #modal .ins-btn.ok:disabled { color: var(--ok, #38d996) !important; border-color: color-mix(in srgb, var(--ok, #38d996) 45%, transparent) !important; background: color-mix(in srgb, var(--ok, #38d996) 12%, transparent) !important; opacity: 1; cursor: default; box-shadow: none; }
+
+
+/* the question with several answers (glassChoice: "SW already has a tunnel ...", "Move X to which Iran server?", Restore / Restore and restart) in the alert style of macOS (the owner, 2026-10-24, with a picture of it: "make this MacBook style"): the answers are a stack of flat full-width buttons - grey, the recommended one (pri) blue, a destructive one (danger, danger-fill) red text on a soft red - the label in 13.5 px, the note under it smaller and quieter; no gradient, no glow, no gloss, in every theme (the themes give a primary button all three), and Cancel the same grey a little apart. */
+html body #ask .ask-box .ask-act.ask-choices { gap: 8px; }
+html body #ask .ask-box .ask-act.ask-choices button { width: 100%; box-sizing: border-box; min-height: 40px; padding: 7px 14px; border-radius: 10px; font-size: 13.5px; font-weight: 600; line-height: 1.25; background-image: none !important; box-shadow: none !important; text-shadow: none !important; border: 0 !important; transform: none !important; background-color: rgba(255, 255, 255, .12) !important; color: inherit !important; }
+html body #ask .ask-box .ask-act.ask-choices button:hover { background-color: rgba(255, 255, 255, .18) !important; }
+html body #ask .ask-box .ask-act.ask-choices button::before, html body #ask .ask-box .ask-act.ask-choices button::after { display: none !important; }
+html body #ask .ask-box .ask-act.ask-choices button small { display: block; margin-top: 1px; font-size: 11.5px; font-weight: 500; line-height: 1.25; opacity: .7; }
+html body #ask .ask-box .ask-act.ask-choices button.pri { background-color: #0a84ff !important; color: #fff !important; }
+html body #ask .ask-box .ask-act.ask-choices button.pri:hover { background-color: #2b95ff !important; }
+html body #ask .ask-box .ask-act.ask-choices button.pri small { opacity: .82; }
+html body #ask .ask-box .ask-act.ask-choices :is(button.danger, button.danger-fill) { background-color: rgba(255, 69, 58, .16) !important; color: #ff6961 !important; }
+html body #ask .ask-box .ask-act.ask-choices :is(button.danger, button.danger-fill):hover { background-color: rgba(255, 69, 58, .24) !important; }
+html body #ask .ask-box .ask-act.ask-choices button.ask-no { min-height: 36px; margin-top: 4px; border-radius: 10px; }
+html[data-mode="light"] body #ask .ask-box .ask-act.ask-choices button { background-color: rgba(60, 70, 100, .09) !important; }
+html[data-mode="light"] body #ask .ask-box .ask-act.ask-choices button:hover { background-color: rgba(60, 70, 100, .15) !important; }
+html[data-mode="light"] body #ask .ask-box .ask-act.ask-choices button.pri { background-color: #0a84ff !important; }
+html[data-mode="light"] body #ask .ask-box .ask-act.ask-choices :is(button.danger, button.danger-fill) { background-color: rgba(255, 69, 58, .12) !important; color: #d70015 !important; }

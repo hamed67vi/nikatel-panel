@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.69.121 - The question with several answers is a stack of flat macOS-style buttons
+
+The owner (2026-10-24, with a picture of "SW already has a tunnel ... Remove it and replace it / Add as a second tunnel / Cancel"): "make this MacBook style".
+
+- **What changed** (`lab.css`, styles only): the answers of a question with several answers (the one of the picture, "Move X to which Iran server?", Restore / Restore and restart, the one-answer OK boxes) had the gradient, the glow and the gloss that the themes give a button. They are flat now, like the buttons of the other alerts (1.69.39): a full-width stack, grey; the recommended answer blue; a destructive answer ("Remove it and replace it") red text on a soft red; the note under a label smaller and quieter; Cancel the same grey a little apart; no gradient, no glow, no gloss, no text shadow in any theme; a lighter set of colours for the light mode.
+- **Proved**: `tests/test_fluid_layout.py` pins the rules and the two answers of the picture; measured on a private demo panel in the built-in browser in the calm, aurora and classic themes, dark and light: for the picture's box, a list of three servers and a single OK box the computed styles of every button have no background image, no shadow, no text shadow and no gloss; the box is 339 px wide and nothing runs out of it.
+- **Not proved**: a picture of it (the pane is small and hidden: only computed styles); the wide "Move the tunnels" plan box, which shares the rule but was not opened; a phone width.
 ## 1.69.120 - The support section of the shop bot is staged: the admins get it first, a customer keeps exactly the old bot until the admin publishes it
 
 > **In short:** `BOT_STATES supportSection` = `admin` (the default when it is not set), `on` or `off`. While it is `admin` the "support" button of the main menu, the support screen and the quiet follow-ups in a ticket exist for the bot's admins only; every other customer gets the old main menu and the old behaviour, byte for byte. The admin's ticket menu has a button that turns the stage admin -> on (everybody) -> off (nobody) -> admin. The Mini App's quiet follow-up follows the same stage.

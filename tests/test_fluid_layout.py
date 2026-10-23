@@ -273,3 +273,20 @@ def test_the_about_box_is_compact_and_macos_like_and_the_license_box_is_hidden_b
     assert "aboutLoad(); enginesLoad(); if (LICENSE_UI) licLoad();" in APP      # (no call of /api/license while the box is hidden)
     assert '<div class="abt-grid${LICENSE_UI ? "" : " abt-nolic"}">' in APP and '<div class="abt-card abt-top" id="about-hero">' in APP
     assert 'LICENSE_UI ? "This panel, its license, the tunnel cores on your servers' in APP and "This panel, the tunnel cores on your servers, the PasarGuard panels and their nodes, and what the service runs with." in (WEB / "i18n.fa.ui2.js").read_text(encoding="utf-8")
+
+
+def test_the_question_with_several_answers_is_a_stack_of_flat_macos_buttons_in_every_theme():
+    """The owner, 2026-10-24, with a picture of "SW already has a tunnel ... Remove it and replace it / Add as a second tunnel / Cancel": "make this MacBook style". The answers of a glassChoice (the recommended one `pri`,
+    a destructive one `danger` / `danger-fill`) had the gradient, the glow and the gloss of the theme; they are flat now: grey, the recommended one blue, a destructive one red text on a soft red, the note under the
+    label smaller and quieter. Measured in the browser in the calm, aurora and classic themes, dark and light: no gradient, no shadow, no text shadow, no gloss; the box 339 px wide, nothing out of it."""
+    css = (WEB / "lab.css").read_text(encoding="utf-8")
+    base = "html body #ask .ask-box .ask-act.ask-choices button {"
+    assert base in css
+    rule = css.split(base, 1)[1].split("}", 1)[0]
+    for part in ("width: 100%", "min-height: 40px", "border-radius: 10px", "font-size: 13.5px", "background-image: none !important", "box-shadow: none !important", "text-shadow: none !important", "border: 0 !important"):
+        assert part in rule
+    assert "html body #ask .ask-box .ask-act.ask-choices button.pri { background-color: #0a84ff !important; color: #fff !important; }" in css
+    assert "html body #ask .ask-box .ask-act.ask-choices :is(button.danger, button.danger-fill) { background-color: rgba(255, 69, 58, .16) !important; color: #ff6961 !important; }" in css
+    assert "html body #ask .ask-box .ask-act.ask-choices button::before, html body #ask .ask-box .ask-act.ask-choices button::after { display: none !important; }" in css
+    assert 'html[data-mode="light"] body #ask .ask-box .ask-act.ask-choices button { background-color: rgba(60, 70, 100, .09) !important; }' in css
+    assert 'cls: "danger-fill", note: "the old one is removed first, then the new one is built"' in APP and 'cls: "pri", note: "the old one stays; both run"' in APP      # (the two answers of the picture)
