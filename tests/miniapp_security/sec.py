@@ -953,6 +953,89 @@ def ap1():
     return bool(bad) or len(got) != len(exp), f"{len(got)} apps (want {len(exp)}); differences: {bad}" if bad or len(got) != len(exp) else "7 apps, 2 recommended read, systems read, the hidden row (status 0) is not shown"
 
 
+@scn("PL1", "MED", "plans the bot does not sell are not listed and not sold: a server switched off (state 0 / active 0), a deleted server's plans, a plan switched off; an existing service on such a server can still be renewed")
+def pl1():
+    reset(); mk_user(U, wal=2_000_000)
+    for sid, act, st in ((2, 1, 0), (4, 0, 1)):
+        sql(f"INSERT INTO server_info (id, title, ucount, remark, flag, active, state) VALUES ({sid}, 'S{sid}', '100', 's{sid}', 'X', {act}, {st})")
+        sql(f"INSERT INTO server_config (id, panel_url, ip, sni, header_type, request_header, response_header, security, tlsSettings, type, username, password) VALUES ({sid}, 'http://127.0.0.1:{PPORT}', '', '', 'none', '', '', 'none', '', 'marzban', 'a', 'b')")
+    plans = {2: 2, 3: 9, 4: 4, 5: 1}      # plan id -> server id (9 has no row at all)
+    for pid, sid in plans.items():
+        act = 0 if pid == 5 else 1
+        sql(f"INSERT INTO server_plans (id, fileid, catid, server_id, inbound_id, acount, limitip, title, protocol, days, volume, type, price, descr, pic, active, step, date, custom_sni) VALUES ({pid}, '', 1, {sid}, 0, 10, 1, 'plan{pid}', 'vless', 30, 50, 'x', 130000, 'd', '', {act}, 0, '', NULL)")
+    problems = []
+    c, j, t = call("plans")
+    ids = sorted(p["id"] for p in j.get("plans", [])) if ok(j) else None
+    if ids != [1]:
+        problems.append(f"plans listed {ids}, want [1]")
+    for pid in (2, 3, 4, 5):
+        w0 = wallet(); n0 = len(PU)
+        c, j, t = call("buy", {"plan_id": pid})
+        if ok(j) or wallet() != w0 or len(PU) != n0:
+            problems.append(f"plan {pid} could be bought (ok={ok(j)}, charged {w0 - wallet()}, accounts +{len(PU) - n0})")
+    sql(f"INSERT INTO orders_list (userid, token, transid, fileid, server_id, inbound_id, remark, uuid, protocol, expire_date, link, amount, status, date, notif, rahgozar, agent_bought) VALUES ('{U}', 'tok', '', 2, 2, 0, 'old2', '', 'vless', {int(time.time()) + 86400}, '[]', 130000, 1, '1', 0, 0, 0)")
+    PU["old2"] = {"username": "old2", "status": "active", "expire": int(time.time()) + 86400, "data_limit": 50 * GB, "used_traffic": 0, "subscription_url": "/sub/x", "links": [], "online_at": None}
+    oid = int(q1("SELECT id FROM orders_list WHERE remark='old2'"))
+    c, j, t = call("renew", {"id": oid})
+    if not ok(j):
+        problems.append(f"an existing service on a server that is not selling any more could not be renewed: {t[:100]}")
+    return bool(problems), "; ".join(problems) if problems else "only plans the bot sells are listed and sold; renewal of an old service still works"
+
+
+@scn("BG1", "LOW", "the first step of the Buy page (choose the kind of service) is staged: miniBuyGroups unset / admin = only the bot's admins, on = everybody, off = nobody")
+def bg1():
+    problems = []
+    for mode, want_admin, want_user in (("(unset)", True, False), ("admin", True, False), ("on", True, True), ("off", False, False)):
+        reset(states=({} if mode == "(unset)" else {"miniBuyGroups": mode}))
+        mk_user(U); mk_user(ADMIN)
+        a = (call("me", uid=ADMIN)[1] or {}).get("features", {}).get("buy_groups")
+        u = (call("me", uid=U)[1] or {}).get("features", {}).get("buy_groups")
+        if a is not want_admin or u is not want_user:
+            problems.append(f"{mode}: admin sees {a} (want {want_admin}), customer {u} (want {want_user})")
+    return bool(problems), "; ".join(problems) if problems else "unset/admin: admins only; on: everybody; off: nobody"
+
+
+@scn("MG1", "LOW", "the bot's server merge (settings/server_merge.json): a merged server's plans are grouped under its parent on the Buy page and every plan keeps its own server for the purchase; a chain, a self-map, a parent that does not sell and a broken file do no harm")
+def mg1():
+    reset(); mk_user(U, wal=2_000_000)
+    sql("INSERT INTO server_info (id, title, ucount, remark, flag, active, state) VALUES (2, 'Test US', '100', 'us', 'US', 1, 1), (3, 'Test NL', '100', 'nl', 'NL', 1, 1), (4, 'Test OFF', '100', 'off', 'XX', 1, 0)")
+    for sid in (2, 3, 4):
+        sql(f"INSERT INTO server_config (id, panel_url, ip, sni, header_type, request_header, response_header, security, tlsSettings, type, username, password) VALUES ({sid}, 'http://127.0.0.1:{PPORT}', '', '', 'none', '', '', 'none', '', 'marzban', 'a', 'b')")
+    sql("INSERT INTO server_categories (id, server_id, title, step) VALUES (2, '1', 'cat2', 2)")
+    for pid, sid, cat, price in ((2, 2, 1, 90000), (3, 2, 2, 300000), (4, 3, 1, 50000)):
+        sql(f"INSERT INTO server_plans (id, fileid, catid, server_id, inbound_id, acount, limitip, title, protocol, days, volume, type, price, descr, pic, active, step, date, custom_sni) VALUES ({pid}, '', {cat}, {sid}, 0, 10, 1, 'plan{pid}', 'vless', 30, 50, 'x', {price}, 'd', '', 1, 0, '', NULL)")
+    mf = f"{B}/bot/settings/server_merge.json"
+
+    def listed(content):
+        if content is None:
+            subprocess.run(f"rm -f {mf}", shell=True)
+        else:
+            open(mf, "w").write(content)
+        c, j, t = call("plans")
+        return {p["id"]: p for p in j["plans"]} if ok(j) else None
+    problems = []
+    p = listed(None)
+    if p is None or sorted(p) != [1, 2, 3, 4] or any(p[i]["group_id"] != p[i]["server_id"] or p[i]["group"] != p[i]["server"] for i in p):
+        problems.append(f"no merge file: every plan must be its own kind of service: {None if p is None else {i: (p[i]['server_id'], p[i]['group_id']) for i in p}}")
+    p = listed('{"2": 1}')
+    if p is None or sorted(p) != [1, 2, 3, 4] or not (p[2]["group_id"] == p[3]["group_id"] == p[1]["group_id"] == 1 and p[2]["group"] == p[3]["group"] == p[1]["group"] and p[4]["group_id"] == 3):
+        problems.append(f'{{"2": 1}}: the plans of server 2 must sit in the kind of server 1: {None if p is None else {i: (p[i]["server_id"], p[i]["group_id"], p[i]["group"]) for i in p}}')
+    elif p[2]["server_id"] != 2 or p[2]["server"] == p[1]["server"]:
+        problems.append("a merged plan lost its own server")
+    w0 = wallet()
+    c, j, t = call("buy", {"plan_id": 2})
+    if not ok(j) or wallet() != w0 - 90000 or q1(f"SELECT server_id FROM orders_list WHERE userid='{U}' ORDER BY id DESC LIMIT 1") != "2":
+        problems.append(f"a plan of a merged server must be bought on its own server (ok={ok(j)}, charged {w0 - wallet()}, order on server {q1(f'SELECT server_id FROM orders_list WHERE userid={chr(39)}{U}{chr(39)} ORDER BY id DESC LIMIT 1')}): {t[:80]}")
+    for content, what in (('{"2": 1, "1": 3}', "a chain (the parent is itself a child)"), ('{"2": 2}', "a server merged into itself"), ('not json{', "a broken file")):
+        p = listed(content)
+        if p is None or sorted(p) != [1, 2, 3, 4] or p[2]["group_id"] != 2:
+            problems.append(f"{what} ({content}) must change nothing for server 2: {None if p is None else {i: p[i]['group_id'] for i in p}}")
+    for content, what in (('{"2": 4}', "a parent that does not sell"), ('{"2": 99}', "a parent that does not exist")):
+        p = listed(content)
+        if p is None or sorted(p) != [1, 4]:
+            problems.append(f"{what} ({content}): the bot cannot reach the merged server, so its plans must not be listed: {None if p is None else sorted(p)}")
+    return bool(problems), "; ".join(problems) if problems else "merged plans are grouped under the parent and bought on their own server; chain, self-map, dead parent and broken file are harmless"
+
 # ===== injection and web basics
 SQLI = ["'", "\"", "' OR '1'='1", "1' OR '1'='1' -- ", "1; DROP TABLE users; -- ", "' UNION SELECT 1,2,3 -- ", "\\", "%27", "1 AND SLEEP(2)", "') OR 1=1 -- ", "0x27", "\x00", "a' or 1=1#", "1) UNION SELECT password FROM server_config -- ", "O'Brien", "%' OR '%'='", "{\"a\":\"'\"}"]
 

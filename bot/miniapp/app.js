@@ -253,32 +253,57 @@ async function doReport(id) { const r = await api("report", {id, text: $("rp-tex
 
 /* ---- buy */
 VIEWS.buy = async () => `<div class="title">خرید سرویس</div><div class="seg" id="b-seg"></div><div id="b-list"><div class="loading"><i class="spin"></i>در حال بارگذاری پلن‌ها…</div></div>${S.feat.gift ? `<div class="card"><h3>🎁 کد هدیه</h3><div class="row"><input class="input grow" id="gift" placeholder="کد را وارد کن" autocomplete="off"><button class="btn pri" onclick="redeem()">اعمال</button></div></div>` : ""}`;
-let buyCat = "";
+let buyCat = "", buySrv = "";
+const planSrv = x => String(x.group_id || x.server_id);      // (a server the bot merged into another one is its parent's kind of service: api.php sends group_id; the plan keeps its own server_id for the purchase)
+const planCat = x => x.category || (S.feat.buy_groups ? x.group : x.server) || x.server;
+const planHead = x => S.feat.buy_groups ? (x.group || x.server) : x.server;      // (the heading of a plan: its kind of service - also when there is one kind only, so a merged server has no heading of its own)
 AFTER.buy = async p => {
   const r = await api("plans");
   const box = $("b-list"); if (!box) return;
   if (!r.ok) { box.innerHTML = `<div class="card"><div class="empty">${esc(r.error)}</div></div>`; return; }
   S.plans = r.plans; S.sell = r.sell; S.cashback = r.cashback;
-  const cats = [...new Set(r.plans.map(x => x.category || x.server))];
+  const pl = p.plan ? r.plans.find(x => x.id === p.plan) : null;
+  if (pl) buySrv = planSrv(pl);      // (a link to one plan opens the kind of service it belongs to)
+  buyDraw();
+  if (pl) buySheet(pl.id);
+};
+/* the kinds of service (the servers of the bot) with their plans: the first step of the Buy page when the bot has more than one (S.feat.buy_groups: api.php stages it, the admins first) */
+function buyServices() {
+  const seen = {}, out = [];
+  (S.plans || []).forEach(x => { const k = planSrv(x); if (!seen[k]) { seen[k] = {id: k, name: x.group || x.server, n: 0, from: Infinity}; out.push(seen[k]); } seen[k].n++; seen[k].from = Math.min(seen[k].from, x.price); });
+  return out.sort((a, b) => Number(a.id) - Number(b.id));      // (the bot lists its servers by id)
+}
+function buyNotes() { return (!S.sell ? `<div class="note warn mb">فروش موقتاً متوقف است؛ سرویس‌های فعلی کار می‌کنند.</div>` : "") + (S.cashback > 0 ? `<div class="note ok mb">🎁 ${T(S.cashback)}٪ هر خرید به‌صورت کش‌بک به کیف پولت برمی‌گردد.</div>` : ""); }
+function buyDraw() {
+  const srvs = buyServices(), grouped = !!S.feat.buy_groups && srvs.length > 1;
+  if (!grouped || !srvs.some(s => s.id === buySrv)) buySrv = "";
+  if (grouped && !buySrv) {      // step one: what kind of service
+    $("b-seg").innerHTML = "";
+    $("b-list").innerHTML = buyNotes() + `<div class="sm mut mb">نوع سرویس را انتخاب کن</div><div class="list">${srvs.map(s => `<div class="item" onclick="buyPick(${js(s.id)})"><div class="tx"><b>${esc(s.name)}</b><small>${T(s.n)} پلن · از ${T(s.from)} تومان</small></div><span class="chev">‹</span></div>`).join("")}</div>`;
+    return;
+  }
+  const cats = [...new Set((S.plans || []).filter(x => !buySrv || planSrv(x) === buySrv).map(planCat))];      // step two: the plans of it, by the bot's categories (time)
   if (!cats.includes(buyCat)) buyCat = cats[0] || "";
   $("b-seg").innerHTML = cats.length > 1 ? cats.map(c => `<button class="${c === buyCat ? "on" : ""}" data-c="${esc(c)}" onclick="buyCatPick(this)">${esc(c)}</button>`).join("") : "";
   paintPlans();
-  if (p.plan) { const pl = r.plans.find(x => x.id === p.plan); if (pl) buySheet(pl.id); }
-};
+}
+function buyPick(id) { buySrv = String(id); buyCat = ""; hap(); buyDraw(); window.scrollTo(0, 0); }
+function buyBack() { buySrv = ""; hap(); buyDraw(); window.scrollTo(0, 0); }
 function buyCatPick(btn) { buyCat = btn.dataset.c || ""; document.querySelectorAll("#b-seg button").forEach(b => b.classList.toggle("on", b === btn)); hap(); paintPlans(); }      // the name sits in a data attribute: a quote in a category name must not break the button
 function paintPlans() {
   const box = $("b-list"), all = S.plans || [];
-  const list = all.filter(x => (x.category || x.server) === buyCat || !buyCat);
+  const list = all.filter(x => (!buySrv || planSrv(x) === buySrv) && (planCat(x) === buyCat || !buyCat));
   if (!all.length) { box.innerHTML = `<div class="card"><div class="empty">فعلاً پلنی تعریف نشده.</div></div>`; return; }
-  const by = {}; list.forEach(x => (by[x.server] = by[x.server] || []).push(x));
-  box.innerHTML = (!S.sell ? `<div class="note warn mb">فروش موقتاً متوقف است؛ سرویس‌های فعلی کار می‌کنند.</div>` : "") + (S.cashback > 0 ? `<div class="note ok mb">🎁 ${T(S.cashback)}٪ هر خرید به‌صورت کش‌بک به کیف پولت برمی‌گردد.</div>` : "") +
+  if (S.feat.buy_groups) list.sort((a, b) => a.price - b.price || a.id - b.id);      // (the plans of a kind and a category in one list by price, the bot's order, also when two servers were merged into it)
+  const by = {}; list.forEach(x => (by[planHead(x)] = by[planHead(x)] || []).push(x));
+  box.innerHTML = (buySrv ? `<button class="btn sm ghost mb" onclick="buyBack()">› همه‌ی نوع سرویس‌ها</button>` : "") + buyNotes() +
     Object.keys(by).map(srv => `<div class="card"><h3>${esc(srv)}</h3>${by[srv].map(x => `<div class="plan ${x.sold_out || !S.sell ? "off" : ""}" onclick="${x.sold_out || !S.sell ? "" : `buySheet(${x.id})`}"><div class="grow"><div class="pt">${esc(x.title)}</div><div class="pd">${vol(x.volume)}، ${x.days ? T(x.days) + " روز" : "بدون محدودیت زمان"}${x.users > 0 ? "، " + T(x.users) + " کاربر" : ""}${x.sold_out ? "، <b>تمام شد</b>" : ""}</div>${x.descr ? `<div class="pd">${esc(x.descr)}</div>` : ""}</div><div class="pr"><b>${T(x.price)}</b>${x.discount ? `<s>${T(x.list_price)}</s> ` : ""}<small>تومان</small></div></div>`).join("")}</div>`).join("");
 }
 function buySheet(id) {
   const x = (S.plans || []).find(p => p.id === id); if (!x) return;
   const wallet = S.me ? S.me.wallet : 0, short = x.price - wallet;
   sheet(`<h3>${esc(x.title)}</h3>
-    <div class="grid"><div class="tile"><small>سرور</small><b>${esc(x.server)}</b></div><div class="tile"><small>قیمت</small><b>${T(x.price)} تومان</b></div><div class="tile"><small>حجم</small><b>${vol(x.volume)}</b></div><div class="tile"><small>مدت</small><b>${x.days ? T(x.days) + " روز" : "نامحدود"}</b></div></div>
+    <div class="grid"><div class="tile"><small>سرور</small><b>${esc(planHead(x))}</b></div><div class="tile"><small>قیمت</small><b>${T(x.price)} تومان</b></div><div class="tile"><small>حجم</small><b>${vol(x.volume)}</b></div><div class="tile"><small>مدت</small><b>${x.days ? T(x.days) + " روز" : "نامحدود"}</b></div></div>
     ${x.descr ? `<div class="note descr mt">${esc(x.descr)}</div>` : ""}
     ${x.discount ? `<div class="note ok mt">تخفیف همکار: ${T(x.discount)}٪ (قیمت اصلی ${T(x.list_price)} تومان)</div>` : ""}
     ${S.feat.hold ? `<div class="note mt">⏱ زمان سرویس از اولین اتصال شروع می‌شود.</div>` : ""}
@@ -319,10 +344,17 @@ AFTER.wallet = async () => {
   const cls = s => ({approved: "ok", auto_cart_approved: "ok", paid: "ok", paid_with_wallet: "info", have_sent: "warn", pending: "warn", declined: "bad", low_wallet: "bad", expired_have_sent: "bad", expired_pending: "bad"}[s] || "");
   const rows = r.pays.filter(p => p.state !== "pending" || p.kind !== "INCREASE_WALLET");
   const done = s => s === "approved" || s === "auto_cart_approved" || s === "paid" || s === "paid_with_wallet";      // only a payment that went through moves the wallet: a refused or expired one shows its amount without a sign
-  box.innerHTML = rows.length ? rows.slice(0, 25).map(p => `<div class="item static"><div class="ic">${p.kind === "INCREASE_WALLET" ? "💳" : p.kind === "BUY_SUB" || p.kind === "RENEW_ACCOUNT" ? "🛍" : "➕"}</div><div class="tx"><div class="row"><b>${esc(p.type)}</b><span class="pill ${cls(p.state)}">${esc(p.state_fa)}</span></div><small>${when(p.at)}${p.note ? "، " + esc(p.note) : ""}</small></div><b class="ltr amt${done(p.state) ? "" : " mut"}">${done(p.state) ? (p.kind === "INCREASE_WALLET" ? "+" : "−") : ""}${T(p.price)}</b></div>`).join("")
-    + (r.cashback.length ? `<div class="sm mut mt">کش‌بک‌ها</div>` + r.cashback.slice(0, 5).map(c => `<div class="item static"><div class="ic">🎁</div><div class="tx"><b>کش‌بک خرید</b><small>${when(c.at)}، خرید ${T(c.order)} تومان</small></div><b class="ltr amt">+${T(c.back)}</b></div>`).join("") : "")
+  const item = p => `<div class="item static"><div class="ic">${p.kind === "INCREASE_WALLET" ? "💳" : p.kind === "BUY_SUB" || p.kind === "RENEW_ACCOUNT" ? "🛍" : "➕"}</div><div class="tx"><div class="row"><b>${esc(p.type)}</b><span class="pill ${cls(p.state)}">${esc(p.state_fa)}</span></div><small>${when(p.at)}${p.note ? "، " + esc(p.note) : ""}</small></div><b class="ltr amt${done(p.state) ? "" : " mut"}">${done(p.state) ? (p.kind === "INCREASE_WALLET" ? "+" : "−") : ""}${T(p.price)}</b></div>`;
+  const cb = r.cashback.length ? `<div class="sm mut mt">کش‌بک‌ها</div>` + r.cashback.slice(0, 5).map(c => `<div class="item static"><div class="ic">🎁</div><div class="tx"><b>کش‌بک خرید</b><small>${when(c.at)}، خرید ${T(c.order)} تومان</small></div><b class="ltr amt">+${T(c.back)}</b></div>`).join("") : "";
+  const rest = rows.slice(3).map(item).join("") + cb;      // the last three show at once; the older ones (and the cashbacks) wait behind one button
+  box.innerHTML = rows.length ? rows.slice(0, 3).map(item).join("") + (rest ? `<div id="hist-more" style="display:none">${rest}</div><button class="btn w mt" id="hist-btn" onclick="histMore()">نمایش بقیه‌ی تاریخچه</button>` : "")
     : `<div class="empty">هنوز تراکنشی نداری.</div>`;
 };
+function histMore() {
+  const more = $("hist-more"), btn = $("hist-btn"); if (!more || !btn) return;
+  const open = more.style.display === "none";
+  more.style.display = open ? "" : "none"; btn.textContent = open ? "بستن" : "نمایش بقیه‌ی تاریخچه"; hap();
+}
 async function topupStart(prefill) {
   if (prefill) { setTab("wallet"); await new Promise(r => setTimeout(r, 60)); const i = $("tp-amount"); if (i) i.value = Math.ceil(prefill / 10000) * 10000; return; }
   const i = $("tp-amount"), amount = parseInt(i && i.value, 10) || 0;

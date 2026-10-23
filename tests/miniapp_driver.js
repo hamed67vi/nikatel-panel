@@ -49,10 +49,24 @@ if (process.argv[3] === "payflow") ctx.fetch = async (url, opt) => { const a = /
 if (process.argv[3] === "noconnect") R.me = { ok: false, error: "down" };
 // "hostile": the support id and the bot name come from the database / baseInfo.php; a quote in them must stay inside the string of the handler (not end it and run the rest)
 const HOSTILE = "x');alert(1);('";
+if (process.argv[3] === "buygroups") {      // the staged first step of the Buy page: three servers, two time categories on the first
+  R.me.features.buy_groups = true;
+  const pl = (id, sid, srv, cat, price) => ({ id, title: "plan" + id, descr: "", price, list_price: price, discount: 0, volume: 10, days: 30, users: 1, server: srv, server_id: sid, category: cat, sold_out: false });
+  R.plans = { ok: true, plans: [pl(11, 1, "S1 \"x\"", "c1", 100000), pl(12, 1, "S1 \"x\"", "c2", 90000), pl(13, 2, "S2", "c1", 70000), pl(14, 3, "S3", "c1", 50000), pl(15, 3, "S3", "c1", 40000)], sell: true, cashback: 0 };
+}
+if (process.argv[3] === "buymerge" || process.argv[3] === "buymerge1") {      // the bot merged server 2 into server 1: the Buy page shows ONE kind (S1) holding the plans of both, S3 stays apart
+  R.me.features.buy_groups = true;
+  const pl = (id, sid, gid, grp, srv, cat, price) => ({ id, title: "plan" + id, descr: "", price, list_price: price, discount: 0, volume: 10, days: 30, users: 1, server: srv, server_id: sid, group_id: gid, group: grp, category: cat, sold_out: false });
+  R.plans = { ok: true, plans: [pl(11, 1, 1, "S1", "S1", "c1", 100000), pl(12, 1, 1, "S1", "S1", "c2", 90000), pl(13, 2, 1, "S1", "S2", "c1", 70000), pl(16, 2, 1, "S1", "S2", "UNLIM", 300000), pl(14, 3, 3, "S3", "S3", "c1", 50000)], sell: true, cashback: 0 };
+  if (process.argv[3] === "buymerge1") R.plans.plans.pop();      // the main bot today: the merged pair is the only kind
+}
+if (process.argv[3] === "history") {      // the wallet page: the last three rows at once, the older ones (and the cashbacks) behind one button
+  R.history.pays = [1, 2, 3, 4, 5].map(i => ({ type: "خرید سرویس", kind: "BUY_SUB", price: 1000 * i, state: "paid_with_wallet", state_fa: "از کیف پول", at: NOW - i, note: "" }));
+}
 if (process.argv[3] === "hostile") { R.me.support = HOSTILE; R.me.bot = HOSTILE; R.me.features.card = false; }
 ctx.Telegram = { WebApp: { initData: "x=1", initDataUnsafe: {}, colorScheme: "dark", ready() {}, expand() {}, onEvent() {}, setHeaderColor() {}, setBackgroundColor() {}, enableClosingConfirmation() {}, BackButton: { onClick() {}, show() {}, hide() {} } } };
 vm.createContext(ctx);
-vm.runInContext(src + "\n;globalThis.__X = Object.fromEntries(['VIEWS','AFTER','S','esc','js','T','GB','left','leftTx','vol','ltr','boot','setTab','renewSheet','extraSheet','reportSheet','buySheet','render','doBuy','doRenew','doExtra','RID'].map(n => [n, (() => { try { return eval(n); } catch (e) { return undefined; } })()]));", ctx);
+vm.runInContext(src + "\n;globalThis.__X = Object.fromEntries(['VIEWS','AFTER','S','esc','js','T','GB','left','leftTx','vol','ltr','boot','setTab','renewSheet','extraSheet','reportSheet','buySheet','render','doBuy','doRenew','doExtra','RID','buyPick','buyBack','buyCatPick','histMore'].map(n => [n, (() => { try { return eval(n); } catch (e) { return undefined; } })()]));", ctx);
 const X = ctx.__X;
 const out = { values: {}, errors: [], calls };
 const tick = () => new Promise(r => setImmediate(r));
@@ -61,6 +75,54 @@ const tick = () => new Promise(r => setImmediate(r));
   if (process.argv[3] === "noconnect") {
     const before = calls.length; X.setTab("wallet"); await tick(); await tick();
     out.values.noconnect = { me: calls.filter(a => a === "me").length, history: calls.filter(a => a === "history").length };
+    console.log(JSON.stringify(out)); return;
+  }
+  if (process.argv[3] === "buygroups") {
+    X.S.stack = [{ v: "buy" }]; await X.render(); await tick(); await tick();
+    const step1 = els["b-list"].innerHTML, seg1 = els["b-seg"].innerHTML;
+    X.buyPick("1");
+    const step2 = els["b-list"].innerHTML, seg2 = els["b-seg"].innerHTML;
+    X.buyPick("3");
+    const step3 = els["b-list"].innerHTML;
+    X.buyBack();
+    const back = els["b-list"].innerHTML;
+    out.values.buygroups = { cards1: (step1.match(/onclick="buyPick\(/g) || []).length, plans1: (step1.match(/buySheet\(/g) || []).length, seg1: seg1 === "", title1: step1.includes("نوع سرویس را انتخاب کن"), from3: step1.includes("از ۴۰٬۰۰۰ تومان") || step1.includes("از ۴۰,۰۰۰ تومان"),
+      plans2: (step2.match(/buySheet\(/g) || []).length, only1: step2.includes("plan11") && !step2.includes("plan13") && !step2.includes("plan14"), backBtn: step2.includes("buyBack()"), tabs2: (seg2.match(/buyCatPick/g) || []).length,
+      plans3: (step3.match(/buySheet\(/g) || []).length, tabs3: 0, again: back === step1 };
+    console.log(JSON.stringify(out)); return;
+  }
+  if (process.argv[3] === "buymerge1") {      // one kind only (a merged pair): no first step, the page is the time tabs, and no plan has a heading of the merged server
+    X.S.stack = [{ v: "buy" }]; await X.render(); await tick(); await tick();
+    const page = els["b-list"].innerHTML, seg = els["b-seg"].innerHTML;
+    X.buyCatPick({ dataset: { c: "UNLIM" } });
+    const unlim = els["b-list"].innerHTML;
+    out.values.buymerge1 = { noStepOne: !page.includes("buyPick("), tabs: (seg.match(/buyCatPick/g) || []).length, plans: (page.match(/buySheet\(/g) || []).length, heads: (page.match(/<h3>/g) || []).length, head: page.includes("<h3>S1</h3>") && !page.includes("S2"), byPrice: page.indexOf("plan13") < page.indexOf("plan11"), unlim: unlim.includes("plan16") && unlim.includes("<h3>S1</h3>") && !unlim.includes("S2") };
+    console.log(JSON.stringify(out)); return;
+  }
+  if (process.argv[3] === "buymerge") {
+    X.S.stack = [{ v: "buy" }]; await X.render(); await tick(); await tick();
+    const step1 = els["b-list"].innerHTML;
+    X.buyPick("1");
+    const step2 = els["b-list"].innerHTML, seg2 = els["b-seg"].innerHTML;
+    X.buyCatPick({ dataset: { c: "UNLIM" } });
+    const unlim = els["b-list"].innerHTML;
+    out.values.buymerge = { cards1: (step1.match(/onclick="buyPick\(/g) || []).length, noS2: !step1.includes("S2"), s1n: /[4۴] پلن/.test(step1), s3: step1.includes("S3"), order: step1.indexOf("S1") < step1.indexOf("S3"),
+      tabs2: (seg2.match(/buyCatPick/g) || []).length, c1plans: (step2.match(/buySheet\(/g) || []).length, c1both: step2.includes("plan11") && step2.includes("plan13") && !step2.includes("plan14"), byPrice: step2.indexOf("plan13") < step2.indexOf("plan11"),
+      cards2: (step2.match(/<h3>/g) || []).length, head2: step2.includes("<h3>S1</h3>") && !step2.includes("S2"), unlimOnly: unlim.includes("plan16") && !unlim.includes("plan11") && unlim.includes("<h3>S1</h3>") && !unlim.includes("S2") };
+    console.log(JSON.stringify(out)); return;
+  }
+  if (process.argv[3] === "history") {
+    X.setTab("wallet"); await tick(); await tick(); await tick();
+    const h = els["hist"].innerHTML, cut = h.indexOf('id="hist-more"'), before = h.slice(0, cut), after = h.slice(cut);
+    const items = s => (s.match(/class="item static"/g) || []).length;
+    const res = { shown: items(before), hidden: items(after), hiddenAtFirst: after.includes('id="hist-more" style="display:none"'), button: after.includes('id="hist-btn"') && after.includes("نمایش بقیه‌ی تاریخچه"), cashbackBehind: after.includes("کش‌بک") && !before.includes("کش‌بک"), newestFirst: before.indexOf("۱٬۰۰۰") > -1 || before.indexOf("1,000") > -1 };
+    const more = mk("hist-more"), btn = mk("hist-btn"); more.style.display = "none"; btn.textContent = "نمایش بقیه‌ی تاریخچه";
+    X.histMore(); res.opened = more.style.display === "" && btn.textContent === "بستن";
+    X.histMore(); res.closed = more.style.display === "none" && btn.textContent === "نمایش بقیه‌ی تاریخچه";
+    R.history.pays = R.history.pays.slice(0, 3); R.history.cashback = [];      // three rows or fewer: nothing to hide, no button
+    X.setTab("services"); await tick(); X.setTab("wallet"); await tick(); await tick(); await tick();
+    const h3 = els["hist"].innerHTML; res.fewRows = items(h3); res.fewButton = h3.includes("hist-btn") || h3.includes("hist-more");
+    out.values.history = res;
     console.log(JSON.stringify(out)); return;
   }
   if (process.argv[3] === "payflow") {

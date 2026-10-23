@@ -215,6 +215,81 @@ def test_premium_emoji_tokens_in_the_bots_texts_never_reach_the_page(tmp_path):
     assert "[pe-support]" in SRC
 
 
+@pytest.mark.skipif(NODE is None, reason="node is not installed here")
+def test_the_buy_page_first_asks_for_the_kind_of_service_then_shows_its_plans():
+    """the owner (2026-10-23): "for buying a service put a category so that the customer first chooses the kind of service": the servers of the bot are the kinds; step one has a card per kind
+    (plans and the cheapest price), a card opens the plans of that kind with the bot's time categories as tabs and a way back; with one kind only the page is as it was"""
+    res = json.loads(subprocess.run([NODE, str(DRIVER), str(MINI / "app.js"), "buygroups"], capture_output=True, text=True, timeout=90, check=True).stdout)
+    assert "crash" not in res and res["errors"] == [], res
+    g = res["values"]["buygroups"]
+    assert g["cards1"] == 3 and g["plans1"] == 0 and g["seg1"] and g["title1"] and g["from3"]      # (no plan on the first screen, no time tabs, the cheapest price of a kind)
+    assert g["plans2"] == 1 and g["only1"] and g["backBtn"] and g["tabs2"] == 2                    # (only the plans of that kind; its time categories are tabs)
+    assert g["plans3"] == 2 and g["again"]                                                         # (another kind; the way back is the first screen)
+
+
+def test_the_first_step_of_the_buy_page_is_staged_the_admins_first():
+    """BOT_STATES miniBuyGroups: 'admin' (the default) = only the bot's admins, 'on' = everybody, 'off' = nobody (the harness scenario BG1 runs the three)"""
+    fn = _fn("buyGroups")
+    assert "$botState['miniBuyGroups'] ?? 'admin'" in fn and "$m === 'on' || ($m === 'admin' && in_array((int) $uid, (array) $admins, true))" in fn
+    assert "'buy_groups' => buyGroups()" in _case("me")
+    assert "!!S.feat.buy_groups && srvs.length > 1" in JS
+
+
+@pytest.mark.skipif(NODE is None, reason="node is not installed here")
+def test_a_server_the_bot_merged_into_another_is_one_kind_of_service_on_the_buy_page():
+    """the owner (2026-10-23): "the unlimited subscription must not be separate any more, the bot's categories were updated, make it like the bot's": the bot's settings/server_merge.json {"2": 1}
+    shows server 2 INSIDE server 1; the page has one card for the pair, its time categories hold the plans of both (by price), every plan keeps its own server for the purchase"""
+    res = json.loads(subprocess.run([NODE, str(DRIVER), str(MINI / "app.js"), "buymerge"], capture_output=True, text=True, timeout=90, check=True).stdout)
+    assert "crash" not in res and res["errors"] == [], res
+    g = res["values"]["buymerge"]
+    assert g["cards1"] == 2 and g["noS2"] and g["s1n"] and g["s3"] and g["order"]      # (S1 with the plans of both servers, S3; the merged server has no card of its own; the bot's order, by id)
+    assert g["tabs2"] == 3 and g["c1plans"] == 2 and g["c1both"] and g["byPrice"]      # (the time categories of both servers are tabs; one category lists the plans of both, cheapest first)
+    assert g["cards2"] == 1 and g["head2"] and g["unlimOnly"]                          # (one heading, the parent's; a category of the merged server only is reachable too)
+
+
+@pytest.mark.skipif(NODE is None, reason="node is not installed here")
+def test_a_merged_pair_that_is_the_only_kind_has_no_heading_of_the_merged_server():
+    """the main bot today: its other servers do not sell, so the merged pair is the ONLY kind (no first step); its plans must still show the parent's heading, the time tabs of both servers, cheapest first"""
+    res = json.loads(subprocess.run([NODE, str(DRIVER), str(MINI / "app.js"), "buymerge1"], capture_output=True, text=True, timeout=90, check=True).stdout)
+    assert "crash" not in res and res["errors"] == [], res
+    g = res["values"]["buymerge1"]
+    assert g["noStepOne"] and g["tabs"] == 3 and g["plans"] == 2 and g["heads"] == 1 and g["head"] and g["byPrice"] and g["unlim"], g
+
+def test_the_merge_file_is_read_the_way_the_bot_reads_it(tmp_path):
+    """bot/server_merge.php smMap(): {"child": parent}; a chain (the parent is itself a child), a self-map, zero or a negative id are ignored; no file or a broken one = no merge"""
+    assert "'/../settings/server_merge.json'" in _fn("mergeMap")
+    (tmp_path / "app").mkdir(); (tmp_path / "settings").mkdir()
+    script = tmp_path / "app" / "t.php"
+    script.write_text("<?php\n" + _fn("mergeMap") + "\necho json_encode(mergeMap());\n", encoding="utf-8")
+    for content, want in ((None, []), ("not json{", []), ('{"2": 1, "3": "1", "4": 4, "5": 0, "-1": 1, "6": 3}', {"2": 1, "3": 1}), ('{"2": 1, "1": 7}', {"1": 7})):
+        f = tmp_path / "settings" / "server_merge.json"
+        f.unlink(missing_ok=True)
+        if content is not None:
+            f.write_text(content, encoding="utf-8")
+        assert json.loads(subprocess.run([PHP, str(script)], capture_output=True, text=True, check=True).stdout) == want, content
+    plans = _case("plans")
+    assert "$merge = mergeMap()" in plans and "'group_id' => $gid" in plans and "if ($gid !== $sid && !isset($parents[$gid])) continue;" in plans      # (a merged server whose parent does not sell cannot be reached in the bot: its plans are not listed)
+    assert "AND state = 1 AND id IN (" in plans and "'server_id' => $sid" in plans                                                                       # (the plan keeps its own server for the purchase)
+
+
+@pytest.mark.skipif(NODE is None, reason="node is not installed here")
+def test_the_history_shows_the_last_three_rows_and_the_rest_behind_a_button():
+    """the owner (2026-10-23): "show the last 3 in the history and put an option to show the rest": three rows, then one button that opens (and closes) the older rows and the cashbacks"""
+    res = json.loads(subprocess.run([NODE, str(DRIVER), str(MINI / "app.js"), "history"], capture_output=True, text=True, timeout=90, check=True).stdout)
+    assert "crash" not in res and res["errors"] == [], res
+    h = res["values"]["history"]
+    assert h["shown"] == 3 and h["hidden"] == 3 and h["hiddenAtFirst"] and h["button"] and h["cashbackBehind"]      # (5 rows + a cashback: 3 at once, 2 rows + the cashback behind the button)
+    assert h["opened"] and h["closed"]                                                                               # (the button opens and closes them)
+    assert h["fewRows"] == 3 and not h["fewButton"]                                                                   # (three rows or fewer: no button)
+
+def test_the_mini_app_lists_and_sells_only_what_the_bot_sells():
+    """the Mini App listed 58 plans where the bot shows 17: a LEFT JOIN let the plans of deleted servers through (s.active IS NULL) and server_info.state (0 = the bot does not sell from it) was never read"""
+    plans, buy = _case("plans"), _case("buy")
+    assert "FROM server_plans p JOIN server_info s ON s.id = p.server_id" in plans and "LEFT JOIN server_info" not in plans
+    assert "p.active = 1 AND s.active = 1 AND s.state = 1" in plans and "s.active IS NULL" not in plans
+    assert "(int) $srv['state'] !== 1" in buy and "i.state" in _fn("serverOf")
+
+
 def test_the_backup_of_a_deploy_is_not_inside_the_web_root():
     """the old copies in app/.prev-<time>/ were served to anybody (app.js, index.html; api.php answered 500 there)"""
     sh = (ROOT / "scripts" / "deploy-miniapp.sh").read_text(encoding="utf-8")
@@ -284,7 +359,7 @@ def test_the_page_shows_the_helper_links_and_the_apps_by_system_with_the_recomme
 def test_only_web_links_are_opened_and_the_files_have_a_new_version_for_the_cache():
     assert r'if (!/^https?:\/\//i.test(u)) return;' in JS
     html = (MINI / "index.html").read_text(encoding="utf-8")
-    assert "app.css?v=3.0.5" in html and "app.js?v=3.0.5" in html
+    assert "app.css?v=3.0.8" in html and "app.js?v=3.0.8" in html
 
 
 # ---------------------------------------------------------------------------------------------- the whole attack harness (opt in)

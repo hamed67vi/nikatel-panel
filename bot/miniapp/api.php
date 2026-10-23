@@ -89,6 +89,30 @@ function settingJson(string $type): array {
     return is_array($j) ? $j : [];
 }
 function settingValue(string $type): string { return (string) (row("SELECT value FROM setting WHERE type = ?", [$type])['value'] ?? ''); }
+/** the first step of the Buy page (choose the kind of service, then see its plans) is staged: BOT_STATES miniBuyGroups = 'admin' (only the admins of the bot see it - the default while it is tried), 'on' (everybody), 'off' (nobody: the old page) */
+function buyGroups(): bool {
+    global $botState, $admins, $uid;
+    $m = (string) ($botState['miniBuyGroups'] ?? 'admin');
+    return $m === 'on' || ($m === 'admin' && in_array((int) $uid, (array) $admins, true));
+}
+/**
+ * The bot's server merge (settings/server_merge.json {"<child>": <parent>}, read the way the bot's own server_merge.php reads it): a merged server is
+ * shown INSIDE its parent on the buy menu. The Buy page does the same - one card for the parent, its categories hold the plans of both servers -
+ * while every plan keeps its own server_id, so the purchase, the panel account and the order are made on the plan's own server as before.
+ * A chain (the parent is itself a child) is ignored; no file = no merge.
+ */
+function mergeMap(): array {
+    static $m = null;
+    if ($m !== null) return $m;
+    $m = [];
+    $f = __DIR__ . '/../settings/server_merge.json';
+    $a = is_file($f) ? json_decode((string) @file_get_contents($f), true) : [];
+    if (is_array($a)) foreach ($a as $child => $parent) {
+        $c = (int) $child; $p = (int) $parent;
+        if ($c > 0 && $p > 0 && $c !== $p && !isset($a[$p])) $m[$c] = $p;
+    }
+    return $m;
+}
 function on(string $key, string $default = 'off'): bool { global $botState; return ($botState[$key] ?? $default) === 'on'; }
 
 /* ---------------------------------------------------------------- texts of the bot (values.php + the panel's overrides) */
@@ -195,7 +219,7 @@ function randomId(int $n = 10): string { $a = 'abcdefghijklmnopqrstuvwxyzABCDEFG
 function ridOf(array $body): string { $r = $body['rid'] ?? ''; return is_string($r) && preg_match('/^[A-Za-z0-9_-]{8,40}$/', $r) ? 'mini:' . $r : ''; }
 function wallet(int $uid): int { return (int) (row("SELECT wallet FROM users WHERE userid = ?", [$uid])['wallet'] ?? 0); }
 function serverOf(int $id): ?array {
-    $s = row("SELECT i.id, i.title, i.flag, i.remark, i.active, i.ucount, c.type, c.panel_url, c.username, c.password, c.sub_links FROM server_info i JOIN server_config c ON c.id = i.id WHERE i.id = ?", [$id]);
+    $s = row("SELECT i.id, i.title, i.flag, i.remark, i.active, i.state, i.ucount, c.type, c.panel_url, c.username, c.password, c.sub_links FROM server_info i JOIN server_config c ON c.id = i.id WHERE i.id = ?", [$id]);
     if ($s) $s['label'] = trim(exEmojiStrip((string) $s['flag']) . ' ' . $s['title']);
     return $s;
 }
@@ -504,7 +528,7 @@ case 'me': {
     $support = trim((string) ($botState['supportID'] ?? ''));
     out(['ok' => true,
         'user' => ['id' => $uid, 'name' => trim((string) $me['name']), 'username' => trim((string) ($me['username'] ?? '')), 'wallet' => (int) $me['wallet'], 'agent' => $isAgent, 'services' => $cnt, 'pending_topups' => $pending, 'since' => (int) ($me['date'] ?? 0)],
-        'features' => ['sell' => on('sellState', 'on'), 'wallet' => on('walletState', 'on'), 'card' => on('cartToCartState'), 'gift' => on('giftState'), 'wheel' => on('wheelState'), 'report' => on('reportState'),
+        'features' => ['sell' => on('sellState', 'on'), 'buy_groups' => buyGroups(), 'wallet' => on('walletState', 'on'), 'card' => on('cartToCartState'), 'gift' => on('giftState'), 'wheel' => on('wheelState'), 'report' => on('reportState'),
             'renew' => on('renewAccountState', 'on'), 'addvolume' => on('increaseVolumeState', 'on'), 'adddays' => on('increaseTimeState', 'on'), 'apps' => $apps > 0, 'hold' => on('onHoldState'),
             'cashback' => (float) ($botState['cashbackPercent'] ?? 0), 'referral' => (int) settingValue('INVITE_BANNER_AMOUNT') > 0, 'sub' => on('subLinkState', 'on'), 'configs' => on('configLinkState', 'on')],
         'amounts' => $amounts, 'min_topup' => MIN_TOPUP, 'support' => ltrim($support, '@'), 'bot' => (string) ($botUsername ?? ''), 'start' => (string) ($user['start_param'] ?? '')]);
@@ -552,13 +576,18 @@ case 'quote': {   // what renew / more volume / more days cost for one service
 }
 
 case 'plans': {
-    $res = rows("SELECT p.*, s.title AS server, s.flag, s.active AS sactive, s.ucount, c.title AS category FROM server_plans p LEFT JOIN server_info s ON s.id = p.server_id LEFT JOIN server_categories c ON c.id = p.catid WHERE p.active = 1 AND (s.active = 1 OR s.active IS NULL) ORDER BY p.catid, p.server_id, p.price");
+    $res = rows("SELECT p.*, s.title AS server, s.flag, s.active AS sactive, s.ucount, c.title AS category FROM server_plans p JOIN server_info s ON s.id = p.server_id LEFT JOIN server_categories c ON c.id = p.catid WHERE p.active = 1 AND s.active = 1 AND s.state = 1 ORDER BY p.catid, p.server_id, p.price");      // (what the bot sells: a plan that is on, on a server that is on AND selling (state 1) - the plans of a deleted server (no row) and of a server with state 0 were listed, 58 plans against the bot's 17)
     $plans = [];
+    $merge = mergeMap(); $parents = [];
+    if ($merge) foreach (rows("SELECT id, title, flag FROM server_info WHERE active = 1 AND state = 1 AND id IN (" . implode(',', array_map('intval', array_unique(array_values($merge)))) . ")") as $g) $parents[(int) $g['id']] = trim(exEmojiStrip((string) ($g['flag'] ?? '')) . ' ' . ($g['title'] ?? ''));      // (the parents that sell: the bot lists a merged server only inside its parent, so under a parent that is off it cannot be reached)
     foreach ($res as $p) {
+        $sid = (int) $p['server_id']; $gid = $merge[$sid] ?? $sid;
+        if ($gid !== $sid && !isset($parents[$gid])) continue;
+        $own = trim(exEmojiStrip((string) ($p['flag'] ?? '')) . ' ' . ($p['server'] ?? ''));
         [$price, , $pct] = priceFor($me, $p);
         $soldOut = ((int) $p['inbound_id'] === 0 && (int) ($p['ucount'] ?? 1) <= 0) || ((int) $p['inbound_id'] !== 0 && (int) ($p['acount'] ?? 1) <= 0);
         $plans[] = ['id' => (int) $p['id'], 'title' => $p['title'], 'descr' => trim((string) ($p['descr'] ?? '')), 'price' => $price, 'list_price' => (int) $p['price'], 'discount' => $pct, 'volume' => (float) $p['volume'], 'days' => (int) $p['days'],
-            'users' => (int) ($p['limitip'] ?? 0), 'server' => trim(exEmojiStrip((string) ($p['flag'] ?? '')) . ' ' . ($p['server'] ?? '')), 'server_id' => (int) $p['server_id'], 'category' => trim((string) ($p['category'] ?? '')), 'sold_out' => $soldOut];
+            'users' => (int) ($p['limitip'] ?? 0), 'server' => $own, 'server_id' => $sid, 'group_id' => $gid, 'group' => $gid === $sid ? $own : $parents[$gid], 'category' => trim((string) ($p['category'] ?? '')), 'sold_out' => $soldOut];
     }
     out(['ok' => true, 'plans' => $plans, 'sell' => on('sellState', 'on'), 'wallet' => wallet($uid), 'cashback' => (float) ($botState['cashbackPercent'] ?? 0)]);
 }
@@ -570,7 +599,7 @@ case 'buy': {
     $plan = row("SELECT * FROM server_plans WHERE id = ? AND active = 1", [(int) ($body['plan_id'] ?? 0)]);
     if (!$plan) fail('این پلن در دسترس نیست.', 404);
     $srv = serverOf((int) $plan['server_id']);
-    if (!$srv || (int) $srv['active'] !== 1 || empty($srv['panel_url'])) fail('سرور این پلن فعال نیست.');
+    if (!$srv || (int) $srv['active'] !== 1 || (int) $srv['state'] !== 1 || empty($srv['panel_url'])) fail('سرور این پلن فعال نیست.');      // (state 1 = selling: a plan of a server the bot switched off could be bought by its id)
     if (!in_array(strtolower((string) $srv['type']), ['marzban', 'pasarguard', 'marzneshin'], true)) fail('خرید این پلن فقط از داخل ربات ممکن است.');
     if ((int) $plan['inbound_id'] === 0 && (int) $srv['ucount'] <= 0) fail(mainText('out_of_server_capacity', 'ظرفیت این سرور پر شده است.'));
     if ((int) $plan['inbound_id'] !== 0 && (int) $plan['acount'] <= 0) fail(mainText('out_of_connection_capacity', 'ظرفیت این پلن پر شده است.'));
