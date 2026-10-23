@@ -351,3 +351,54 @@ def test_a_server_that_is_removed_takes_what_the_doctor_knew_about_its_pairs_wit
     knowledge.record(other_ir, other_fr, {"kind": "paqet", "ok": True, "score": 58}, "full")
     assert client.delete(f"/api/servers/{fr}").status_code == 200
     assert knowledge.pair(ir, fr) == {} and knowledge.pair(other_ir, other_fr)["kinds"]["paqet"]
+
+
+# ------------------------------------------------------------------ the three tiers of the night survey (1.69.125)
+def test_the_survey_goes_on_to_the_rest_of_the_standard_list_and_then_to_the_variants_of_the_links_that_passed(monkeypatch):
+    """The owner, 2026-10-24: "why do you not test the other methods? I want you to work on every scenario"."""
+    from nikatel.services import license
+
+    monkeypatch.setattr(license, "tunnel_kind_allowed", lambda k: True)
+    ir, fr = live_pair("m1")
+    now = int(time.time())
+
+    for k in knowledge.READY:
+        knowledge.record(ir, fr, {"kind": k, "ok": True, "score": 60}, "full")
+
+    mine = lambda cold=False: [p[2] for p in knowledge.pending_pairs(now, cold_only=cold) if p[:2] == (ir, fr)]
+    assert mine() == [knowledge.MORE] and mine(cold=True) == []                         # the first tier is known: the rest of the standard list is next (a pair that is known is not a "cold" one)
+
+    for k in knowledge.MORE:
+        knowledge.record(ir, fr, {"kind": k, "ok": True, "score": 60}, "full")
+
+    got = mine()
+    assert got and set(got[0]) == {f"{x}:{y}" for x in ("ipip", "ipipfou", "ipipgue", "fou", "gue", "ipsec", "ipsecnat", "wg") for y in knowledge.VARIANT_TRANSPORTS} - set(knowledge.PRIOR)      # every link that passed, with the other transports
+    assert not set(got[0]) & set(knowledge.PRIOR)
+
+    for k in got[0]:
+        knowledge.record(ir, fr, {"kind": k, "ok": True, "score": 55}, "full")
+
+    assert mine() == []                                                                 # everything the panel can build has been tested: nothing is due
+
+
+def test_the_variants_are_asked_only_for_a_link_that_passed():
+    e = lambda ok: knowledge.merge(None, {"kind": "x", "ok": True, "score": 60} if ok else {"kind": "x", "ok": False, "error": "no data passes"}, "full" if ok else "latency", NOW)
+    p = {"kinds": {"ipip:tcpmux": e(True), "fou:tcpmux": e(False), "gue:tcpmux": None}}
+    assert knowledge.link_variants(p) == ["ipip:tcp", "ipip:wsmux", "ipip:wssmux"]                                      # a link that failed or was never tested gives none
+    assert knowledge.link_variants({}) == [] and knowledge.link_variants(None) == []
+
+
+def test_the_survey_builds_the_variants_after_the_standard_kinds(monkeypatch):
+    ir, fr = two_servers("k9")
+    started = []
+    monkeypatch.setattr(tunnel_test, "compare_start", lambda iran_id, foreign_id, kinds, measure="full", source="manual", install_wg=False: started.append(kinds) or "cmp11")
+    knowledge.survey_start(ir, fr, "survey", ["ipip:tcp", "paqet", "fou:wssmux"])
+    assert started[0] == ["paqet", "ipip:tcp", "fou:wssmux"]                                                            # (the standard order first, the variants after it in the order asked - they used to be dropped)
+
+def test_a_variant_is_kept_in_the_memory_of_the_pair_and_a_kind_the_panel_cannot_build_is_not():
+    ir, fr = two_servers("k10")
+    knowledge.record(ir, fr, {"kind": "ipip:wsmux", "ok": True, "score": 61}, "latency")
+    knowledge.record(ir, fr, {"kind": "made-up:kind", "ok": True, "score": 90}, "latency")
+    p = knowledge.pair(ir, fr)
+    assert "ipip:wsmux" in p["kinds"] and "made-up:kind" not in p["kinds"]
+    assert [r["kind"] for r in knowledge.ranked(p, int(time.time()))] == ["ipip:wsmux"]                                # (ranked handles a kind that is not in the standard list)

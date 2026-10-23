@@ -53,6 +53,12 @@ UDP_LINK_KINDS = tuple(k for k in LINK_KINDS if linkmodels.is_udp(linkmodels.spl
 # the owner asks (Doctor page, Knowledge) or by a repair that needs them.
 READY = ["bp:wssmux", "chisel:tls", "bp:tcpmux", "bpd:pck", "chisel:fwd", "paqet", "bp:wss", "chisel:fwdtls", "bp:tcp", "bpd:udp", "wg:tcpmux", "fou:tcpmux",
          "gue:tcpmux", "ipip:tcpmux", "ipipfou:tcpmux", "ipipgue:tcpmux", "ipsec:tcpmux", "ipsecnat:tcpmux"]      # (a link of the other models too: where protocol 47 is filtered they are the first thing to try, and which of them passes differs from pair to pair - a survey never installs a package, wireguard-tools included)
+# The night survey goes in THREE tiers, one survey of a pair at a time (the owner, 2026-10-24: "why do you not test the other methods? I want you to work on every scenario - above all the heavier limits on the Iran servers"):
+#   1. READY - what a repair reaches for (about twelve minutes a pair);
+#   2. MORE  - the rest of the standard list (PRIOR), once the first tier of the pair is known;
+#   3. the VARIANTS of a link that passed - Backhaul over IPIP / FOU / GUE / IPsec / WireGuard with the transports `tcp`, `wsmux`, `wssmux` too (a link that did not pass is not tried again with other transports: they would fail for the same reason).
+MORE = [k for k in PRIOR if k not in READY]
+VARIANT_TRANSPORTS = ("tcp", "wsmux", "wssmux")
 # Backhaul over a WireGuard link CARRIED inside Chisel (one TCP port; services/linkmodels.py): not in PRIOR / READY / CUT_LINKS - the Doctor does not walk them in its standard order and the night survey does not build them. They are the
 # LAST RESORT of a cut (`autopilot._carrier_last_resort`): after every kind failed, when the link probe SEES one pass. The owner can test them in Compare (the grid has them) and build them from Create tunnel.
 CARRIER_KINDS = tuple(f"{k}:tcpmux" for k in linkmodels.CARRIER_LINKS)
@@ -323,6 +329,31 @@ def poor(pair: dict | None, now: int) -> list[str]:
     return sorted(k for k, e in ((pair or {}).get("kinds") or {}).items() if verdict(e) == "poor" and now - int(e["last"].get("at") or 0) < FULL_FRESH)
 
 
+def link_variants(pair: dict | None) -> list[str]:
+    """Pure: the third tier of the survey for a pair - the transports `tcp`, `wsmux` and `wssmux` of every non-GRE link whose `tcpmux` kind PASSED on this pair (a good or poor test), in the order of LINK_KINDS, never a kind of the standard list
+    and only what the panel can build (`tunnel_test.KINDS`). A link that failed or was never tested gives none."""
+    from . import tunnel_test
+
+    valid = {x[0] for x in tunnel_test.KINDS}
+    have = (pair or {}).get("kinds") or {}
+    out: list[str] = []
+
+    for k in LINK_KINDS:
+        link = k.split(":", 1)[0]
+        e = have.get(f"{link}:tcpmux")
+
+        if not e or verdict(e) not in ("good", "poor"):
+            continue
+
+        for tr in VARIANT_TRANSPORTS:
+            v = f"{link}:{tr}"
+
+            if v in valid and v not in PRIOR and v not in out:
+                out.append(v)
+
+    return out
+
+
 def due_kinds(pair: dict | None, kinds: list[str], now: int, refresh: int = REFRESH) -> list[str]:
     """The kinds (in the order given) whose knowledge is missing or old: never tested; tested more than `refresh` ago; one that failed, more than FAIL_FRESH ago."""
     have = (pair or {}).get("kinds") or {}
@@ -409,8 +440,10 @@ def pair(iran_id: int, foreign_id: int) -> dict:
 
 
 def record(iran_id: int, foreign_id: int, r: dict, measure: str, now: int | None = None) -> None:
-    """Keep one result of a pair test (a row of a compare job)."""
-    if r.get("kind") not in PRIOR:
+    """Keep one result of a pair test (a row of a compare job). Every kind the panel can build is kept (1.69.125: the variants of the third tier of the survey are not in the standard list; they were thrown away here)."""
+    from . import tunnel_test
+
+    if r.get("kind") not in PRIOR and r.get("kind") not in {x[0] for x in tunnel_test.KINDS}:
         return
 
     now = now or int(time.time())
@@ -635,7 +668,7 @@ def survey_start(iran_id: int, foreign_id: int, source: str = "survey-manual", k
 
         names = (i.name, f.name)
 
-    order = [k for k in PRIOR if kinds is None or k in kinds]
+    order = [k for k in PRIOR if kinds is None or k in kinds] + [k for k in (kinds or []) if k not in PRIOR]          # (the standard order first; the variants of the third tier after it, in the order given)
     measure = "full" if source == "survey-manual" else "latency"      # the night survey asks only whether a type connects and what its delay and loss are (a few pings through a temporary tunnel): no speed test on servers that carry users
     jid = tunnel_test.compare_start(iran_id, foreign_id, order, measure=measure, source=source, install_wg=source == "survey-manual")      # (only a survey the owner asked for may install wireguard-tools; the night one never installs a package)
 
@@ -702,6 +735,9 @@ def pending_pairs(now: int, cold_only: bool = False) -> list[tuple[int, int, lis
                 continue
 
             due = due_kinds(p, allowed, now)
+
+            if not due and not cold_only:                     # (the night survey goes on when a pair knows its first tier: the rest of the standard list, then the variants of the links that passed)
+                due = due_kinds(p, [k for k in MORE if license.tunnel_kind_allowed(k)], now) or due_kinds(p, [k for k in link_variants(p) if license.tunnel_kind_allowed(k)], now)
 
             if due:
                 out.append((len(p.get("kinds") or {}), int(p.get("at") or 0), i, f, due))
@@ -807,7 +843,7 @@ def state(now: int | None = None) -> dict:
         p = d["pairs"].get(k) or {}
         kinds = p.get("kinds") or {}
         rows.append({"iran_id": i, "foreign_id": f, "iran": names[i], "foreign": names[f], "tunnels": live.get((i, f), 0), "at": int(p.get("at") or 0), "tested": len(kinds),
-                     "due": len(due_kinds(p, READY, now)), "best": ranked(p, now), "poor": poor(p, now), "cuts": repeats(i, f, now), "links": dict(p.get("links") or {}),
+                     "due": len(due_kinds(p, READY, now)), "due_more": len(due_kinds(p, MORE, now)) + len(due_kinds(p, link_variants(p), now)), "best": ranked(p, now), "poor": poor(p, now), "cuts": repeats(i, f, now), "links": dict(p.get("links") or {}),
                      "blocked": [{"kind": x, "error": kinds[x]["last"].get("error") or "", "at": int(kinds[x]["last"].get("at") or 0)} for x in blocked(p, now)],
                      "untested": untested(p)})
 
