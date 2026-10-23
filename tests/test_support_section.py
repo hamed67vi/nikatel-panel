@@ -152,24 +152,45 @@ def test_crlf_files_stay_crlf(bot, tmp_path):
 def test_the_new_screens_answer_and_the_old_handlers_step_aside(bot, tmp_path):
     env = _env(tmp_path)
     _install(str(bot), env=env)
-    out, err = _run_bot(bot, DATA="supportSection", FROM="7", STATE=json.dumps({"supportID": "@op_chat"}))
+    on = {"supportID": "@op_chat", "supportSection": "on"}
+    out, err = _run_bot(bot, DATA="supportSection", FROM="7", STATE=json.dumps(on))
     flat = _buttons(out)
     assert out.count("EDIT") == 1 and "usersNewTicket" in [b.get("callback_data") for b in flat] and [b["url"] for b in flat if "url" in b] == ["https://t.me/op_chat"] and "END" in out, (out, err)      # (one screen: the new one, not the old one too)
-    out, _ = _run_bot(bot, DATA="supportSection", FROM="7", STATE=json.dumps({"supportID": "@op_chat", "supportChat": "off"}))
-    assert not [b for b in _buttons(out) if "url" in b] and "usersNewTicket" in [b.get("callback_data") for b in _buttons(out)]
+    out, _ = _run_bot(bot, DATA="supportSection", FROM="7", STATE=json.dumps(dict(on, supportChat="off")))
+    assert not [b for b in _buttons(out) if "url" in b] and "usersNewTicket" in [b.get("callback_data") for b in _buttons(out)] and "OLD" not in out
     out, _ = _run_bot(bot, DATA="ticketsList", FROM="1", STATE="{}")             # (an admin)
-    assert out.count("EDIT") == 1 and "toggleSupportChat" in out and "managePanel" in out
+    assert out.count("EDIT") == 1 and "toggleSupportChat" in out and "toggleSupportStage" in out and "managePanel" in out
     out, _ = _run_bot(bot, DATA="toggleSupportChat", FROM="1", STATE="{}")
     kb = json.loads(next(ln for ln in out.splitlines() if ln.startswith("KB "))[3:])
-    assert "SETTING supportChat=off" in out and out.count("EDIT") == 1 and "❌" in kb["inline_keyboard"][2][0]["text"]
+    assert "SETTING supportChat=off" in out and out.count("EDIT") == 1 and "❌" in kb["inline_keyboard"][3][0]["text"]
     out, _ = _run_bot(bot, DATA="toggleSupportChat", FROM="1", STATE=json.dumps({"supportChat": "off"}))
     assert "SETTING supportChat=on" in out
-    out, _ = _run_bot(bot, DATA="toggleSupportChat", FROM="7", STATE="{}")         # (a customer: nothing is switched, the old code answers nothing either)
-    assert "SETTING" not in out and "END" in out
-    cfg = subprocess.run([PHP, "-d", "display_errors=1", "-r", "$buttonValues = ['sharj' => 'A', 'application_links' => 'B', 'my_info' => 'C', 'invite_friends' => 'D']; $from_id = 1; $admin = 1; include 'config.php'; echo getMainKeys();"], check=False, capture_output=True, text=True, cwd=bot).stdout
-    rows = json.loads(cfg)["inline_keyboard"]
-    flat = [b["callback_data"] for r in rows for b in r]
-    assert flat.index("supportSection") == flat.index("myInfo") + 1 and next(b["text"] for r in rows for b in r if b["callback_data"] == "supportSection") != ""      # (the row under "apps / my info")
+    for state, nxt in (({}, "on"), ({"supportSection": "on"}, "off"), ({"supportSection": "off"}, "admin")):
+        out, _ = _run_bot(bot, DATA="toggleSupportStage", FROM="1", STATE=json.dumps(state))
+        assert f"SETTING supportSection={nxt}" in out and out.count("EDIT") == 1, (state, out)
+    for data in ("toggleSupportChat", "toggleSupportStage"):
+        out, _ = _run_bot(bot, DATA=data, FROM="7", STATE="{}")         # (a customer: nothing is switched, the old code answers nothing either)
+        assert "SETTING" not in out and "END" in out
+
+
+def test_the_stage_gives_the_section_to_the_admins_first_and_a_customer_gets_exactly_the_old_bot(bot, tmp_path):
+    env = _env(tmp_path)
+    _install(str(bot), env=env)
+    for state, admin_gets, customer_gets in (({}, True, False), ({"supportSection": "admin"}, True, False), ({"supportSection": "bogus"}, True, False), ({"supportSection": "on"}, True, True), ({"supportSection": "off"}, False, False)):
+        for who, gets in (("1", admin_gets), ("7", customer_gets)):
+            out, err = _run_bot(bot, DATA="supportSection", FROM=who, STATE=json.dumps(dict(state, supportID="@op_chat")))
+            new = bool([b for b in _buttons(out) if "url" in b])
+            assert new == gets and out.count("EDIT") == 1 and "END" in out and err == "", (state, who, out, err)      # (whoever is not covered gets the old screen: it is still there, unchanged)
+            assert ("OLD" in out) == (not gets)
+            cfg = subprocess.run([PHP, "-d", "display_errors=1", "-r", f"require 'support_section.php'; $botState = json_decode('{json.dumps(state)}', true); $userInfo = ['isAdmin' => false]; $buttonValues = ['sharj' => 'A', 'application_links' => 'B', 'my_info' => 'C', 'invite_friends' => 'D']; $from_id = {who}; $admin = 1; include 'config.php'; echo getMainKeys();"],
+                                 check=False, capture_output=True, text=True, cwd=bot)
+            rows = json.loads(cfg.stdout)["inline_keyboard"]
+            flat = [b["callback_data"] for r in rows for b in r]
+            assert ("supportSection" in flat) == gets, (state, who, cfg.stdout, cfg.stderr)
+            if gets:
+                assert flat.index("supportSection") == flat.index("myInfo") + 1      # (the row under "apps / my info")
+            else:
+                assert flat == ["increaseMyWallet", "reciveApplications", "myInfo"] + (["inviteFriends"] if who != "1" else [])      # (the menu of a person who is not covered has the old buttons only)
 
 
 def test_a_follow_up_in_a_ticket_does_not_reach_the_old_handler_but_a_first_message_does(bot, tmp_path):
@@ -206,8 +227,11 @@ echo json_encode([$on, $off, $nolink, $adm, $adm2, supChatOn([]), supChatOn(['su
     cb = lambda rows: [b.get("callback_data") for r in rows for b in r if "callback_data" in b]
     assert cb(on) == ["usersNewTicket", "usersOpenTickets", "userAllTickets", "mainMenu"] and on[-2][0]["url"] == "https://t.me/op_chat"      # (the chat button sits above the way back)
     assert cb(off) == cb(nolink) == cb(on) and not [b for r in off for b in r if "url" in b] and not [b for r in nolink for b in r if "url" in b]
-    assert cb(adm) == ["openTickets", "newTickets", "allTickets", "ticketsCategory", "toggleSupportChat", "managePanel"]
-    assert "✅" in adm[2][0]["text"] and "❌" in adm2[2][0]["text"] and (d, o, f) == (True, True, False)
+    assert cb(adm) == ["openTickets", "newTickets", "allTickets", "ticketsCategory", "toggleSupportStage", "toggleSupportChat", "managePanel"]
+    assert "✅" in adm[3][0]["text"] and "❌" in adm2[3][0]["text"] and (d, o, f) == (True, True, False)
+    stages = _php("""$bv = ['back_button' => 'B']; foreach ([[], ['supportSection' => 'admin'], ['supportSection' => 'on'], ['supportSection' => 'off'], ['supportSection' => 'x']] as $s) $o[] = [supMode($s), supAdminRows($s, $bv)[2][0]['text']]; echo json_encode($o);""")
+    assert [m for m, _ in stages] == ["admin", "admin", "on", "off", "admin"]      # (unset or anything unknown = the admins first)
+    assert len({t for _, t in stages}) == 3 and "🧪" in stages[0][1] and "🌐" in stages[2][1] and "⛔" in stages[3][1]
 
 
 FAKE_DB = r"""
@@ -223,7 +247,7 @@ class FakeStmt {
 class FakeConn { function prepare($sql) { return new FakeStmt($sql); } }
 $LOG = [];
 $connection = new FakeConn();
-$userInfo = ['step' => $cfg['step']]; $from_id = $cfg['from']; $buttonValues = ['cancel' => 'CANCEL', 'back_button' => 'BACK'];
+$userInfo = ['step' => $cfg['step'], 'isAdmin' => $cfg['is_admin'] ?? false]; $from_id = $cfg['from']; $admin = 1; $botState = $cfg['state'] ?? ['supportSection' => 'on']; $buttonValues = ['cancel' => 'CANCEL', 'back_button' => 'BACK'];
 if (array_key_exists('text', $cfg)) $text = $cfg['text'];
 if (isset($cfg['fileid'])) { $fileid = $cfg['fileid']; $caption = $cfg['caption'] ?? null; }
 function sendMessage($t, $k = null, $p = null) { global $LOG; $LOG[] = ["send", $t, $k]; }
@@ -255,6 +279,16 @@ def test_a_follow_up_is_saved_quietly_when_the_last_message_is_the_customers_own
     assert next(x for x in log if x[0] == "insert")[1][2] == "it's a \"quote\" / # test"
 
 
+def test_the_quiet_rule_follows_the_stage():
+    """a customer is not covered while the stage is "admin" (unset) or "off": the old handler announces his message; an admin is covered in "admin" and "on" (the way to test it)"""
+    for state, customer, admin_user, flag_admin in (({}, False, True, False), ({"supportSection": "admin"}, False, True, False), ({"supportSection": "on"}, True, True, False), ({"supportSection": "off"}, False, False, False)):
+        assert _quiet(state=state)[0] is customer, state
+        assert _quiet(state=state, **{"from": 1, "chat": {"user_id": 1, "state": 0}})[0] is admin_user, state              # (the bot's main admin)
+        assert _quiet(state=state, is_admin=True)[0] is admin_user, state                                                  # (an admin of the bot's list: users.isAdmin)
+    done, log = _quiet(state={})
+    assert done is False and log == []
+
+
 def test_everything_else_is_left_to_the_old_handler():
     for what, cfg in (("the support answered last", {"last": {"msg_type": "ADMIN"}}), ("no message in the ticket", {"last": None}), ("somebody else's ticket", {"chat": {"user_id": 6, "state": 0}}),
                       ("a closed ticket", {"chat": {"user_id": 5, "state": 2}}), ("no such ticket", {"chat": None}), ("the cancel button", {"text": "CANCEL"}), ("not in a ticket", {"step": "none"}),
@@ -271,11 +305,15 @@ $data = 'toggleSupportChat'; $from_id = 1; $a = supHandleAdminMenu();
 $from_id = 9; $b = supHandleAdminMenu();
 $data = 'ticketsList'; $from_id = 1; $c = supHandleAdminMenu();
 $userInfo['isAdmin'] = true; $from_id = 9; $d = supHandleAdminMenu();
-echo json_encode([$a, $b, $c, $d, $botState, $L]);"""
-    a, b, c, d, state, log = _php(code)
-    assert (a, b, c, d) == (True, False, True, True) and state == {"supportChat": "off"} and [x for x in log if x[0] == "set"] == [["set", "supportChat", "off"]]
+$userInfo['isAdmin'] = false; $from_id = 1; $data = 'toggleSupportStage'; $e1 = supHandleAdminMenu(); $e2 = supHandleAdminMenu(); $e3 = supHandleAdminMenu();
+$from_id = 9; $f = supHandleAdminMenu();
+echo json_encode([$a, $b, $c, $d, $botState, $L, [$e1, $e2, $e3, $f]]);"""
+    a, b, c, d, state, log, cycle = _php(code)
+    assert (a, b, c, d) == (True, False, True, True) and cycle == [True, True, True, False]
+    assert state == {"supportChat": "off", "supportSection": "admin"}      # (three taps of the stage button: admin -> on -> off -> admin)
+    assert [x[2] for x in log if x[0] == "set" and x[1] == "supportSection"] == ["on", "off", "admin"] and [x for x in log if x[0] == "set" and x[1] == "supportChat"] == [["set", "supportChat", "off"]]
     edits = [x for x in log if x[0] == "edit"]
-    assert len(edits) == 3 and "❌" in json.loads(edits[0][2])["inline_keyboard"][2][0]["text"]
+    assert len(edits) == 6 and "❌" in json.loads(edits[0][2])["inline_keyboard"][3][0]["text"]
 
 
 def test_the_helper_never_throws_into_the_bot():
@@ -293,7 +331,9 @@ def test_the_mini_app_follows_the_switch_and_the_quiet_follow_up():
     js = (MINI / "app.js").read_text(encoding="utf-8")
     assert "'support_chat' => on('supportChat', 'on')" in api
     case = api[api.index("case 'ticket_reply'"):api.index("case 'report'")]
-    assert "$quiet = $last && (string) $last['msg_type'] === 'USER';" in case and "if (!$quiet) {" in case
+    assert "$quiet = supportQuiet() && $last && (string) $last['msg_type'] === 'USER';" in case and "if (!$quiet) {" in case
+    stage = api[api.index("function supportQuiet()"):api.index("function on(")]
+    assert "$botState['supportSection'] ?? 'admin'" in stage and "$m === 'on' || ($m !== 'off' && in_array((int) $uid, (array) $admins, true))" in stage      # (staged like the bot: admins first)
     assert case.index("$quiet =") < case.index("INSERT INTO chats_info") < case.index("if (!$quiet)")      # (the rule is read BEFORE the new message is stored)
     assert "const chatOn = () => !!S.support && S.feat.support_chat !== false;" in js and js.count("chatOn()") == 3 and "${S.support ? `" not in js
 

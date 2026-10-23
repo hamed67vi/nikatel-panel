@@ -1038,7 +1038,7 @@ def mg1():
 
 @scn("TQ1", "LOW", "tickets: a follow-up (the last message of the ticket is the customer's own) is saved and NOT announced to the admins again; after an answer of the support the next message is announced once; features.support_chat follows BOT_STATES supportChat")
 def tq1():
-    reset(); mk_user(U)
+    reset(states={"supportSection": "on"}); mk_user(U)
     problems = []
     c, j, t = call("ticket_new", {"title": "t1", "text": "first", "category": "tech"})
     if not ok(j):
@@ -1059,6 +1059,18 @@ def tq1():
     call("ticket_reply", {"id": cid, "text": "and more"})
     if (len(tg_msgs("sendMessage", ADMIN)), len(tg_msgs("sendMessage", ADMIN2))) != (2, 2):
         problems.append("the second message in a row was announced")
+    # the stage (BOT_STATES supportSection): unset / admin = the quiet rule only for the bot's admins, on = everybody, off = nobody
+    for mode, quiet_u, quiet_a in ((None, False, True), ("admin", False, True), ("on", True, True), ("off", False, False)):
+        reset(states={"supportSection": mode}); mk_user(U); mk_user(ADMIN)
+        for who, want_quiet in ((U, quiet_u), (ADMIN, quiet_a)):
+            c, j, t = call("ticket_new", {"title": "t", "text": "first", "category": "tech"}, uid=who)
+            if not ok(j):
+                problems.append(f"{mode}: ticket_new failed for {who}: {t[:60]}"); continue
+            before = len(tg_msgs("sendMessage", ADMIN2))
+            call("ticket_reply", {"id": j["id"], "text": "again"}, uid=who)
+            told = len(tg_msgs("sendMessage", ADMIN2)) - before
+            if (told == 0) != want_quiet:
+                problems.append(f"stage {mode}: the follow-up of {'the customer' if who == U else 'an admin'} was {'quiet' if told == 0 else 'announced'}, want {'quiet' if want_quiet else 'announced as before'}")
     on1 = (call("me")[1] or {}).get("features", {}).get("support_chat")
     reset(states={"supportChat": "off"}); mk_user(U)
     off = (call("me")[1] or {}).get("features", {}).get("support_chat")

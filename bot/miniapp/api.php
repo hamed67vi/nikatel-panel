@@ -113,6 +113,12 @@ function mergeMap(): array {
     }
     return $m;
 }
+/** the quiet follow-up in a ticket is staged like the bot's support section (BOT_STATES supportSection): 'admin' (the default: only the bot's admins), 'on' (everybody), 'off' (nobody) */
+function supportQuiet(): bool {
+    global $botState, $admins, $uid;
+    $m = (string) ($botState['supportSection'] ?? 'admin');
+    return $m === 'on' || ($m !== 'off' && in_array((int) $uid, (array) $admins, true));
+}
 function on(string $key, string $default = 'off'): bool { global $botState; return ($botState[$key] ?? $default) === 'on'; }
 
 /* ---------------------------------------------------------------- texts of the bot (values.php + the panel's overrides) */
@@ -924,7 +930,7 @@ case 'ticket_reply': {
     throttleHit($uid, 'ticket');
     // a follow-up (the last message of the ticket is the customer's own, nobody answered yet) is saved but not announced to the admins again - the same rule as the bot's support section (support_section.php); after an answer the next message is announced once
     $last = row("SELECT msg_type FROM chats_info WHERE chat_id = ? ORDER BY id DESC LIMIT 1", [$id]);
-    $quiet = $last && (string) $last['msg_type'] === 'USER';
+    $quiet = supportQuiet() && $last && (string) $last['msg_type'] === 'USER';
     run("INSERT INTO chats_info (chat_id, sent_date, msg_type, text) VALUES (?, ?, 'USER', ?)", [$id, time(), $text]);
     if (!$quiet) {
         run("UPDATE chats SET state = 0 WHERE id = ?", [$id]);

@@ -4,9 +4,11 @@
 # Copies bot/menu/support_section.php next to bot.php and puts FIVE marked lines (every one ends with "// [support]") into the bot's own files:
 #   bot.php    1) the include of support_section.php at the top (only when the file is there);
 #              2) before the handler of the button "supportSection": the new screen (tickets + the operator's chat); when it answers, the old handler is skipped;
-#              3) before the handler of "ticketsList" (admins): the ticket menu with the switch of the direct chat (also the callback toggleSupportChat);
+#              3) before the handler of "ticketsList" (admins): the ticket menu with the stage of the section and the switch of the direct chat (also the callbacks toggleSupportStage, toggleSupportChat);
 #              4) before the handler of the customer's message in a ticket (step sendMsg_<id>): a follow-up (the last message of the ticket is the customer's own) is saved and NOT sent to the admins again;
-#   config.php 5) one row "support" in the customer's main menu (getMainKeys), under the row of the apps and "my info".
+#   config.php 5) one row "support" in the main menu (getMainKeys), under the row of the apps and "my info" - an empty row for whoever the stage does not cover.
+# STAGED: BOT_STATES supportSection = "admin" (the default: the button, the screen and the quiet follow-ups exist for the admins only; every customer gets exactly the old bot), "on" (everybody), "off" (nobody);
+# the admin's ticket menu has the button that turns it admin -> on -> off -> admin.
 # Nothing of the old code is changed or removed: every new line calls support_section.php behind function_exists() and the old handler is still there for the case that it returns false.
 # The old files are kept in $BACKUP_DIR (default /root/backups); php -l runs on the new files BEFORE they replace the old ones; --uninstall takes the five lines out again (byte for byte) and removes support_section.php.
 # The direct chat switch: BOT_STATES supportChat = "off" (the admin's ticket menu has the button); the operator's link is the bot's supportID setting.
@@ -32,12 +34,12 @@ TAG = " // [support]"
 BOT = [
     ("<?php\n", "if (is_file(__DIR__ . '/support_section.php')) require_once __DIR__ . '/support_section.php';" + TAG + "\n", "after"),
     ("if($data==\"supportSection\"){\n", "if($data==\"supportSection\" && function_exists('supHandleScreen') && supHandleScreen()) $data = 'support-handled';" + TAG + "\n", "before"),
-    ("if($data==\"ticketsList\" and ($from_id == $admin || $userInfo['isAdmin'] == true)){\n", "if(($data==\"ticketsList\" || $data==\"toggleSupportChat\") && function_exists('supHandleAdminMenu') && supHandleAdminMenu()) $data = 'support-handled';" + TAG + "\n", "before"),
+    ("if($data==\"ticketsList\" and ($from_id == $admin || $userInfo['isAdmin'] == true)){\n", "if(($data==\"ticketsList\" || $data==\"toggleSupportStage\" || $data==\"toggleSupportChat\") && function_exists('supHandleAdminMenu') && supHandleAdminMenu()) $data = 'support-handled';" + TAG + "\n", "before"),
     ("if(preg_match('/^sendMsg_(.*)/',$userInfo['step'],$match)  and $text!=$buttonValues['cancel']){\n", "if(function_exists('supQuietFollowUp') && supQuietFollowUp()) $userInfo['step'] = 'none';" + TAG + "\n", "before"),
 ]
 CONF = [
     ("        [['text'=>$buttonValues['application_links'],'callback_data'=>\"reciveApplications\"],['text'=>$buttonValues['my_info'],'callback_data'=>\"myInfo\"]],\n",
-     "        [['text'=>$buttonValues['support_section'] ?? '🛂 پشتیبانی','callback_data'=>\"supportSection\"]]," + TAG + "\n", "after"),
+     "        (function_exists('supMenuRow') ? supMenuRow() : [])," + TAG + "\n", "after"),
 ]
 
 def load(p):

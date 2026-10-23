@@ -112,8 +112,9 @@ $dbUserName = 'mini'; $dbPassword = 'mini-test-pw'; $dbName = '{DB}'; $USDTPrice
 
 def reset(states=None, support_id="@test_support"):
     sql("SET FOREIGN_KEY_CHECKS=0; DELETE FROM users; DELETE FROM chats; DELETE FROM chats_info; DELETE FROM setting; DELETE FROM pays")
-    st = {"botState": "on", "sellState": "on", "walletState": "on", "cartToCartState": "on", "supportID": support_id, "searchState": "on"}
+    st = {"botState": "on", "sellState": "on", "walletState": "on", "cartToCartState": "on", "supportID": support_id, "searchState": "on", "supportSection": "on"}      # (the section is published here; ST1 tries the stages)
     st.update(states or {})
+    st = {k: v for k, v in st.items() if v is not None}      # (a state given as None is left out: "not set")
     sql(f"INSERT INTO setting (type, value) VALUES ('BOT_STATES', {esc(json.dumps(st))}), ('PAYMENT_KEYS', {esc('{}')})")
     for uid, adm in ((ADMIN, 1), (ADMIN2, 1), (U, 0), (OTHER, 0)):
         sql(f"INSERT INTO users (userid, name, username, refcode, wallet, date, step, isAdmin, is_agent) VALUES ('{uid}', 'T{uid}', 't{uid}', '0', 0, '{int(time.time())}', 'none', {adm}, 0)")
@@ -202,6 +203,9 @@ def urls(bs): return [b.get("url") for b in bs if "url" in b]
 
 # ------------------------------------------------------------------ scenarios
 SC = []
+OLD_MENU = []      # (the customer's main menu as the old bot draws it, filled by the run of the old files)
+
+
 def scn(i, title):
     def d(f): SC.append((i, title, f)); return f
     return d
@@ -267,7 +271,7 @@ def ad1(port, after):
     if not {"openTickets", "newTickets", "allTickets", "ticketsCategory", "managePanel"} <= set(d):
         problems.append(f"the old ticket menu buttons are missing: {d}")
     if after:
-        if "toggleSupportChat" not in d:
+        if "toggleSupportChat" not in d or "toggleSupportStage" not in d:
             problems.append(f"no switch in the ticket menu: {d}")
         label = [b["text"] for b in last_markup(ADMIN) if b.get("callback_data") == "toggleSupportChat"]
         if not label or "✅" not in label[0]:
@@ -295,6 +299,51 @@ def ad1(port, after):
     else:
         if "toggleSupportChat" in d:
             problems.append("the old menu has the switch")
+    return problems
+
+
+@scn("ST1", "the stage (BOT_STATES supportSection): unset / admin = the section exists for the admins only and a customer gets exactly the old bot; on = everybody; off = nobody; the admin's button cycles admin -> on -> off -> admin")
+def st1(port, after):
+    problems = []
+    for mode, admin_sees, user_sees in ((None, True, False), ("admin", True, False), ("on", True, True), ("off", False, False)):
+        reset(states={"supportSection": mode})
+        post(port, cb(ADMIN, "mainMenu")); a = "supportSection" in datas(last_markup(ADMIN))
+        post(port, cb(U, "mainMenu")); u = "supportSection" in datas(last_markup(U))
+        rows = [r for r in (json.loads(([m for m in sent(U) if m["markup"]] or [{"markup": "{}"}])[-1]["markup"]).get("inline_keyboard") or []) if r]      # (the customer's main menu without the empty rows the bot builds anyway)
+        if not rows:
+            problems.append(f"{mode}: could not read the customer's main menu")
+        if not after:
+            OLD_MENU.append(rows)
+        elif OLD_MENU and not user_sees and rows != OLD_MENU[0]:
+            problems.append(f"{mode}: a customer the stage does not cover has a different main menu than the old bot's: {rows} vs {OLD_MENU[0]}")
+        if after and (a, u) != (admin_sees, user_sees):
+            problems.append(f"{mode}: the main menu has the support button for the admin={a} / the customer={u}, want {admin_sees} / {user_sees}")
+        post(port, cb(U, "supportSection")); chat = bool(urls(last_markup(U)))      # (a stale button of a customer: the new screen only where the stage covers him)
+        if after and chat != user_sees:
+            problems.append(f"{mode}: a customer's tap on supportSection gave the new screen = {chat}, want {user_sees}")
+        post(port, cb(ADMIN2, "supportSection")); chat = bool(urls(last_markup(ADMIN2)))
+        if after and chat != admin_sees:
+            problems.append(f"{mode}: an admin's tap on supportSection gave the new screen = {chat}, want {admin_sees}")
+        for uid, covered in ((U, user_sees), (ADMIN2, admin_sees)):      # (an admin writing as a customer is the way to test it)
+            cid = mk_ticket(uid); set_step(uid, f"sendMsg_{cid}"); n = len(TG_LOG)
+            post(port, msg(uid, "again"))
+            told = [m for m in sent(ADMIN, since=n) if m["method"] in ("sendMessage", "sendPhoto") and NEW in m["text"]]
+            if after and bool(told) == covered:
+                problems.append(f"{mode}: a follow-up of {'the customer' if uid == U else 'an admin'} was {'announced' if told else 'quiet'}, want {'quiet' if covered else 'announced as before'}")
+            if len(infos(cid)) != 2:
+                problems.append(f"{mode}: the follow-up was not saved ({infos(cid)})")
+    if after:
+        reset(states={"supportSection": None}); seq = []
+        for _ in range(4):
+            post(port, cb(ADMIN, "toggleSupportStage")); seq.append(botstate().get("supportSection"))
+        if seq != ["on", "off", "admin", "on"]:
+            problems.append(f"the admin's button gave {seq}, want ['on', 'off', 'admin', 'on']")
+        label = [b["text"] for b in last_markup(ADMIN) if b.get("callback_data") == "toggleSupportStage"]
+        if not label or "🌐" not in label[0]:
+            problems.append(f"the button should say 'everybody' after the 4th tap: {label}")
+        reset(states={"supportSection": "admin"}); post(port, cb(U, "toggleSupportStage"))
+        if botstate().get("supportSection") != "admin":
+            problems.append("a customer's tap changed the stage")
     return problems
 
 
