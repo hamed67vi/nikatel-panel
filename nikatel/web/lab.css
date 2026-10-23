@@ -1301,3 +1301,9 @@ html[data-mode="light"] body #ask .ask-box .ask-act.ask-choices button { backgro
 html[data-mode="light"] body #ask .ask-box .ask-act.ask-choices button:hover { background-color: rgba(60, 70, 100, .15) !important; }
 html[data-mode="light"] body #ask .ask-box .ask-act.ask-choices button.pri { background-color: #0a84ff !important; }
 html[data-mode="light"] body #ask .ask-box .ask-act.ask-choices :is(button.danger, button.danger-fill) { background-color: rgba(255, 69, 58, .12) !important; color: #d70015 !important; }
+
+/* 1.69.122 - the replacement card of the build form: what is found, the replacement, and under it the CDN names (the owner, 2026-10-24) */
+.bld-check .bconf.bgroup { display: flex; flex-direction: column; gap: 5px; }
+.bld-check .bconf.bgroup .bg-h { font-size: 12.5px; font-weight: 700; }
+.bld-check .bconf.bgroup .chk.sub { margin-left: 24px; padding-top: 4px; border-top: 1px dashed rgba(255, 190, 70, .3); }
+.bld-check .bconf.bgroup .chk.sub.off { opacity: .45; }

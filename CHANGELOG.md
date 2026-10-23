@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.69.122 - The build form: "replace the tunnel" and "move its CDN names" are ONE card
+
+The owner (2026-10-24, on the build form that showed "...remove it first and replace it" and, a line below, "then point the CDN records of the replaced tunnel at the new Iran server"): "I did not understand - combine these options so they are not mistaken".
+
+- **Before**: two loose lines. The second one (the CDN names) looked like a separate choice and was ticked by default.
+- **Now**: one card. Its title says what was found ("Port 8072 already goes to this foreign server through another tunnel"); under it one tick per tunnel ("Replace <name> (<Iran server>, up): the old tunnel is removed first and the new one takes its place"); and under that, indented, "And move its CDN names to the new Iran server" (with "(asks first on Tunnels -> CDN)" when the DNS account is not in the automatic mode). The CDN tick is grey while no replacement is ticked: the names follow only a tunnel that is replaced - the server already ignored the tick without a replacement, now the form shows it.
+- **Not changed**: what is built and when, the port-in-use notices and the old-unit tick, the replacement and the DNS follow-up themselves.
+- **Proved**: `tests/test_build_check_group.py` (one card, the CDN tick inside it after the replacement tick, the old two lines gone, the grey state, the server rule).
+- **Not proved**: how the card looks in a browser (not walked).
 ## 1.69.121 - The question with several answers is a stack of flat macOS-style buttons
 
 The owner (2026-10-24, with a picture of "SW already has a tunnel ... Remove it and replace it / Add as a second tunnel / Cancel"): "make this MacBook style".
