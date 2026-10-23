@@ -63,6 +63,7 @@ if (process.argv[3] === "buymerge" || process.argv[3] === "buymerge1") {      //
 if (process.argv[3] === "history") {      // the wallet page: the last three rows at once, the older ones (and the cashbacks) behind one button
   R.history.pays = [1, 2, 3, 4, 5].map(i => ({ type: "خرید سرویس", kind: "BUY_SUB", price: 1000 * i, state: "paid_with_wallet", state_fa: "از کیف پول", at: NOW - i, note: "" }));
 }
+if (process.argv[3] === "nochat") R.me.features.support_chat = false;      // the admin switched the direct chat off: no card that opens the operator's chat
 if (process.argv[3] === "hostile") { R.me.support = HOSTILE; R.me.bot = HOSTILE; R.me.features.card = false; }
 ctx.Telegram = { WebApp: { initData: "x=1", initDataUnsafe: {}, colorScheme: "dark", ready() {}, expand() {}, onEvent() {}, setHeaderColor() {}, setBackgroundColor() {}, enableClosingConfirmation() {}, BackButton: { onClick() {}, show() {}, hide() {} } } };
 vm.createContext(ctx);
@@ -91,7 +92,11 @@ const tick = () => new Promise(r => setImmediate(r));
       plans3: (step3.match(/buySheet\(/g) || []).length, tabs3: 0, again: back === step1 };
     console.log(JSON.stringify(out)); return;
   }
-  if (process.argv[3] === "buymerge1") {      // one kind only (a merged pair): no first step, the page is the time tabs, and no plan has a heading of the merged server
+  if (process.argv[3] === "nochat" || process.argv[3] === "chat") {
+    for (const v of ["home", "more", "tickets"]) { X.S.stack = [{ v }]; await X.render(); await tick(); }
+    out.values.chat = { cards: HTML.filter(h => h.includes("sup_port")).length, tickets: HTML.some(h => h.includes("tk-list")) };
+    console.log(JSON.stringify(out)); return;
+  }  if (process.argv[3] === "buymerge1") {      // one kind only (a merged pair): no first step, the page is the time tabs, and no plan has a heading of the merged server
     X.S.stack = [{ v: "buy" }]; await X.render(); await tick(); await tick();
     const page = els["b-list"].innerHTML, seg = els["b-seg"].innerHTML;
     X.buyCatPick({ dataset: { c: "UNLIM" } });

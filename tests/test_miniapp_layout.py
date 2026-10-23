@@ -100,7 +100,7 @@ def test_the_light_theme_has_readable_status_colours_and_the_wheel_lays_many_amo
 def test_the_description_of_a_plan_keeps_its_lines_and_the_files_have_a_new_version_for_the_cache():
     js, html = (MINI / "app.js").read_text(encoding="utf-8"), (MINI / "index.html").read_text(encoding="utf-8")
     assert '<div class="note descr mt">${esc(x.descr)}</div>' in js and ".note.descr { white-space: pre-line; }" in _css()
-    assert "app.css?v=3.0.8" in html and "app.js?v=3.0.8" in html
+    assert "app.css?v=3.0.9" in html and "app.js?v=3.0.9" in html
 
 
 def test_the_font_never_holds_the_first_paint_back():

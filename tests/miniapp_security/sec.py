@@ -1036,6 +1036,36 @@ def mg1():
             problems.append(f"{what} ({content}): the bot cannot reach the merged server, so its plans must not be listed: {None if p is None else sorted(p)}")
     return bool(problems), "; ".join(problems) if problems else "merged plans are grouped under the parent and bought on their own server; chain, self-map, dead parent and broken file are harmless"
 
+@scn("TQ1", "LOW", "tickets: a follow-up (the last message of the ticket is the customer's own) is saved and NOT announced to the admins again; after an answer of the support the next message is announced once; features.support_chat follows BOT_STATES supportChat")
+def tq1():
+    reset(); mk_user(U)
+    problems = []
+    c, j, t = call("ticket_new", {"title": "t1", "text": "first", "category": "tech"})
+    if not ok(j):
+        return True, f"ticket_new failed: {t[:100]}"
+    cid = j["id"]
+    n1, n2 = len(tg_msgs("sendMessage", ADMIN)), len(tg_msgs("sendMessage", ADMIN2))
+    if (n1, n2) != (1, 1):
+        problems.append(f"a new ticket must reach each admin once: {n1}, {n2}")
+    c, j, t = call("ticket_reply", {"id": cid, "text": "again"})
+    if not ok(j) or q1(f"SELECT COUNT(*) FROM chats_info WHERE chat_id={cid}") != "2":
+        problems.append(f"the follow-up was not saved: {t[:80]}")
+    if (len(tg_msgs("sendMessage", ADMIN)), len(tg_msgs("sendMessage", ADMIN2))) != (1, 1):
+        problems.append("a follow-up was announced to the admins again")
+    sql(f"INSERT INTO chats_info (chat_id, sent_date, msg_type, text) VALUES ({cid}, {int(time.time())}, 'ADMIN', 'answer')"); sql(f"UPDATE chats SET state = 1 WHERE id = {cid}")
+    c, j, t = call("ticket_reply", {"id": cid, "text": "thanks"})
+    if (len(tg_msgs("sendMessage", ADMIN)), len(tg_msgs("sendMessage", ADMIN2))) != (2, 2) or q1(f"SELECT state FROM chats WHERE id={cid}") != "0":
+        problems.append(f"a message after an answer must be announced once and mark the ticket new: admins {len(tg_msgs('sendMessage', ADMIN))}/{len(tg_msgs('sendMessage', ADMIN2))}, state {q1(f'SELECT state FROM chats WHERE id={cid}')}")
+    call("ticket_reply", {"id": cid, "text": "and more"})
+    if (len(tg_msgs("sendMessage", ADMIN)), len(tg_msgs("sendMessage", ADMIN2))) != (2, 2):
+        problems.append("the second message in a row was announced")
+    on1 = (call("me")[1] or {}).get("features", {}).get("support_chat")
+    reset(states={"supportChat": "off"}); mk_user(U)
+    off = (call("me")[1] or {}).get("features", {}).get("support_chat")
+    if on1 is not True or off is not False:
+        problems.append(f"features.support_chat: default {on1} (want True), switched off {off} (want False)")
+    return bool(problems), "; ".join(problems) if problems else "follow-ups are quiet, the first message after an answer is announced once, the chat switch is a feature flag"
+
 # ===== injection and web basics
 SQLI = ["'", "\"", "' OR '1'='1", "1' OR '1'='1' -- ", "1; DROP TABLE users; -- ", "' UNION SELECT 1,2,3 -- ", "\\", "%27", "1 AND SLEEP(2)", "') OR 1=1 -- ", "0x27", "\x00", "a' or 1=1#", "1) UNION SELECT password FROM server_config -- ", "O'Brien", "%' OR '%'='", "{\"a\":\"'\"}"]
 

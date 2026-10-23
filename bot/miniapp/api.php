@@ -528,7 +528,7 @@ case 'me': {
     $support = trim((string) ($botState['supportID'] ?? ''));
     out(['ok' => true,
         'user' => ['id' => $uid, 'name' => trim((string) $me['name']), 'username' => trim((string) ($me['username'] ?? '')), 'wallet' => (int) $me['wallet'], 'agent' => $isAgent, 'services' => $cnt, 'pending_topups' => $pending, 'since' => (int) ($me['date'] ?? 0)],
-        'features' => ['sell' => on('sellState', 'on'), 'buy_groups' => buyGroups(), 'wallet' => on('walletState', 'on'), 'card' => on('cartToCartState'), 'gift' => on('giftState'), 'wheel' => on('wheelState'), 'report' => on('reportState'),
+        'features' => ['sell' => on('sellState', 'on'), 'buy_groups' => buyGroups(), 'support_chat' => on('supportChat', 'on'), 'wallet' => on('walletState', 'on'), 'card' => on('cartToCartState'), 'gift' => on('giftState'), 'wheel' => on('wheelState'), 'report' => on('reportState'),
             'renew' => on('renewAccountState', 'on'), 'addvolume' => on('increaseVolumeState', 'on'), 'adddays' => on('increaseTimeState', 'on'), 'apps' => $apps > 0, 'hold' => on('onHoldState'),
             'cashback' => (float) ($botState['cashbackPercent'] ?? 0), 'referral' => (int) settingValue('INVITE_BANNER_AMOUNT') > 0, 'sub' => on('subLinkState', 'on'), 'configs' => on('configLinkState', 'on')],
         'amounts' => $amounts, 'min_topup' => MIN_TOPUP, 'support' => ltrim($support, '@'), 'bot' => (string) ($botUsername ?? ''), 'start' => (string) ($user['start_param'] ?? '')]);
@@ -922,10 +922,15 @@ case 'ticket_reply': {
     if ($text === '') fail('متن خالی است.');
     if (throttled($uid, 'ticket', 20, 600)) fail('Too many messages; wait a few minutes.', 429);      // (every reply is sent to every admin)
     throttleHit($uid, 'ticket');
+    // a follow-up (the last message of the ticket is the customer's own, nobody answered yet) is saved but not announced to the admins again - the same rule as the bot's support section (support_section.php); after an answer the next message is announced once
+    $last = row("SELECT msg_type FROM chats_info WHERE chat_id = ? ORDER BY id DESC LIMIT 1", [$id]);
+    $quiet = $last && (string) $last['msg_type'] === 'USER';
     run("INSERT INTO chats_info (chat_id, sent_date, msg_type, text) VALUES (?, ?, 'USER', ?)", [$id, time(), $text]);
-    run("UPDATE chats SET state = 0 WHERE id = ?", [$id]);
-    $msg = "💬 <b>پیام جدید در تیکت</b> [" . h($c['title']) . "]\n\n👤 " . userLink($uid, (string) $me['name']) . " · <code>$uid</code>\n\n" . h($text);
-    foreach ($admins as $a) tgText($a, $msg, ['inline_keyboard' => [[['text' => 'پاسخ', 'callback_data' => "reply_$id"]]]]);
+    if (!$quiet) {
+        run("UPDATE chats SET state = 0 WHERE id = ?", [$id]);
+        $msg = "💬 <b>پیام جدید در تیکت</b> [" . h($c['title']) . "]\n\n👤 " . userLink($uid, (string) $me['name']) . " · <code>$uid</code>\n\n" . h($text);
+        foreach ($admins as $a) tgText($a, $msg, ['inline_keyboard' => [[['text' => 'پاسخ', 'callback_data' => "reply_$id"]]]]);
+    }
     out(['ok' => true]);
 }
 

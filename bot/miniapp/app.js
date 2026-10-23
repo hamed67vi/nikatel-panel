@@ -16,6 +16,7 @@ const leftTx = (ts, hold) => !ts && hold ? "از اولین اتصال" : /رو�
 const vol = g => (Number(g) <= 0 ? "نامحدود" : Number(g) >= 1000 ? T(Number(g) / 1000) + " ترابایت" : T(g) + " گیگ");      // (a plan with volume 0 is unlimited in the bot, not "0 GB")
 
 const S = {me: null, feat: {}, amounts: [], bot: "", support: "", stack: [{v: "home"}], plans: null, services: null, live: {}, tickets: null, topup: null, busy: false};
+const chatOn = () => !!S.support && S.feat.support_chat !== false;      // (the direct chat with the operator: the admin switches it off in the bot's ticket menu, BOT_STATES supportChat)
 try { S.topup = JSON.parse(localStorage.getItem("nk.topup") || "null"); if (S.topup && Date.now() - S.topup.at > 3600e3) S.topup = null; } catch (e) { S.topup = null; }
 
 /* ---- Telegram glue */
@@ -120,7 +121,7 @@ VIEWS.home = async () => {
   return `${hero}
     <div class="card"><h3>سرویس‌های من <span class="pill" id="h-count">${S.me ? T(S.me.services) : "—"}</span></h3><div id="h-svc" class="list"><div class="sk" style="height:58px"></div></div></div>
     <div class="card"><h3>دسترسی سریع</h3><div class="qa" style="--cols:${qa.length <= 4 ? Math.max(qa.length, 1) : qa.length <= 6 ? 3 : 4}">${qa.map(q => `<button onclick="${q[2]}"><i>${q[0]}</i>${q[1]}</button>`).join("")}</div></div>
-    ${S.support ? `<div class="card tap" onclick="openLink(${js("https://t.me/" + S.support)})"><div class="row"><div><b>ارتباط مستقیم با پشتیبانی</b><div class="sm mut">${ltr("@" + S.support)}</div></div><span class="chev">‹</span></div></div>` : ""}`;
+    ${chatOn() ? `<div class="card tap" onclick="openLink(${js("https://t.me/" + S.support)})"><div class="row"><div><b>ارتباط مستقیم با پشتیبانی</b><div class="sm mut">${ltr("@" + S.support)}</div></div><span class="chev">‹</span></div></div>` : ""}`;
 };
 AFTER.home = async () => {
   const r = await loadServices();
@@ -412,7 +413,7 @@ VIEWS.more = async () => {
     F.apps && ["📱", "اپلیکیشن‌های اتصال", "برنامه‌های پیشنهادی برای هر دستگاه", "go('apps')"],
     F.gift && ["🎁", "کد هدیه", "کد را وارد کن و کیف پولت را شارژ کن", "go('gift')"],
     F.wheel && ["🎡", "گردونه شانس", "هر روز یک شانس", "go('wheel')"],
-    S.support && ["💬", "ارتباط مستقیم با پشتیبان", ltr("@" + S.support), `openLink(${js("https://t.me/" + S.support)})`],
+    chatOn() && ["💬", "ارتباط مستقیم با پشتیبان", ltr("@" + S.support), `openLink(${js("https://t.me/" + S.support)})`],
     ["🤖", "باز کردن ربات", "منوی کامل ربات", `openLink(${js("https://t.me/" + S.bot)})`],
   ].filter(Boolean);
   return `<div class="title">بیشتر</div><div class="list">${rows.map(r => `<div class="item" onclick="${r[3]}"><div class="ic">${r[0]}</div><div class="tx"><b>${r[1]}</b><small>${r[2]}</small></div><span class="chev">‹</span></div>`).join("")}</div>
@@ -470,7 +471,7 @@ async function spin() {
 }
 
 /* ---- tickets */
-VIEWS.tickets = async p => `<div class="title">🎫 پشتیبانی <button class="btn sm pri" onclick="go('ticket_new',{svc:${js(p.svc || "")}})">+ تیکت جدید</button></div>${S.support ? `<div class="card tap" onclick="openLink(${js("https://t.me/" + S.support)})"><div class="row"><div><b>گفتگوی مستقیم</b><div class="sm mut">${ltr("@" + S.support)}</div></div><span class="chev">‹</span></div></div>` : ""}<div id="tk-list" class="list"><div class="loading"><i class="spin"></i>…</div></div>`;
+VIEWS.tickets = async p => `<div class="title">🎫 پشتیبانی <button class="btn sm pri" onclick="go('ticket_new',{svc:${js(p.svc || "")}})">+ تیکت جدید</button></div>${chatOn() ? `<div class="card tap" onclick="openLink(${js("https://t.me/" + S.support)})"><div class="row"><div><b>گفتگوی مستقیم</b><div class="sm mut">${ltr("@" + S.support)}</div></div><span class="chev">‹</span></div></div>` : ""}<div id="tk-list" class="list"><div class="loading"><i class="spin"></i>…</div></div>`;
 AFTER.tickets = async () => {
   const r = await api("tickets"); const box = $("tk-list"); if (!box) return;
   if (!r.ok) { box.innerHTML = `<div class="empty">${esc(r.error)}</div>`; return; }

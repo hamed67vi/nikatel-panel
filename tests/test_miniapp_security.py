@@ -359,7 +359,7 @@ def test_the_page_shows_the_helper_links_and_the_apps_by_system_with_the_recomme
 def test_only_web_links_are_opened_and_the_files_have_a_new_version_for_the_cache():
     assert r'if (!/^https?:\/\//i.test(u)) return;' in JS
     html = (MINI / "index.html").read_text(encoding="utf-8")
-    assert "app.css?v=3.0.8" in html and "app.js?v=3.0.8" in html
+    assert "app.css?v=3.0.9" in html and "app.js?v=3.0.9" in html
 
 
 # ---------------------------------------------------------------------------------------------- the whole attack harness (opt in)
