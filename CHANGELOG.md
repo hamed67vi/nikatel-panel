@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.69.114 - The Mini App shows the plain character of a premium-emoji token, never the token
+
+> **In short:** the bot's texts (`settings/text_overrides.json`, `button_overrides.json`, `values.php`) can hold `{emoji:ID:😀}` tokens (premium emoji, installed on the main bot 2026-10-22); the Mini App reads the same files and cannot draw a custom emoji, so `botTexts()` now runs `exEmojiStrip()` over every string of them: it shows the fallback character, never the raw token. Already hot-patched on the deployed main bot; this puts the same line into the source so a redeploy does not remove it.
+
+Asked by the session that installed the premium emoji on the main bot (the owner's own migration session, 2026-10-22 / 23): "put the same strip into the repo source bot/miniapp/api.php (and its tests), so a later redeploy of the Mini App does not remove it".
+
+- **The line** (`api.php botTexts`, marker `// [pe-support]`): for `$mainValues` and `$buttonValues` (the file and its overrides already merged) every string value goes through `exEmojiStrip`; numbers and nested arrays are left as they are; a token without a fallback character becomes the star, as in the bot.
+- **Proved**: `tests/test_miniapp_security.py::test_premium_emoji_tokens_in_the_bots_texts_never_reach_the_page` (a stand-in bot folder: values.php, text and button overrides; `botTexts`, `mainText`, `buttonText` under php), 41 Mini App tests, the attack harness scenarios and the old 159-check e2e still pass. **Not proved**: with the real premium-emoji texts of the main bot in a real Telegram.
+
 ## 1.69.113 - The bot's apps screen is split by system: iPhone / iOS, Android, Windows, Mac
 
 > **In short:** the screen of the shop bot's button "download apps" was one flat list of every app (29 buttons on the main bot). It now shows one button per system with the number of apps, a system opens its apps with the recommended ones (a title with `(پیشنهادی)` in the bot's list) first, marked with a star, and a way back. `scripts/install-apps-groups.sh <bot dir>` makes the change in the bot (backup, `php -l` first, `--uninstall` puts it back byte for byte). The Mini App already did the same since 1.69.112.

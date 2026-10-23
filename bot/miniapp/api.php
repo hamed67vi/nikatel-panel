@@ -101,6 +101,8 @@ function botTexts(): array {
         $f = __DIR__ . "/../settings/{$kind}_overrides.json";
         if (is_file($f)) { $ov = json_decode((string) file_get_contents($f), true); if (is_array($ov)) $$var = array_merge($$var, $ov); }
     }
+    /* the bot's texts can carry premium-emoji tokens ({emoji:ID:😀}, the bot turns them into custom emoji): the Mini App cannot show those, it shows the plain character - never the raw token */
+    foreach (['mainValues', 'buttonValues'] as $__v) { if (is_array($$__v)) foreach ($$__v as $__k => $__x) { if (is_string($__x)) ${$__v}[$__k] = exEmojiStrip($__x); } }      // [pe-support]
     return $t = [is_array($mainValues) ? $mainValues : [], is_array($buttonValues) ? $buttonValues : []];
 }
 function mainText(string $key, string $fallback = ''): string { [$m] = botTexts(); $v = $m[$key] ?? $fallback; return is_string($v) ? $v : $fallback; }

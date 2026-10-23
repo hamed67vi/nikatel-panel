@@ -197,6 +197,24 @@ def test_a_stock_bot_without_extras_php_still_starts_the_mini_app(tmp_path):
     assert json.loads(out) == ["x 🙂 y", "plain", 30, 0, 7]
 
 
+@pytest.mark.skipif(PHP is None, reason="php is not installed here")
+def test_premium_emoji_tokens_in_the_bots_texts_never_reach_the_page(tmp_path):
+    """the bot's text_overrides.json / button_overrides.json can hold {emoji:ID:😀} (premium emoji, installed on the main bot 2026-10-22); the Mini App reads the same files and shows the plain character, never the token"""
+    (tmp_path / "app").mkdir()
+    (tmp_path / "settings").mkdir()
+    (tmp_path / "settings" / "values.php").write_text("<?php\n$mainValues = ['a' => 'x {emoji:12345678:😀} y', 'n' => 5, 'l' => ['k' => '{emoji:12345678:🙂}']];\n$buttonValues = ['b' => '{emoji:99999999} z'];\n", encoding="utf-8")
+    (tmp_path / "settings" / "text_overrides.json").write_text(json.dumps({"c": "{emoji:11111111:⭐} top"}, ensure_ascii=False), encoding="utf-8")
+    (tmp_path / "settings" / "button_overrides.json").write_text(json.dumps({"d": "go {emoji:22222222:👉}"}, ensure_ascii=False), encoding="utf-8")
+    head = SRC[SRC.index("if (!function_exists('exEmojiStrip'))"):SRC.index("const GB = ")]
+    script = tmp_path / "app" / "t.php"      # (botTexts reads ../settings/ next to the script, as in the bot's folder)
+    script.write_text("<?php\n" + head + _fn("botTexts") + _fn("mainText") + _fn("buttonText") + "\n[$m, $b] = botTexts();\necho json_encode([$m, $b, mainText('a'), buttonText('b', 'fallback'), buttonText('zz', 'fallback')], JSON_UNESCAPED_UNICODE);\n", encoding="utf-8")
+    got = json.loads(subprocess.run([PHP, str(script)], capture_output=True, text=True, check=True).stdout)
+    assert got[0] == {"a": "x 😀 y", "n": 5, "l": {"k": "{emoji:12345678:🙂}"}, "c": "⭐ top"}      # (the strings of the first level, the overrides too; a number and a nested array are left as they are)
+    assert got[1] == {"b": "⭐ z", "d": "go 👉"}                                                # (a token without a fallback character becomes ⭐, as in the bot)
+    assert got[2:] == ["x 😀 y", "⭐ z", "fallback"]
+    assert "[pe-support]" in SRC
+
+
 def test_the_backup_of_a_deploy_is_not_inside_the_web_root():
     """the old copies in app/.prev-<time>/ were served to anybody (app.js, index.html; api.php answered 500 there)"""
     sh = (ROOT / "scripts" / "deploy-miniapp.sh").read_text(encoding="utf-8")
