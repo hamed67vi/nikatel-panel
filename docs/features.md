@@ -49,3 +49,8 @@ Account (password, two-step sign-in with recovery codes, reset by Telegram code,
 
 ## 9. Interface
 Plain JS, no build step; hover fade on every button and row; a loading box and automatic retry so a page switch never shows the old page; fixed-height log boxes; **fluid layout**: the page shrinks with the window (rows stay rows, bars and tabs are one row, a table cuts its texts with "…" and drops its less important columns by the width of its box), locks at 560 px on a desktop window, and has a phone layout with a bottom bar (`?fluid=0` brings the old card layout back); the installer, the updater and the docs are in the repository.
+
+## Customer notices while the internet is cut (Bale)
+| | |
+|---|---|
+| **Settings → Api & Key → Bale · customer notices** | a small Bale bot on one Iran server (`relay/bale_relay.py`): customers start it once and may link their subscription; it tells them by itself when the server has lost the whole outside world for a few minutes and again when it is back; customers can write to you in the same chat and you answer from your own Bale (so an owner abroad with only Bale reachable can run it: `/send`, `/cut`, `/back`, `/info`). Install / update / remove from the box, the state read from the server, the texts changeable. Design and limits: [`bale.md`](bale.md) |

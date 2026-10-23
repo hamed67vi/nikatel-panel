@@ -617,6 +617,16 @@ echo LOG; tail -n 6 /opt/nikatel-xgw/error.log 2>/dev/null | cut -c1-200
   echo "T $p $r | $t"
 done
 """, {"PORTS": _PORTS}),
+
+    # the Bale relay (services/bale.py), a read: its unit, whether this server resolves the Bale API name, and the status file the relay writes about itself (between STATUS and END)
+    "relay_status": (r"""echo "UNIT $(systemctl is-active nikatel-relay 2>/dev/null || echo none)"
+echo "ENABLED $(systemctl is-enabled nikatel-relay 2>/dev/null || echo no)"
+echo "PY $(python3 -V 2>&1 | head -1)"
+echo "DNS $(getent hosts tapi.bale.ai 2>/dev/null | head -1 | cut -d' ' -f1)"
+echo STATUS
+head -c 30000 /opt/nikatel-relay/data/status.json 2>/dev/null; echo
+echo END
+""", {}),
 }
 
 
@@ -799,7 +809,7 @@ def _script_text(name: str, params: Mapping[str, str] | None) -> str:
 # Same shape as SCRIPTS. They run only when the panel is not read-only, only through services/actions.py.
 _UNIT1 = r"^[A-Za-z0-9][A-Za-z0-9._@-]{0,63}\.(service|timer)$"
 _B64 = r"^[A-Za-z0-9+/=]{0,200000}$"
-_PATH = r"^/(etc/(systemd/system|backhaul|backpack|paqet|nikatel-chisel|nikatel/ipsec|sysctl\.d)|usr/local/(bin|sbin)|opt/nikatel-probe-manager|opt/nikatel-probe/xray)/[A-Za-z0-9._-]{1,80}$"
+_PATH = r"^/(etc/(systemd/system|backhaul|backpack|paqet|nikatel-chisel|nikatel/ipsec|sysctl\.d)|usr/local/(bin|sbin)|opt/nikatel-probe-manager|opt/nikatel-relay(/outbox)?|opt/nikatel-probe/xray)/[A-Za-z0-9._-]{1,80}$"
 _TNAME = r"^[a-z0-9][a-z0-9-]{0,14}$"
 
 ACTIONS: dict[str, tuple[str, Mapping[str, str]]] = {
@@ -1889,6 +1899,22 @@ err=$(echo '@B64@' | base64 -d | nft -f - 2>&1) && echo METER_ON || echo "METER_
 t=$(nft list table inet nikatel_meter 2>/dev/null) && { echo OLD; echo "$t" | awk '@NFTAWK@'; echo ENDOLD; nft delete table inet nikatel_meter 2>&1 | head -2; }
 nft list table inet nikatel_meter >/dev/null 2>&1 && echo "METER_FAIL the table is still there" || echo METER_OFF
 """.replace("@NFTAWK@", _NFT_AWK), {}),
+
+    # the Bale relay (services/bale.py): make its folder (0700) after checking that this server has a python3 that can run it. "RELAY_READY <python version>" / "RELAY_FAIL <why>".
+    "relay_prepare": (r"""command -v python3 >/dev/null 2>&1 || { echo "RELAY_FAIL this server has no python3"; exit 0; }
+python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 8) else 1)' 2>/dev/null || { echo "RELAY_FAIL python3 on this server is older than 3.8"; exit 0; }
+python3 -c 'import sqlite3, ssl, http.client' 2>/dev/null || { echo "RELAY_FAIL python3 on this server lacks sqlite3 or ssl"; exit 0; }
+mkdir -p /opt/nikatel-relay/data /opt/nikatel-relay/outbox && chmod 700 /opt/nikatel-relay /opt/nikatel-relay/data /opt/nikatel-relay/outbox
+echo "RELAY_READY $(python3 -V 2>&1)"
+""", {}),
+
+    # the way back: stop it, take its unit, program and config (the bot token) away. Its data (the customers who started the bot) stays unless PURGE is 1. "REMOVED".
+    "relay_remove": (r"""systemctl disable --now nikatel-relay >/dev/null 2>&1 || true
+rm -f /etc/systemd/system/nikatel-relay.service /opt/nikatel-relay/bale_relay.py /opt/nikatel-relay/config.json
+systemctl daemon-reload
+if [ '@PURGE@' = 1 ]; then rm -rf /opt/nikatel-relay; fi
+echo REMOVED
+""", {"PURGE": r"^[01]$"}),
 }
 
 

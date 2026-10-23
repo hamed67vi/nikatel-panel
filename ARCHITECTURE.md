@@ -129,11 +129,13 @@ nikatel/
     shopbot_admin.py the bot's administration: payments (approve / decline like the bot), orders, users, plans,
                      categories, servers, discounts, gifts, broadcasts, tickets, texts (overrides), settings
                      documents, apps, top-ups, backups, command menu, Mini App status / deploy
+    bale.py          the Bale relay (docs/bale.md): installs relay/bale_relay.py on ONE Iran server over SSH (reviewed actions relay_prepare, put_file, unit_enable_restart, relay_remove), writes its config, reads its status
+                     (the read script relay_status) and queues a notice; the relay itself talks to the customers in Bale and tells them by itself when the international internet is cut
     importer.py      the old panel's JSON -> rows, idempotent
     settings.py      typed settings in the database (secrets masked in responses)
     events.py        the sentences the operator reads
   api/             FastAPI routers, one file per resource; thin: validate, call a service, answer
-                   (auth, tokens, servers, tunnels, nodes, gateway, engines, actions, autopilot, ai, configs, panels, accounts, outbound, radar, shopbot,
+                   (auth, tokens, servers, tunnels, nodes, gateway, engines, actions, autopilot, ai, configs, panels, accounts, outbound, radar, shopbot, bale,
                     alerts, events, jobs, failover, doctor, dns, license, balance, analyst, checkall, best, setup, system = health, logs, update of the panel itself)
   web/             plain JS and CSS, no build step. index.html loads everything; app.js: PAGES.<name> per page, SUB tabs, glass modal windows (showModal), themes (LOOK),
                    a loading box on every page change and automatic retry when a load fails, a status bar for messages; pg_*.js: one file per PasarGuard tab, each
@@ -143,6 +145,7 @@ nikatel/
                    importance with data-prio, 0 = never drops - for a table whose first column is a tick box), mobile2.css is the phone,
                    mobile.css the old card layout (`?fluid=0`); i18n*.js the Persian words
   main.py          create_app(), lifespan, security headers (CSP), `nikatel` CLI (serve / import / set-password / run-job / restore)
+relay/             the Bale relay (bale_relay.py, Python standard library only): a Bale bot on an Iran server that talks to the customers while the international internet is cut; installed by services/bale.py
 bot/miniapp/       the Telegram Mini App of the shop bot (api.php + index.html + app.js + app.css), deployed
                    next to the bot by the panel (Shop bot → Tools → Mini App) or scripts/deploy-miniapp.sh
 tests/             pytest; services tested pure, the API through TestClient, ssh never real

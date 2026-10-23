@@ -26,6 +26,9 @@ DEFAULTS: dict[str, dict[str, Any]] = {
     "probe": {"api_url": "", "api_token": "", "standby": [], "server_id": 0},
     # the shop bot: where it runs (reached over SSH with the panel's key) and its public webhook URL
     "shopbot": {"host": "", "ssh_user": "root", "ssh_port": 22, "dir": "/var/www/nikabot", "env": "/opt/nikabot/db.env", "public_url": ""},
+    # the Bale relay (services/bale.py): a customer channel for the days the international internet is cut. server_id / installed_at: where it runs (an Iran server) and since when; hosts: the hosts a customer's subscription link may be on;
+    # texts: the owner's own wording of the relay's messages (only those that differ from the default)
+    "bale": {"server_id": 0, "installed_at": 0, "version": "", "token": "", "admins": [], "hosts": [], "auto_notice": True, "support": True, "cut_after": 180, "restore_after": 120, "texts": {}},
     # the AI assistant (Anthropic): advises inside Fix; `actions` lets its suggested steps be added to the plan
     "ai": {"enabled": False, "api_key": "", "model": "claude-sonnet-5-5", "actions": True, "status": {},   # api_key / model / status: the Anthropic record (status = the result of the last key test)
            "provider": "anthropic", "providers": {}},                                                                       # provider: the AI every call uses; providers: {id: {api_key, model, base_url, status}} of the other AIs (services/ai.py)
@@ -70,7 +73,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
     "comeback": {"wants": {}, "returns": {}},          # wants: tunnel name -> {kind it should go back to, kind it runs as, cause, when it left, looks so far, next look}; returns: tunnel name -> when it was swapped back (the last 24 hours)
 }
 
-SECRET_FIELDS = {"telegram": ("token",), "probe": ("api_token",), "ai": ("api_key",), "arvan": ("api_key",), "license": ("token",)}
+SECRET_FIELDS = {"telegram": ("token",), "bale": ("token",), "probe": ("api_token",), "ai": ("api_key",), "arvan": ("api_key",), "license": ("token",)}
 
 
 _ALERT_OLD = ("tunnel_fails", "server_fails", "config_fails", "min_down_minutes", "up_stable_seconds")
