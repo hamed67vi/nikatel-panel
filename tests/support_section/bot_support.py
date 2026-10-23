@@ -105,9 +105,10 @@ $dbUserName = 'mini'; $dbPassword = 'mini-test-pw'; $dbName = '{DB}'; $USDTPrice
 """)
         net = re.search(r"\$range\s*=\s*\[\s*['\"]([0-9.]+)/", open(f"{ORIG}/config.php", encoding="utf-8").read())      # (check() lets only Telegram's networks in: the first one of the bot's own list)
         open(f"{T}/{name}/prepend.php", "w").write(f"<?php $_SERVER['REMOTE_ADDR'] = '{net.group(1)}';\n")
-    r = subprocess.run(["bash", f"{MOD}/scripts/install-support-section.sh", f"{T}/after"], capture_output=True, text=True, env=dict(os.environ, BACKUP_DIR=f"{T}/bk"))
-    if r.returncode:
-        print(r.stdout, r.stderr); sys.exit(2)
+    for script in ("install-support-section.sh", "install-agent-discount-notice.sh"):      # (both mods of the bot are put in: they must live together)
+        r = subprocess.run(["bash", f"{MOD}/scripts/{script}", f"{T}/after"], capture_output=True, text=True, env=dict(os.environ, BACKUP_DIR=f"{T}/bk"))
+        if r.returncode:
+            print(r.stdout, r.stderr); sys.exit(2)
 
 
 def reset(states=None, support_id="@test_support"):
@@ -444,6 +445,56 @@ def tk5(port, after):
     post(port, msg(U, "my first message"))
     if sql(f"SELECT COUNT(*) FROM chats WHERE user_id={U}") != "1" or len(admin_notices(n)) + len([m for c in (ADMIN, ADMIN2) for m in sent(c, since=n) if "my first message" in m["text"]]) == 0:
         problems.append("a new ticket was not created or not announced")
+    return problems
+
+
+@scn("AG1", "the admin raises an agent's discount (general / a server's / a plan's): the agent gets ONE short message; the same or a lower value, a refused value, a switched-off message: nothing; what is saved is the same in the old bot")
+def ag1(port, after):
+    problems = []
+    agent = OTHER
+
+    def setup(states=None):
+        reset(states=states)
+        sql("DELETE FROM server_info; DELETE FROM server_plans")
+        sql("INSERT INTO server_info (id, title, ucount, remark, flag, active, state) VALUES (1, 'Test DE', '100', 'tst', 'DE', 1, 1)")
+        sql("INSERT INTO server_plans (id, fileid, catid, server_id, inbound_id, acount, limitip, title, protocol, days, volume, type, price, descr, pic, active, step, date, custom_sni) VALUES (1, '', 1, 1, 0, 10, 1, 'plan', 'vless', 30, 50, 'x', 130000, 'd', '', 1, 0, '', NULL)")
+        ten = esc(json.dumps({"normal": "10"}))
+        sql(f"UPDATE users SET is_agent = 1, discount_percent = {ten} WHERE userid = '{agent}'")
+
+    def edit(kind, key, value):
+        set_step(ADMIN, f"editAgentDiscount{kind}{agent}_{key}")
+        n = len(TG_LOG)
+        post(port, msg(ADMIN, value))
+        return [m for m in sent(agent, since=n) if m["method"] == "sendMessage"]
+
+    def stored():
+        return json.loads(sql(f"SELECT discount_percent FROM users WHERE userid = '{agent}'"))
+    setup()
+    got = edit("Normal", "0", "20")
+    if stored().get("normal") != "20":
+        problems.append(f"the general discount was not saved: {stored()}")
+    if after and (len(got) != 1 or "20" not in got[0]["text"] or len(got[0]["text"]) > 200):
+        problems.append(f"raising 10 -> 20: the agent should get one short message with 20, got {[m['text'] for m in got]}")
+    if not after and got:
+        problems.append("the old bot told the agent")
+    for v in ("15", "15", "9"):
+        if edit("Normal", "0", v):
+            problems.append(f"a lower / equal value ({v}) was announced")
+    edit("Normal", "0", "15")
+    if edit("Normal", "0", "abc") or stored().get("normal") != "15":
+        problems.append(f"a text that is not a number: sent or saved ({stored()})")
+    got = edit("Server", "1", "30")
+    if stored().get("servers", {}).get("1") != "30" or (after and (len(got) != 1 or "Test DE" not in got[0]["text"] or "30" not in got[0]["text"])):
+        problems.append(f"a server discount 30 over the general 15: saved {stored().get('servers')}, messages {[m['text'] for m in got]}")
+    if edit("Server", "1", "12"):
+        problems.append("a lowered server discount was announced")
+    got = edit("Plan", "1", "40")
+    if stored().get("plans", {}).get("1") != "40" or (after and (len(got) != 1 or "plan" not in got[0]["text"] or "40" not in got[0]["text"])):
+        problems.append(f"a plan discount 40: saved {stored().get('plans')}, messages {[m['text'] for m in got]}")
+    setup(states={"agentDiscountMsg": "off"})
+    got = edit("Normal", "0", "25")
+    if got or stored().get("normal") != "25":
+        problems.append(f"agentDiscountMsg = off: sent {len(got)} / saved {stored()}")
     return problems
 
 
