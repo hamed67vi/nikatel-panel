@@ -1011,8 +1011,22 @@ function tunModal(t) {
 function tunWinHtml(t) {
   const sec = state.tsec === "monitor" ? "monitor" : "overview", c = (state.chartCache || {})["t" + t.id + ":" + state.mrange];
   const bar = `<div class="tabs lab-sec">${TUN_SECS.map(([k, l]) => `<button class="${k === sec ? "on" : ""}" onclick="tunWtab('${k}')">${l}</button>`).join("")}</div>`;
-  const body = sec === "monitor" ? `<div class="wsec"><div class="${c ? "mon" : "charts"}" id="tun-charts-${t.id}">${c || '<div class="mut">loading…</div>'}</div></div>` : tunBanner(t) + tunStandby(t) + tunBwBox(t) + tunLane(t) + tunGrid(t) + `<div class="sgrid">${tunUsersBox(t)}${tunUpBox(t)}${tunResBox(t)}</div>`;
+  const body = sec === "monitor" ? `<div class="wsec"><div class="${c ? "mon" : "charts"}" id="tun-charts-${t.id}">${c || '<div class="mut">loading…</div>'}</div></div>` : tunBanner(t) + tunStandby(t) + tunTrident(t) + tunBwBox(t) + tunLane(t) + tunGrid(t) + `<div class="sgrid">${tunUsersBox(t)}${tunUpBox(t)}${tunResBox(t)}</div>`;
   return bar + `<div class="lab-body" data-sec="${sec}">${body}</div><div id="fix-${t.id}" class="fix hidden"></div>`;
+}
+/* the Trident (the owner, 2026-10-23: "combine the tunnel types into a strong multi-layer tunnel that gives the best connection in every condition - our own method"; services/trident.py): this tunnel, its standby and one more tunnel of another
+   kind between the same two servers share the users' NEW connections by live quality; a strand that falls loses its share at once, one that comes back is let in by steps; the connections that are open are never touched.
+   t.trident = {on, state (off · waiting · building · active · idle · failed · winding_down), why, strands: [{role, kind, state, usable, weight, step}], weights} */
+const TR_WORD = {off: "Off", waiting: "Starting…", building: "Building…", active: "Active", idle: "Idle", failed: "Not built", winding_down: "Ending…"};
+function tunTrident(t) {
+  const w = t.trident || {}, st = w.state || "off", id = t.id, tone = st === "active" ? "ok" : st === "off" ? "" : st === "failed" ? "bad" : "warn";
+  const b = (label, click, pri, tip) => `<button class="sm ${pri ? "pri" : ""}" onclick="${click}" ${tip ? `title="${esc(tip)}"` : ""}>${label}</button>`;
+  const rows = (w.strands || []).map(s => `${esc(s.kind)} ${s.usable ? (s.weight == null ? "" : s.weight + " %") + (s.step < 3 ? " ↗" : "") : "down"}`);
+  const meta = st === "off" ? "Shares the new connections of this tunnel with its standby and one more tunnel of another kind, by live quality. Nobody is cut." :
+    st === "active" ? (rows.length ? rows.join(" · ") : (w.weights || []).join(" / ") + " %") : esc(w.why || TR_WORD[st] || "");
+  const acts = st === "off" ? b("Turn on", `tunTridentSet(${id}, true)`, false, "Build the extra strand beside the tunnel (about a minute) and share the new connections between the strands; nobody is cut")
+    : st === "winding_down" ? "" : (st === "active" ? b("Rebalance", `tunTridentRebalance(${id})`, false, "Work the shares out again now") : "") + b("Turn off", `tunTridentSet(${id}, false)`, false, "Every new connection goes to the tunnel; the ones open on the strands finish there");
+  return `<div class="lab-ban ${tone}" data-b="trident" title="The Trident: this tunnel and its strands (tunnels of other kinds between the same two servers) share the NEW connections by live quality; open connections are never touched"><i class="lb-i">≋</i><div class="lb-t"><b>Trident · ${TR_WORD[st] || st}</b><span class="lb-m" title="${esc(w.why || "")}">${meta}</span></div><div class="lb-a">${acts}</div></div>`;
 }
 /* the warm standby (the owner, 2026-10-17: "bring the delay down to the minimum"; services/standby.py): a second tunnel of another type between the same two servers, built BEFORE a cut and kept idle on shifted ports; when this tunnel is cut
    the users' ports are handed to it in seconds, and they go back when this tunnel has held for a minute. A switch and a state in the window - the standby is not a row of the list. t.standby = {on, state, kind, since, why, ports, up} */
@@ -1558,6 +1572,25 @@ window.tunLaneStop = async id => {
   try { await api(`/api/tunnels/${id}/lane/stop`, {method: "POST"}); toast("✓ The new connections go to the tunnel again; the ones open on the second tunnel finish there", "ok"); } catch (e) { toast("✕ " + e.message, "bad"); }
   await tunRedraw(id);
 };
+let tunTrT = null;
+const tunTridentWatch = id => {      // while the Trident starts (the strands are built) the window looks again every 5 s, until it works (or stops)
+  clearInterval(tunTrT); let n = 0;
+  tunTrT = setInterval(async () => {
+    if (state.open !== id || !document.getElementById("tun-detail-" + id) || ++n > 90) { clearInterval(tunTrT); return; }
+    await tunRedraw(id); const s = ((state.tunnelsCache || []).find(x => x.id === id) || {}).trident || {};
+    if (["active", "idle", "off", "failed"].includes(s.state)) clearInterval(tunTrT);
+  }, 5000);
+};
+window.tunTridentSet = async (id, on) => {
+  if (on && !await gconfirm("Turn the Trident on for this tunnel? Its standby and one more tunnel of another kind are built beside it (about two minutes), then the new connections are shared between them by live quality. The connections that are open are not touched, nobody is cut.")) return;
+  if (!on && !await gconfirm("Turn the Trident off? Every new connection goes to this tunnel again; the ones open on the other strands finish there, and the extra strand is removed.", {danger: true})) return;
+  try { await api(`/api/tunnels/${id}/trident`, {method: "PUT", body: JSON.stringify({on})}); toast(on ? "✓ Trident on - the strands are being built beside the tunnel; nothing changes for the users" : "✓ Trident off - every new connection goes to the tunnel", "ok"); } catch (e) { toast("✕ " + e.message, "bad"); }
+  await tunRedraw(id); tunTridentWatch(id);
+};
+window.tunTridentRebalance = async id => {
+  try { await api(`/api/tunnels/${id}/trident/rebalance`, {method: "POST"}); toast("✓ The shares are worked out again", "ok"); } catch (e) { toast("✕ " + e.message, "bad"); }
+  await tunRedraw(id);
+};
 window.qualityOne = async id => { toast("Measuring… (about 10 s)"); try { const r = await api(`/api/tunnels/${id}/quality`, {method: "POST"}); toast(`✓ ${r.name}: ${r.latency_ms} ms · jitter ${r.jitter_ms} · loss ${r.loss_pct}% · score ${r.score}`, "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
 window.checkAll = async () => {      // Check all: it works right there on the button (no window); the answer is one line in the status bar and the list is drawn again
   if (state.tunChecking) return; state.tunChecking = true;
@@ -1762,7 +1795,7 @@ function tunPeakHtml(u, cap) {      // the card of the Monitor tab: four tiles, 
 }/* Create tunnel: five engines, each with its transports and options; the form keeps its values when the engine changes */
 const bk = {kinds: null, kind: localStorage.getItem("nk.bk.kind") || "backhaul", transport: "", v: {}, guide: true};
 const BK_ICON = {auto: "★", backhaul: "⇄", backpack: "🎒", backpack_direct: "🧭", paqet: "📦", chisel: "⛏"};
-const BK_AUTO = {key: "auto", title: "Automatic", transports: [{key: "best", label: "Best of the day"}]};      // (the owner, 2026-10-19: "a tunnel mode that puts the best tunnel of the day on it": the panel picks the type - knowledge.best_kind - when Build is pressed)
+const BK_AUTO = {key: "auto", title: "Automatic", transports: [{key: "best", label: "Best of the day"}, {key: "trident", label: "Trident"}]};      // (the owner, 2026-10-19: "a tunnel mode that puts the best tunnel of the day on it": the panel picks the type - knowledge.best_kind - when Build is pressed; 2026-10-23: "give our three-layer tunnel a cool technical name and put it there" - Trident: Best of the day, then its two other strands beside it, services/trident.py)
 /* what to pick, and why - the defaults below every engine are already the many-users settings (mux, 8 mux channels, 16-24 pool, keepalive 75 s, heartbeat 20 s, BBR + fq on both kernels) */
 window.bkPick = (k, t) => { bk.kind = k; bk.transport = t; localStorage.setItem("nk.bk.kind", k); };
 const BK_GUIDE = [
@@ -1781,7 +1814,7 @@ const BK_GUIDE = [
 ];
 const SPOOF_PROFILES = [["udp", "plain datagrams · the default"], ["icmp", "for paths that filter UDP"], ["tcp", "looks like a TCP flow"], ["icmpv6", "ICMPv6 echo in an IPv4 packet"], ["proto58", "bare protocol 58"], ["ipip", "IP-in-IP (protocol 4)"], ["gre", "GRE (protocol 47)"]];      // (the packet profiles of BackPack's IP spoofing carrier: docs/ip-spoofing.md of the project)
 /* two or three words per type, shown in the drop-down */
-const BK_FOR = {"auto:best": "the type that connects best between these two servers today", "backhaul:tcpmux": "many users, normal route ⭐", "backhaul:tcp": "few users, plain route", "backhaul:wsmux": "behind a CDN, clear", "backhaul:wssmux": "behind a CDN, TLS",
+const BK_FOR = {"auto:best": "the type that connects best between these two servers today", "auto:trident": "three tunnels of different kinds carry it together: the best one right now gets the new connections", "backhaul:tcpmux": "many users, normal route ⭐", "backhaul:tcp": "few users, plain route", "backhaul:wsmux": "behind a CDN, clear", "backhaul:wssmux": "behind a CDN, TLS",
   "backhaul:wg:tcpmux": "GRE filtered, UDP open, encrypted", "backhaul:wg:tcp": "GRE filtered, UDP open, few users", "backhaul:fou:tcpmux": "GRE filtered, UDP open, no encryption", "backhaul:gue:tcpmux": "GRE filtered, UDP open, GUE shape", "backhaul:ipip:tcpmux": "GRE filtered, the lightest link", "backhaul:ipipfou:tcpmux": "GRE filtered, IPIP in UDP", "backhaul:ipipgue:tcpmux": "GRE filtered, IPIP in UDP (GUE)", "backhaul:ipsec:tcpmux": "GRE filtered, ESP open, encrypted", "backhaul:ipsecnat:tcpmux": "GRE filtered, UDP open, IPsec", "backhaul:wgchisel:tcpmux": "GRE, ESP and UDP all filtered, one TCP port open", "backhaul:wgchiselfwd:tcpmux": "the same, the Iran server dials",
   "backpack:tcpmux": "many users, GRE blocked", "backpack:tcp": "few users, GRE blocked", "backpack:stealth": "very heavy filtering", "backpack:pck": "Iran stalls plain TCP (root)", "backpack:kcp": "lossy route, games", "backpack:udp": "UDP-only services", "backpack:quic": "UDP open, wants QUIC", "backpack:ws": "behind your own TLS", "backpack:wsmux": "WebSocket + many users", "backpack:wss": "must look like HTTPS", "backpack:wssmux": "heavy filtering + many users", "backpack:xdi": "Iran blocks almost everything",
   "backpack_direct:udp": "low latency, voice, games", "backpack_direct:quic": "low latency, UDP open", "backpack_direct:pck": "Iran throttles TCP (root)", "backpack_direct:sni": "fake TLS hello: only a domain passes (root)", "backpack_direct:spoof": "forged source address (root)", "backpack_direct:xdi": "UDP and TCP both blocked",
@@ -1803,7 +1836,8 @@ async function buildFormHtml() {
   const sel = (name, label, list, dflt) => `<label>${label}<select name="${name}" data-dd>${list.map(p => `<option ${val(name, dflt) === p ? "selected" : ""}>${p}</option>`).join("")}</select></label>`;
   const muxed = BP_MUXED.includes(tr.key.split(":").pop());          // ("wg:tcpmux" is TCP Mux over WireGuard)
   let options = "";
-  if (K.key === "auto") options = '<small class="mut">Best of the day is built with the default settings of the type it picks: the one that connects best between these two servers - what the Doctor measured on this pair, a fresh full measurement first, then the score. Nothing measured yet: the first choice of the Doctor for a new pair. Pick the Iran server first (the smart choice cannot know the pair).</small>'; else if (K.key === "backhaul") options = num("mtu", "GRE MTU", 0, 0, 1476, "(0 = measure)") + num("keepalive", "Keepalive (s)", 75, 10, 600) + num("heartbeat", "Heartbeat (s)", 20, 5, 120) + num("connection_pool", "Connection pool", muxed ? 24 : 32, 1, 256, "(client connections kept ready)") + (muxed ? num("mux_con", "Mux channels", 8, 1, 64) : "") + num("channel_size", "Channel size", 8192, 1024, 65536, "(buffer)") + num("dial_timeout", "Dial timeout (s)", 10, 3, 60) + num("retry_interval", "Retry interval (s)", 2, 1, 30) + sel("log_level", "Log level", ["warn", "error", "info", "debug"], "warn") + nodelay + chk("aggressive_pool", "Aggressive pool", "reconnect lost pool connections at once") + chk("tune", "Tune the kernel", "BBR + fq + big buffers on both servers", true);
+  if (K.key === "auto" && tr.key === "trident") options = '<small class="mut">Trident is built as Best of the day first (the type that connects best between these two servers, with its default settings); then its two other strands - a warm standby and one more tunnel of a kind that no filter of the first one cuts - are built beside it, and the new connections are shared between the three by live quality (loss, delay, capacity, the stability of each kind). A strand that falls loses its share in seconds, one that comes back is let in by steps, the connections that are open are never touched. Nothing to set here. Pick the Iran server first.</small>';
+  else if (K.key === "auto") options = '<small class="mut">Best of the day is built with the default settings of the type it picks: the one that connects best between these two servers - what the Doctor measured on this pair, a fresh full measurement first, then the score. Nothing measured yet: the first choice of the Doctor for a new pair. Pick the Iran server first (the smart choice cannot know the pair).</small>'; else if (K.key === "backhaul") options = num("mtu", "GRE MTU", 0, 0, 1476, "(0 = measure)") + num("keepalive", "Keepalive (s)", 75, 10, 600) + num("heartbeat", "Heartbeat (s)", 20, 5, 120) + num("connection_pool", "Connection pool", muxed ? 24 : 32, 1, 256, "(client connections kept ready)") + (muxed ? num("mux_con", "Mux channels", 8, 1, 64) : "") + num("channel_size", "Channel size", 8192, 1024, 65536, "(buffer)") + num("dial_timeout", "Dial timeout (s)", 10, 3, 60) + num("retry_interval", "Retry interval (s)", 2, 1, 30) + sel("log_level", "Log level", ["warn", "error", "info", "debug"], "warn") + nodelay + chk("aggressive_pool", "Aggressive pool", "reconnect lost pool connections at once") + chk("tune", "Tune the kernel", "BBR + fq + big buffers on both servers", true);
   else if (K.key === "backpack") options = `<label>Preset<select name="preset" data-dd>${["turbo", "balanced", "stable"].map(p => `<option ${val("preset", "turbo") === p ? "selected" : ""}>${p}</option>`).join("")}</select></label>` + num("keepalive", "Keepalive (s)", 75, 10, 600) + num("heartbeat", "Heartbeat (s)", 20, 5, 120) + num("connection_pool", "Connection pool", BP_MUXED.includes(tr.key) ? 16 : 24, 1, 256, "(client connections kept ready)") + (BP_MUXED.includes(tr.key) ? num("mux_con", "Mux channels", 8, 1, 64) : "") + num("channel_size", "Channel size", 8192, 1024, 65536, "(buffer)") + nodelay + chk("accept_udp", "Forward UDP too", "the same ports over UDP");
   else if (K.key === "backpack_direct") options = (tr.key === "sni" ? `<label>Fake SNI <small>(the domain the fake TLS hello names: one your route allows)</small><input name="sni_domain" value="${val("sni_domain", "")}" placeholder="cdn.example.com" required></label>` : "")
     + (tr.key === "spoof" ? `<label>Packet profile <small>(both ends use it)</small><select name="spoof_profile" data-dd>${SPOOF_PROFILES.map(([p, n]) => `<option value="${p}" ${val("spoof_profile", "udp") === p ? "selected" : ""}>${p} — ${n}</option>`).join("")}</select></label><label>Forged source IPv4 <small>(empty = do not forge: the right first build - test the path, then set it)</small><input name="spoof_src_ip" value="${val("spoof_src_ip", "")}" placeholder="10.10.10.10" autocomplete="off"></label><label>Network interface <small>(only for a server with several)</small><input name="spoof_interface" value="${val("spoof_interface", "")}" placeholder="eth0" autocomplete="off"></label>` : "")
@@ -1902,7 +1936,7 @@ window.bkBtn = form => { const btn = form && form.querySelector("button.pri"); i
 window.bkKind = k => { bk.kind = k; bk.transport = ""; localStorage.setItem("nk.bk.kind", k); bkRedraw(); };
 window.bkTransport = t => { bk.transport = t; bkRedraw(); };
 function bkBody(f) {
-  const body = {iran_id: +f.get("iran_id"), foreign_id: +f.get("foreign_id"), ports: (f.get("ports") || "").trim(), kind: bk.kind, transport: bk.transport || f.get("transport") || "", opts: {}};   // the type select keeps kind|transport in bk, not in a field
+  const body = {iran_id: +f.get("iran_id"), foreign_id: +f.get("foreign_id"), ports: (f.get("ports") || "").trim(), kind: bk.kind === "auto" && bk.transport === "trident" ? "trident" : bk.kind, transport: bk.transport || f.get("transport") || "", opts: {}};   // the type select keeps kind|transport in bk, not in a field (Automatic · Trident is the kind "trident" for the API)
   if (bk.kind === "backhaul") {
     body.mtu = +f.get("mtu") || 0; body.keepalive = +f.get("keepalive") || 75;
     body.nodelay = $("#modal [name=nodelay]") ? f.get("nodelay") === "on" : bk.chk.nodelay !== false;
@@ -1939,7 +1973,7 @@ window.startTest = async e => {
   const trn = bk.transport || f.get("transport") || "tcpmux";
   const kind = bk.kind === "backhaul" ? trn : bk.kind === "backpack" ? "bp:" + trn : bk.kind === "backpack_direct" ? "bpd:" + trn : bk.kind === "paqet" ? "paqet" : ({wss: "chisel:tls", fws: "chisel:fwd", fwss: "chisel:fwdtls"}[trn] || "chisel");
   const box = $("#build-story"); box.classList.remove("hidden");
-  if (bk.kind === "auto") { box.innerHTML = '<div class="fx-line plan"><b>›</b>Best of the day is chosen when you press Build; to test one type between these two servers, pick that type.</div>'; return; }
+  if (bk.kind === "auto") { box.innerHTML = `<div class="fx-line plan"><b>›</b>${bk.transport === "trident" ? "Trident" : "Best of the day"} is chosen when you press Build; to test one type between these two servers, pick that type.</div>`; return; }
   let iranId = +f.get("iran_id") || 0;
   try {
     if (!iranId) {   // Smart: the Iran servers are tested one after the other, best first; a poor one is left for the next
@@ -1989,7 +2023,7 @@ window.startBuild = async e => {
     body.dns_names = form.querySelector("input[name=dns_set]:checked") ? String(f.get("dns_names") || "").split(/[,\s]+/).filter(Boolean) : [];
     box.innerHTML = '<div class="fx-line run"><i></i>Starting…</div>';
     const r = await api("/api/tunnels", {method: "POST", body: JSON.stringify(body)});
-    if (r.why) toast("★ Best of the day: " + r.why, "ok");
+    if (r.why) toast((r.trident ? "🔱 Trident, first strand: " : "★ Best of the day: ") + r.why, "ok");
     bkRun({type: "build", id: r.id});
     const done = await followStory(r.id, box, 600);
     if (done && done.ok) { const cb = $("#build-check"); if (cb) cb.innerHTML = ""; bk.ck = null; bk.ckKey = ""; Object.keys(bk.chk).filter(k => /^(replace_|stale_|dns_follow)/.test(k)).forEach(k => delete bk.chk[k]); bkBtn(form); }      // (the owner, 2026-10-20: "after the build the tick of the replacement goes by itself - it is replaced": the port notice and its ticks are gone; the next change of the form checks again)

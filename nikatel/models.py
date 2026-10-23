@@ -16,8 +16,10 @@ def is_temp(name: str) -> bool:
 
 def is_standby(t) -> bool:
     """The warm standby of another tunnel (services/standby.py): a real tunnel between the same two servers on shifted ports, switched off in the list (`enabled` False: every place that lists, counts, alerts on or repairs
-    the enabled tunnels leaves it alone) and looked at only by the standby job. Its record names the tunnel it stands for."""
-    return bool(((getattr(t, "record", None) or {}) if not isinstance(t, dict) else t).get("standby_of"))
+    the enabled tunnels leaves it alone) and looked at only by the standby job. Its record names the tunnel it stands for.
+    An extra strand of a Trident (services/trident.py) is the same kind of hidden helper tunnel: `record.strand_of` names its tunnel."""
+    rec = (getattr(t, "record", None) or {}) if not isinstance(t, dict) else t
+    return bool(rec.get("standby_of") or rec.get("strand_of"))
 
 
 def now() -> int:

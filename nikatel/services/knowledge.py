@@ -200,8 +200,22 @@ def best_kinds(iran_id: int, foreign_id: int, allowed=lambda k: True, now: int |
         return picks, ""
 
     kinds, _ = plan_for(iran_id, foreign_id, "", False, False, now=now)
-    first = [(k, f"{k}: nothing is measured between these two servers yet - the Doctor's first choice for a new pair") for k in kinds if allowed(k) and linkmodels.split_kind(k)[0] != "wg"][:limit]
+    pool = [k for k in kinds if allowed(k) and linkmodels.split_kind(k)[0] != "wg"]
+    # ONE GRE kind at most among the tries: the standard order starts with the four Backhaul-over-GRE kinds, and when GRE is filtered on the pair (seen for real on 2026-10-23: a Trident between an Iran server
+    # and the build server tried tcpmux, wssmux, tcp - all GRE - and gave up) every try fails the same way; the tries after the first are the kinds of other families, in their order
+    pool = pool[:1] + [k for k in pool[1:] if k not in GRE_KINDS] + [k for k in pool[1:] if k in GRE_KINDS]
+    first = [(k, f"{k}: nothing is measured between these two servers yet - the Doctor's first choice for a new pair") for k in pool][:limit]
     return first, ("" if first else "no tunnel type may be built here (the licence)")
+
+
+def note_gre_filtered(iran_id: int, foreign_id: int, why: str, now: int | None = None) -> None:
+    """A REAL build of a Backhaul-over-GRE tunnel ended because GRE (protocol 47) does not pass between the two servers: every GRE kind is kept as a failed test of the pair (`blocked` leaves them out for
+    FAIL_FRESH), so that the next choice - a standby, a strand, Best of the day, a repair - does not try the other three the same way. Seen for real on 2026-10-23: a Trident's tunnel, then its standby,
+    tried tcpmux, wssmux, tcpmux, wssmux on one filtered pair, a minute each, with growing waits between them."""
+    now = now or int(time.time())
+
+    for kind in GRE_KINDS:
+        record(iran_id, foreign_id, {"kind": kind, "ok": False, "error": str(why)[:140]}, "latency", now=now)
 
 
 def best_kind(iran_id: int, foreign_id: int, allowed=lambda k: True, now: int | None = None) -> tuple[str, str]:

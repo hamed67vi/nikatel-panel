@@ -81,15 +81,15 @@ _WANT: dict[str, tuple[str, int]] = {}      # tunnel name -> (the type its next 
 
 
 # ------------------------------------------------------------------ pure helpers (tested)
-def shifted(port: int) -> int | None:
-    """The shifted port of a users' port: SHIFT + P, or P - SHIFT above 45535 (None when neither is a usable port)."""
+def shifted(port: int, shift: int = SHIFT) -> int | None:
+    """The shifted port of a users' port: SHIFT + P, or P - SHIFT above 65535 - SHIFT (None when neither is a usable port). `shift`: another offset (the extra strands of a Trident use 30000, 40000)."""
     p = int(port)
 
-    if 1 <= p and p + SHIFT <= 65535:
-        return p + SHIFT
+    if 1 <= p and p + shift <= 65535:
+        return p + shift
 
-    if p - SHIFT >= 1024 and p <= 65535:
-        return p - SHIFT
+    if p - shift >= 1024 and p <= 65535:
+        return p - shift
 
     return None
 
@@ -99,9 +99,9 @@ def norm_ports(text: str) -> str:
     return ",".join(p.spec() for p in builder.parse_ports(text))
 
 
-def shift_mapping(text: str, taken: set[int]) -> tuple[str, dict[int, int]]:
+def shift_mapping(text: str, taken: set[int], shift: int = SHIFT) -> tuple[str, dict[int, int]]:
     """('443=2096, 80', {...}) -> ('20443:2096,20080:80', {443: 20443, 80: 20080}): every users' port is shifted, the port on the foreign side stays. ValueError with a sentence when a port cannot be
-    shifted or the shifted port is taken (`taken`: the ports other tunnels listen on, on the Iran server)."""
+    shifted or the shifted port is taken (`taken`: the ports other tunnels listen on, on the Iran server). `shift`: another offset (the extra strands of a Trident)."""
     maps = builder.parse_ports(text)
 
     if len(maps) > 200:
@@ -111,7 +111,7 @@ def shift_mapping(text: str, taken: set[int]) -> tuple[str, dict[int, int]]:
     out, mapping = [], {}
 
     for m in maps:
-        s = shifted(m.listen)
+        s = shifted(m.listen, shift)
 
         if s is None:
             raise ValueError(f"port {m.listen} cannot be shifted to a free port, so it has no standby")
@@ -392,9 +392,10 @@ def renamed(old: str, new: str) -> None:
     if old in _BUILDS:
         _BUILDS[new] = _BUILDS.pop(old)
 
-    from . import lanes
+    from . import lanes, trident
 
     lanes.renamed(old, new)
+    trident.renamed(old, new)
 
     if old in tunnels.HANDED:
         tunnels.HANDED.discard(old)
@@ -402,8 +403,12 @@ def renamed(old: str, new: str) -> None:
 
     with session() as db:
         for t in db.scalars(select(Tunnel).where(Tunnel.enabled.is_(False))):
-            if (t.record or {}).get("standby_of") == old:
-                t.record = {**(t.record or {}), "standby_of": new}
+            rec = t.record or {}
+
+            if rec.get("standby_of") == old:
+                t.record = {**rec, "standby_of": new}
+            elif rec.get("strand_of") == old:
+                t.record = {**rec, "strand_of": new}
 
 
 # ------------------------------------------------------------------ what the job reads of a tunnel and its standby
@@ -445,14 +450,14 @@ def _sview(t: Tunnel, p: dict | None) -> dict:
 
 
 def standby_row(db, name: str) -> Tunnel | None:
-    return next((t for t in db.scalars(select(Tunnel).where(Tunnel.enabled.is_(False))) if (t.record or {}).get("standby_of") == name), None)
+    return next((t for t in db.scalars(select(Tunnel).where(Tunnel.enabled.is_(False))) if (t.record or {}).get("standby_of") == name), None)          # (an extra strand of a Trident has `strand_of`, not `standby_of`: it is not this tunnel's standby)
 
 
 def _views(names: list[str]) -> dict[str, dict]:
     """{tunnel name: {"p": the tunnel, "s": its standby}} as plain data (two reads of the table, no session held): each is None when there is no such row."""
     with session() as db:
         rows = {t.name: t for t in db.scalars(select(Tunnel).where(Tunnel.name.in_(list(names))))} if names else {}
-        sbs = {str((t.record or {}).get("standby_of")): t for t in db.scalars(select(Tunnel).where(Tunnel.enabled.is_(False))) if is_standby(t)}
+        sbs = {str((t.record or {}).get("standby_of")): t for t in db.scalars(select(Tunnel).where(Tunnel.enabled.is_(False))) if (t.record or {}).get("standby_of")}
         out = {}
 
         for n in names:
@@ -531,6 +536,11 @@ def handover(name: str, why: str = "", manual: bool = False) -> dict:
     `manual` (the button): the handover stays until Back now is pressed - the job does not give it back by itself."""
     if get_settings().read_only:
         raise ValueError("the panel is read-only: nothing is changed")
+
+    from . import trident
+
+    if trident.owns(name):
+        raise ValueError("the Trident of this tunnel shares the users' ports: turn the Trident off first")
 
     with _lock(name):
         v = _view(name)
@@ -963,9 +973,10 @@ def _auto_mark() -> None:
 
 def forget(name: str) -> None:
     """The owner removed the tunnel: its mark and its standby go with it (in the background; a tunnel that is rebuilt by a repair keeps both - this is only called for a removal the owner asked for)."""
-    from . import lanes
+    from . import lanes, trident
 
     lanes.forget(name)
+    trident.forget(name)
 
     if name in _marks() or _view(name)["s"] is not None:
         _mark(name, False)
@@ -1153,6 +1164,11 @@ def _step(name: str) -> None:
     act, why = decide(p, s, now=now, auto=auto, storm=autopilot.storm_now() if needs_calm or better else False, repairing=name in autopilot.repairing_names(), building=name in _BUILDS, wait_until=wait_until,
                       after=after_seconds(), better=better)
 
+    from . import trident
+
+    if act == "handover" and trident.owns(name):          # (only the handover: a handover that stands is always given back when the tunnel has held - it would shadow the Trident)
+        act, why = "wait", "the Trident of this tunnel shares the users' ports (one writer to the NAT table)"
+
     if act == "handover":
         handover(name, why)
     elif act == "back":
@@ -1246,7 +1262,7 @@ def run() -> None:
     names = set(_marks())
 
     with session() as db:
-        names |= {str((t.record or {}).get("standby_of")) for t in db.scalars(select(Tunnel).where(Tunnel.enabled.is_(False))) if is_standby(t)}
+        names |= {str((t.record or {}).get("standby_of")) for t in db.scalars(select(Tunnel).where(Tunnel.enabled.is_(False))) if (t.record or {}).get("standby_of")}
 
     if names:
         with ThreadPoolExecutor(min(4, len(names))) as ex:

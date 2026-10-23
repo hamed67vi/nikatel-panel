@@ -8,7 +8,16 @@ from sqlalchemy import select
 from ..auth import current_user
 from ..db import session
 from ..models import Tunnel, TunnelCheck, is_standby, is_temp
-from ..services import analyst, builder, capacity, lanes, linkmodels, livebw, standby
+from ..services import (
+    analyst,
+    builder,
+    capacity,
+    lanes,
+    linkmodels,
+    livebw,
+    standby,
+    trident,
+)
 from ..services.tunnels import check_tunnel, plan_for
 
 router = APIRouter(tags=["tunnels"], dependencies=[Depends(current_user)])
@@ -18,7 +27,7 @@ class BuildIn(BaseModel):
     iran_id: int = Field(ge=0)                                  # 0 = the smart choice: the Iran server that ranks best for this foreign server
     foreign_id: int
     ports: str = Field(min_length=1, max_length=300)
-    kind: str = Field("backhaul", pattern=r"^(auto|backhaul|backpack|backpack_direct|paqet|chisel)$")          # auto = "Best of the day": the panel picks the type that connects best between the two servers (knowledge.best_kind)
+    kind: str = Field("backhaul", pattern=r"^(auto|trident|backhaul|backpack|backpack_direct|paqet|chisel)$")          # auto = "Best of the day": the panel picks the type that connects best between the two servers (knowledge.best_kind); trident = Best of the day, then the tunnel is marked for a Trident (services/trident.py: its two other strands are built beside it)
     transport: str = Field("tcpmux", pattern=r"^[a-z0-9:]{0,24}$")
     mtu: int = Field(0, ge=0, le=1476)
     keepalive: int = Field(75, ge=10, le=600)
@@ -33,19 +42,20 @@ class BuildIn(BaseModel):
 @router.post("/tunnels", status_code=202)
 def build(body: BuildIn):
     """Build a tunnel (any engine) as an action; the answer is its id. 0 as the Iran server = the best one is chosen. `kind: "auto"` (Best of the day) = the type that connects best between these two servers today is chosen;
-    the answer says which (`kind`, `transport`, `why`)."""
+    the answer says which (`kind`, `transport`, `why`). `kind: "trident"` = Best of the day, and when the tunnel is built it is marked for a Trident (`trident: true` in the answer)."""
     try:
         kind, why = body.kind, ""
+        trident = body.kind == "trident"
         transport = body.transport or ("tcpmux" if kind == "backhaul" else "")     # an empty transport means the default of the engine
         opts = dict(body.opts)
 
         fallback: list[str] = []
 
-        if kind == "auto":
+        if kind in ("auto", "trident"):
             from ..services import knowledge, license, tunnel_test
 
             if body.iran_id == 0:
-                raise ValueError("Best of the day is chosen for a pair of servers: pick the Iran server first (the smart choice of the Iran server cannot know the pair yet)")
+                raise ValueError(f"{'Trident' if trident else 'Best of the day'} is chosen for a pair of servers: pick the Iran server first (the smart choice of the Iran server cannot know the pair yet)")
 
             picks, why = knowledge.best_kinds(body.iran_id, body.foreign_id, allowed=license.tunnel_kind_allowed, limit=knowledge.AUTO_TRIES)
 
@@ -75,10 +85,10 @@ def build(body: BuildIn):
         if kind == "backhaul" and transport not in ("tcp", "tcpmux", "wsmux", "wssmux"):
             raise ValueError("transport must be tcp, tcpmux, wsmux or wssmux")
 
-        if kind == "backhaul" and body.kind != "auto":
+        if kind == "backhaul" and body.kind not in ("auto", "trident"):
             opts["link_fallback"] = True                         # the link under it does not pass between the two servers: the other link models are tried, one by one, before the build gives up
 
-        other_opts = {k: v for k, v in ({} if body.kind == "auto" else body.opts).items() if k in ("preset", "accept_udp", "sni_domain", "spoof_profile", "spoof_src_ip", "spoof_interface", "mtu", "kcp_mode", "conn", "keepalive", "heartbeat", "nodelay", "connection_pool", "mux_con", "channel_size", "rcvwnd", "sndwnd", "smuxbuf", "streambuf", "kcp_block") and isinstance(v, (str, int, bool)) and len(str(v)) <= 80}
+        other_opts = {k: v for k, v in ({} if body.kind in ("auto", "trident") else body.opts).items() if k in ("preset", "accept_udp", "sni_domain", "spoof_profile", "spoof_src_ip", "spoof_interface", "mtu", "kcp_mode", "conn", "keepalive", "heartbeat", "nodelay", "connection_pool", "mux_con", "channel_size", "rcvwnd", "sndwnd", "smuxbuf", "streambuf", "kcp_block") and isinstance(v, (str, int, bool)) and len(str(v)) <= 80}
         measure = "full" if body.opts.get("measure") != "latency" else "latency"
 
         names = [n.strip().lower() for n in body.dns_names if n.strip()]
@@ -86,11 +96,11 @@ def build(body: BuildIn):
         if any(len(n) > 253 or not re.fullmatch(r"[a-z0-9.*-]+", n) for n in names):
             raise ValueError("a DNS name may only have letters, digits, dots and dashes")
 
-        if body.iran_id == 0 or body.replace_ids or body.replace_units or body.dns_follow or names or fallback:
+        if body.iran_id == 0 or body.replace_ids or body.replace_units or body.dns_follow or names or fallback or trident:
             from ..services import create
 
             aid = create.start(body.iran_id, body.foreign_id, body.ports, kind, transport, opts if kind == "backhaul" else other_opts,
-                               body.replace_ids, body.dns_follow, body.mtu, body.keepalive, body.nodelay, measure, dns_names=names, replace_units=body.replace_units, fallback_kinds=fallback)
+                               body.replace_ids, body.dns_follow, body.mtu, body.keepalive, body.nodelay, measure, dns_names=names, replace_units=body.replace_units, fallback_kinds=fallback, trident=trident)
         elif kind == "backhaul":
             aid = builder.start_build(body.iran_id, body.foreign_id, body.ports, transport, body.mtu, body.keepalive, nodelay=body.nodelay, opts=opts)
         else:
@@ -100,7 +110,7 @@ def build(body: BuildIn):
     except ValueError as e:
         raise HTTPException(400, str(e))
 
-    return {"ok": True, "id": aid, **({"kind": kind, "transport": transport, "why": why} if body.kind == "auto" else {})}          # (the answer of every other build is what it always was)
+    return {"ok": True, "id": aid, **({"kind": kind, "transport": transport, "why": why, "trident": trident} if body.kind in ("auto", "trident") else {})}          # (the answer of every other build is what it always was)
 
 
 class PrecheckIn(BaseModel):
@@ -533,6 +543,34 @@ def standby_back(tunnel_id: int):
     return {"ok": True, **standby.status(name)}
 
 
+class TridentIn(BaseModel):
+    on: bool
+
+
+@router.get("/tunnels/{tunnel_id}/trident")
+def trident_get(tunnel_id: int):
+    """The Trident of a tunnel: on, state (off · waiting · building · active · idle · failed · winding_down), why, and one row per strand (tunnel · standby · strand): kind, state, its share of the new connections in percent, its step on the way in, capacity, delay, loss."""
+    return {"ok": True, **trident.status(_standby_name(tunnel_id))}
+
+
+@router.put("/tunnels/{tunnel_id}/trident")
+def trident_set(tunnel_id: int, body: TridentIn):
+    """Switch the Trident of a tunnel on (its standby and one more tunnel of another kind are built beside it; the new connections are shared between them by live quality) or off (every new connection goes to the tunnel; the open ones finish where they are)."""
+    try:
+        return {"ok": True, **trident.switch(tunnel_id, body.on)}
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@router.post("/tunnels/{tunnel_id}/trident/rebalance")
+def trident_rebalance(tunnel_id: int):
+    """Work the shares out again now and put them (without waiting for the pause between small drifts)."""
+    try:
+        return {"ok": True, **trident.rebalance(_standby_name(tunnel_id))}
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
 class LanesIn(BaseModel):
     on: bool
 
@@ -630,9 +668,10 @@ class TunnelOut(BaseModel):
     cap: dict = {}          # the capacity that is filling (services/capacity.py): {state: warm | full, util, cap, since}; {} while it is fine or unknown
     standby: dict = {}      # the warm standby of the tunnel (services/standby.py): on, state, type, since, why, the shifted ports
     lane: dict = {}         # its lane (services/lanes.py): state (off · idle · waiting · sharing · paused), why, the share to the second tunnel, both capacities, the users' rate on both
+    trident: dict = {}        # its Trident (services/trident.py): on, state (off · waiting · building · active · idle · failed · winding_down), why, the share of each strand in percent
 
 
-def _out(t: Tunnel, sb: dict | None = None, lane: dict | None = None) -> TunnelOut:
+def _out(t: Tunnel, sb: dict | None = None, lane: dict | None = None, wv: dict | None = None) -> TunnelOut:
     plan = plan_for(t)
     return TunnelOut(id=t.id, name=t.name, type=t.type, transport=t.transport, engine=t.engine,
                      iran_name=t.iran.name, iran_host=t.iran.host, foreign_name=t.foreign.name, foreign_host=t.foreign.host,
@@ -643,7 +682,7 @@ def _out(t: Tunnel, sb: dict | None = None, lane: dict | None = None) -> TunnelO
                      bw={k: v for k, v in ((t.record or {}).get("bw") or {}).items() if k != "hist"},
                      ux={k: v for k, v in ((t.record or {}).get("ux") or {}).items() if k != "pend"},
                      record={k: v for k, v in (t.record or {}).items() if k not in ("quality", "bw", "ux")},
-                     units={"iran": plan.iran_units, "foreign": plan.foreign_units, "iface": plan.iface}, cap=capacity.view(t.name), standby=sb or {}, lane=lane or {})
+                     units={"iran": plan.iran_units, "foreign": plan.foreign_units, "iface": plan.iface}, cap=capacity.view(t.name), standby=sb or {}, lane=lane or {}, trident=wv or {})
 
 
 def rebuilding_rows(items: list[dict], servers: dict[int, tuple[str, str]], known: set[str], now: int) -> list[TunnelOut]:
@@ -678,7 +717,8 @@ def list_tunnels():
         shown = [t for t in db.scalars(select(Tunnel).order_by(Tunnel.name)) if not is_temp(t.name) and not is_standby(t)]      # a temporary test tunnel and a warm standby are not part of the list
         sbs = standby.summaries([t.name for t in shown])
         lns = lanes.summaries([t.name for t in shown])
-        rows = [_out(t, sbs.get(t.name), lns.get(t.name)) for t in shown]
+        wvs = trident.summaries([t.name for t in shown])
+        rows = [_out(t, sbs.get(t.name), lns.get(t.name), wvs.get(t.name)) for t in shown]
         pending = st.get("pending_builds").get("items", [])
 
         if pending:
@@ -697,7 +737,7 @@ def get_tunnel(tunnel_id: int):
         if t is None or is_standby(t):          # (a standby is shown inside the window of its tunnel only)
             raise HTTPException(404, "tunnel not found")
 
-        return _out(t, standby.status(t.name), lanes.status(t.name))
+        return _out(t, standby.status(t.name), lanes.status(t.name), trident.status(t.name))
 
 
 @router.get("/tunnels/{tunnel_id}/stability")

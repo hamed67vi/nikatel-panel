@@ -42,7 +42,10 @@ def test_the_best_kinds_are_the_good_ones_then_the_weak_ones_by_what_they_carrie
 
     picks, why = knowledge.best_kinds(ir, fr, limit=3)
     assert picks and why == "" and picks[0][1].endswith("first choice for a new pair")           # (nothing measured: the Doctor's first choice for a new pair)
+    kinds = [k for k, _ in picks]
+    assert kinds[0] == "tcpmux" and sum(k in knowledge.GRE_KINDS for k in kinds) == 1 and kinds[1:] == ["bp:wssmux", "chisel:tls"]          # ONE GRE kind at most: a filtered GRE must not burn every try (2026-10-23, a real pair)
     assert knowledge.best_kinds(ir, fr, allowed=lambda k: False)[0] == [] and "the licence" in knowledge.best_kinds(ir, fr, allowed=lambda k: False)[1]
+    assert [k for k, _ in knowledge.best_kinds(ir, fr, allowed=lambda k: k not in knowledge.GRE_KINDS, limit=2)[0]] == ["bp:wssmux", "chisel:tls"]
 
 
 def _finished(ok, line):
@@ -84,6 +87,62 @@ def test_a_build_that_ends_badly_goes_on_to_the_next_best_type_before_the_next_i
     text = "\n".join(s["story"])
     assert s["ok"] is True and tried == [("backhaul", "tcpmux", {}), ("backhaul", "tcp", {"link": "fou"}), ("backpack", "wssmux", {})]
     assert "backhaul · tcpmux did not work - trying the next type" in text and "Trying backpack · wssmux" in text
+
+
+def test_a_build_that_found_gre_filtered_teaches_the_pair_so_no_choice_tries_a_gre_kind_again():
+    """Seen for real (2026-10-23): a Trident's tunnel failed on GRE, then its standby tried tcpmux and wssmux again, a minute each, with growing waits."""
+    from nikatel.services import standby
+
+    with session() as db:
+        i, f = Server(name="ir-gt", host="203.0.113.74", role="iran", online=True), Server(name="fr-gt", host="198.51.100.74", role="foreign", online=True)
+        db.add_all([i, f])
+        db.flush()
+        ir, fr = i.id, f.id
+
+    now = int(time.time())
+    knowledge.note_gre_filtered(ir, fr, "GRE (protocol 47) is probably filtered between these two servers", now=now)
+    p = knowledge.pair(ir, fr)
+    assert sorted(knowledge.blocked(p, now)) == sorted(knowledge.GRE_KINDS) and "probably filtered" in p["kinds"]["tcpmux"]["last"]["error"]
+    kinds = [k for k, _ in knowledge.best_kinds(ir, fr, limit=3)[0]]
+    assert kinds and not any(k in knowledge.GRE_KINDS for k in kinds)                                                            # Best of the day: no GRE kind at all now
+    plan, _ = knowledge.plan_for(ir, fr, "bp:wssmux", False, False, now=now)
+    chosen, _note = standby.choose_kind(plan, "bp:wssmux", p, now)
+    assert chosen and chosen not in knowledge.GRE_KINDS and chosen.split(":")[0] != "bp"                                        # the standby: another carrier, and never a GRE kind
+    assert knowledge.blocked(p, now + knowledge.FAIL_FRESH + 1) == []                                                            # (two weeks later it may be tried again)
+
+
+def test_when_gre_is_filtered_the_other_gre_kinds_are_left_out_of_the_tries(client, monkeypatch):
+    """Seen for real (2026-10-23): Best of the day tried tcpmux, wssmux and tcp on a pair where GRE is filtered - three tries, one cause, nothing built."""
+    from nikatel.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "read_only", False)
+    monkeypatch.setattr(create, "_POLL", 0.05)
+
+    with session() as db:
+        ir, fr = Server(name="ir-gf", host="203.0.113.73", role="iran", online=True), Server(name="fr-gf", host="198.51.100.73", role="foreign", online=True)
+        db.add_all([ir, fr])
+        db.flush()
+        ir_id, fr_id = ir.id, fr.id
+
+    tried = []
+    monkeypatch.setattr(builder, "start_build", lambda iran_id, foreign_id, ports, transport, mtu=0, keepalive=75, forced_name="", nodelay=True, opts=None, hidden_key="standby_of":
+                        tried.append(("backhaul", transport, dict(opts or {}))) or _finished(False, "Stopped: the GRE link is up but the inner addresses cannot ping each other (Iran→foreign 0/10, foreign→Iran 0/10). GRE (protocol 47) is probably filtered between these two servers."))
+    monkeypatch.setattr(build_other, "start_build", lambda iran_id, foreign_id, ports, kind, transport="", opts=None, forced_name="", measure="full", standby_of="", hidden_key="standby_of":
+                        tried.append((kind, transport, dict(opts or {}))) or _finished(True, "Tunnel is ready."))
+    aid = create.start(ir_id, fr_id, "9076", "backhaul", "tcpmux", {}, [], False, fallback_kinds=["wssmux", "tcp", "fou:tcpmux", "bp:wssmux"])
+    s = None
+
+    for _ in range(120):
+        s = client.get(f"/api/actions/{aid}").json()
+
+        if s["done"]:
+            break
+
+        time.sleep(0.1)
+
+    text = "\n".join(s["story"])
+    assert s["ok"] is True and tried == [("backhaul", "tcpmux", {}), ("backhaul", "tcpmux", {"link": "fou"}), ("backpack", "wssmux", {})]          # wssmux and tcp (GRE too) were left out; a link that is not GRE is still tried
+    assert "GRE is filtered between these two servers: the other GRE kinds are left out (backhaul · wssmux, backhaul · tcp)" in text
 
 
 def test_the_arguments_of_a_build_follow_from_a_key_of_the_pair_test():

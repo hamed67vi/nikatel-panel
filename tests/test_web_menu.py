@@ -1506,7 +1506,7 @@ def test_the_tunnel_window_has_a_second_row_of_boxes_for_the_users_and_the_stabi
     """The owner, 2026-10-17: "show the stability and the quality of the users' internet inside their own box, not in the cards - I do not want the cards to be crowded". Row one: Servers | Status | Link; row two: Users' internet | Stability | Last results."""
     app, css = _web("app.js"), _web("lab.css")
     body = app.split("function tunWinHtml(t) {", 1)[1].split("function tunBanner", 1)[0]
-    assert "tunBanner(t) + tunStandby(t) + tunBwBox(t) + tunLane(t) + tunGrid(t) + `<div class=\"sgrid\">${tunUsersBox(t)}${tunUpBox(t)}${tunResBox(t)}</div>`" in body
+    assert "tunBanner(t) + tunStandby(t) + tunTrident(t) + tunBwBox(t) + tunLane(t) + tunGrid(t) + `<div class=\"sgrid\">${tunUsersBox(t)}${tunUpBox(t)}${tunResBox(t)}</div>`" in body
     assert 'data-b="users"' in app and 'data-b="stability"' in app and 'data-b="results"' in app and "<i>${SI.users}</i>Users' internet" in app and "<i>${SI.pulse}</i>Stability" in app
     users = app.split("const tunUsersBox = t => {", 1)[1].split("const tunUpBox = t =>", 1)[0]
     assert all(f'kv("{w}", ' in users for w in ("Quality", "Problems")) and "Tie the configs to their tunnels in the Doctor page" in users and "-webkit-line-clamp: 2" in css      # (two rows, two lines of the problems, two of the Doctor's sentence: the row of boxes stays as tall as the Stability box)
@@ -1756,6 +1756,6 @@ def test_the_knowledge_tab_does_not_jump_and_a_pair_is_two_small_lines():
 def test_the_type_list_has_best_of_the_day_which_the_panel_resolves_when_build_is_pressed():
     """The owner, 2026-10-19: "a tunnel mode that puts the best tunnel of the day on it"."""
     app = _web("app.js")
-    assert 'const BK_AUTO = {key: "auto", title: "Automatic", transports: [{key: "best", label: "Best of the day"}]};' in app
+    assert 'const BK_AUTO = {key: "auto", title: "Automatic", transports: [{key: "best", label: "Best of the day"}, {key: "trident", label: "Trident"}]};' in app          # (1.69.124: Trident beside it, tests/test_trident.py)
     assert 'bk.kinds = kd.kinds.some(k => k.key === "auto") ? kd.kinds : [BK_AUTO, ...kd.kinds];' in app and '"auto:best": "the type that connects best between these two servers today"' in app
-    assert 'if (K.key === "auto") options = ' in app and 'if (bk.kind === "auto") { box.innerHTML = ' in app and 'if (r.why) toast("★ Best of the day: " + r.why, "ok");' in app
+    assert 'else if (K.key === "auto") options = ' in app and 'if (bk.kind === "auto") { box.innerHTML = ' in app and 'if (r.why) toast((r.trident ? "🔱 Trident, first strand: " : "★ Best of the day: ") + r.why, "ok");' in app

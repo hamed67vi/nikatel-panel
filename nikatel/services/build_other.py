@@ -453,10 +453,12 @@ class Build:
     measure: str = "full"       # full | latency
     quality: dict = field(default_factory=dict)
     standby_of: str = ""        # the warm standby of this tunnel (services/standby.py): the row is made switched off and without an event, under its own lock
+    hidden_key: str = "standby_of"          # the key of the row's record that names the tunnel ("strand_of": an extra strand of a Trident, services/trident.py)
 
 
-def start_build(iran_id: int, foreign_id: int, ports_text: str, kind: str, transport: str = "", opts: dict | None = None, forced_name: str = "", measure: str = "full", standby_of: str = "") -> int:
-    """Validate, create the action_log entry, build in a thread. Returns the action id. `standby_of`: the name of the tunnel this one is the warm standby of."""
+def start_build(iran_id: int, foreign_id: int, ports_text: str, kind: str, transport: str = "", opts: dict | None = None, forced_name: str = "", measure: str = "full", standby_of: str = "",
+                hidden_key: str = "standby_of") -> int:
+    """Validate, create the action_log entry, build in a thread. Returns the action id. `standby_of`: the name of the tunnel this one is the warm standby of (`hidden_key` "strand_of": an extra strand of its Trident)."""
     if get_settings().read_only:
         raise ValueError("the panel is read-only; set NIKATEL_READ_ONLY=false on the panel server to build tunnels")
 
@@ -538,7 +540,7 @@ def start_build(iran_id: int, foreign_id: int, ports_text: str, kind: str, trans
             db.add(entry)
             db.flush()
             aid = entry.id
-            b = Build(aid, kind, iran, foreign, ports, transport, opts, name=forced_name, measure=measure, standby_of=standby_of)
+            b = Build(aid, kind, iran, foreign, ports, transport, opts, name=forced_name, measure=measure, standby_of=standby_of, hidden_key=hidden_key)
             db.expunge(iran)
             db.expunge(foreign)
 
@@ -949,7 +951,7 @@ def _build(b: Build) -> None:
                    forwarded_ports=[p.listen for p in b.ports],
                    record={"kind": b.kind, "direction": direction, "transport_label": tlabel, "port_mapping": ",".join(p.spec() for p in b.ports),
                            "test_port": b.test_port, "inner_net": b.net, "udp_carrier": b.udp, "opts": {k: v for k, v in b.opts.items() if k != "sni_domain" or v},
-                           "quality": b.quality, "built_by": "nikatel-panel", **({"standby_of": b.standby_of} if b.standby_of else {})},
+                           "quality": b.quality, "built_by": "nikatel-panel", **({b.hidden_key: b.standby_of} if b.standby_of else {})},
                    secrets={"token": token, "test_key": key}, state="starting", state_since=int(time.time()))
         db.add(t)
         db.flush()

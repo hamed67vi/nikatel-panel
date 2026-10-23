@@ -115,6 +115,7 @@ Measured on one pair (an Iran server and a foreign server 114 ms away, 78 ms thr
 | Only a whitelisted domain passes | BackPack Direct · SNI spoofing |
 | UDP and TCP both blocked | BackPack · xDi (ICMP) |
 | The foreign server cannot be dialled | BackPack Direct (the Iran side dials) |
+| It must stay up whatever is filtered next | **Trident** (Automatic): three tunnels of different kinds carry it together, the new connections go to the best one right now - [trident.md](trident.md) |
 
 When unsure, run *Tunnel test* on the pair: it tries the engines you tick and says which one works best today.
 

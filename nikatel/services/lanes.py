@@ -421,6 +421,11 @@ def start(name: str, manual: bool = False, why: str = "") -> dict:
     if get_settings().read_only:
         raise ValueError("the panel is read-only: nothing is changed")
 
+    from . import trident
+
+    if trident.owns(name):
+        raise ValueError("the Trident of this tunnel already shares its new connections between its strands: no lane")
+
     def check(v):
         p, s = v["p"], v["s"]
 
@@ -617,6 +622,11 @@ def _calm(p: dict) -> str:
 
 # ------------------------------------------------------------------ the job
 def _step(name: str, view: dict) -> None:
+    from . import trident
+
+    if trident.owns(name):                # (the Trident writes the NAT chain of this tunnel: a lane beside it would share the share again)
+        return
+
     now = int(time.time())
     v = standby._view(name)
     p, s = v["p"], v["s"]

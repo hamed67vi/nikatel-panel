@@ -401,6 +401,18 @@ echo "NOW $(date +%s)"
 echo "NOW $(date +%s)"
 """, {}),
 
+    # the TRIDENT (services/trident.py), read-only: "TRULE <name> <tcp|udp> <users' port> <shifted port> <probability>" for every redirect inside a trident chain (a chain NKTR_*, rules tagged "nikatel-trident-<name>"; the
+    # probability is the kernel's number, 0.29999999981 for 30 %, and "1" for a rule with no statistic match: everything that reaches it goes there) and "TJUMP <name> <proto> <users' port> <chain> <shadowed>" for every jump to
+    # such a chain from PREROUTING (`shadowed`: terminating rules of anybody else - a handover, a lane, a DNAT - that stand ABOVE the jump for the same port: they take the first packet before the trident sees it).
+    "trident_list": (r"""iptables -t nat -S 2>/dev/null | awk '/^-A / { ch = $2; p = ""; d = ""; c = ""; j = ""; to = ""; pr = ""; for (i = 1; i <= NF; i++) { if ($i == "-p") p = $(i + 1); if ($i == "--dport") d = $(i + 1); if ($i == "--comment") { c = $(i + 1); gsub(/"/, "", c) } if ($i == "-j") j = $(i + 1); if ($i == "--to-ports") to = $(i + 1); if ($i == "--probability") pr = $(i + 1) }
+  key = p " " d
+  if (c ~ /^nikatel-trident-/) { name = c; sub(/^nikatel-trident-/, "", name)
+    if (ch == "PREROUTING" && j ~ /^NKTR_/ && d != "") print "TJUMP", name, p, d, j, sh[key] + 0
+    else if (ch ~ /^NKTR_/ && j == "REDIRECT" && to != "" && d != "") print "TRULE", name, p, d, to, (pr == "" ? "1" : pr) }
+  else if (ch == "PREROUTING" && d != "" && (j == "REDIRECT" || j == "RETURN" || j == "DNAT" || j == "ACCEPT")) sh[key]++ }'
+echo "NOW $(date +%s)"
+""", {}),
+
     # read-only: the byte counters of some network cards, the byte counters of the TCP connections of some tunnels, and the uptime, in one go - the live numbers of the tunnels (services/livebw.py):
     #   "IF <card> <rx_bytes> <tx_bytes>" for every card that exists;
     #   "SOCK <spec> <local> <remote> <bytes_acked> <bytes_received>" for every established connection of a tunnel that has no card of its own (a reverse proxy: BackPack, Chisel): spec "s8072" = the connections that
@@ -1023,6 +1035,78 @@ if command -v iptables >/dev/null 2>&1; then
   else parkit; fi
 fi
 echo "LANE_OFF $n $(iptables -t nat -S PREROUTING 2>/dev/null | grep -- "--comment \"\?$tag\"\? " | grep -c -- '-j REDIRECT') $( (iptables -t nat -S PREROUTING; iptables -t filter -S INPUT) 2>/dev/null | grep -c -- "--comment \"\?$tag\"\? ") $conns"
+""", {"NAME": _TNAME, "PARK": r"^[012]$"}),
+
+    # the TRIDENT (services/trident.py): the users' NEW connections are shared between the tunnel and its other strands (more tunnels of other kinds between the same two servers, on shifted ports). All the redirects of one trident
+    # live in ONE chain of its own, NKTR_<10 hex of sha1(name)>, called from PREROUTING by one jump per users' port; the chain is replaced with ONE iptables-restore transaction (flush + the new rules, all or nothing: there is
+    # never a moment with half of the old shares and half of the new, and a mistake in the text leaves the old chain as it was). A rule is `-m statistic --mode random --probability p -j REDIRECT --to-ports <shifted>`, p the chance
+    # to be taken GIVEN that the rules above did not take the connection ("1" = no statistic match: all that is left); what no rule takes goes on to the tunnel. The NAT table sees only the first packet of a flow and conntrack
+    # keeps what it decided: a connection that is open is never touched. The jumps are not removed while the trident stands, so the chain of the NAT table is never empty (deleting the LAST rule of a NAT chain makes the kernel forget
+    # the translation of every open connection - measured, see lanes). INPUT gets one tagged ACCEPT per shifted port (a closed INPUT chain would drop what was redirected); the accept of a shifted port that has left the plan lets
+    # only the established connections go on. No boot unit: after a reboot everything goes to the tunnel (the safe state) and the panel puts the trident again.
+    # PLAN: "<proto>:<users' port>:<shifted port>:<probability>,..." in the order of the rules (the rules of one port in the order they are tried). "TRIDENT_SET <name> <redirect rules in the chain>" / "TRIDENT_FAIL <why>".
+    "trident_set": (r"""n='@NAME@'; plan='@PLAN@'; tag="nikatel-trident-$n"; ch="NKTR_$(printf '%s' "$n" | sha1sum | cut -c1-10)"
+command -v iptables >/dev/null 2>&1 && command -v iptables-restore >/dev/null 2>&1 || { echo "TRIDENT_FAIL this server has no iptables-restore"; exit 0; }
+W=""; iptables -w -t nat -S PREROUTING >/dev/null 2>&1 && W="-w"
+RW=""; iptables-restore --help 2>&1 | grep -q -- '--wait' && RW="--wait=10"
+ipt() { iptables $W "$@"; }
+keys=$(echo "$plan" | tr ',' '\n' | awk -F: '{ print $1 ":" $2 }' | sort -u)
+wantp=$(echo "$plan" | tr ',' '\n' | awk -F: '{ print $1 ":" $3 }' | sort -u)
+for pt in $wantp; do proto=${pt%%:*}; sp=${pt##*:}
+  ipt -C INPUT -p "$proto" --dport "$sp" -m comment --comment "$tag" -j ACCEPT 2>/dev/null || ipt -I INPUT 1 -p "$proto" --dport "$sp" -m comment --comment "$tag" -j ACCEPT || { echo "TRIDENT_FAIL the kernel did not take the accept for port $sp"; exit 0; }
+  while ipt -C INPUT -p "$proto" --dport "$sp" -m conntrack --ctstate ESTABLISHED,RELATED -m comment --comment "$tag" -j ACCEPT 2>/dev/null; do ipt -D INPUT -p "$proto" --dport "$sp" -m conntrack --ctstate ESTABLISHED,RELATED -m comment --comment "$tag" -j ACCEPT; done
+done
+rules=$(echo "$plan" | tr ',' '\n' | while IFS=: read -r proto port to prob; do
+  st=""; [ "$prob" = 1 ] || st="-m statistic --mode random --probability $prob"
+  echo "-A $ch -p $proto --dport $port $st -m comment --comment $tag -j REDIRECT --to-ports $to"
+done)
+err=$(printf '*nat\n:%s - [0:0]\n-F %s\n%s\nCOMMIT\n' "$ch" "$ch" "$rules" | iptables-restore --noflush $RW 2>&1) || { echo "TRIDENT_FAIL the kernel did not take the chain: $(echo "$err" | grep -v '^Try' | head -n 1 | cut -c1-120)"; exit 0; }
+for pp in $keys; do proto=${pp%%:*}; port=${pp##*:}
+  ipt -t nat -C PREROUTING -p "$proto" --dport "$port" -m comment --comment "$tag" -j "$ch" 2>/dev/null || ipt -t nat -I PREROUTING 1 -p "$proto" --dport "$port" -m comment --comment "$tag" -j "$ch" || { echo "TRIDENT_FAIL the kernel did not take the jump for port $port"; exit 0; }
+done
+ipt -t nat -S PREROUTING 2>/dev/null | grep -- "--comment \"\?$tag\"\? " | grep -- "-j $ch" | tr -d '"' | while read -r r; do
+  p=$(echo "$r" | awk '{ for (i = 1; i <= NF; i++) if ($i == "-p") print $(i + 1) }'); d=$(echo "$r" | awk '{ for (i = 1; i <= NF; i++) if ($i == "--dport") print $(i + 1) }')
+  echo "$keys" | grep -qx "$p:$d" || ipt -t nat $(echo "$r" | sed 's/^-A /-D /')
+done
+ipt -t filter -S INPUT 2>/dev/null | grep -- "--comment \"\?$tag\"\? " | grep -v conntrack | tr -d '"' | while read -r r; do
+  p=$(echo "$r" | awk '{ for (i = 1; i <= NF; i++) if ($i == "-p") print $(i + 1) }'); d=$(echo "$r" | awk '{ for (i = 1; i <= NF; i++) if ($i == "--dport") print $(i + 1) }')
+  echo "$wantp" | grep -qx "$p:$d" && continue
+  ipt -C INPUT -p "$p" --dport "$d" -m conntrack --ctstate ESTABLISHED,RELATED -m comment --comment "$tag" -j ACCEPT 2>/dev/null || ipt -I INPUT 1 -p "$p" --dport "$d" -m conntrack --ctstate ESTABLISHED,RELATED -m comment --comment "$tag" -j ACCEPT
+  ipt $(echo "$r" | sed 's/^-A /-D /')
+done
+echo "TRIDENT_SET $n $(ipt -t nat -S "$ch" 2>/dev/null | grep -c -- '-j REDIRECT')"
+""", {"NAME": _TNAME, "PLAN": r"^(tcp|udp):\d{1,5}:\d{1,5}:(0\.\d{8}|1)(,(tcp|udp):\d{1,5}:\d{1,5}:(0\.\d{8}|1)){0,599}$"}),
+
+    # (order of trident_set: the accepts of the shifted ports FIRST, then the chain, then the jumps, and only then the accepts of the shifted ports that left the plan - a redirected connection must never meet a port that is
+    # not open yet; measured: with the accepts last, every change of plan dropped the first SYNs of the new strand.)
+
+    # the way a trident ends. PARK=1 (the careful way): the chain is emptied - new connections all go to the tunnel - but the jumps STAY (the NAT chain is not empty, so the connections that are open keep their translation) and the
+    # accepts keep only the established connections. PARK=2: the jumps, the chain and the accepts go - but ONLY when no connection to the shifted ports is left (ss), so nothing is reset; otherwise it stays as PARK=1 and the panel
+    # asks again later. PARK=0: everything of the trident goes now (the trident or its tunnel is being removed). "TRIDENT_OFF <name> <redirects left> <rules of the tag left> <connections to the shifted ports>".
+    "trident_off": (r"""n='@NAME@'; park='@PARK@'; tag="nikatel-trident-$n"; ch="NKTR_$(printf '%s' "$n" | sha1sum | cut -c1-10)"; conns=0
+if command -v iptables >/dev/null 2>&1; then
+  W=""; iptables -w -t nat -S PREROUTING >/dev/null 2>&1 && W="-w"
+  ipt() { iptables $W "$@"; }
+  mine() { ipt -t "$1" -S "$2" 2>/dev/null | grep -- "--comment \"\?$tag\"\? " | tr -d '"'; }
+  pd() { awk '{ p = ""; d = ""; for (i = 1; i <= NF; i++) { if ($i == "-p") p = $(i + 1); if ($i == "--dport") d = $(i + 1) } if (p != "" && d != "") print p, d }' | sort -u; }
+  for sp in $(mine filter INPUT | pd | awk '{ print $2 }' | sort -u); do c=$(ss -Htn state established "( sport = :$sp )" 2>/dev/null | wc -l); conns=$((conns + c)); done
+  parkit() {
+    ipt -t nat -F "$ch" 2>/dev/null
+    mine filter INPUT | grep -v conntrack | pd | while read -r p d; do
+      ipt -C INPUT -p "$p" --dport "$d" -m conntrack --ctstate ESTABLISHED,RELATED -m comment --comment "$tag" -j ACCEPT 2>/dev/null || ipt -I INPUT 1 -p "$p" --dport "$d" -m conntrack --ctstate ESTABLISHED,RELATED -m comment --comment "$tag" -j ACCEPT
+      while ipt -C INPUT -p "$p" --dport "$d" -m comment --comment "$tag" -j ACCEPT 2>/dev/null; do ipt -D INPUT -p "$p" --dport "$d" -m comment --comment "$tag" -j ACCEPT; done
+    done
+  }
+  dropall() {
+    mine nat PREROUTING | grep -- "-j $ch" | sed 's/^-A /-D /' | while read -r r; do ipt -t nat $r; done
+    ipt -t nat -F "$ch" 2>/dev/null; ipt -t nat -X "$ch" 2>/dev/null
+    mine filter INPUT | sed 's/^-A /-D /' | while read -r r; do ipt -t filter $r; done
+  }
+  if [ "$park" = 0 ]; then dropall
+  elif [ "$park" = 2 ] && [ "$conns" = 0 ]; then dropall
+  else parkit; fi
+fi
+echo "TRIDENT_OFF $n $(iptables -t nat -S "$ch" 2>/dev/null | grep -c -- '-j REDIRECT') $( (iptables -t nat -S PREROUTING; iptables -t filter -S INPUT) 2>/dev/null | grep -c -- "--comment \"\?$tag\"\? ") $conns"
 """, {"NAME": _TNAME, "PARK": r"^[012]$"}),
 
     # WireGuard for a Backhaul link: install wireguard-tools when the server has none (apt only; nothing is copied from another machine - a binary of another release does not run), then make the key of one tunnel

@@ -613,6 +613,7 @@ class Build:
     link_fallback: bool = False        # the owner built it from Create tunnel: a link that does not pass is followed by the other link models (`_build_worker`)
     link_tried: list = field(default_factory=list)
     standby_of: str = ""   # the warm standby of this tunnel (services/standby.py): the row is made switched off and without an event, under its own lock (the repair of the real tunnel may build at the same time)
+    hidden_key: str = "standby_of"          # the key of the row's record that names the tunnel: "strand_of" for an extra strand of a Trident (services/trident.py) - hidden in the same way, but not THE standby of the tunnel
 
 
 CANCEL: set[int] = set()   # build ids the operator stopped: the next step of the build raises and the build rolls everything back
@@ -778,8 +779,8 @@ def mtu_limit(opts: dict | None) -> int:
 
 
 def start_build(iran_id: int, foreign_id: int, ports_text: str, transport: str = "tcpmux", mtu: int = 0, keepalive: int = 75, forced_name: str = "", nodelay: bool = True, opts: dict | None = None,
-                standby_of: str = "") -> int:
-    """Validate, create the action_log entry, run the build in a thread. Returns the action id. `standby_of`: the name of the tunnel this one is the warm standby of."""
+                standby_of: str = "", hidden_key: str = "standby_of") -> int:
+    """Validate, create the action_log entry, run the build in a thread. Returns the action id. `standby_of`: the name of the tunnel this one is the warm standby of (`hidden_key` "strand_of": an extra strand of its Trident)."""
     if get_settings().read_only:
         raise ValueError("the panel is read-only; set NIKATEL_READ_ONLY=false on the panel server to build tunnels")
 
@@ -828,7 +829,7 @@ def start_build(iran_id: int, foreign_id: int, ports_text: str, transport: str =
             db.add(entry)
             db.flush()
             aid = entry.id
-            b = Build(aid, iran, foreign, ports, transport, mtu, keepalive, nodelay=bool(nodelay), opts=opts, name=forced_name, standby_of=standby_of, link_fallback=fallback)
+            b = Build(aid, iran, foreign, ports, transport, mtu, keepalive, nodelay=bool(nodelay), opts=opts, name=forced_name, standby_of=standby_of, link_fallback=fallback, hidden_key=hidden_key)
             db.expunge(iran)
             db.expunge(foreign)
 
@@ -1257,6 +1258,14 @@ def _build(b: Build) -> None:
     (_, gb), _ = ver_f
 
     if ga < 8 or gb < 8:
+        if link == "gre" and not is_temp(b.name):            # (a REAL build found GRE filtered on this pair: the Doctor's memory of the pair learns it, so a standby, a strand or the next Best of the day does not try the other GRE kinds the same way)
+            try:
+                from . import knowledge
+
+                knowledge.note_gre_filtered(b.iran.id, b.foreign.id, filtered)
+            except Exception:
+                log.exception("the filtered GRE of %s could not be kept in the memory of the pair", b.name)
+
         raise LinkFailed(f"the {title} link is up but the inner addresses cannot ping each other (Iran→foreign {ga}/10, foreign→Iran {gb}/10). "
                            f"{filtered}; try another Iran server for this foreign server" + ("" if link == "gre" else " or another link type") + ".")
 
@@ -1337,7 +1346,7 @@ def _build(b: Build) -> None:
                    port=port, iran_tunnel_ip=iran_ip, foreign_tunnel_ip=foreign_ip, forwarded_ports=[p.listen for p in b.ports],
                    record={"network": network, "prefix": 30, "mtu": b.mtu, "ttl": 255, "direction": "reverse", "keepalive": b.keepalive, "nodelay": b.nodelay, "opts": b.opts,
                            "port_mapping": ",".join(p.spec() for p in b.ports), "data_test": data, "built_by": "nikatel-panel",
-                           **({"standby_of": b.standby_of} if b.standby_of else {}),
+                           **({b.hidden_key: b.standby_of} if b.standby_of else {}),
                            **({"link": link, "link_port": link_port, **({"wg": {"iran_pub": pubs["iran"], "foreign_pub": pubs["foreign"]}} if link in NEEDS_WG_TOOL else {}), **({"carrier": carrier_record(link, link_port, pubs.get("fp", ""))} if carried else {})} if link != "gre" else {})},        # (public keys only: the private ones never left their servers)
                    secrets={"token": token, "gre_key": key}, state="starting", state_since=int(time.time()))
         db.add(t)

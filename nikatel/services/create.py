@@ -17,7 +17,7 @@ from sqlalchemy import select
 
 from ..db import session
 from ..log import get_logger
-from ..models import ActionLog, Server, Tunnel
+from ..models import ActionLog, Server, Tunnel, is_standby, is_temp
 from ..ssh import Node, SSHError, run_script
 from . import autopilot, build_other, builder, detect, failover, tunnel_test
 
@@ -239,8 +239,39 @@ def smart_test(foreign_id: int, ports: str, kind: str) -> int:
     return autopilot._start(f"smart test → {fname}", work, action="create")
 
 
+def _gre_filtered(build_aid: int) -> bool:
+    """Did this build end because GRE (protocol 47) does not pass between the two servers (the builder's own sentence)?"""
+    with session() as db:
+        e = db.get(ActionLog, build_aid)
+        return e is not None and any("GRE (protocol 47) is probably filtered" in str(line) for line in (e.story or []))
+
+
+def _mark_trident(aid: int, iran_id: int, foreign_id: int, ports: str) -> None:
+    """Create tunnel → Automatic → Trident (the owner, 2026-10-23: "give our three-layer tunnel a cool technical name and put it there"): the tunnel that was just built is marked for a Trident (services/trident.py) - its warm
+    standby and its extra strand are built beside it by their jobs, and the new connections are shared between the three when they are up. The newest tunnel of the pair that forwards the first port is the one."""
+    from . import trident
+
+    listen = _ports(ports)[:1]
+
+    with session() as db:
+        rows = [t for t in db.scalars(select(Tunnel).where(Tunnel.iran_server_id == iran_id, Tunnel.foreign_server_id == foreign_id, Tunnel.enabled.is_(True)).order_by(Tunnel.created_at.desc(), Tunnel.id.desc()))
+                if not is_temp(t.name) and not is_standby(t) and (not listen or listen[0] in [int(x) for x in (t.forwarded_ports or []) if str(x).isdigit()])]
+        tid, name = (rows[0].id, rows[0].name) if rows else (0, "")
+
+    if not tid:
+        autopilot._say(aid, "Trident: the new tunnel was not found in the list - mark it in its window (Trident → Turn on).")
+        return
+
+    try:
+        trident.switch(tid, True)
+        autopilot._say(aid, f"Trident: {name} is marked - its standby and its extra strand (a kind that no filter of the first one cuts) are built beside it now; the new connections are shared between the three when they are up.")
+    except (ValueError, RuntimeError, SSHError) as e:
+        autopilot._say(aid, f"Trident: {name} was built but could not be marked ({str(e)[:120]}) - mark it in its window (Trident → Turn on).")
+
+
 def start(iran_id: int, foreign_id: int, ports: str, kind: str, transport: str, opts: dict, replace_ids: list[int], dns_follow: bool,
-          mtu: int = 0, keepalive: int = 75, nodelay: bool = True, measure: str = "full", dns_names: list[str] | None = None, replace_units: list[str] | None = None, fallback_kinds: list[str] | None = None) -> int:
+          mtu: int = 0, keepalive: int = 75, nodelay: bool = True, measure: str = "full", dns_names: list[str] | None = None, replace_units: list[str] | None = None, fallback_kinds: list[str] | None = None,
+          trident: bool = False) -> int:
     _ports(ports)                                   # a sentence for a bad list, before anything starts
     replace_units = [u for u in (replace_units or []) if parse_backhaul_unit(u)]
     dns_names = [n.strip().lower() for n in (dns_names or []) if n.strip()] if failover.ENABLED else []
@@ -340,6 +371,13 @@ def start(iran_id: int, foreign_id: int, ports: str, kind: str, transport: str, 
                     chosen = cand
                     break
 
+                if a_kind == "backhaul" and not (a_opts or {}).get("link") and _gre_filtered(build_aid):
+                    dropped = [f"{k} · {t}" for k, t, o in attempts[k_n + 1:] if k == "backhaul" and not (o or {}).get("link")]
+                    attempts[k_n + 1:] = [(k, t, o) for k, t, o in attempts[k_n + 1:] if not (k == "backhaul" and not (o or {}).get("link"))]          # (in place: the loop walks this list. GRE is filtered on this pair: the other GRE kinds would fail the same way - seen for real on 2026-10-23, three tries, one cause)
+
+                    if dropped:
+                        autopilot._say(aid, "GRE is filtered between these two servers: the other GRE kinds are left out (" + ", ".join(dropped) + ")")
+
                 what = f" {a_kind} · {a_transport or 'default'}" if len(attempts) > 1 else ""
                 autopilot._say(aid, f"{iname}:{what} did not work" + (" - trying the next type" if k_n < len(attempts) - 1 else " - trying the next Iran server" if n < len(candidates) - 1 else ""))
 
@@ -360,6 +398,9 @@ def start(iran_id: int, foreign_id: int, ports: str, kind: str, transport: str, 
 
         if dns_names:
             failover.point_names(aid, dns_names, chosen)
+
+        if trident:
+            _mark_trident(aid, chosen, foreign_id, ports)
 
         autopilot._say(aid, "Done.", done=True, ok=True)
     return autopilot._start(f"create {ports} → {fname}", work, action="create")
