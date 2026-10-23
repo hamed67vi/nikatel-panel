@@ -161,3 +161,27 @@ def test_a_disturbed_carrier_is_not_restarted_and_its_other_types_are_not_tried(
     bandwidth.investigate(7, tid)
     assert not restarted and any("tunnels that run on tcpmux dropped together" in s for s in said)           # (no restart of the engine: it is the type)
     assert tested and all(not k.endswith("tcpmux") and k != "tcpmux" for k in tested[0][0])                    # no type of the disturbed carrier is tried
+
+
+def test_what_a_swap_taught_is_kept_and_the_next_drop_of_the_pair_tests_that_type_first(monkeypatch):
+    """The owner, 2026-10-23: "when it has tested the types, the problem and the type that fixed it must go into its memory"."""
+    from nikatel.services import swap
+
+    tid = _world(monkeypatch, name="dr-p")
+
+    with session() as db:
+        t = db.get(Tunnel, tid)
+        ir, fr = t.iran_server_id, t.foreign_server_id
+        snap = {"name": "dr-p", "iran_id": ir, "foreign_id": fr}
+
+    swap._remember(snap, "paqet", False)                                                     # a type that did not carry well is kept as an attempt, never as a fix
+    assert knowledge.playbook(ir, fr, "slow") == {}
+    swap._remember(snap, "paqet", True)
+    pb = knowledge.playbook(ir, fr, "slow")
+    assert pb["kind"] == "paqet" and pb["n"] == 1 and pb["step"] == "swap"
+
+    said, tested, calls = _spy(monkeypatch, [_row("tcp", 95.0), _row("paqet", 200.0)])
+    bandwidth.investigate(7, tid)
+    assert tested == [(["paqet", "tcp"], "full")]                                            # the type that fixed it last time first (before: tcp, paqet)
+    assert any("fixed it - it is tested first" in s and "paqet" in s for s in said)
+    assert calls and calls[0][1] == "tcp"                                                    # (tested first is not taken first: paqet has one test only - not proven steady - so the proven tcp is the one the Doctor changes to)

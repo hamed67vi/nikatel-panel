@@ -171,6 +171,17 @@ def _suggest(aid: int, snap: dict, cur: str, kind: str, why: str, reason: str, b
 
     autopilot._say(aid, f"{snap['name']} is NOT changed to {kind} by itself: {reason}. A change would cut the users, so the Doctor leaves it as it is and looks again later; it suggests nothing.", done=True, ok=True)
 
+def _remember(snap: dict, kind: str, healed: bool) -> None:
+    """What the swap taught the Doctor (the owner, 2026-10-23: "when it has tested the types the problem and the type that fixed it go into its memory"): the problem (a drop or a very slow tunnel - the cause `slow`, as the restart of
+    the engine writes it), the type tried and whether it fixed it, kept with the other incidents of the pair (`knowledge.remember`). The next drop of this pair tests that type first (`bandwidth._swap_after_drop`)."""
+    from . import knowledge
+
+    try:
+        knowledge.remember(snap["iran_id"], snap["foreign_id"], "slow", snap["name"], [{"step": "swap", "kind": kind, "ok": bool(healed)}], bool(healed), max(0, int(time.time()) - _TRIED.get(snap["name"], int(time.time()))))
+    except Exception:
+        log.exception("what the swap of %s taught could not be kept", snap["name"])
+
+
 # ------------------------------------------------------------------ the story
 def beside(aid: int, snap: dict, kind: str, why: str, before: float) -> None:
     """Change the type of the tunnel in `snap` to `kind` without a cut (see the module's text). `why`: the sentence of the change; `before`: what the tunnel gives now (Mb/s)."""
@@ -270,6 +281,7 @@ def _work(aid: int, snap: dict, cur: str, kind: str, why: str, before: float, sa
 
     if bad:
         say(f"{kind} is up beside {cur}, but {bad}: the users stay on {cur}.", done=True, ok=False)
+        _remember(snap, kind, False)
         return
 
     say(f"{kind} gives {down:g} Mb/s in the speed test through itself (the dropped {cur} gives {before:g}). The users' new connections go over to it now.")
@@ -307,6 +319,7 @@ def _work(aid: int, snap: dict, cur: str, kind: str, why: str, before: float, sa
             with session() as db:
                 emit(db, "warn", "tunnels", f"Tunnel {name}: the Doctor built {kind} beside {cur}, but it did not carry well ({note}); the users stayed on {cur}.", name)
 
+            _remember(snap, kind, False)
             return
 
         say(f"{kind} carries the users' new connections ({note}). Waiting up to {DRAIN_LIMIT // 60} minutes for the connections that are open on {cur} to end - it is not touched before.")
@@ -345,6 +358,8 @@ def _work(aid: int, snap: dict, cur: str, kind: str, why: str, before: float, sa
             log.exception("the speed of %s could not be kept", kind)
     except (ValueError, RuntimeError, SSHError, OSError) as e:
         after = f" It could not be measured just now ({str(e)[:80]}): the Doctor measures it in a few minutes."
+
+    _remember(snap, kind, True)
 
     with session() as db:
         emit(db, "ok", "tunnels", f"Tunnel {name} is now {kind} (it was {cur}): the Doctor changed it without a cut.{after}", name)

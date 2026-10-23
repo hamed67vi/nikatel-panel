@@ -791,6 +791,12 @@ def _swap_after_drop(aid: int, tunnel_id: int, say) -> None:
         plan, _ = knowledge.plan_for(snap["iran_id"], snap["foreign_id"], cur, False, True)
         kinds = [k for k in plan if k != cur and license.tunnel_kind_allowed(k) and k not in knowledge.blocked(p, now) and k.rsplit(":", 1)[-1] != bad_family]
 
+    pb = knowledge.playbook(snap["iran_id"], snap["foreign_id"], "slow", now)          # (what fixed this problem on this pair the last time, kept by the swap: it is tested first)
+
+    if pb and pb["kind"] in kinds:
+        kinds = [pb["kind"]] + [k for k in kinds if k != pb["kind"]]
+        say(f"The last time this happened on {snap['iran_name']} ⇄ {snap['foreign_name']}, {pb['kind']} fixed it" + (f" ({pb['n']} times)" if pb["n"] > 1 else "") + " - it is tested first.")
+
     kinds = kinds[:DROP_TRIES]
 
     if not kinds:

@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.69.118 - What a change of type taught the Doctor is kept, and the next drop of the pair tests that type first
+
+The owner (2026-10-23): "when the Doctor has tested the types, the problem and the type that fixed it must go into its memory". The Doctor already kept every CUT and what healed it (the repair) and, for a slow tunnel, that a restart of the engine did or did not help; the change of a tunnel's TYPE after a drop was not kept.
+
+- **Kept** (`swap._remember` -> `knowledge.remember`, cause `slow` like the restart): when the Doctor changes a dropped tunnel to another type without a cut, the pair, the problem and the type are written with the other incidents - as a FIX when the new type carried (the swap finished), as an attempt that fixed nothing when it was up but gave too little or carried the users badly.
+- **Used** (`bandwidth._swap_after_drop`): the type that fixed the problem the last time on this pair (`knowledge.playbook`) is tested FIRST at the next drop, and the story says so. It is tested like any other; it is taken by itself only when its steadiness is proven (1.69.86).
+- **Where things stand on the live panel** (read only, 2026-10-23): the Doctor keeps 200 incidents (for example a slow tunnel that a restart healed 33 times and did not heal 41 times; a cut route that BackPack wssmux healed 10 times). It has tested 33 of the 64 types of a tunnel anywhere (415 of 1216 pair-and-type tests of its 19 tunnels): the 31 types that only combine a link (IPIP, FOU, GUE, IPsec) with `tcp`, `wsmux` or `wssmux`, and WireGuard-in-Chisel, were never tested - the night survey and "Test this pair" test the 33 of the standard list.
+- **Proved**: `tests/test_drop_swap.py` (a swap that carried is kept as a fix, one that did not is not; the next drop tests that type first and says so; nothing is taken by itself on one test).
+- **Not proved**: a real swap on the live panel writing its incident.
 ## 1.69.117 - The Mini App lists and sells only the plans the bot sells; the Buy page asks for the kind of service first (admins first) and follows the bot's server merge; the history shows the last three rows
 
 > **In short:** (1) the Mini App listed every plan that was switched on, also the ones of a server the bot had switched off (`server_info.state = 0`) and of deleted servers - 58 plans on the main bot where the bot shows 17 - and such a plan could be bought by its id: the list and the purchase now follow the bot. (2) The Buy page first asks which kind of service (the bot's servers: "special subscription", "single link", ...), then shows its plans with the time categories as tabs; a server the bot merged into another one (`settings/server_merge.json`) is no card of its own, its plans sit inside its parent as in the bot; it is staged: only the bot's admins see the new first step until `BOT_STATES miniBuyGroups` is set to `on`. (3) The wallet history shows the last three rows and the older ones behind one button.
