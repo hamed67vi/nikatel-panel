@@ -395,9 +395,16 @@ def test_the_menu_of_a_server_row_and_the_menu_of_its_window_are_one_full_list_i
     r = _node(MENU_HARNESS.replace("%(fn)s", _function(LAB_JS, "function labServerItems(p, s, ctx) {")))
     full = ["#Server", "Overview", "Check now", "Console", "Live traffic…", "Edit…", "Reboot…", "-",
             "Access > Connect SSH… | Change SSH password… | Forget host key… | Open in an SSH program…",
-            "Tests > GRE test | Spoof test… | Is it filtered in Iran? | Abuse-Defender: install…",
+            "Tests > GRE test | Spoof test… | Is it filtered in Iran?",
             "Install > Nodes and tools… | Tunnel cores… | WireGuard tools… | Update the server…", "-", "Move to profile > ", "Make a PasarGuard node…", "Off the page", "-", "Delete server…"]
     assert r["row"] == full and r["win"] == full      # (the same list, whichever menu it is opened from)
     assert r["swin"] == [x.replace("Off the page", "Put on the page") for x in full if x not in ("Move to profile > ", "Make a PasarGuard node…")]      # (a server on no profile: no profile to move, put on the page instead of off it)
-    assert [x for x in r["iran"] if x.startswith("Tests")] == ["Tests > GRE test | Spoof test…"]      # (the filter check and Abuse-Defender are for foreign servers only)
+    assert [x for x in r["iran"] if x.startswith("Tests")] == ["Tests > GRE test | Spoof test…"]      # (the filter check is for foreign servers only; the menu has no Abuse-Defender item since 1.69.136)
 
+
+
+def test_the_tests_menu_has_no_abuse_defender_item():
+    """The owner, 2026-10-25, with a picture of Tests > "Abuse-Defender: remove…": "remove the Abuse-Defender option from here". Only the menu item is gone: `srvAbuse` (what the Install view of the window calls) stays."""
+    fn = _function(LAB_JS, "function labServerItems(p, s, ctx) {")
+    assert '"Abuse-Defender: ' not in fn and "srvAbuse" not in fn and "abuseOn" not in fn      # (no item, no state read for one)
+    assert "window.srvAbuse = async (id, action) =>" in (Path(__file__).resolve().parents[1] / "nikatel" / "web" / "app.js").read_text(encoding="utf-8")

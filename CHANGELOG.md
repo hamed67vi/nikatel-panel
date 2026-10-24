@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.69.136 - No Abuse-Defender item in the Tests menu of a server
+
+The owner (2026-10-25, with a picture of Tests > "Abuse-Defender: remove…"): "remove the Abuse-Defender option from here".
+
+- **What changed** (`lab.js labServerItems`): the Tests flyout of a server (in its row and in its window) is GRE test, Spoof test… and, for a foreign server, Is it filtered in Iran? - the "Abuse-Defender: install… / remove…" item is gone, with the lookup of its state that only it used. Nothing else was touched: the Install view of the server window still has its Abuse-Defender row with its own install / remove button and the box with the log, and the routes and the install are as they were.
+- **Proved**: `tests/test_ui_regression_walk.py` - the real `labServerItems` in node: the Tests list of a foreign server is GRE test | Spoof test… | Is it filtered in Iran?, of an Iran server GRE test | Spoof test…; the source of the menu has no Abuse-Defender item and no `srvAbuse` call while `window.srvAbuse` is still defined for the Install view.
+- **Not proved**: the Install view's Abuse-Defender row in the browser (not touched, not opened).
 ## 1.69.135 - The Reviewer: the teacher of the Doctor - it reads every repair that went badly, writes what went wrong, and proposes lessons that you approve
 
 > **به زبان ساده:** حالا بعد از هر تعمیری که تانل را درست نکرد، خیلی طول کشید یا کار اضافه کرد، یک «بازبین» (تب جدید **Reviewer** در صفحهٔ Tunnel Doctor) لاگ همان تعمیر را می‌خواند و می‌نویسد چه اتفاقی افتاد و آیا دکتر درست رفتار کرد. اگر کلید AI ذخیره باشد، خود AI نظر می‌دهد و «درس» پیشنهاد می‌کند (مثلاً «این مرحله را روی این تانل ۵ روز امتحان نکن»). هیچ درسی بدون تأیید تو اجرا نمی‌شود. بازبین فقط می‌خواند: به هیچ تانل و سروری دست نمی‌زند.
