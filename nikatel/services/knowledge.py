@@ -73,6 +73,16 @@ PLAYBOOK_DAYS = 90          # what healed a pair this long ago is still the firs
 _LOCK = threading.Lock()
 
 
+LOST_MARKS = ("ssh connection lost", "is off or does not answer", "does not answer over SSH")
+
+
+def server_lost(text) -> bool:
+    """Pure: does this line (or the last lines of the story of a build) say that the panel lost its SSH connection to a server - it went off, its network dropped? Such a kind was NOT TESTED: the build died before the route
+    was judged, so it says nothing about the route (it is remembered as "could not be tried", never as "blocked for two weeks" - the owner's panel, 2026-10-24: 26 types were "blocked" on a pair because its Iran server was off)."""
+    lines = [text] if isinstance(text, str) else list(text or [])[-6:]
+    return any(m in str(ln) for ln in lines for m in LOST_MARKS)
+
+
 # ------------------------------------------------------------------ pure helpers (tested)
 def pair_key(iran_id: int, foreign_id: int) -> str:
     return f"{int(iran_id)}:{int(foreign_id)}"
@@ -81,9 +91,10 @@ def pair_key(iran_id: int, foreign_id: int) -> str:
 def merge(entry: dict | None, r: dict, measure: str, now: int) -> dict:
     """The entry of one kind after one test. `r` is a row of a pair test (kind, ok, score, latency_ms ..., error / verdict); `measure`: "full" (speed included) or "latency"."""
     e = dict(entry or {})
+    why = str(r.get("error") or r.get("verdict") or "")[:140]
 
-    if r.get("skipped"):          # not tested at all (a server lacks wireguard-tools): that is NOT a failure of the route - it is never "blocked", it is asked again
-        e["last"] = {"ok": False, "measured": False, "skipped": str(r["skipped"]), "at": now, "measure": measure, "score": None, "error": str(r.get("error") or r.get("verdict") or "")[:140]}
+    if r.get("skipped") or (not r.get("ok") and not r.get("works") and r.get("score") is None and server_lost(why)):          # not tested at all (a server lacks wireguard-tools, or it went off in the middle of the build): that is NOT a failure of the route - it is never "blocked", it is asked again
+        e["last"] = {"ok": False, "measured": False, "skipped": str(r.get("skipped") or "server"), "at": now, "measure": measure, "score": None, "error": why}
         return e
 
     ok, measured = bool(r.get("ok")), r.get("score") is not None or bool(r.get("works"))          # "works": it was built and carried data (a real build checks that) though nobody scored it
@@ -143,6 +154,9 @@ def verdict(e: dict | None) -> str:
 
     if last.get("ok"):
         return "good"
+
+    if not last.get("measured") and server_lost(last.get("error")):          # (what was kept before the Doctor knew this: the build died with the server - it was never a verdict on the route)
+        return "untested"
 
     return "poor" if last.get("measured") else "failed"
 
@@ -312,7 +326,7 @@ def blocked(pair: dict | None, now: int) -> list[str]:
 def untested(pair: dict | None) -> list[dict]:
     """The kinds that were NOT tested on the pair because they could not be tried (a server lacks wireguard-tools) - [{"kind", "reason", "at"}]. They are neither good nor blocked: the page says "not tested", and they are
     asked again (a day later, or at once when the owner installs the tools)."""
-    return [{"kind": k, "reason": "tools" if (e["last"].get("skipped") == "tools") else str(e["last"].get("skipped")), "error": e["last"].get("error") or "", "at": int(e["last"].get("at") or 0)}
+    return [{"kind": k, "reason": "tools" if (e["last"].get("skipped") == "tools") else str(e["last"].get("skipped") or "server"), "error": e["last"].get("error") or "", "at": int(e["last"].get("at") or 0)}
             for k, e in sorted(((pair or {}).get("kinds") or {}).items()) if verdict(e) == "untested"]
 
 

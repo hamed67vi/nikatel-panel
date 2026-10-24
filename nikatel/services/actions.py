@@ -231,6 +231,12 @@ def _fix(tunnel_id: int, aid: int, dry_run: bool, source: str) -> None:
         iran_node = Node(t.iran.host, t.iran.ssh_user, t.iran.ssh_port)
         foreign_node = Node(t.foreign.host, t.foreign.ssh_user, t.foreign.ssh_port)
         iran_host, owner_id = t.iran.host, t.iran_server_id
+        off = servers_off(t)
+
+    if off:          # (a server that is off: neither server is asked - an SSH question to a server that is off costs its whole timeout - and nothing is restarted; the owner, 2026-10-24: the Doctor must not do extra work for it)
+        _skip(aid)
+        _say(aid, "; ".join(off) + ": nothing is asked of the servers and nothing is restarted until it is back.", done=True, ok=False)
+        return
 
     if not dry_run and s.read_only:
         _say(aid, "The panel is read-only: nothing is changed. Set NIKATEL_READ_ONLY=false on the panel server to allow repairs. Showing the plan as a dry run instead.")

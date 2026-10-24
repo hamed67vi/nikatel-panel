@@ -76,6 +76,13 @@ def servers_off(t: Tunnel) -> list[str]:
     return [f"{role} server {s.name} is off or does not answer" for role, s in (("Iran", t.iran), ("Foreign", t.foreign)) if s is not None and s.enabled and s.online is False]
 
 
+def servers_off_of(iran_id: int, foreign_id: int) -> list[str]:
+    """`servers_off` for a pair given by id, read from the database NOW: a repair that began while both servers answered must notice the moment one of them stops (the pulse needs ~8 s), and the tunnel it works on
+    may not have a row any more (it is removed while the repair builds it again)."""
+    with session() as db:
+        return [f"{role} server {s.name} is off or does not answer" for role, sid in (("Iran", iran_id), ("Foreign", foreign_id)) if (s := db.get(Server, sid)) is not None and s.enabled and s.online is False]
+
+
 _IPV4 = re.compile(r"\d{1,3}(\.\d{1,3}){3}")
 
 

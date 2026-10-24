@@ -695,7 +695,7 @@ window.closeModal = () => {
   hideModal();            // only the window goes: the page behind is left exactly as it is (what a window changes, it redraws itself)
   if (state.pageStale) { state.pageStale = false; setTimeout(() => { if (state.open == null && !state.build) refresh(); }, 280); }      // what was held back while the window was open
 };
-window.closeOrDock = () => { const m = $("#modal"), ov = m && m.firstElementChild; if (ov && ov.querySelector(".fx-line.run")) { minModal(); toast("It keeps working: its chip is at the bottom of the page"); return; } closeModal(); };      // (Close and Esc on a window that is still working put it in the bar; a click on the chip brings it back)
+window.closeOrDock = () => { const m = $("#modal"), ov = m && m.firstElementChild; if (ov && ov.querySelector(".fx-line.run") && !ov.querySelector(".modal.repaircard")) {      /* (the window that only SHOWS what the Doctor does with a tunnel - tunRepairCard - has nothing to lose: it closes, and the row opens it again) */ minModal(); toast("It keeps working: its chip is at the bottom of the page"); return; } closeModal(); };      // (Close and Esc on a window that is still working put it in the bar; a click on the chip brings it back)
 document.addEventListener("keydown", e => { if (e.key === "Escape" && $("#modal") && $("#modal").innerHTML && !$("#modal .modal.keep")) closeOrDock(); /* a form marked keep (Add account, the record form) stays until it is saved or its Close button is pressed */ });
 
 /* ---- dashboard */
@@ -1704,7 +1704,7 @@ const stText = t => t.state === "up" ? "ACTIVE" : t.state === "down" ? "DOWN" : 
     const cut = t.state === "down" || (!["up", "degraded", "starting"].includes(t.state) && !!t.last_error), l = tunLoss(t);
     return `<div class="tlink ${t.state}${cut ? " cut" : ""}" title="Tunnel ${esc(t.name)}: ${esc(t.iran_name)} ⇄ ${esc(t.foreign_name)} (${esc(stText(t).toLowerCase())})"><b class="ms ${cut ? "" : t.rtt_ms == null ? "mut" : t.rtt_ms > 150 ? "warn" : ""}">${cut ? "" : t.rtt_ms != null ? t.rtt_ms.toFixed(0) + " ms" : "—"}</b><i class="wire">${ARR_L}<u class="dots"></u>${ARR_R}${cut ? '<em class="xx">✕</em>' : ""}</i><small class="loss ${cut ? "" : l.v >= SHOW_LOSS ? "hi" : l.blocked ? "blk" : "ok"}" title="${esc(lossTip(t))}">${cut ? "" : l.v != null ? l.v + "%" : l.blocked ? "no ping" : "—"}</small></div>`;
   };
-  const row = t => { const gre = t.type === "backhaul" || t.type === "gre", d = t.detail || {}; return `<tr class="${t.state} ${tunSev(t)}${t.id < 0 ? "" : " clk"}" ${t.id < 0 ? "" : `onclick="toggleDetail(${t.id})" title="Click for the details" tabindex="0"`} data-q="${esc([t.name, t.iran_name, t.foreign_name, t.type, t.transport, t.state, (t.iran_host || ""), (t.foreign_host || ""), (t.forwarded_ports || []).join(" ")].filter(Boolean).join(" ").toLowerCase())}" data-qx="${esc([t.iran_name, t.foreign_name].map(n => { const sv = (state.serversCache || []).find(x => x.name === n) || {}; return [sv.provider, ((sv.extra || {}).geo || {}).provider, ((sv.extra || {}).geo || {}).domain, sv.country].filter(Boolean).join(" "); }).join(" ").toLowerCase())}">
+  const row = t => { const gre = t.type === "backhaul" || t.type === "gre", d = t.detail || {}; return `<tr class="${t.state} ${tunSev(t)} clk" ${t.id < 0 ? `onclick="tunRepairCard('${esc(t.name)}')" title="The Tunnel Doctor is working on this tunnel - click to see what it is doing" tabindex="0"` : `onclick="toggleDetail(${t.id})" title="Click for the details" tabindex="0"`} data-q="${esc([t.name, t.iran_name, t.foreign_name, t.type, t.transport, t.state, (t.iran_host || ""), (t.foreign_host || ""), (t.forwarded_ports || []).join(" ")].filter(Boolean).join(" ").toLowerCase())}" data-qx="${esc([t.iran_name, t.foreign_name].map(n => { const sv = (state.serversCache || []).find(x => x.name === n) || {}; return [sv.provider, ((sv.extra || {}).geo || {}).provider, ((sv.extra || {}).geo || {}).domain, sv.country].filter(Boolean).join(" "); }).join(" ").toLowerCase())}">
       <td class="name"><i class="tun-lamp ${esc(t.state)}" title="${esc(stText(t) + (t.last_error && t.state !== "up" ? " - " + t.last_error : ""))}"></i>${esc(t.name)}${wrench(t)}${newest.has(t.id) ? '<span class="newtag" title="One of the two newest tunnels, built in the last 30 minutes">new</span>' : ""}</td>
       <td class="td-ty2"><span class="td-type ty-${esc(tunType(t))}">${esc((t.type || "").toUpperCase())}${t.transport ? " · " + esc(t.transport.replace("l3:", "")) : ""}</span><small class="mut">${gre ? linkTag(t) : ["direct", "forward"].includes((t.record || {}).direction) ? (t.record || {}).direction : "public"}</small></td>
       <td class="bwc" data-tid="${t.id}">${bwCell(t)}</td>
@@ -2374,9 +2374,21 @@ window.apDetail = id => {
   const d = t.detail || {}, lines = [`Tunnel: ${t.name}`, `State: ${t.state}`, t.last_error ? `Last error: ${t.last_error}` : "", tunLoss(t).v != null ? `Packet loss: ${tunLoss(t).v} %` : tunLoss(t).blocked ? "Packet loss: not measurable (ping is blocked on this path; the data passes)" : "", t.rtt_ms != null ? `Delay: ${Math.round(t.rtt_ms)} ms` : "", (t.bw || {}).down != null ? `Bandwidth: ${bwFmt(t.bw.down)}${t.bw.ref ? ` (usually ${bwFmt(t.bw.ref)})` : ""}` : "", ["drop", "slow"].includes((t.bw || {}).state) ? bwWhy(t) : "", ["poor", "bad"].includes((t.ux || {}).grade) ? uxWhy(t) : ""].filter(Boolean);
   showModal(`<b>${esc(t.name)}</b>`, `<pre class="gl-out">${esc(lines.join("\n"))}</pre><div class="frm-act"><button class="sm" onclick="closeModal();apLive(${t.id}, '${esc(t.name)}')">📡 Live log</button><button class="sm" onclick="closeModal();apDiagnose(${t.id})">Diagnose</button></div>`, "mid");
 };
+/* a tunnel the Doctor took off its servers to build it again is a placeholder row: no id, no menu, no window (the owner, 2026-10-24, "its card does not open at all"). Its click opens THIS window: what the Doctor is doing with it, live. It is held on the
+   screen (keepWin) - the list behind is drawn again every few seconds while the Doctor works - and only its Close button closes it. */
+window.tunRepairCard = async name => {
+  state.keepWin = true; state.open = null;
+  const t = (state.tunnelsCache || []).find(x => x.name === name) || (state.tunRowCache && state.tunRowCache.get(name)) || {};
+  showModal(`<b>🔧 ${esc(name)}</b>${t.iran_name ? ` <span class="mut">${esc(t.iran_name)} ⇄ ${esc(t.foreign_name)}</span>` : ""}`,
+    '<div class="ibox"><h5><i>🔧</i>Being repaired</h5><div style="padding:6px 0;font-size:13px">The Tunnel Doctor took this tunnel off its servers to build it again. Its window is back as soon as it is built (about a minute). If a server of it is off the Doctor stops at once and puts the tunnel back in the list as down.</div></div><div id="ap-story" class="fix" style="margin-top:10px"><div class="fx-line run"><i></i>Looking for the repair of this tunnel…</div></div>', "wide keep repaircard");
+  await apLiveFill(name);
+};
 window.apLive = async (id, name) => {
   /* the live log of what the Tunnel Doctor does with this tunnel: the running repair when there is one, else the last one (with a button to look again) */
   showModal(`<b>📡 ${esc(name)}</b>`, '<div id="ap-story" class="fix"><div class="fx-line run"><i></i>Looking for the repair of this tunnel…</div></div><div class="frm-act" style="margin-top:8px"><button class="sm" onclick="apDiagnose('+id+')">🩺 Check the tunnel now</button></div>', "wide");
+  await apLiveFill(name);
+};
+const apLiveFill = async name => {
   try {
     const list = (await api("/api/actions?limit=80&kinds=fix,autopilot,balance,underuse,move,speed")).actions.filter(a => a.ref === name && ["autopilot", "observe", "fix", "build", "create", "move", "speed"].includes(a.action));
     const box = $("#ap-story"), a = list.find(x => !x.done) || list[0];

@@ -48,7 +48,7 @@ from . import (
 )
 from . import settings as st
 from .events import emit
-from .tunnels import check_tunnel, servers_off
+from .tunnels import check_tunnel, servers_off, servers_off_of
 
 log = get_logger("autopilot")
 LEVELS = ("restart", "rebuild", "switch")
@@ -464,6 +464,35 @@ class Busy(ValueError):
     gets the app's own handler (main.py): 409, never a 500 for a double click."""
 
 
+HELD = "held: "        # what `_replace` leaves as the last line of `out` when it stopped before it removed or built anything because a server is off
+
+
+class ServerOff(RuntimeError):
+    """A server of the tunnel is off while a repair works on it: the repair stops where it is (the message is the plain sentence). Raised inside the repair, caught by `smart_fix`; `_start` shows it as "Stopped: ..." for any other caller."""
+
+
+def off_note(off: list[str]) -> str:
+    """The plain sentence of a hold: which server, and what is NOT done (the owner, 2026-10-24: "when a server is off the Doctor must see it and do no extra work" - the real case: the repair went on removing the tunnel and trying
+    26 tunnel types for 17 minutes against an Iran server that had been off since the first minute, and the row of the tunnel was a placeholder with no window all that time)."""
+    return "; ".join(off) + " - nothing is done to this tunnel until it is back: no restart, no rebuild, no other type, nothing removed. The Doctor looks again when the server answers."
+
+
+def _off_of(tunnel_id: int) -> list[str]:
+    """The servers of this tunnel that are off right now (read from the database)."""
+    with session() as db:
+        t = db.get(Tunnel, tunnel_id)
+        return servers_off(t) if t is not None else []
+
+
+def _off_stop(aid: int, snap: dict, off: list[str], removed: bool) -> None:
+    """The repair stops here because a server of the pair is off. Nothing more is asked of the servers or built (every build would only wait for a server that does not answer). A tunnel the repair had ALREADY taken off
+    has its row put back at once, DOWN (`_keep_down`): the checks and the repair look at it when the server answers - the list never shows it as "repairing…" with no window while the Doctor waits for nothing."""
+    _say(aid, ("The tunnel was already taken off for this repair: it is put back in the list as down and nothing more is built. " if removed else "Nothing is removed or built. ") + "; ".join(off) + ". The Doctor looks at it again when the server answers.")
+
+    if removed:
+        _keep_down(aid, snap, "; ".join(off))
+
+
 def _start(label: str, fn, *args, action: str = "autopilot", source: str = "manual", allow_read_only: bool = False) -> int:
     """Create the action_log entry and run `fn(aid, *args)` in a thread; returns the id. `source` says who started it (manual / auto).
     `allow_read_only`: work that only reads the servers (a health check, a measurement) may run while the panel is read-only."""
@@ -565,6 +594,15 @@ def _replace(aid: int, tunnel_id: int, iran_id: int, foreign_id: int, kind: str,
     kind again only after the last (`restore`) and reads the last line of every build (`out`)."""
     snap = snap or _snapshot(tunnel_id)
     old_kind = kind_of(snap["type"], snap["transport"], snap["record"])
+
+    if first and not skip_offline and (off := servers_off_of(iran_id, foreign_id)):          # (a server of the pair that will carry it is off: nothing can be built, so nothing is removed - a failover has `skip_offline`: its old Iran server is off on purpose)
+        _say(aid, f"{why} {off_note(off)}")
+
+        if out is not None:
+            out.append(HELD + "; ".join(off))
+
+        return False
+
     _say(aid, f"{why} Replacing {snap['label']}: {old_kind} → {kind}" if first else f"{why} Building {kind} as {snap['label']}")
 
     if first:
@@ -582,6 +620,10 @@ def _replace(aid: int, tunnel_id: int, iran_id: int, foreign_id: int, kind: str,
         return True
 
     _say(aid, f"The {kind} build failed ({story[-1] if story else '?'})." + (f" Putting the old {old_kind} tunnel back." if restore else ""))
+
+    if restore and (off := servers_off_of(snap["iran_id"], snap["foreign_id"])):          # (a server went off in the middle: the old type cannot be built either - the row goes back at once)
+        _off_stop(aid, snap, off, removed=True)
+        return False
 
     if restore:
         ok2, story2 = _try_build(snap, snap["iran_id"], snap["foreign_id"], old_kind, snap["record"].get("opts"))
@@ -705,6 +747,10 @@ def _switch_cut(aid: int, snap: dict, kinds: list[str]) -> str:
     queue, last_resort, n = list(allowed), False, 0
 
     while True:
+        if off := servers_off_of(snap["iran_id"], snap["foreign_id"]):          # (looked at before EVERY type: a server that goes off in the middle ends the run at once - 26 builds that each wait 30 s for a server that is off are not tried)
+            _off_stop(aid, snap, off, removed=not first)
+            raise ServerOff("; ".join(off))
+
         if not queue and not last_resort:
             last_resort = True                                     # every kind in the list is tried: the last resort is a WireGuard link inside a Chisel carrier (one TCP port) - where the plain links are all filtered
             queue = _carrier_last_resort(aid, snap, set(kinds))
@@ -718,14 +764,19 @@ def _switch_cut(aid: int, snap: dict, kinds: list[str]) -> str:
         _say(aid, f"Trying {kind} ({n} of {len(allowed)}): it is built as the real tunnel and checked for data." if not last_resort else f"Trying {kind} (last resort): it is built as the real tunnel and checked for data.")
         out: list[str] = []
         ok = _replace(aid, snap["id"], snap["iran_id"], snap["foreign_id"], kind, "", snap=snap, first=first, restore=False, out=out)
-        first = False
+        held = not ok and bool(out) and out[-1].startswith(HELD)          # (the replace stopped before it removed or built anything: a server went off a moment after the look above - nothing to remember, the look at the top of the loop ends the run)
+        first = first and held
+
+        if held:
+            continue
 
         unfit_now = not ok and tunnel_test.server_unfit(out)          # (a server that cannot run the engine: not a verdict on the route)
+        lost_now = not ok and (knowledge.server_lost(out) or bool(servers_off_of(snap["iran_id"], snap["foreign_id"])))          # (a server that went off in the middle of the build: it died before the route was judged - "could not be tried", never "blocked")
 
         try:
             q = _quality_of(snap["name"]) if ok else {}
             result = {"kind": kind, "ok": int(q.get("score") or 0) >= 50, "works": True, **{k: q.get(k) for k in knowledge.NUMS}} if ok else {"kind": kind, "ok": False, "error": (out[-1] if out else "")[:140],
-                                                                                                                                                      **({"skipped": "tools"} if tunnel_test.tools_missing(out) else {"skipped": "server"} if unfit_now else {})}
+                                                                                                                                                      **({"skipped": "tools"} if tunnel_test.tools_missing(out) else {"skipped": "server"} if unfit_now or lost_now else {})}
             knowledge.record(snap["iran_id"], snap["foreign_id"], result, "latency")
         except Exception:
             log.exception("what %s answered could not be kept", kind)
@@ -743,6 +794,10 @@ def _switch_cut(aid: int, snap: dict, kinds: list[str]) -> str:
     if first:
         _say(aid, "Nothing could be built on this route, so nothing was removed: the tunnel stays as it is.")
     else:
+        if off := servers_off_of(snap["iran_id"], snap["foreign_id"]):
+            _off_stop(aid, snap, off, removed=True)
+            raise ServerOff("; ".join(off))
+
         _say(aid, f"None of the {n} tunnel types connected on this route. Putting the old {old_kind} tunnel back so it is not lost.")
         ok2, story2 = _try_build(snap, snap["iran_id"], snap["foreign_id"], old_kind, snap["record"].get("opts"))
         _say(aid, "The old tunnel is back." if ok2 else f"The old tunnel could not be rebuilt either ({story2[-1][:120] if story2 else '?'}).")
@@ -753,14 +808,19 @@ def _switch_cut(aid: int, snap: dict, kinds: list[str]) -> str:
     return ""
 
 
-def _rebuild_safe(aid: int, tunnel_id: int, fresh_link: bool = False) -> tuple[bool, list[str]]:
+def _rebuild_safe(aid: int, tunnel_id: int, fresh_link: bool = False, check: bool = True) -> tuple[bool, list[str]]:
     """Remove the tunnel and build it again (same name, same ports). A rebuild that fails never leaves the operator with nothing:
-    the old tunnel is built again from the copy taken before it was removed (and stays in 'Recently removed' if even that fails)."""
+    the old tunnel is built again from the copy taken before it was removed (and stays in 'Recently removed' if even that fails).
+    `check`: a server of the pair that is off stops it before anything is removed, and after a failed build keeps it from trying the old type on a server that is off (`builder.follow_server_host` passes False)."""
     snap = _snapshot(tunnel_id)
     old_kind = kind_of(snap["type"], snap["transport"], snap["record"])
 
+    if check and (off := servers_off_of(snap["iran_id"], snap["foreign_id"])):          # (nothing can be built while a server is off: the tunnel is not removed)
+        _say(aid, off_note(off))
+        return False, [off_note(off)]
+
     try:
-        ok, story = _wait(builder.rebuild_tunnel(tunnel_id, fresh_link=fresh_link))
+        ok, story = _wait(builder.rebuild_tunnel(tunnel_id, fresh_link=fresh_link, **({} if check else {"check": False})))
     except (ValueError, RuntimeError, SSHError) as e:
         with session() as db:
             still_there = db.get(Tunnel, tunnel_id) is not None
@@ -772,6 +832,11 @@ def _rebuild_safe(aid: int, tunnel_id: int, fresh_link: bool = False) -> tuple[b
 
     if ok:
         return True, story
+
+    if check and (off := servers_off_of(snap["iran_id"], snap["foreign_id"])):          # (a server went off in the middle of the build: the old type cannot be built either - the row goes back at once)
+        _say(aid, f"The new build failed ({story[-1][:160] if story else '?'}).")
+        _off_stop(aid, snap, off, removed=True)
+        return False, story
 
     _say(aid, f"The new build failed ({story[-1][:160] if story else '?'}). Putting the old {old_kind} tunnel back so it is not lost.")
     ok2, story2 = _try_build(snap, snap["iran_id"], snap["foreign_id"], old_kind, snap["record"].get("opts"))
@@ -956,9 +1021,18 @@ def _holds(aid: int, tunnel_id: int, seconds: int = SOAK) -> bool:
     return False
 
 
+def _hold(aid: int, snap: dict, off: list[str], finish: bool) -> bool:
+    """A repair that finds a server of its tunnel off does nothing at all: it says so and ends (the one line of the story is the whole answer)."""
+    _say(aid, f"{snap['name']}: {off_note(off)}", done=finish, ok=False)
+    return False
+
+
 def smart_fix(aid: int, tunnel_id: int, level: str, source: str = "manual", finish: bool = True) -> bool:
     """Diagnose, then climb the ladder up to `level`. With finish=False the story entry is left open (a run over several tunnels)."""
     snap = _snapshot(tunnel_id)
+    if off := servers_off_of(snap["iran_id"], snap["foreign_id"]):          # (a server that is off: no look at the tunnel, no question to the servers or to the AI, no step - see `off_note`)
+        return _hold(aid, snap, off, finish)
+
     d = diagnose(tunnel_id)
     _say(aid, f"{snap['name']}: {d['summary']}.")
 
@@ -992,11 +1066,18 @@ def smart_fix(aid: int, tunnel_id: int, level: str, source: str = "manual", fini
         emit(db, "warn", "actions", f"Smart repair of {snap['label']} ({source}): {d['summary']}.", snap["name"])
 
     healed = False
+    stopped = ""                    # a server went off in the middle: the sentence that says which (the repair ends there and keeps no verdict about the route)
     tried: list[dict] = []          # the steps in the order they were tried, kept as data for the analyst
     t_run = time.time()
 
     for step in steps:
         t_step, step_kind = time.time(), ""
+
+        if off := servers_off_of(snap["iran_id"], snap["foreign_id"]):          # (looked at before EVERY step: the repair may have begun while both servers answered)
+            stopped = "; ".join(off)
+            _say(aid, f"Before the step “{step}”: {stopped}.")
+            break
+
         if step in ("rebuild", "relink", "switch") and storm_now():
             _say(aid, "Mass disruption right now (several servers offline or many tunnels down): this tunnel is not deleted or rebuilt. The repair waits until the servers answer, then looks again.")
             break
@@ -1069,7 +1150,12 @@ def smart_fix(aid: int, tunnel_id: int, level: str, source: str = "manual", fini
                 for note in notes:
                     _say(aid, note)
 
-                step_kind = _switch_cut(aid, snap, kinds)
+                try:
+                    step_kind = _switch_cut(aid, snap, kinds)
+                except ServerOff as e:          # (it said so and put the row back; the repair ends here)
+                    stopped = str(e)
+                    break
+
                 healed = bool(step_kind)
 
                 if healed and step_kind != d["kind"]:
@@ -1091,6 +1177,13 @@ def smart_fix(aid: int, tunnel_id: int, level: str, source: str = "manual", fini
 
         if healed:
             break
+
+    if stopped:          # a server went off: no move, no test from another Iran server, no verdict kept about the route or the steps (the route was never judged) - see `off_note`
+        with session() as db:
+            emit(db, "warn", "actions", f"Smart repair of {snap['label']} stopped: {stopped}. Nothing more is done to it until the server is back.", snap["name"])
+
+        _say(aid, f"{snap['name']}: stopped - {stopped}. It is looked at again when the server answers.", done=finish, ok=False)
+        return False
 
     if not healed and d["cause"] in ("gre_blocked", "route_cut", "lossy_route", "port_blocked"):
         from . import failover  # imported here: failover builds on this module
@@ -1180,6 +1273,10 @@ def smart_fix_start(tunnel_id: int, level: str = "switch", source: str = "manual
         raise ValueError("level must be restart, rebuild or switch")
 
     snap = _snapshot(tunnel_id)
+
+    if off := servers_off_of(snap["iran_id"], snap["foreign_id"]):          # (refused at the start: no story, no action, nothing is asked of the servers - the button and the Doctor both get this sentence)
+        raise ValueError(off_note(off))
+
     return _start(snap["name"], smart_fix, tunnel_id, level, source, source=source)
 
 
@@ -1194,6 +1291,17 @@ def fix_all(aid: int, level: str, source: str = "manual") -> None:
 
     if not todo:
         _say(aid, "Every tunnel is up: nothing to repair.", done=True, ok=True)
+        return
+
+    held = {t["name"]: off for t in todo if (off := _off_of(t["id"]))}          # (a tunnel of a server that is off is left alone: there is nothing to repair until the server is back)
+
+    for name, off in held.items():
+        _say(aid, f"{name}: {off_note(off)}")
+
+    todo = [t for t in todo if t["name"] not in held]
+
+    if not todo:
+        _say(aid, f"Nothing to repair now: {len(held)} tunnel(s) wait for a server that is off.", done=True, ok=True)
         return
 
     _say(aid, f"{len(todo)} tunnel(s) need attention: " + ", ".join(t["name"] for t in todo))
@@ -1263,6 +1371,9 @@ def replace_start(tunnel_id: int, kind: str) -> int:
 
     snap = _snapshot(tunnel_id)
 
+    if off := servers_off_of(snap["iran_id"], snap["foreign_id"]):          # (the new type needs both servers: nothing is removed for a build that cannot work)
+        raise ValueError(off_note(off))
+
     def run(aid: int) -> None:
         ok = _replace(aid, tunnel_id, snap["iran_id"], snap["foreign_id"], kind, "Chosen by you.")
         _say(aid, "Done." if ok else "Not changed.", done=True, ok=ok)
@@ -1275,6 +1386,9 @@ def move_start(tunnel_id: int, iran_id: int) -> int:
 
     if iran_id == snap["iran_id"]:
         raise ValueError("choose another Iran server")
+
+    if off := servers_off_of(iran_id, snap["foreign_id"]):          # (the new pair carries it: the Iran server it leaves may be off - that is the very reason to move - but the one it goes to and the foreign server must answer)
+        raise ValueError(off_note(off))
 
     kind = kind_of(snap["type"], snap["transport"], snap["record"])
 

@@ -31,7 +31,7 @@ from . import linkmodels
 from . import settings as st
 from .events import emit
 from .trash import snapshot as trash_snapshot
-from .tunnels import check_tunnel, parse_side, sname
+from .tunnels import check_tunnel, parse_side, servers_off_of, sname
 
 log = get_logger("builder")
 GRE_HOLD_WAIT = 10
@@ -1439,9 +1439,11 @@ def delete_tunnel(tunnel_id: int, keep_record: bool = False, trash: bool = False
     return results
 
 
-def rebuild_tunnel(tunnel_id: int, fresh_link: bool = False) -> int:
+def rebuild_tunnel(tunnel_id: int, fresh_link: bool = False, check: bool = True) -> int:
     """Same pair, same name, same ports: remove, then build again. `fresh_link`: a GRE tunnel gets a different inner network (and, as
-    always, a new GRE key) - a repair step for a link that a filter has learnt. Returns the build action id."""
+    always, a new GRE key) - a repair step for a link that a filter has learnt. Returns the build action id.
+    `check`: refused (nothing is removed) while a server of the pair is off - the build needs both, so the tunnel would only be taken away and left as a placeholder; a server that got a new address
+    is rebuilt with check=False (its flag still says off for a few seconds after the edit)."""
     with session() as db:
         t = db.get(Tunnel, tunnel_id)
 
@@ -1454,6 +1456,9 @@ def rebuild_tunnel(tunnel_id: int, fresh_link: bool = False) -> int:
 
     if not ports_text:
         raise ValueError("the saved record has no ports")
+
+    if check and (off := servers_off_of(iran_id, foreign_id)):
+        raise ValueError("; ".join(off) + ": the tunnel is not removed - it would only be taken away and could not be built again. Rebuild it when the server answers.")
 
     other = typ in ("backpack", "paqet", "chisel")
     kind = rec.get("kind") or ("backpack_direct" if transport.startswith("l3:") else typ)
@@ -1503,7 +1508,7 @@ def follow_server_host(server_id: int, old_host: str, new_host: str) -> list[str
 
         for tid, tname in ids:
             try:
-                ok, story = autopilot._rebuild_safe(aid, tid)
+                ok, story = autopilot._rebuild_safe(aid, tid, check=False)          # (the flag "off" of this server is the one before the new address: it is not asked)
                 autopilot._say(aid, f"{tname}: " + (story[-1] if story else "no result"))
                 healed += 1 if ok else 0
             except (ValueError, RuntimeError, SSHError) as e:
