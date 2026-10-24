@@ -1756,6 +1756,6 @@ def test_the_knowledge_tab_does_not_jump_and_a_pair_is_two_small_lines():
 def test_the_type_list_has_best_of_the_day_which_the_panel_resolves_when_build_is_pressed():
     """The owner, 2026-10-19: "a tunnel mode that puts the best tunnel of the day on it"."""
     app = _web("app.js")
-    assert 'const BK_AUTO = {key: "auto", title: "Automatic", transports: [{key: "best", label: "Best of the day"}, {key: "trident", label: "Trident"}]};' in app          # (1.69.124: Trident beside it, tests/test_trident.py)
+    assert 'const BK_AUTO = {key: "auto", title: "Automatic", transports: [{key: "trident", label: "Trident"}]};' in app and '{key: "best", label: "Best of the day"}' not in app          # (1.69.124: Trident beside it, tests/test_trident.py)
     assert 'bk.kinds = kd.kinds.some(k => k.key === "auto") ? kd.kinds : [BK_AUTO, ...kd.kinds];' in app and '"auto:best": "the type that connects best between these two servers today"' in app
     assert 'else if (K.key === "auto") options = ' in app and 'if (bk.kind === "auto") { box.innerHTML = ' in app and 'if (r.why) toast((r.trident ? "🔱 Trident, first strand: " : "★ Best of the day: ") + r.why, "ok");' in app

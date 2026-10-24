@@ -49,14 +49,14 @@ def test_every_one_of_the_64_kinds_has_traits_and_the_families_are_what_a_filter
 
     for k in kinds:
         t = trident.traits(k)
-        assert set(t) == {"family", "l4", "dial", "tls"} and t["family"] in ("gre", "ipip", "esp", "udp", "tcp", "icmp") and t["dial"] in ("iran", "foreign")
+        assert set(t) == {"family", "l4", "dial", "tls", "enc", "over"} and isinstance(t["enc"], bool) and 0 <= t["over"] <= 100 and t["family"] in ("gre", "ipip", "esp", "udp", "tcp", "icmp") and t["dial"] in ("iran", "foreign")
 
     assert trident.traits("tcpmux")["family"] == "gre" and trident.traits("wssmux")["tls"] is True
     assert trident.traits("wg:tcpmux")["family"] == "udp" and trident.traits("fou:tcpmux")["family"] == "udp" and trident.traits("ipip:tcpmux")["family"] == "ipip" and trident.traits("ipsec:tcpmux")["family"] == "esp"
-    assert trident.traits("bp:wssmux") == {"family": "tcp", "l4": "tcp", "dial": "foreign", "tls": True}
+    assert trident.traits("bp:wssmux") == {"family": "tcp", "l4": "tcp", "dial": "foreign", "tls": True, "enc": True, "over": 0}
     assert trident.traits("bp:kcp")["family"] == "udp" and trident.traits("bp:xdi")["family"] == "icmp" and trident.traits("bp:pck")["l4"] == "tcp-raw"
     assert trident.traits("bpd:pck")["dial"] == "iran" and trident.traits("bpd:udp")["family"] == "udp"
-    assert trident.traits("chisel:fwdtls") == {"family": "tcp", "l4": "tcp", "dial": "iran", "tls": True} and trident.traits("chisel")["dial"] == "foreign"
+    assert trident.traits("chisel:fwdtls") == {"family": "tcp", "l4": "tcp", "dial": "iran", "tls": True, "enc": True, "over": 0} and trident.traits("chisel")["dial"] == "foreign"
     assert trident.traits("paqet")["dial"] == "iran" and trident.traits("wgchiselfwd:tcpmux")["dial"] == "iran" and trident.traits("something-new")["family"] == "tcp"
 
 
@@ -1277,3 +1277,38 @@ def test_the_window_shows_one_row_per_strand_with_its_share_and_the_state_of_the
     assert sm["nobody"] == {"on": False, "state": "off", "why": ""} and sm["de-ir1"]["weights"] == [80, 10, 10] and sm["de-ir1"]["strands"] == s["strands"] and sm["de-ir1"]["state"] == "active"
     trident._BUILDS["de-ir1"] = {"aid": 1, "name": "x", "kind": "bpd:udp", "at": clock()}
     assert trident.status("de-ir1")["state"] == "building" and "bpd:udp" in trident.status("de-ir1")["why"]
+
+
+# ------------------------------------------------------------------ what a strand costs and what it hides (1.69.126)
+def test_every_kind_has_the_bytes_it_adds_to_a_packet_and_whether_an_observer_can_read_it():
+    """The owner, 2026-10-24: "stable in every condition and still a light tunnel"."""
+    t = trident.traits
+    assert t("tcpmux")["over"] == 24 and t("tcpmux")["enc"] is False and t("wssmux")["enc"] is True and t("wssmux")["over"] == 24
+    assert t("bp:wssmux")["over"] == 0 and t("bp:wssmux")["enc"] is True and t("bp:tcpmux")["over"] == 0 and t("bp:tcpmux")["enc"] is False          # (a TCP stream cuts its packets to size by itself)
+    assert t("bpd:pck")["over"] == 40 and t("bpd:xdi")["over"] == 52 and t("bpd:udp")["over"] == 28 and t("bp:kcp")["over"] == 28
+    assert t("ipsec:tcpmux")["over"] == 56 and t("ipsec:tcpmux")["enc"] and t("wg:tcpmux")["over"] == 60 and t("wg:tcpmux")["enc"] and t("ipip:tcpmux")["over"] == 20 and not t("ipip:tcpmux")["enc"]
+    assert t("bp:quic")["enc"] and t("bpd:quic")["enc"] and t("chisel:tls")["enc"] and not t("chisel:fwd")["enc"] and t("wgchisel:tcpmux")["over"] == 80
+    assert trident.mtu_of("tcpmux") == 1476 and trident.mtu_of("bpd:xdi") == 1448 and trident.mtu_of("tcpmux", 1320) == 1320 and trident.mtu_of("tcpmux", 0) == 1476 and trident.mtu_of("tcpmux", "x") == 1476
+
+
+def test_a_fat_header_lowers_the_quality_a_little_and_never_below_half():
+    assert trident.mtu_factor(None) == 1.0 and trident.mtu_factor(1476) == 1.0 and trident.mtu_factor(1400) == 1.0
+    assert abs(trident.mtu_factor(1280) - 1280 / 1400) < 1e-9 and trident.mtu_factor(300) == 0.5
+    base = trident.quality(0.0, 50.0, 50.0, 1.0)
+    assert trident.quality(0.0, 50.0, 50.0, 1.0, 1320) < base and trident.quality(0.0, 50.0, 50.0, 1.0, 1476) == base
+
+
+def test_among_strands_that_are_alike_the_lighter_one_gets_the_bigger_share():
+    one = {"usable": True, "cap": 100.0, "rtt": 50.0, "loss": 0.0, "stab": 1.0, "stage": 3}
+    w = trident.target_weights([{**one, "mtu": 1476}, {**one, "mtu": 1300}])
+    assert w[0] > w[1] and abs(sum(w) - 1.0) < 1e-9
+    same = trident.target_weights([{**one, "mtu": 1476}, {**one, "mtu": 1476}])
+    assert abs(same[0] - same[1]) < 1e-9                                                               # (equal strands share equally, as before)
+
+
+def test_a_tie_between_kinds_goes_to_the_encrypted_one_then_to_the_lighter_one():
+    kinds = ["ipip:tcpmux", "wg:tcpmux"]                                                               # the same fate as "tcpmux" for the filter (another family, the same dialling side, the same packets), nobody tested either
+    k, why = trident.pick_kind(kinds, ["tcpmux"], None, NOW)
+    assert k == "wg:tcpmux" and "not tested" in why                                                    # (listed second: it is encrypted)
+    k, _ = trident.pick_kind(["fou:tcpmux", "gue:tcpmux"], ["tcpmux"], None, NOW)
+    assert k == "fou:tcpmux"                                                                           # (both plain UDP links: 28 bytes against 36)

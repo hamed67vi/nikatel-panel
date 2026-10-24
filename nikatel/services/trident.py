@@ -62,6 +62,7 @@ LOSS_FREE = 1.0                # a loss under this (percent) costs a strand noth
 LOSS_SCALE = 3.0               # every 3 points over it halve the quality (1 / (1 + over / 3))
 RTT_SLACK = 40.0               # a strand 40 ms slower than the best one has about half its quality factor from delay ... (best + 40) / (rtt + 40)
 STAB_UNKNOWN = 0.85            # a kind whose stability is not proven yet counts this much (`knowledge.STEADY_UNKNOWN`)
+MTU_GOOD = 1400                # a strand whose packets can carry this many bytes (or more) loses nothing to its overhead; under it the quality falls with the MTU (never under half) - the light strand wins a tie (the owner, 2026-10-24: "stable in every condition and still a light tunnel")
 CAP_DEFAULT = 100.0            # the capacity (Mb/s) of a strand nobody measured and no strand did: only the quality factors decide
 ADJUST_SMALL = 0.08            # a drift of this many points (a share of 1) ...
 ADJUST_EVERY = 600             # ... is applied at most this often
@@ -104,12 +105,45 @@ _BP_L4 = {"tcpmux": "tcp", "tcp": "tcp", "stealth": "tcp", "ws": "tcp", "wsmux":
 _BPD_L4 = {"udp": "udp", "quic": "udp", "pck": "tcp-raw", "xdi": "icmp"}
 _FAMILY = {"tcp": "tcp", "tcp-raw": "tcp", "udp": "udp", "icmp": "icmp"}
 _LINK_FAMILY = {"wg": "udp", "fou": "udp", "gue": "udp", "ipipfou": "udp", "ipipgue": "udp", "ipsecnat": "udp", "ipip": "ipip", "ipsec": "esp"}
+# What a packet-carrying kind adds to every packet (bytes: the outer IP header and what the carrier puts on it); a kind that rides a TCP STREAM adds none to the packets (TCP cuts them to size by itself). The owner, 2026-10-24: the premium
+# Backhaul of a friend shows MTU 1320 for its raw-packet mode against 1500 for TCP: the MTU of a strand is part of how good it is.
+_OVER_LINK = {"ipip": 20, "ipipfou": 48, "ipipgue": 56, "fou": 28, "gue": 36, "ipsec": 56, "ipsecnat": 64, "wg": 60}
+_OVER_L4 = {"tcp": 0, "tcp-raw": 40, "udp": 28, "icmp": 52}
+_ENC_LINKS = ("wg", "ipsec", "ipsecnat", "wgchisel", "wgchiselfwd")
 
 
 def traits(kind: str) -> dict:
     """What a filter on the route sees of a tunnel kind: `family` (what must pass between the two servers: gre · ipip · esp · udp · tcp · icmp - two kinds of one family fall to the same filter), `l4` (the packets: tcp ·
     tcp-raw · udp · icmp), `dial` (which server opens the connection: iran · foreign - a route that is filtered one way only cuts one of them) and `tls` (it looks like HTTPS). A guess from the name of the kind, made once
-    and tested; a kind nobody knows counts as plain TCP dialled by the foreign server."""
+    and tested; a kind nobody knows counts as plain TCP dialled by the foreign server. Also `enc` (an observer on the route cannot read it: TLS, WireGuard, IPsec, QUIC) and `over` (bytes it adds to every packet; 0 for a kind that rides a TCP stream)."""
+    t = _traits(kind)
+    head, _, tail = str(kind).partition(":")
+    t["enc"] = bool(t["tls"] or head in _ENC_LINKS or tail == "quic")                 # (what an observer on the route cannot read: TLS, WireGuard, IPsec, QUIC; plain GRE / IPIP / TCP / ICMP kinds are not)
+
+    if kind in knowledge.GRE_KINDS:
+        t["over"] = 24
+    elif head in _OVER_LINK:
+        t["over"] = _OVER_LINK[head]
+    elif head in ("wgchisel", "wgchiselfwd"):
+        t["over"] = 80                                                            # (WireGuard inside a TCP stream: the carrier link of the Chisel cuts its MTU)
+    else:
+        t["over"] = _OVER_L4.get(t["l4"], 0)
+
+    return t
+
+
+def mtu_of(kind: str, recorded: int | None = None) -> int:
+    """The bytes a strand's packets can carry: the MTU its build measured and recorded (Backhaul keeps it in its record), else 1500 less what its kind adds to every packet (`traits`)."""
+    try:
+        if recorded and int(recorded) > 0:
+            return int(recorded)
+    except (TypeError, ValueError):
+        pass
+
+    return 1500 - int(traits(kind)["over"])
+
+
+def _traits(kind: str) -> dict:
     head, _, tail = str(kind).partition(":")
 
     if kind in knowledge.GRE_KINDS:
@@ -158,7 +192,7 @@ def pick_kind(kinds: list[str], chosen: list[str], pair: dict | None, now: int, 
 
     known = {r["kind"] for r in knowledge.ranked(pair, now, include_poor=True)}
     wx = states or {}
-    best = min(enumerate(pool), key=lambda it: (wx.get(traits(it[1])["family"]) == "blocked", clash(it[1], chosen), wx.get(traits(it[1])["family"]) == "pressure", it[1] not in known, it[0]))[1]
+    best = min(enumerate(pool), key=lambda it: (wx.get(traits(it[1])["family"]) == "blocked", clash(it[1], chosen), wx.get(traits(it[1])["family"]) == "pressure", it[1] not in known, not traits(it[1])["enc"], traits(it[1])["over"], it[0]))[1]          # (a tie goes to what is known, then to what is encrypted, then to the lighter one, then to the Doctor's order)
     c = clash(best, chosen)
     state = wx.get(traits(best)["family"])
     note = ("known to connect on this pair" if best in known else "not tested on this pair yet") + (", another family than the others (a filter that cuts one does not cut this)" if c[0] == 0 else ", the same family as another strand (nothing better was left)")
@@ -166,9 +200,17 @@ def pick_kind(kinds: list[str], chosen: list[str], pair: dict | None, now: int, 
     return best, f"{best}: {note}"
 
 
-def quality(loss: float | None, rtt: float | None, best_rtt: float | None, stab: float | None) -> float:
+def mtu_factor(mtu: int | None) -> float:
+    """1 for a strand whose packets carry MTU_GOOD bytes or more (or whose MTU is not known); under it the MTU over MTU_GOOD, never under a half: a fat header costs a fragment on every full packet."""
+    if mtu is None:
+        return 1.0
+
+    return max(0.5, min(1.0, float(mtu) / MTU_GOOD))
+
+
+def quality(loss: float | None, rtt: float | None, best_rtt: float | None, stab: float | None, mtu: int | None = None) -> float:
     """0 - 1: how good a strand is NOW. Loss: free up to LOSS_FREE percent, then every LOSS_SCALE points halve it. Delay: (best + 40) / (this + 40) against the best strand. Stability of the kind: its proven
-    stability (0 - 1), or STAB_UNKNOWN when it was tested too few times. A number that is not known costs nothing."""
+    stability (0 - 1), or STAB_UNKNOWN when it was tested too few times. MTU: `mtu_factor`. A number that is not known costs nothing."""
     q = 1.0
 
     if loss is not None:
@@ -178,6 +220,7 @@ def quality(loss: float | None, rtt: float | None, best_rtt: float | None, stab:
         q *= (float(best_rtt) + RTT_SLACK) / (float(rtt) + RTT_SLACK)
 
     q *= STAB_UNKNOWN if stab is None else max(0.3, min(1.0, float(stab)))
+    q *= mtu_factor(mtu)
     return max(0.01, min(1.0, q))
 
 
@@ -200,7 +243,7 @@ def target_weights(items: list[dict]) -> list[float]:
     default = caps[len(caps) // 2] if caps else CAP_DEFAULT
     rtts = [float(items[i]["rtt"]) for i in use if items[i].get("rtt") is not None]
     best = min(rtts) if rtts else None
-    raw = {i: float(items[i].get("cap") or default) * quality(items[i].get("loss"), items[i].get("rtt"), best, items[i].get("stab")) * float(items[i].get("wx") or 1.0) for i in use}      # wx: the weather of the strand's family on the route (services/weather.py) - 1 when nothing is known
+    raw = {i: float(items[i].get("cap") or default) * quality(items[i].get("loss"), items[i].get("rtt"), best, items[i].get("stab"), items[i].get("mtu")) * float(items[i].get("wx") or 1.0) for i in use}      # wx: the weather of the strand's family on the route (services/weather.py) - 1 when nothing is known
     top = CEIL_TWO if len(use) == 2 else CEIL_MANY
     ceil = {i: min(top, RAMP[max(0, min(3, int(items[i].get("stage", 3))))]) for i in use}
     floor = {i: min(FLOOR, ceil[i]) for i in use}
@@ -484,7 +527,7 @@ def _xview(t: Tunnel, p: dict | None) -> dict:
             "ports": [int(x) for x in (t.forwarded_ports or []) if str(x).isdigit()], "udp": bool((rec.get("opts") or {}).get("accept_udp")), "rtt": t.rtt_ms,
             "loss": (t.detail or {}).get("loss_pct"), "last_error": t.last_error or "", "iran_id": t.iran_server_id, "foreign_id": t.foreign_server_id, "created_at": int(t.created_at or 0),
             "stale": _stale(t, p) if rec.get("strand_of") else "", "iran": (t.iran.host, t.iran.ssh_user, t.iran.ssh_port), "iran_off": t.iran.enabled is not False and t.iran.online is False,
-            "bw": dict(rec.get("bw") or {})}
+            "bw": dict(rec.get("bw") or {}), "mtu": rec.get("mtu")}
 
 
 def _read(name: str) -> dict:
@@ -762,7 +805,7 @@ def _items(name: str, v: dict, applied: dict, now: int) -> list[dict]:
             stage, stage_at = (3 if idx == 0 and not was else 0), now
 
         item = {"idx": idx, "id": row["id"], "name": row["name"], "kind": row["kind"], "state": row["state"], "up_for": up_for, "usable": usable, "rtt": row["rtt"], "loss": row["loss"],
-                "ports": row["ports"], "udp": row["udp"], "bw": row.get("bw"), "stab": _stab_of(pair, row["kind"], now), "stage": stage, "stage_at": stage_at, "iran": row["iran"], "last_error": row["last_error"]}
+                "ports": row["ports"], "udp": row["udp"], "bw": row.get("bw"), "stab": _stab_of(pair, row["kind"], now), "mtu": mtu_of(row["kind"], row.get("mtu")), "stage": stage, "stage_at": stage_at, "iran": row["iran"], "last_error": row["last_error"]}
         item["cap"] = _cap_of(item, applied, now)
         item["wx"], item["wx_word"] = weather.factor_for(row["iran_id"], row["foreign_id"], row["kind"], now)          # the weather of its family on the route: 1.0 and "" when nothing is known
         out.append(item)
@@ -1342,7 +1385,8 @@ def status(name: str) -> dict:
                 continue
 
             strands.append({"idx": it["idx"], "role": ("tunnel", "standby", "strand")[it["idx"]], "kind": it["kind"], "name": it["name"], "state": it["state"], "usable": it["usable"],
-                            "weight": round(100 * float(w[it["idx"]])) if it["idx"] < len(w) else None, "step": it["stage"], "capacity": it["cap"], "delay": it["rtt"], "loss": it["loss"], "weather": it.get("wx_word", "")})
+                            "weight": round(100 * float(w[it["idx"]])) if it["idx"] < len(w) else None, "step": it["stage"], "capacity": it["cap"], "delay": it["rtt"], "loss": it["loss"], "weather": it.get("wx_word", ""),
+                            "mtu": it["mtu"], "enc": traits(it["kind"])["enc"]})
 
         if state == "active" and not why and v.get("p"):
             why = weather.words(v["p"]["iran_id"], v["p"]["foreign_id"], now)          # (the only place the weather shows: a few words under the bar, e.g. "udp blocked on this route for 2 h")
