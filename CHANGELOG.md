@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.69.127 - The night survey leaves no noise: no "removed" warnings for its temporary tunnels, no "crash" for a server that cannot be tested
+## 1.69.128 - The night survey leaves no noise: no "removed" warnings for its temporary tunnels, no "crash" for a server that cannot be tested
 
 > **به زبان ساده:** بررسی شبانه دیگر رویداد زرد «Tunnel test-1 removed» و کرش با traceback برای سرور بدون python3 نمی‌سازد.
 >
