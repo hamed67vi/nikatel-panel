@@ -55,6 +55,14 @@ def _no_type_test_after_a_drop(monkeypatch):
     monkeypatch.setattr(bandwidth, "DROP_SWAP", False)
 
 
+@pytest.fixture(autouse=True)
+def _no_review_after_a_repair(monkeypatch):
+    """After a smart repair the Reviewer reads what happened in a thread of its own (services/reviewer.py): a thread that writes settings after the test that started the repair is over is not wanted - only tests/test_reviewer.py turns it on."""
+    from nikatel.services import reviewer
+
+    monkeypatch.setattr(reviewer, "AUTO", False)
+
+
 @pytest.fixture
 def client():
     from fastapi.testclient import TestClient

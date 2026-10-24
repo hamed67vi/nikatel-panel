@@ -1311,3 +1311,26 @@ html[data-mode="light"] body #ask .ask-box .ask-act.ask-choices :is(button.dange
 /* the "⚠ ×2" mark beside a foreign server that ends several tunnels (the owner, 2026-10-24, with a picture of it: "make this ×2 tag paler and a little smaller"): 9 px instead of 10, a tighter capsule, and 60 % of its colour until the pointer is on it - it is a hint, not an alarm */
 html body #page .dup { margin-left: 5px; font-size: 9px; font-weight: 700; line-height: 14px; padding: 0 5px; opacity: .6; transition: opacity .15s; }
 html body #page .dup:hover { opacity: .95; }
+/* 1.69.135 - the Reviewer tab of the Tunnel Doctor: the teacher of the Doctor - what went wrong in a repair, whether the Doctor acted well, and the lessons it proposes (nothing is in force before the owner approves it) */
+html body #page .rv-list { display: block; }
+html body #page .rv-row { display: block; box-sizing: border-box; margin: 0 0 8px; padding: 10px 14px; border-radius: 14px; border: 1px solid var(--uk-line); border-left-width: 3px; background: #0f1626; font-size: 12.5px; }
+html body #page .rv-row.bad { border-left-color: #ff6b81; } html body #page .rv-row.warn { border-left-color: #ffc44d; } html body #page .rv-row.note, html body #page .rv-row.good { border-left-color: rgba(255, 255, 255, .22); }
+html body #page .rv-h { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; }
+html body #page .rv-h .sp, html body #page .rv-less .sp { flex: 1; }
+html body #page .rv-h b { font-size: 13px; }
+html body #page .rv-h time { font-size: 11px; white-space: nowrap; }
+html body #page .rv-h button, html body #page .rv-less button { height: 26px; padding: 0 12px; border-radius: 9px; font-size: 11px; }
+html body #page .rv-s { margin: 7px 0 0; line-height: 1.45; }
+html body #page .rv-m { margin: 4px 0 0; line-height: 1.45; color: #ffc44d; }
+html body #page .rv-m b { font-weight: 700; }
+html body #page .rv-fl { margin: 6px 0 0; padding: 0 0 0 18px; font-size: 11.5px; line-height: 1.5; color: var(--mut); }
+html body #page .rv-fl li.bad { color: #ff8a9b; } html body #page .rv-fl li.warn { color: #ffc44d; }
+html body #page .rv-note { display: block; margin-top: 5px; font-size: 11px; }
+html body #page .rv-v.v-wasteful, html body #page .rv-v.v-wrong { color: #ffc44d; border-color: rgba(255, 196, 77, .45); } html body #page .rv-v.v-good, html body #page .rv-v.v-unlucky { color: #3ddc97; border-color: rgba(61, 220, 151, .4); }
+html body #page .rv-less { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; margin: 0 0 8px; padding: 9px 14px; border-radius: 14px; border: 1px solid var(--uk-line); background: #0f1626; font-size: 12.5px; }
+html body #page .rv-less.proposed { border-color: rgba(255, 196, 77, .45); }
+html body #page .rv-less > b { flex: 1 1 260px; min-width: 0; font-weight: 600; }
+html body #page .rv-less .rv-why { flex: 1 1 100%; font-size: 11.5px; line-height: 1.4; }
+textarea.rv-report { width: 100%; box-sizing: border-box; font: 11.5px/1.45 ui-monospace, Menlo, Consolas, monospace; }
+html[data-mode="light"] body #page .rv-row, html[data-mode="light"] body #page .rv-less { background: #fff; }
+html[data-mode="light"] body #page .rv-m, html[data-mode="light"] body #page .rv-fl li.warn { color: #9a6700; } html[data-mode="light"] body #page .rv-fl li.bad { color: #b4232f; }

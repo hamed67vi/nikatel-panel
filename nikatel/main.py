@@ -106,7 +106,7 @@ def _index_html() -> str:
     """index.html; the script and stylesheet links carry their change time, so a deploy never shows an old copy."""
     html = (WEB / "index.html").read_text(encoding="utf-8")
 
-    for name in ("app.js", "analyst.js", "knowledge.js", "outbound.js", "bale.js", "pg_common.js", "pg_access.js", "pg_nodes.js", "pg_srvnode.js", "pg_cores.js", "pg_admin.js", "pg_roles.js", "pg_client.js", "pg_users.js", "pg_hosts.js", "pg_kinds.js", "pg_usage.js", "pg_configs.js", "pg_update.js", "lab.js", "pg.css", "pg_access.css", "pg_nodes.css", "pg_cores.css", "pg_admin.css", "pg_usage.css", "pg_configs.css", "pg_kinds.css", "lab.css", "doctor.css", "fluid.css", "uikit.css", "login.css", "light.css", "app.css", "mobile.css", "mobile2.css", "early.js", "fluid.js", "i18n.js", "i18n.fa.ui.js", "i18n.fa.msg.js", "i18n.fa.doctor.js", "i18n.fa.ui2.js"):
+    for name in ("app.js", "analyst.js", "knowledge.js", "review.js", "outbound.js", "bale.js", "pg_common.js", "pg_access.js", "pg_nodes.js", "pg_srvnode.js", "pg_cores.js", "pg_admin.js", "pg_roles.js", "pg_client.js", "pg_users.js", "pg_hosts.js", "pg_kinds.js", "pg_usage.js", "pg_configs.js", "pg_update.js", "lab.js", "pg.css", "pg_access.css", "pg_nodes.css", "pg_cores.css", "pg_admin.css", "pg_usage.css", "pg_configs.css", "pg_kinds.css", "lab.css", "doctor.css", "fluid.css", "uikit.css", "login.css", "light.css", "app.css", "mobile.css", "mobile2.css", "early.js", "fluid.js", "i18n.js", "i18n.fa.ui.js", "i18n.fa.msg.js", "i18n.fa.doctor.js", "i18n.fa.ui2.js"):
         try:
             stamp = int((WEB / name).stat().st_mtime)
         except OSError:

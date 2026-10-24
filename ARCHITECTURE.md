@@ -88,6 +88,9 @@ nikatel/
     analyst.py       what the history says: tunnel profiles (availability, outages, latency, weak hours), outages that come together, what fixes what,
                      servers at the peak (idle / redundant); hints the smart repair asks before it climbs (RepairCase rows); `stability_view` / `stability` = the Stability box of
                      a tunnel window (GET /tunnels/{id}/stability: the share answered and the cuts over 24 h and 7 days, the last cut, up for, verdict, the strip of the last day)
+    reviewer.py      the Reviewer, the teacher of the Doctor (docs/reviewer.md): after a smart repair that went badly or took long it writes FINDINGS by its own rules, a REVIEW by the AI (when a key is saved: a few calls an hour,
+                     facts as data, IPs masked, the answer parsed into a fixed shape), a REPORT for the developer, and proposes LESSONS (skip a rebuild / relink on a tunnel, avoid a type on a pair for some days) that the owner
+                     approves; approved ones reach the Doctor through nalyst.hints_for and knowledge.plan_for. It never touches a tunnel or a server
     diagnosis.py     reads a failure: is it the panel, a service on your server, or outside it? (pure rules; a repair's plain summary and the log summary use it)
     underuse.py      a server that carries little is looked at (net_health probe): what the kernel settings can fix is fixed (sysctl_tune, measured,
                      rolled back when worse); a fault of the provider's network is reported once
@@ -138,7 +141,7 @@ nikatel/
     events.py        the sentences the operator reads
   api/             FastAPI routers, one file per resource; thin: validate, call a service, answer
                    (auth, tokens, servers, tunnels, nodes, gateway, engines, actions, autopilot, ai, configs, panels, accounts, outbound, radar, shopbot, bale,
-                    alerts, events, jobs, failover, doctor, dns, license, balance, analyst, checkall, best, setup, system = health, logs, update of the panel itself)
+                    alerts, events, jobs, failover, doctor, dns, license, balance, analyst, reviewer, checkall, best, setup, system = health, logs, update of the panel itself)
   web/             plain JS and CSS, no build step. index.html loads everything; app.js: PAGES.<name> per page, SUB tabs, glass modal windows (showModal), themes (LOOK),
                    a loading box on every page change and automatic retry when a load fails, a status bar for messages; pg_*.js: one file per PasarGuard tab, each
                    registers itself in pgTabs (pg_common.js) and is drawn by the pages of the PasarGuard group (see 2b); app.css + pg_*.css: the looks.

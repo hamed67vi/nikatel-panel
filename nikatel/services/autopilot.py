@@ -44,6 +44,7 @@ from . import (
     knowledge,
     linkmodels,
     linkprobe,
+    reviewer,
     tunnel_test,
 )
 from . import settings as st
@@ -525,6 +526,9 @@ def _start(label: str, fn, *args, action: str = "autopilot", source: str = "manu
                 _BUSY.pop(label, None)
 
             wake_repair()                 # a repair has ended: whatever is due next (a retry, the next tunnel's turn) starts now, not at the next tick
+
+            if action == "autopilot":
+                reviewer.after_run(aid)       # the Reviewer reads what happened, in a thread of its own (services/reviewer.py): it never touches a tunnel or a server
 
     threading.Thread(target=run, name=f"autopilot-{label}", daemon=True).start()
     return aid

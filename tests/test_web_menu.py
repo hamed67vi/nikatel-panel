@@ -1613,7 +1613,7 @@ def test_the_password_box_of_the_sign_in_page_keeps_the_colour_of_the_field_when
 
 def test_the_doctor_page_has_a_knowledge_tab_for_what_it_knows_and_remembers():
     app, kn, index, main = _web("app.js"), _web("knowledge.js"), _web("index.html"), (Path(__file__).resolve().parent.parent / "nikatel" / "main.py").read_text(encoding="utf-8")
-    assert 'tabBtn("know", "spark", "Knowledge"' in app and 'id="ap-t-know"' in app and 'id="kn-box"' in app and '["now", "done", "moves", "ana", "know"]' in app and 'if (k === "know") knLoad();' in app and 'if (apTab === "know") knLoad();' in app
+    assert 'tabBtn("know", "spark", "Knowledge"' in app and 'id="ap-t-know"' in app and 'id="kn-box"' in app and '["now", "done", "moves", "ana", "know", "rev"]' in app and 'if (k === "know") knLoad();' in app and 'if (apTab === "know") knLoad();' in app
     assert '<script src="/static/knowledge.js"></script>' in index and '"knowledge.js"' in main
     assert 'api("/api/doctor/knowledge")' in kn and '/api/doctor/knowledge/survey' in kn and '/api/doctor/knowledge/stop' in kn and 'window.knSet = async body =>' in kn and "What the Doctor remembers of cuts" in kn
     assert all(f'"{k}"' in app.split("const AP_LABEL = {", 1)[1].split("};", 1)[0] or f'{k}:' in app.split("const AP_LABEL = {", 1)[1].split("};", 1)[0] for k in ("bp:wss", "bp:ws", "bp:wsmux", "bp:kcp", "bp:quic", "bp:pck", "bp:xdi", "bpd:quic", "bpd:pck", "bpd:xdi", "tcpmux", "paqet", "chisel:fwd"))

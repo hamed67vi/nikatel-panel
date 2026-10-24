@@ -389,7 +389,13 @@ def hints_for(tunnel: str, cause: str, steps: list[str]) -> tuple[list[str], lis
     try:
         rows = step_rows(30)
         mine = [r for r in rows if r["tunnel"] == tunnel]
-        return choose_steps(steps, cause, mine, rows, int(time.time()))
+        kept, notes = choose_steps(steps, cause, mine, rows, int(time.time()))
+        from . import (
+            reviewer,  # (the lessons the owner approved: services/reviewer.py - they only ever take away a rebuild or a relink, never the restart, the switch or the move)
+        )
+
+        kept, more = reviewer.apply_steps(tunnel, kept)
+        return kept, notes + more
     except Exception:
         log.exception("the analyst could not advise (the repair goes on without it)")
         return list(steps), []

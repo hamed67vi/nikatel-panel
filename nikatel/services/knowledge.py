@@ -636,6 +636,14 @@ def plan_for(iran_id: int, foreign_id: int, current: str, no_gre: bool, lossy: b
     if cut_link:
         kinds = [k for k in kinds if linkmodels.split_kind(k)[0] != cut_link]
 
+    from . import (
+        reviewer,  # (the types the owner told the Doctor not to try between this pair - an approved lesson of the Reviewer; never all of them: a cut tunnel must always have something to try)
+    )
+
+    told = reviewer.avoided(iran_id, foreign_id, now)
+    left = [k for k in kinds if k not in told]
+    told = {k: v for k, v in told.items() if k in kinds} if left else {}
+    kinds = left if told else kinds
     pb = {} if (lossy or not cause) else playbook(iran_id, foreign_id, cause, now)
 
     if pb and pb["kind"] in kinds and pb["kind"] not in cannot and pb["kind"] not in blocked(p, now):
@@ -664,6 +672,9 @@ def plan_for(iran_id: int, foreign_id: int, current: str, no_gre: bool, lossy: b
 
     if bad:
         lines.append("Not tried, they failed on this pair lately: " + ", ".join(bad[:6]) + ".")
+
+    if told:
+        lines.append("Not tried, you told the Doctor not to (Reviewer lessons you approved): " + ", ".join(f"{k} (until {time.strftime('%Y-%m-%d', time.localtime(int(v['until'])))})" for k, v in sorted(told.items())) + ".")
 
     return kinds, lines
 
