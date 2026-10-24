@@ -1307,3 +1307,7 @@ html[data-mode="light"] body #ask .ask-box .ask-act.ask-choices :is(button.dange
 .bld-check .bconf.bgroup .bg-h { font-size: 12.5px; font-weight: 700; }
 .bld-check .bconf.bgroup .chk.sub { margin-left: 24px; padding-top: 4px; border-top: 1px dashed rgba(255, 190, 70, .3); }
 .bld-check .bconf.bgroup .chk.sub.off { opacity: .45; }
+
+/* the "⚠ ×2" mark beside a foreign server that ends several tunnels (the owner, 2026-10-24, with a picture of it: "make this ×2 tag paler and a little smaller"): 9 px instead of 10, a tighter capsule, and 60 % of its colour until the pointer is on it - it is a hint, not an alarm */
+html body #page .dup { margin-left: 5px; font-size: 9px; font-weight: 700; line-height: 14px; padding: 0 5px; opacity: .6; transition: opacity .15s; }
+html body #page .dup:hover { opacity: .95; }

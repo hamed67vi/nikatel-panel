@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.69.132 - The "⚠ ×2" mark of the tunnel list is smaller and paler
+
+The owner (2026-10-24, with a picture of "DE2 ⚠ ×2"): "make this ×2 tag paler and a little smaller".
+
+- **What changed** (`lab.css`, styles only): the mark beside a foreign server that ends more than one tunnel is 9 px (it was 10.5 px) with a tighter capsule (5 px at the sides instead of 6) and at 60 % of its colour; the pointer on it brings it back to almost full, and its tooltip (which tunnels share the server, "Is that on purpose?") is as before. It is a hint, not an alarm; the light mode gets the same through the opacity.
+- **Proved**: `tests/test_fluid_layout.py` pins the rule; in the browser on a private demo panel the computed style of the mark went from 10.5 px / 6 px / opacity 1 to 9 px / 5 px / opacity 0.6.
+- **Not proved**: a picture of it (the pane is small and hidden: computed styles only); the owner's list.
 ## 1.69.131 - The red tag of a cut tunnel says "Iran server down", not "the Iran server is…"
 
 The owner (2026-10-24, with a picture of a red tag "the Iran server is..."): "these error texts must be short and clear: Iran server down".

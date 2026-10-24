@@ -290,3 +290,13 @@ def test_the_question_with_several_answers_is_a_stack_of_flat_macos_buttons_in_e
     assert "html body #ask .ask-box .ask-act.ask-choices button::before, html body #ask .ask-box .ask-act.ask-choices button::after { display: none !important; }" in css
     assert 'html[data-mode="light"] body #ask .ask-box .ask-act.ask-choices button { background-color: rgba(60, 70, 100, .09) !important; }' in css
     assert 'cls: "danger-fill", note: "the old one is removed first, then the new one is built"' in APP and 'cls: "pri", note: "the old one stays; both run"' in APP      # (the two answers of the picture)
+
+def test_the_x2_mark_of_a_foreign_server_that_ends_several_tunnels_is_smaller_and_paler():
+    """The owner, 2026-10-24, with a picture of "DE2 ⚠ ×2": "make this ×2 tag paler and a little smaller" - 9 px instead of 10.5 px, a tighter capsule, 60 % of its colour until the pointer is on it (measured in the browser:
+    font 10.5 -> 9 px, side padding 6 -> 5 px, opacity 1 -> 0.6)."""
+    css = (WEB / "lab.css").read_text(encoding="utf-8")
+    rule = css.split("html body #page .dup {", 1)[1].split("}", 1)[0]
+    for part in ("font-size: 9px", "font-weight: 700", "padding: 0 5px", "opacity: .6"):
+        assert part in rule
+    assert "html body #page .dup:hover { opacity: .95; }" in css
+    assert 'class="dup" title="This foreign server ends' in APP      # (the mark itself is not changed: the same hint, the same tooltip)
