@@ -555,12 +555,19 @@ def start_build(iran_id: int, foreign_id: int, ports_text: str, kind: str, trans
     return aid
 
 
+class PreflightError(RuntimeError):
+    """A server that cannot take this build (no python3 for the test door, the SSH user is not root, an architecture that is not supported): a known stop, said in the story - not a crash."""
+
+
 def _worker(b: Build, pair: str) -> None:
     try:
         with server_locks([b.iran.id, b.foreign.id], b.aid):
             _build(b)
     except Exception as e:  # thread boundary
-        log.exception("build #%s crashed", b.aid)
+        if isinstance(e, PreflightError):
+            log.warning("build #%s stopped: %s", b.aid, e)          # (one line: the night survey meets such a server for every type of the pair)
+        else:
+            log.exception("build #%s crashed", b.aid)
 
         try:
             _rollback(b)
@@ -647,13 +654,13 @@ def _preflight(b: Build, iran: Node, foreign: Node) -> tuple[dict, dict]:
 
     for label, f, srv in (("Iran", fi, b.iran), ("Foreign", ff, b.foreign)):
         if not f["root"]:
-            raise RuntimeError(f"{label} server {srv.name}: the SSH user is not root")
+            raise PreflightError(f"{label} server {srv.name}: the SSH user is not root")
 
         if not f["python"]:
-            raise RuntimeError(f"{label} server {srv.name} has no python3 (needed for the test door)")
+            raise PreflightError(f"{label} server {srv.name} has no python3 (needed for the test door)")
 
         if f["arch"] not in ("x86_64", "amd64"):
-            raise RuntimeError(f"{label} server {srv.name}: architecture {f['arch']} is not supported (x86_64 only)")
+            raise PreflightError(f"{label} server {srv.name}: architecture {f['arch']} is not supported (x86_64 only)")
 
     for p in b.ports:
         if p.listen in fi["tcp"]:

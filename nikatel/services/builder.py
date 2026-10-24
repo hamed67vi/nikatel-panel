@@ -1427,7 +1427,7 @@ def delete_tunnel(tunnel_id: int, keep_record: bool = False, trash: bool = False
             e.ok = all("removed" in r and "not" not in r for r in results)
             e.finished_at = int(time.time())
 
-        if not quiet:
+        if not quiet and (not is_temp(name) or any("not" in r for r in results)):          # (a temporary test tunnel that was removed cleanly is no news - the night survey removes hundreds; one that could NOT be removed still is)
             emit(db, "warn" if all("not" not in r for r in results) else "bad", "tunnels", f"Tunnel {label} removed: " + "; ".join(results), name)
 
     if snap is not None:

@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.69.127 - The night survey leaves no noise: no "removed" warnings for its temporary tunnels, no "crash" for a server that cannot be tested
+
+> **به زبان ساده:** بررسی شبانه دیگر رویداد زرد «Tunnel test-1 removed» و کرش با traceback برای سرور بدون python3 نمی‌سازد.
+>
+> **In short:** the survey's temporary tunnels leave no yellow Events, and a server that cannot be tested is a one-line warning, not a crash.
+
+The owner (2026-10-24, "check the program, I think it is confused"). The live panel was healthy (problems: none; 617 MB; 8 restarts today were the owner's updates). What looked like confusion: the night survey (Doctor → Knowledge, 02:00-06:00 Iran time, on) was building and removing temporary `test-1` / `test-2` tunnels on 50 pairs - 399 builds in a few hours - and each removal was a yellow "Tunnel test-1 (…) removed" event every ~30 s; and the survey met the foreign server without python3 for every type and logged an ERROR with a traceback each time (7 in three hours).
+
+- **`builder`**: the removal of a TEMPORARY tunnel (`is_temp`) that went well is not an event (like its creation, which already was not one); one that could not be removed still is, red.
+- **`build_other.PreflightError`**: the three known stops of the preflight (not root, no python3, unsupported architecture) are a warning line (`build #N stopped: …`) and the same story line and rollback as before; any other exception is still an ERROR with its traceback.
+- **Not changed**: the survey itself (still on, window 02:00-06:00; it can be switched off in Doctor → Knowledge), what it measures, the Telegram alerts. The foreign server UA1 still needs python3 for its types to be tested (the panel has no "install python3" button on purpose).
+- **Proved**: `tests/test_survey_quiet.py` (a PreflightError is one warning and the story says why, a real exception is still an ERROR, the source of the two rules) and the builder / build_other / tunnel_test test files. **Not proved**: on the live panel at night (the owner's next night shows it).
+
 ## 1.69.127 - Trident: a strand has a cost (MTU) and an encryption flag, and between equal strands the lighter one wins; the Create-tunnel menu no longer offers Best of the day
 
 The owner (2026-10-24, after reading what Backhaul premium offers - its raw-packet profiles `icmp`, `ipip`, `udp`, `tcp`, `gre` - and the MTU it sets for them): "do all of it - I only want the Trident to stay stable and connected in every condition and still be a light tunnel".
