@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.69.131 - The red tag of a cut tunnel says "Iran server down", not "the Iran server is…"
+
+The owner (2026-10-24, with a picture of a red tag "the Iran server is..."): "these error texts must be short and clear: Iran server down".
+
+- **Cause** (`app.js CUT_TAGS`, `cutTag`): since 1.69.72 a tunnel whose server is off gets the reason "the Iran server is off or does not answer" at once; the tags knew only the older sentence ("the Iran server does not answer"), so this one fell through to the last rule, which cut ANY unknown sentence after 18 characters: "the Iran server is…".
+- **Fix**: the tags know the new sentences and say the state of the server in the words of the owner - **Iran server down**, **foreign server down**, **both servers down** (they said "… off" before). A sentence no tag knows is no longer cut in the middle: a short one (up to 20 characters) is shown whole, a long one makes the tag say the state ("down" / "unstable"); the whole sentence is still the tooltip. The small grey line of an unstable tunnel (the same cutting at 24 characters) follows the same rule, and also says "port blocked" / "flapping" / "link cut" ... where a tag exists.
+- **Proved**: `tests/test_web_menu.py` runs the real `cutTag` in node over the sentences of the tunnel check (the three new ones, the old ones with their new words, a long unknown one → "down", a short unknown one as it is); on a private demo panel in the built-in browser the cut tunnels say "Iran server down", "foreign server down", "both servers down", "down" and "short odd", each with its sentence as the tip.
+- **Not proved**: every error sentence the services can write (the ones in the tunnel check were read; the Doctor's and the builder's sentences are not shown as tags); the owner's own list.
 ## 1.69.130 - A server that is offline says only "Offline"
 
 The owner (2026-10-24, with a picture of a row "Offline" + "GRE ✕"): "when a server is offline no GRE tag or any other tag, only Offline".

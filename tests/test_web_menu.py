@@ -1363,10 +1363,10 @@ def test_the_tag_of_a_cut_tunnel_names_the_end_that_is_cut(tmp_path):
     cases = [("no answer from the foreign end over the GRE link", "foreign link"), ("the GRE interface pl-ir3 is DOWN on the Iran server", "Iran link"),
              ("Iran: nikatel-gre-pl-ir3.service is inactive", "Iran link"), ("foreign: nikatel-gre-pl-ir3.service is failed", "foreign link"),
              ("Iran: backhaul-iran-tcpmux-9906.service is inactive", "Iran service"), ("foreign: backhaul-kharej-tcpmux-9906.service is dead", "foreign service"),
-             ("both servers do not answer (timeout)", "both servers off"), ("the Iran server does not answer (timeout after 35s)", "Iran server off"), ("the foreign server does not answer (x)", "foreign server off"),
+             ("both servers do not answer (timeout)", "both servers down"), ("the Iran server does not answer (timeout after 35s)", "Iran server down"), ("the foreign server does not answer (x)", "foreign server down"), ("the Iran server is off or does not answer", "Iran server down"), ("the foreign server is off or does not answer", "foreign server down"), ("the Iran and foreign server is off or does not answer", "both servers down"),
              ("port 8072 answers on the server but not from ir9: blocked in front of the server", "port blocked"), ("port 8075 is not listening on the Iran server", "port closed"),
              ("port 8075 accepts connections but no data comes back through the tunnel", "no data"), ("no data moves through the tunnel under load: the last tests carried 0 Mb/s", "no data"),
-             ("the link flaps: 5 of the last 10 checks failed, users see cuts", "flapping"), ("something odd happened here that is long", "something odd happ…"), ("", "down")]
+             ("the link flaps: 5 of the last 10 checks failed, users see cuts", "flapping"), ("something odd happened here that is long", "down"), ("short odd", "short odd"), ("", "down")]
     r = subprocess.run([node, str(driver)], input=json.dumps([{"last_error": e, "state": "down"} for e, _ in cases]), capture_output=True, text=True, encoding="utf-8", timeout=60, check=False)
     assert r.returncode == 0, r.stderr[-600:]
     assert json.loads(r.stdout) == [want for _, want in cases]
