@@ -904,8 +904,9 @@ def resume_pending() -> int:
 
         with session() as db:
             exists = db.scalar(select(Tunnel).where(Tunnel.name == name)) is not None
+            orphan = db.get(Server, int(a.get("iran_id") or 0)) is None or db.get(Server, int(a.get("foreign_id") or 0)) is None
 
-        if exists:
+        if exists or orphan:          # (a server that is gone cannot get its tunnel built: the note goes, with no "could not be resumed" - nobody is waiting for that tunnel)
             pending_drop(name)
             continue
 

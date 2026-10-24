@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.69.129 - A tunnel you removed no longer stays in the list as "starting": its old rebuild note goes with it, and a note whose server is gone draws nothing
+
+> **به زبان ساده:** تانلی که با دکمهٔ حذف پاک کرده بودید، گاهی در لیست می‌ماند با وضعیت «NEW / starting» و بدون هیچ دکمه‌ای. حالا هنگام حذف، یادداشت قدیمیِ «در حال ساخت» هم پاک می‌شود و یادداشتی که سرورش دیگر در پنل نیست اصلاً نمایش داده نمی‌شود.
+>
+> **In short:** a tunnel removed by hand could stay in the list as a "starting" row with no buttons, because an old "being rebuilt" note was never dropped. Removing the tunnel now drops that note too, and a note whose server is gone is not drawn at all.
+
+The owner (2026-10-24, "I deleted this tunnel but it is stuck there", with a screenshot: a BackPack `wssmux` row, state NEW / starting, Iran node known, Foreign node "?", no buttons). The tunnel was not in the database any more (both removals had finished: "removed from both servers"). The row was a placeholder drawn by `rebuilding_rows()` from a leftover item of `pending_builds` - the note a rebuild or a repair writes before it removes a tunnel and drops when the new one is built or given up. That note had never been dropped (most likely a build that ended while the database was locked - the panel had an hour of "database is locked" on 2026-10-21; the drop is the last step of a build and its failure is only logged), so it sat hidden behind the real tunnel of the same name; the moment the tunnel was removed it showed itself, with the foreign server of the note already gone from the panel (hence "?"). Nothing could remove it: the placeholder has no id and no buttons. Only a restart of the panel cleared it, by trying to build the tunnel again.
+
+- **`DELETE /api/tunnels/{id}`**: after the tunnel is removed the note with its name is dropped (`builder.pending_drop`). A failure to write the setting is logged and does not turn a finished removal into an error. A removal that is refused (read-only) leaves the note alone. Rebuilds and repairs do NOT go this way - they remove the tunnel with their own call and keep their note, as before.
+- **`rebuilding_rows` / `dead_note`**: a note whose Iran or foreign server is not on the panel any more draws no row (it can never be built).
+- **`resume_pending`** (at the start of the panel): a note whose server is gone is dropped at once, with no "could not be resumed" Event - nobody is waiting for that tunnel. A note whose servers exist is built again, as before.
+- **Kept on purpose**: a note whose servers exist and whose tunnel is missing still draws its "rebuilding…" row and is still built again at the next start - that is the safety net of a rebuild that a restart interrupted, and the panel cannot tell it from a stale note without a clock the notes do not carry.
+
+Proved: `tests/test_pending_ghost.py` (5 tests) - a dead note draws no row and a live rebuild still does; the list with one of each; removal by hand drops only its own note; a refused removal keeps it; the start drops a dead note with no Event and builds the live one. Not proved: on the live panel itself - its ghost goes at the update (the dead note draws nothing), the note itself is dropped at the next start.
+
 ## 1.69.128 - The night survey leaves no noise: no "removed" warnings for its temporary tunnels, no "crash" for a server that cannot be tested
 
 > **به زبان ساده:** بررسی شبانه دیگر رویداد زرد «Tunnel test-1 removed» و کرش با traceback برای سرور بدون python3 نمی‌سازد.

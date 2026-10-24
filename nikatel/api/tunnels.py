@@ -7,6 +7,7 @@ from sqlalchemy import select
 
 from ..auth import current_user
 from ..db import session
+from ..log import get_logger
 from ..models import Tunnel, TunnelCheck, is_standby, is_temp
 from ..services import (
     analyst,
@@ -21,6 +22,7 @@ from ..services import (
 from ..services.tunnels import check_tunnel, plan_for
 
 router = APIRouter(tags=["tunnels"], dependencies=[Depends(current_user)])
+log = get_logger("tunnels")
 
 
 class BuildIn(BaseModel):
@@ -469,6 +471,11 @@ def delete(tunnel_id: int):
     if name:
         standby.forget(name)
 
+        try:
+            builder.pending_drop(name)          # (an old note of a rebuild that nobody finished: once the tunnel is gone it would draw a "rebuilding…" row for it - and a restart of the panel would build it again)
+        except Exception:  # (the tunnel is removed: a settings write that fails must not turn that into an error)
+            log.exception("the rebuild note of %s could not be dropped", name)
+
     return {"ok": True, "results": res}
 
 
@@ -685,16 +692,24 @@ def _out(t: Tunnel, sb: dict | None = None, lane: dict | None = None, wv: dict |
                      units={"iran": plan.iran_units, "foreign": plan.foreign_units, "iface": plan.iface}, cap=capacity.view(t.name), standby=sb or {}, lane=lane or {}, trident=wv or {})
 
 
+def dead_note(it: dict, servers: dict[int, tuple[str, str]]) -> bool:
+    """Pure: the note of a rebuild whose Iran or foreign server is not on the panel any more. It can never be built (`resume_pending` drops it at the next start) and
+    the row it would draw has "?" for a server and no way to remove it (the owner, 2026-10-24: a deleted tunnel stayed in the list as NEW / starting)."""
+    a = it.get("args") or {}
+
+    return int(a.get("iran_id") or 0) not in servers or int(a.get("foreign_id") or 0) not in servers
+
+
 def rebuilding_rows(items: list[dict], servers: dict[int, tuple[str, str]], known: set[str], now: int) -> list[TunnelOut]:
     """Pure: a placeholder row for every rebuild in flight (the old tunnel is already removed, the new one not yet recorded), so the list never loses the tunnel
-    for the minute of a rebuild. A negative id marks it: the UI shows "rebuilding…" and no buttons."""
+    for the minute of a rebuild. A negative id marks it: the UI shows "rebuilding…" and no buttons. A note whose server is gone draws nothing (`dead_note`)."""
     rows = []
 
     for n, it in enumerate(items):
         a = it.get("args") or {}
         name = str(it.get("name") or "")
 
-        if not name or name in known or is_temp(name):
+        if not name or name in known or is_temp(name) or dead_note(it, servers):
             continue
 
         iran, foreign = servers.get(int(a.get("iran_id") or 0), ("?", "")), servers.get(int(a.get("foreign_id") or 0), ("?", ""))
