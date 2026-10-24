@@ -180,9 +180,9 @@ console.log(JSON.stringify({idle: names(labIssueChips({iss})), rebooting: names(
 def test_the_row_that_says_rebooting_shows_no_red_chips_for_what_the_restart_causes():
     src = "\n".join(_line(LAB_JS, k) for k in ("const labBusyOk", "const labRestartCut"))
     r = _node(CHIPS_HARNESS.replace("%(src)s", src).replace("%(chips)s", _function(LAB_JS, "const labIssueChips = s => {")))
-    assert r["idle"] == ["Offline", "GRE ✕", "Filtered"]
+    assert r["idle"] == ["Offline"]      # (1.69.130, the owner: a server that is offline says only Offline - no GRE, no Filtered, no tunnel tags)
     assert r["rebooting"] == ["Filtered"]      # (a real problem is still said)
-    assert r["installing"] == ["Offline", "GRE ✕", "Filtered"]      # (only a restart explains an offline server)
+    assert r["installing"] == ["Offline"]      # (only a restart explains an offline server; while it installs it is still just Offline)
 
 
 def test_the_issues_a_restart_causes_are_the_offline_ones_the_gre_tag_and_the_tunnels_down():
@@ -357,3 +357,20 @@ def test_the_tabs_of_the_profiles_keep_their_names_and_scroll_when_they_do_not_f
     assert "padding: 0 9px" in _rule(block, "html[data-fluid] body #page .lab-bar:has(.lab-kinds > button:nth-child(5)) .tabs.lab-kinds > button")
     assert "@container labbar (max-width: 1000px) {" in block and ".lab-chip > span { display: none; }" in block      # (five tabs or more: the chips lose their words earlier)
     assert "html body #page .tabs.lab-kinds { flex: 0 1 auto !important; min-width: 0; overflow-x: auto; }" in LAB_CSS      # (the strip itself scrolls: it is the buttons that no longer shrink)
+
+
+@needs_node
+def test_an_offline_server_says_only_offline_and_a_server_that_answers_keeps_all_its_tags():
+    """The owner, 2026-10-24, with a picture of a row "Offline" + "GRE ✕": "when a server is offline no GRE tag or any other tag, only Offline" - the tunnels of a server that does not answer are down because it is off, and the
+    other tags (Filtered, a bad route, CPU ...) cannot be read from a server that does not answer."""
+    src = "\n".join(_line(LAB_JS, k) for k in ("const labBusyOk", "const labRestartCut"))
+    code = CHIPS_HARNESS.split("const iss = ", 1)[0].replace("%(src)s", src).replace("%(chips)s", _function(LAB_JS, "const labIssueChips = s => {")) + """
+const names = html => [...html.matchAll(/<\\/svg>?([^<]+)<\\/span>|">([^<>]+)<\\/span>/g)].map(m => m[1] || m[2]);
+const off = [{sev: "bad", txt: "GRE ✕", gre: true}, {sev: "bad", txt: "Offline"}, {sev: "bad", txt: "3 tunnels down"}, {sev: "warn", txt: "CPU 91%"}];
+const up = [{sev: "bad", txt: "GRE ✕", gre: true}, {sev: "bad", txt: "Filtered"}, {sev: "warn", txt: "CPU 91%"}, {sev: "warn", txt: "RAM 90%"}];
+console.log(JSON.stringify({off: names(labIssueChips({iss: off})), up: names(labIssueChips({iss: up})), none: names(labIssueChips({iss: []}))}));
+"""
+    r = _node(code)
+    assert r["off"] == ["Offline"]      # (whatever the order the issues come in)
+    assert r["up"][:3] == ["GRE ✕", "Filtered", "CPU 91%"] and len(r["up"]) == 4      # (three chips and "+1": a server that answers keeps all its tags)
+    assert r["none"] == []

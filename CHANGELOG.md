@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.69.130 - A server that is offline says only "Offline"
+
+The owner (2026-10-24, with a picture of a row "Offline" + "GRE ✕"): "when a server is offline no GRE tag or any other tag, only Offline".
+
+- **What changed** (`lab.js labIssueChips`): the tags after the name of a server that does not answer are only **Offline**. The tunnels that end on it are down because it is off (the GRE tag, "N tunnels down"), and what the sampling reads from the server itself (the filter, a bad route, CPU, memory, the node) cannot be read from a server that does not answer, so none of them is said beside it. A server that answers keeps all its tags (three and "+n") as before. The lamp, the order of the list (a server that is off is red and first) and the search by those words are not changed; the tip of the Offline tag still says why the server does not answer.
+- **Proved**: `tests/test_ui_regression_walk.py` - the real `labIssueChips` in node: an offline server says `["Offline"]` whatever order its issues come in, also while it installs; a rebooting one still says only what is not caused by the restart; a server that answers keeps GRE, Filtered, CPU and the "+1"; on a private demo panel in the built-in browser the offline server row says only "Offline" (before: "Offline", "GRE ✕", "Node ✕") and the others keep their tags.
+- **Not proved**: the owner's own list; the server window, where the same facts are still listed in full (it was not changed).
 ## 1.69.129 - A tunnel you removed no longer stays in the list as "starting": its old rebuild note goes with it, and a note whose server is gone draws nothing
 
 > **به زبان ساده:** تانلی که با دکمهٔ حذف پاک کرده بودید، گاهی در لیست می‌ماند با وضعیت «NEW / starting» و بدون هیچ دکمه‌ای. حالا هنگام حذف، یادداشت قدیمیِ «در حال ساخت» هم پاک می‌شود و یادداشتی که سرورش دیگر در پنل نیست اصلاً نمایش داده نمی‌شود.
