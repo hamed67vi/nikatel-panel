@@ -424,7 +424,7 @@ def test_deleting_a_server_that_carries_a_pasarguard_node_has_the_tick_in_its_ow
 def test_a_server_that_carries_a_pasarguard_node_keeps_the_actions_of_the_node_in_its_menu():
     """The owner, 2026-10-15: "I did not say remove these capabilities" - the node was merged into the row of its server, and the Log, Usage, Certificate, Restart ... of the node were gone from the menu."""
     lab = _web("lab.js")
-    row = lab.split('if (ctx === "row") {', 1)[1].split("return [labGrp(\"Server\")", 1)[0]
+    row = lab.split("function labServerItems(p, s, ctx) {", 1)[1].split('/* "Move to a better Iran server', 1)[0]      # (since 1.69.133 one list for the row and for the window: the node's actions are in both)
     assert 'x.type === "pasarguard" && x.node_id != null' in row and 'labNodeParts({panel_id: pgn.panel_id, node_id: pgn.node_id})' in row and 'labSubItem("PasarGuard node", "box", [' in row
     assert "...nodeFly, gone, labSep, del]" in lab
 

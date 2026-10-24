@@ -374,3 +374,30 @@ console.log(JSON.stringify({off: names(labIssueChips({iss: off})), up: names(lab
     assert r["off"] == ["Offline"]      # (whatever the order the issues come in)
     assert r["up"][:3] == ["GRE ✕", "Filtered", "CPU 91%"] and len(r["up"]) == 4      # (three chips and "+1": a server that answers keeps all its tags)
     assert r["none"] == []
+
+
+MENU_HARNESS = r"""
+const labSep = {sep: 1}, labGrp = t => ({grp: t}), labIt = (t, k, fn, o) => ({t}), labSubItem = (t, k, items) => ({t, sub: items});
+const labOpen = () => 0, labCheckOne = () => 0, checkServer = () => 0, srvConsole = () => 0, liveOpen = () => 0, editServer = () => 0, srvReboot = () => 0, srvConnect = () => 0, srvPassword = () => 0, forgetKey = () => 0, glassChoice = () => 0, srvOpen = () => 0;
+const greCheck = () => 0, srvSpoof = () => 0, srvFilter = () => 0, srvAbuse = () => 0, srvCores = () => 0, srvWg = () => 0, srvInstall = () => 0, wtab = () => 0, labRemove = () => 0, labAdopt = () => 0, deleteServer = () => 0, labMakeNode = () => 0;
+const labMoveItems = () => [], labCanMakeNode = () => true, pgSrvOn = () => [], labNodeParts = () => ({}), state = {open: null}, $ = () => null, refresh = () => 0;
+%(fn)s
+const names = items => items.map(x => x.grp ? "#" + x.grp : x === labSep ? "-" : x.sub ? x.t + " > " + x.sub.map(y => y.t).join(" | ") : x.t);
+const s = {id: 1, name: "n", role: "foreign", online: true, enabled: true, facts: {}, extra: {}}, i = {id: 5};
+console.log(JSON.stringify({row: names(labServerItems(i, s, "row")), win: names(labServerItems(i, s, "win")), swin: names(labServerItems(null, s, "swin")), iran: names(labServerItems(i, {...s, role: "iran"}, "row"))}));
+"""
+
+
+@needs_node
+def test_the_menu_of_a_server_row_and_the_menu_of_its_window_are_one_full_list_in_categories():
+    """The owner, 2026-10-24, with a picture of the row menu (Server group, Move to profile, Delete): "combine the options of this menu with the options inside the box, both complete, in categories like
+    this". The row had no Access / Tests / Install and the window had no Overview, Move to profile or Make a PasarGuard node: now both are the same list - Server | Access, Tests, Install | profile and node | Delete."""
+    r = _node(MENU_HARNESS.replace("%(fn)s", _function(LAB_JS, "function labServerItems(p, s, ctx) {")))
+    full = ["#Server", "Overview", "Check now", "Console", "Live traffic…", "Edit…", "Reboot…", "-",
+            "Access > Connect SSH… | Change SSH password… | Forget host key… | Open in an SSH program…",
+            "Tests > GRE test | Spoof test… | Is it filtered in Iran? | Abuse-Defender: install…",
+            "Install > Nodes and tools… | Tunnel cores… | WireGuard tools… | Update the server…", "-", "Move to profile > ", "Make a PasarGuard node…", "Off the page", "-", "Delete server…"]
+    assert r["row"] == full and r["win"] == full      # (the same list, whichever menu it is opened from)
+    assert r["swin"] == [x.replace("Off the page", "Put on the page") for x in full if x not in ("Move to profile > ", "Make a PasarGuard node…")]      # (a server on no profile: no profile to move, put on the page instead of off it)
+    assert [x for x in r["iran"] if x.startswith("Tests")] == ["Tests > GRE test | Spoof test…"]      # (the filter check and Abuse-Defender are for foreign servers only)
+

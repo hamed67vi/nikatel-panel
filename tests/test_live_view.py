@@ -149,7 +149,7 @@ def test_the_routes_answer_a_reading_a_refusal_with_its_reason_and_a_bad_gateway
 
 def test_the_menus_of_a_tunnel_and_of_a_server_open_the_window_and_the_words_are_in_persian():
     fa, css = (WEB / "i18n.fa.ui2.js").read_text(encoding="utf-8"), (WEB / "lab.css").read_text(encoding="utf-8")
-    assert LAB.count('labIt("Live traffic…", "pulse", () => liveOpen("tunnel", t.id, t.name, !!(t.units || {}).iface)') == 1 and LAB.count('labIt("Live traffic…", "pulse", () => liveOpen("server", s.id, nm)') == 2   # the tunnel menu, the row and the window of a server
+    assert LAB.count('labIt("Live traffic…", "pulse", () => liveOpen("tunnel", t.id, t.name, !!(t.units || {}).iface)') == 1 and LAB.count('labIt("Live traffic…", "pulse", () => liveOpen("server", s.id, nm)') == 1   # the tunnel menu, and the one list of a server (its row and its window, since 1.69.134)
     assert "window.liveOpen = (kind, id, name, hasCard) =>" in LAB and "/live-read?via=${via}" in LAB and "/api/servers/${L.id}/live-read" in LAB and "Math.max(150, 1000 - (Date.now() - t0))" in LAB            # one reading a second, the time of the answer taken off
     assert "while (LIVE_W === L && document.getElementById(\"lv-\" + L.token))" in LAB and "if (L.fails >= 5)" in LAB                                                                               # a closed window stops everything; five failures in a row stop it too
     assert ".lv .lv-row" in css and ".lv .lv-g .l0" in css and '"Live traffic": "' in fa and '"Curr": "' in fa and '"Ttl": "' in fa
