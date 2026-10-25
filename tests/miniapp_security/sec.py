@@ -1136,7 +1136,7 @@ def dc1():
         ("cap", {"amount": 50, "maxd": 20_000}, False, None, 110_000), ("minimum met", {"minp": 100_000}, False, None, 117_000), ("minimum not met", {"minp": 200_000}, False, None, None),
         ("expired", {"exp": now - 10}, False, None, None), ("not expired", {"exp": now + 3600}, False, None, 117_000), ("no uses left", {"count": 0}, False, None, None), ("uses left", {"count": 5}, False, None, 117_000),
         ("switched off", {"active": 0}, False, None, None),
-        ("agents only, a customer", {"aud": "agents"}, False, None, None), ("agents only, an agent", {"aud": "agents"}, True, None, 117_000), ("non agents, an agent", {"aud": "non_agents"}, True, None, None), ("non agents, a customer", {"aud": "non_agents"}, False, None, 117_000),
+        ("agents only, a customer", {"aud": "agents"}, False, None, None), ("agents only, an agent (an agent takes no code at all)", {"aud": "agents"}, True, None, None), ("percent 10, an agent", {}, True, None, None), ("non agents, an agent", {"aud": "non_agents"}, True, None, None), ("non agents, a customer", {"aud": "non_agents"}, False, None, 117_000),
         ("one user, him", {"aud": "user", "aud_user": U}, False, None, 117_000), ("one user, somebody else", {"aud": "user", "aud_user": U + 1}, False, None, None),
         ("buyers, a first-time customer", {"aud": "buyers"}, False, None, None), ("buyers, a customer who paid", {"aud": "buyers"}, False, "paid", 117_000),
         ("non buyers, a first-time customer", {"aud": "non_buyers"}, False, None, 117_000), ("non buyers, a customer who paid", {"aud": "non_buyers"}, False, "paid", None),
@@ -1215,8 +1215,12 @@ def dc2():
         problems.append(f"a code on a plan that costs nothing used a use up: {code_row('TRIAL')}")
     dc_setup(agent=True); sql(f"UPDATE users SET discount_percent = '{{\"normal\":\"20\"}}' WHERE userid = '{U}'"); mk_code("AG10")
     c, j, t = call("buy", {"plan_id": 1, "code": "AG10", "rid": "dc2ag" + os.urandom(4).hex()})
-    if not ok(j) or 1_000_000 - wallet() != 93_600:
-        problems.append(f"an agent pays 104000 and the code takes 10% of THAT: paid {1_000_000 - wallet()} (want 93600): {t[:80]}")
+    c2, j2, t2 = call("discount_check", {"plan_id": 1, "code": "AG10"})
+    if ok(j) or ok(j2) or wallet() != 1_000_000 or code_row("AG10") != (-1, []) or (call("me")[1] or {}).get("features", {}).get("discount_code") is not False:
+        problems.append(f"an agent (active agency plan) takes no code: buy ok={ok(j)}, check ok={ok(j2)}, wallet {wallet()}, code {code_row('AG10')}, the field should be switched off for him: {t[:60]}")
+    c, j, t = call("buy", {"plan_id": 1, "rid": "dc2ag2" + os.urandom(4).hex()})
+    if not ok(j) or 1_000_000 - wallet() != 104_000:
+        problems.append(f"an agent without a code pays his agency price 104000: paid {1_000_000 - wallet()}: {t[:60]}")
     # asking is rate limited; odd strings are harmless
     dc_setup(); mk_code("REAL")
     codes = ["", "nope", "'", "\" OR 1=1 -- ", "REAL' OR '1'='1", "\x00", "a" * 300, "%", "REAL%", "ریال", "{\"a\":1}"]
@@ -1233,7 +1237,7 @@ def dc2():
     c, j, t = call("buy", {"plan_id": 1, "code": "REAL", "rid": "dc2thr" + os.urandom(4).hex()})
     if ok(j) and last[0] == 429:
         problems.append("while slowed down a buy with a code still went through")
-    return bool(problems), "; ".join(problems[:6]) if problems else "the last use goes to one customer, retries and failures take nothing, asking is rate limited, odd strings are harmless, the switch works, an agent's base price is used"
+    return bool(problems), "; ".join(problems[:6]) if problems else "the last use goes to one customer, retries and failures take nothing, asking is rate limited, odd strings are harmless, the switch works, an agent takes no code"
 
 # ===== injection and web basics
 SQLI = ["'", "\"", "' OR '1'='1", "1' OR '1'='1' -- ", "1; DROP TABLE users; -- ", "' UNION SELECT 1,2,3 -- ", "\\", "%27", "1 AND SLEEP(2)", "') OR 1=1 -- ", "0x27", "\x00", "a' or 1=1#", "1) UNION SELECT password FROM server_config -- ", "O'Brien", "%' OR '%'='", "{\"a\":\"'\"}"]

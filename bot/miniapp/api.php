@@ -243,6 +243,7 @@ function priceFor(array $me, array $plan): array {
     return [max(0, $price), 1, $pct];
 }
 /* ---------------------------------------------------------------- discount codes: the bot's own table `discounts`, the same rules as applyDiscountToPay() of the bot's config.php */
+const AGENT_NO_CODE = 'کد تخفیف برای همکاران قابل استفاده نیست؛ شما از تخفیف همکاری استفاده می‌کنید.';
 /** the code's row when it can be used now (switched on, not expired, uses left), else null; $lock = read it FOR UPDATE (inside a transaction) */
 function discountRow(string $code, bool $lock = false): ?array {
     if ($code === '' || mb_strlen($code) > 64) return null;
@@ -255,6 +256,7 @@ function discountRow(string $code, bool $lock = false): ?array {
 function discountApply(array $d, array $me, int $uid, array $plan, int $price): array {
     $audience = (string) ($d['audience_type'] ?? '') ?: 'all';
     $isAgent = (int) ($me['is_agent'] ?? 0) === 1;
+    if ($isAgent) return [false, AGENT_NO_CODE];      // (the owner: whoever has an active agency plan takes no discount code - he has the agency discount)
     $paidBuys = fn() => (int) (row("SELECT COUNT(*) AS c FROM pays WHERE user_id = ? AND state IN ('auto_cart_approved','approved','paid','paid_with_wallet')", [$uid])['c'] ?? 0) > 0;      // (the bot does not count a wallet purchase as a purchase here; the Mini App only pays from the wallet, so it does)
     $hasOrder = fn() => (int) (row("SELECT COUNT(*) AS c FROM orders_list WHERE userid = ?", [$uid])['c'] ?? 0) > 0;
     $allowed = match ($audience) {
@@ -592,7 +594,7 @@ case 'me': {
     $support = trim((string) ($botState['supportID'] ?? ''));
     out(['ok' => true,
         'user' => ['id' => $uid, 'name' => trim((string) $me['name']), 'username' => trim((string) ($me['username'] ?? '')), 'wallet' => (int) $me['wallet'], 'agent' => $isAgent, 'services' => $cnt, 'pending_topups' => $pending, 'since' => (int) ($me['date'] ?? 0)],
-        'features' => ['sell' => on('sellState', 'on'), 'buy_groups' => buyGroups(), 'support_chat' => on('supportChat', 'on'), 'ticket_new' => on('miniTicketNew', 'on'), 'discount_code' => on('miniDiscountCode', 'on'), 'wallet' => on('walletState', 'on'), 'card' => on('cartToCartState'), 'gift' => on('giftState'), 'wheel' => on('wheelState'), 'report' => on('reportState'),
+        'features' => ['sell' => on('sellState', 'on'), 'buy_groups' => buyGroups(), 'support_chat' => on('supportChat', 'on'), 'ticket_new' => on('miniTicketNew', 'on'), 'discount_code' => on('miniDiscountCode', 'on') && !$isAgent, 'wallet' => on('walletState', 'on'), 'card' => on('cartToCartState'), 'gift' => on('giftState'), 'wheel' => on('wheelState'), 'report' => on('reportState'),
             'renew' => on('renewAccountState', 'on'), 'addvolume' => on('increaseVolumeState', 'on'), 'adddays' => on('increaseTimeState', 'on'), 'apps' => $apps > 0, 'hold' => on('onHoldState'),
             'cashback' => (float) ($botState['cashbackPercent'] ?? 0), 'referral' => (int) settingValue('INVITE_BANNER_AMOUNT') > 0, 'sub' => on('subLinkState', 'on'), 'configs' => on('configLinkState', 'on')],
         'amounts' => $amounts, 'min_topup' => MIN_TOPUP, 'support' => ltrim($support, '@'), 'bot' => (string) ($botUsername ?? ''), 'start' => (string) ($user['start_param'] ?? '')]);
@@ -661,6 +663,7 @@ case 'discount_check': {
     $code = trim((string) ($body['code'] ?? ''));
     $plan = row("SELECT * FROM server_plans WHERE id = ? AND active = 1", [(int) ($body['plan_id'] ?? 0)]);
     if (!$plan) fail('این پلن در دسترس نیست.', 404);
+    if ((int) ($me['is_agent'] ?? 0) === 1) fail(AGENT_NO_CODE);      // (an agent: no code, and nothing to count as a wrong try)
     if ($code === '') fail('کد را وارد کن.');
     if (throttled($uid, 'discount', 10, 900)) fail('Too many wrong codes; try again in a few minutes.', 429);      // (a script could try codes as fast as it likes)
     [$list] = priceFor($me, $plan);
@@ -686,6 +689,7 @@ case 'buy': {
     $dCode = trim((string) ($body['code'] ?? '')); $dValue = 0; $listPrice = $price;
     if ($dCode !== '') {
         if (!on('miniDiscountCode', 'on')) fail('کد تخفیف فعال نیست.');
+        if ($agentBought === 1) fail(AGENT_NO_CODE);      // (an agent: no code; the purchase is not made, he asks again without it)
         if (throttled($uid, 'discount', 10, 900)) fail('Too many wrong codes; try again in a few minutes.', 429);
         $dRow = discountRow($dCode);
         $why = $dRow ? discountApply($dRow, $me, $uid, $plan, $price) : [false, mainText('discount_not_found', mainText('not_valid_discount_code', 'کد تخفیف معتبر نیست.'))];

@@ -105,7 +105,7 @@ $dbUserName = 'mini'; $dbPassword = 'mini-test-pw'; $dbName = '{DB}'; $USDTPrice
 """)
         net = re.search(r"\$range\s*=\s*\[\s*['\"]([0-9.]+)/", open(f"{ORIG}/config.php", encoding="utf-8").read())      # (check() lets only Telegram's networks in: the first one of the bot's own list)
         open(f"{T}/{name}/prepend.php", "w").write(f"<?php $_SERVER['REMOTE_ADDR'] = '{net.group(1)}';\n")
-    for script in ("install-support-section.sh", "install-agent-discount-notice.sh", "install-menu-user-id.sh", "install-emoji-extra.sh"):      # (the mods of the bot are put in: they must live together)
+    for script in ("install-support-section.sh", "install-agent-discount-notice.sh", "install-menu-user-id.sh", "install-emoji-extra.sh", "install-agent-no-code.sh"):      # (the mods of the bot are put in: they must live together)
         r = subprocess.run(["bash", f"{MOD}/scripts/{script}", f"{T}/after"], capture_output=True, text=True, env=dict(os.environ, BACKUP_DIR=f"{T}/bk"))
         if r.returncode:
             print(r.stdout, r.stderr); sys.exit(2)
@@ -581,6 +581,51 @@ def el1(port, after):
     if after and len(listed) < 100:
         problems.append(f"the list should have grown a lot, it has {len(listed)} emoji")
     sql("DELETE FROM setting WHERE type LIKE 'MAIN_BUTTONS%'")
+    return problems
+
+
+@scn("AC1", "a customer with an active agency plan takes no discount code in the bot's own applyDiscountToPay() (cut out of the real config.php and run on the private database): refused with one sentence, the use of the code is NOT taken; a customer who is not an agent gets the discount; the old bot lets the agent have it")
+def ac1(port, after):
+    problems = []
+    tree = f"{T}/{'after' if after else 'before'}"
+    probe = tree + "/_ac_probe.php"
+    open(probe, "w").write(r"""<?php
+error_reporting(0); mysqli_report(MYSQLI_REPORT_OFF);
+$t = token_get_all(file_get_contents($argv[1])); $n = count($t); $start = null;
+for ($i = 0; $i < $n; $i++) if (is_array($t[$i]) && $t[$i][0] === T_FUNCTION) { $j = $i + 1; while (is_array($t[$j]) && $t[$j][0] === T_WHITESPACE) $j++; if (is_array($t[$j]) && $t[$j][1] === 'applyDiscountToPay') { $start = $i; break; } }
+if ($start === null) { echo json_encode(['error' => 'no function']); exit; }
+$depth = 0; $out = ''; $began = false;
+for ($k = $start; $k < $n; $k++) { $x = is_array($t[$k]) ? $t[$k][1] : $t[$k]; $out .= $x; if ($x === '{' || $x === '${') { $depth++; $began = true; } elseif ($x === '}') { $depth--; if ($began && $depth === 0) break; } }
+eval($out);
+$SENT = []; function sendMessage($txt) { global $SENT; $SENT[] = $txt; }
+$connection = new mysqli('localhost', 'mini', 'mini-test-pw', $argv[2]); $connection->set_charset('utf8mb4');
+$r = applyDiscountToPay($connection, (int) $argv[3], 'AC1CODE', (int) $argv[4], 'u', 'n', 1, ['not_valid_discount_code' => 'NOT VALID'], []);
+echo json_encode(['result' => $r, 'sent' => $SENT], JSON_UNESCAPED_UNICODE);
+""")
+    for who, agent in ((900401, 0), (900402, 1)):
+        reset()
+        sql(f"INSERT INTO users (userid, name, username, refcode, wallet, date, step, isAdmin, is_agent) VALUES ('{who}', 'T', 't', '0', 0, '1', 'none', 0, {agent})")
+        sql(f"INSERT INTO pays (hash_id, user_id, type, plan_id, server_id, price, request_date, state, agent_bought, agent_count) VALUES ('h{who}', {who}, 'BUY_SUB', 1, 1, 130000, {int(time.time())}, 'pending', {agent}, 0)")
+        sql("DELETE FROM discounts")
+        sql("INSERT INTO discounts (hash_id, type, amount, expire_date, expire_count, used_by, can_use, audience_type, audience_user_id, target_type, target_id, min_price, max_discount, is_active) VALUES ('AC1CODE', 'percent', 10, 0, 5, NULL, 1, 'all', NULL, 'all', NULL, 0, NULL, 1)")
+        pid = int(sql(f"SELECT id FROM pays WHERE hash_id = 'h{who}'"))
+        r = subprocess.run(["php", "-d", f"mysqli.default_socket={SOCK}", probe, f"{tree}/config.php", DB, str(pid), str(who)], capture_output=True, text=True, cwd=tree)
+        try:
+            res = json.loads(r.stdout)
+        except ValueError:
+            problems.append(f"the probe printed no answer: {r.stdout[:100]!r} {r.stderr[:100]!r}"); continue
+        if "error" in res:
+            problems.append(res["error"]); continue
+        ok_ = res["result"]["success"]
+        left, used = sql("SELECT expire_count FROM discounts WHERE hash_id = 'AC1CODE'"), sql("SELECT COALESCE(used_by, '') FROM discounts WHERE hash_id = 'AC1CODE'")
+        refused_agent = after and agent == 1
+        if refused_agent:
+            if ok_ or res["result"]["price"] != 130000 or left != "5" or used not in ("", None) or not res["sent"] or "NOT VALID" in res["sent"][0]:
+                problems.append(f"the agent must be refused with his own sentence and the use must stay: success={ok_}, price {res['result']['price']}, count {left}, used_by {used!r}, sent {res['sent'][:1]}")
+        else:
+            if not ok_ or res["result"]["price"] != 117000 or left != "4" or str(who) not in str(used):
+                problems.append(f"{'an agent of the OLD bot' if agent else 'a customer'} must get the discount as before: success={ok_}, price {res['result']['price']}, count {left}, used_by {used!r}")
+    os.remove(probe)
     return problems
 
 
