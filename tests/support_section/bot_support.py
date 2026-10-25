@@ -51,7 +51,7 @@ class Tg(BaseHTTPRequestHandler):
         else:
             fields = {k: v[0] for k, v in urllib.parse.parse_qs(body.decode(errors="replace")).items()}
         with TLOCK:
-            TG_LOG.append({"method": method, "chat_id": str(fields.get("chat_id", "")), "text": fields.get("text") or fields.get("caption") or "", "markup": fields.get("reply_markup", ""), "mid": fields.get("message_id", ""), "token_ok": bool(m) and m.group(1) == TOKEN})
+            TG_LOG.append({"method": method, "chat_id": str(fields.get("chat_id", "")), "text": fields.get("text") or fields.get("caption") or "", "markup": fields.get("reply_markup", ""), "mid": fields.get("message_id", ""), "parse": fields.get("parse_mode", ""), "token_ok": bool(m) and m.group(1) == TOKEN})
         out = {"ok": True, "result": {"message_id": 700 + len(TG_LOG)}}
         data = json.dumps(out).encode()
         self.send_response(200); self.send_header("Content-Type", "application/json"); self.send_header("Content-Length", str(len(data))); self.send_header("Connection", "close"); self.end_headers(); self.wfile.write(data)
@@ -105,10 +105,16 @@ $dbUserName = 'mini'; $dbPassword = 'mini-test-pw'; $dbName = '{DB}'; $USDTPrice
 """)
         net = re.search(r"\$range\s*=\s*\[\s*['\"]([0-9.]+)/", open(f"{ORIG}/config.php", encoding="utf-8").read())      # (check() lets only Telegram's networks in: the first one of the bot's own list)
         open(f"{T}/{name}/prepend.php", "w").write(f"<?php $_SERVER['REMOTE_ADDR'] = '{net.group(1)}';\n")
-    for script in ("install-support-section.sh", "install-agent-discount-notice.sh"):      # (both mods of the bot are put in: they must live together)
+    for script in ("install-support-section.sh", "install-agent-discount-notice.sh", "install-menu-user-id.sh"):      # (the mods of the bot are put in: they must live together)
         r = subprocess.run(["bash", f"{MOD}/scripts/{script}", f"{T}/after"], capture_output=True, text=True, env=dict(os.environ, BACKUP_DIR=f"{T}/bk"))
         if r.returncode:
             print(r.stdout, r.stderr); sys.exit(2)
+    # the owner's menu text: the word MENU-ID after the prompt line, in the 'after' bot only (the old bot keeps its text)
+    vp = f"{T}/after/settings/values.php"
+    vals = open(vp, encoding="utf-8").read()
+    prompt = "🔰 لطفا یکی از دکمه های زیر را انتخاب کنید:"
+    assert vals.count(prompt) == 2, vals.count(prompt)
+    open(vp, "w", encoding="utf-8").write(vals.replace(prompt, prompt + "\n\n🎫 شناسه عددی: MENU-ID"))
 
 
 def reset(states=None, support_id="@test_support"):
@@ -495,6 +501,33 @@ def ag1(port, after):
     got = edit("Normal", "0", "25")
     if got or stored().get("normal") != "25":
         problems.append(f"agentDiscountMsg = off: sent {len(got)} / saved {stored()}")
+    return problems
+
+
+@scn("MU1", "the customer's own numeric id, monospace, at the end of the main-menu text (the word MENU-ID in values.php): <code> in an edited (HTML) menu, a backtick pair in a sent (Markdown) one, his own id, never the other customer's; the old bot has no such line")
+def mu1(port, after):
+    problems = []
+    for uid, other in ((U, OTHER), (OTHER, U)):
+        reset()
+        n = len(TG_LOG)
+        post(port, msg(uid, "/start"))
+        post(port, cb(uid, "mainMenu"))
+        menus = [m for m in sent(uid, since=n) if m["method"] in ("sendMessage", "editMessageText") and "لطفا" in m["text"] and "انتخاب" in m["text"]]
+        if not menus:
+            problems.append(f"user {uid}: no main-menu text was sent at all")
+            continue
+        for m in menus:
+            if "MENU-ID" in m["text"] or str(other) in m["text"]:
+                problems.append(f"user {uid}: the word was left or another id shown: {m['text'][-80:]!r}")
+            if not after:
+                if str(uid) in m["text"]:
+                    problems.append(f"the old bot shows an id: {m['text'][-60:]!r}")
+                continue
+            want = f"<code>{uid}</code>" if m["parse"] == "HTML" else (f"`{uid}`" if m["parse"].lower().startswith("markdown") else str(uid))
+            if f"شناسه عددی: {want}" not in m["text"]:
+                problems.append(f"user {uid} ({m['method']}, parse={m['parse']!r}): the id line should be 'id: {want}': {m['text'][-70:]!r}")
+        if after and {m["parse"] for m in menus} == {""}:
+            problems.append("no parse mode on any menu message: the check of the markup did not run")
     return problems
 
 
