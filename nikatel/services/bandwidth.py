@@ -162,6 +162,22 @@ def add_sample(bw: dict | None, now: int, down: float, up: float | None, how: st
             "next_at": next_at, "hist": hist, "loss": {"pct": float(loss), "at": now} if loss is not None else keep}, change
 
 
+def carry_notes(old: dict | None, new: dict, change: str) -> dict:
+    """Pure: `new` (what `add_sample` made) with the Doctor's own notes in the tunnel's `bw` kept. `add_sample` builds the dict again from its own keys, so at the next measurement of a tunnel the sentence that says where
+    the drop is (`why`) vanished from its window and the rail "the engine is restarted once in six hours" (`engine_fix_at`) was void (found 2026-10-25 on a tunnel that dropped for two hours). `engine_fix_at` is always kept;
+    `why` while the same drop (or very slow) goes on - a new episode or its end starts without the old sentence."""
+    old = old or {}
+    out = dict(new)
+
+    if old.get("engine_fix_at"):
+        out["engine_fix_at"] = old["engine_fix_at"]
+
+    if old.get("why") and not change and new.get("state") in ("drop", "slow"):
+        out["why"] = old["why"]
+
+    return out
+
+
 def explain(f: dict) -> tuple[str, str]:
     """Pure: (a short code, ONE sentence) - where the problem of a tunnel whose bandwidth dropped most likely is. `f` holds what the Doctor found: now / ref (Mb/s), the CPU of the two servers, how many tunnels
     of the same Iran / foreign server dropped too, the loss and delay of the line (against its usual delay), the traffic the tunnel carries now. The first rule that fits wins, the cheapest explanation first."""
@@ -277,6 +293,7 @@ def _store(tunnel_id: int, down: float, up: float | None, how: str, ping: float 
 
         rec = dict(t.record or {})
         bw, change = add_sample(rec.get("bw"), now, down, up, how, ping, loss, live=live)
+        bw = carry_notes(rec.get("bw"), bw, change)
 
         if bw["next_at"] == now + INTERVAL:               # the usual rhythm: a few minutes different for every tunnel, so that they do not all fall in one minute
             bw["next_at"] += (tunnel_id * 97) % 600
@@ -550,6 +567,8 @@ def run() -> None:
 
             if change in ("drop", "slow"):
                 _investigate_later(tid)
+            elif bw.get("state") == "drop":
+                _relook_later(tid, bw)                              # a drop that LASTS: looked at again a few hours after the last look (the first look may have found the way to a fix shut, as the shifted port of the standby once did)
             elif bw.get("state") == "slow":
                 _retype_later(tid)                                  # a tunnel that is ALREADY very slow (judged before an update, or a change that could not start): tried again at every watch, until it is changed
             elif bw.get("state") in ("ok", "learning", "low"):
@@ -688,8 +707,8 @@ def _say_checks(say, f: dict) -> None:
         say(f"Users are carrying {f['live']:.0f} Mb/s through it right now.")
 
 
-def _keep_why(tunnel_id: int, code: str, sentence: str, what: str) -> None:
-    """The sentence that says where the problem is: kept in the record of the tunnel (the page shows it) and told as an event."""
+def _keep_why(tunnel_id: int, code: str, sentence: str, what: str, tell: bool = True) -> None:
+    """The sentence that says where the problem is: kept in the record of the tunnel (the page shows it) and told as an event (`tell` False: a second look at a drop that lasts keeps it quietly)."""
     with session() as db:
         t = db.get(Tunnel, tunnel_id)
 
@@ -699,11 +718,14 @@ def _keep_why(tunnel_id: int, code: str, sentence: str, what: str) -> None:
             bw["why"] = {"code": code, "text": sentence, "at": int(time.time())}
             rec["bw"] = bw
             t.record = rec
-            emit(db, "warn", "tunnels", f"Tunnel {t.name}: the bandwidth {what} - {sentence}", t.name)
+
+            if tell:
+                emit(db, "warn", "tunnels", f"Tunnel {t.name}: the bandwidth {what} - {sentence}", t.name)
 
 
-def investigate(aid: int, tunnel_id: int, finish: bool = True) -> None:
-    """The story of the look (the Doctor's Live window shows it): what dropped, what was checked, where the problem is. A tunnel that is VERY SLOW (it never dropped) has its own story, `_investigate_slow`."""
+def investigate(aid: int, tunnel_id: int, finish: bool = True, relook: bool = False) -> None:
+    """The story of the look (the Doctor's Live window shows it): what dropped, what was checked, where the problem is. A tunnel that is VERY SLOW (it never dropped) has its own story, `_investigate_slow`.
+    `relook`: a second look at a drop that LASTS (`relook_due`): the engine was tried at the first look, so it is not restarted again (that cuts the users for half a minute), and the sentence is kept without a new event."""
     from . import autopilot
 
     f = _facts(tunnel_id)
@@ -713,15 +735,15 @@ def investigate(aid: int, tunnel_id: int, finish: bool = True) -> None:
         _investigate_slow(aid, tunnel_id, f, say, finish)
         return
 
-    say(f"{f['name']}: the bandwidth dropped to {f['now']} Mb/s; it usually gives {f['ref']}.")
+    say(f"{f['name']}: " + (f"still dropped - {f['now']} Mb/s, it usually gives {f['ref']}. The Doctor looks again, hours after the last look." if relook else f"the bandwidth dropped to {f['now']} Mb/s; it usually gives {f['ref']}."))
     _say_checks(say, f)
     code, sentence = explain(f)
-    _keep_why(tunnel_id, code, sentence, "dropped")
+    _keep_why(tunnel_id, code, sentence, "dropped", tell=not relook)
     say("Where the problem is: " + sentence)
 
     fixed = None
 
-    if code == "this_only":
+    if code == "this_only" and not relook:
         fixed = _engine_fix(tunnel_id, say)
 
     if code in DROP_SWAP_CODES and fixed is not True:
@@ -1203,7 +1225,30 @@ def _retype_later(tunnel_id: int) -> None:
     except ValueError as e:
         log.info("the change of type of tunnel %s not started: %s", tunnel_id, str(e)[:100])
 
-def _investigate_later(tunnel_id: int) -> None:
+RELOOK_AFTER = 3 * 3600          # a drop that lasts is looked at again this long after its last look
+_RELOOKED: dict[int, int] = {}   # tunnel id -> when the Doctor last looked at its drop (kept in memory: after a restart of the panel a drop older than RELOOK_AFTER is looked at once more)
+
+
+def relook_due(bw: dict | None, last: int, now: int) -> bool:
+    """Pure: is a tunnel that is STILL dropped due for another look - its drop began, and the last look (or the beginning of the drop, when there was none since the panel started) is RELOOK_AFTER old. The first look
+    may have ended with the way to a fix shut for a reason that is gone (2026-10-25: it found tcp 726 Mb/s against 28 Mb/s of kcp and could not change to it because of a port check that is mended now): nobody should
+    have to wait for the drop to end and begin again."""
+    bw = bw or {}
+    since = int((bw.get("drop") or {}).get("since") or 0)
+
+    return bw.get("state") == "drop" and since > 0 and now - max(since, int(last or 0)) >= RELOOK_AFTER
+
+
+def _relook_later(tunnel_id: int, bw: dict) -> None:
+    """Called at every measurement of a tunnel that is still dropped: when `relook_due`, the look starts again (only in the modes fix and move; the engine is not restarted again, no new event)."""
+    if not actions_mode_allows_fix():
+        return
+
+    if relook_due(bw, _RELOOKED.get(tunnel_id, 0), int(time.time())):
+        _investigate_later(tunnel_id, relook=True)
+
+
+def _investigate_later(tunnel_id: int, relook: bool = False) -> None:
     """Start the look at a confirmed drop as a story of the Doctor (not twice at once, never for a tunnel whose repair is running)."""
     from . import autopilot
 
@@ -1213,6 +1258,7 @@ def _investigate_later(tunnel_id: int) -> None:
             name = t.name if t is not None else ""
 
         if name:
-            autopilot._start(name, investigate, tunnel_id, action="speed", source="auto", allow_read_only=True)
+            _RELOOKED[tunnel_id] = int(time.time())
+            autopilot._start(name, investigate, *((tunnel_id, True, True) if relook else (tunnel_id,)), action="speed", source="auto", allow_read_only=True)
     except ValueError as e:
         log.info("look at the drop of tunnel %s not started: %s", tunnel_id, str(e)[:100])

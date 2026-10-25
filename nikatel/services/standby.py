@@ -729,7 +729,7 @@ def build_plan(name: str, kind: str = "") -> dict:
         raise ValueError(why)
 
     now = int(time.time())
-    ports_text, mapping = shift_mapping(p["mapping"], _taken_ports(p["iran_id"], ""))
+    ports_text, mapping = shift_mapping(p["mapping"], _taken_ports(p["iran_id"], (v["s"] or {}).get("name", "")))          # (the tunnel's own standby is not "another tunnel": its ports are free for the standby that replaces it - the swap of a type asked first and found "port 25050 is already used" because of it, 2026-10-25)
     asked = kind or _wanted(name)
 
     if asked:
