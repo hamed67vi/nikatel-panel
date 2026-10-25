@@ -889,21 +889,18 @@ const lossTip = t => tunLoss(t).blocked ? "Ping does not pass on this path (the 
 const noSvcText = (t, n) => `Connected, but nothing listens on port ${(n.ports || []).join(", ")} of the foreign server ${t.foreign_name}${n.all ? "" : " (its other ports do answer)"}: the tunnel carries data, nobody answers behind it. Add the inbound on that port there, or point the tunnel at a port that has one (Ports…).`;
 const tunNoSvc = t => { const n = (t.detail || {}).no_service; return n && n.confirmed && ["up", "degraded"].includes(t.state) ? n : null; };      // "connected, no service" (the owner, 2026-10-25): the tunnel is fine, nothing listens on the port it delivers to on the foreign server (services/tunnels.py no_service)
 const tunSev = t => { const loss = tunLoss(t).v || 0; if (t.state === "down") return "sev-red"; return t.state === "unknown" || t.state === "starting" || loss >= SHOW_LOSS || tunNoSvc(t) || (["drop", "slow"].includes((t.bw || {}).state) && bwHurts(t)) ? "sev-yellow" : ""; };      // (a dropped capacity the users do not feel does not lift the tunnel in the list, the Problems filter or the counter: the owner, 2026-10-22 "if the users' bandwidth fell it comes up, otherwise it stays where it is")
-/* the ORDER of the tunnel list (the owner, 2026-10-21: "a tunnel with a problem goes to the top; every location together, then alphabetical"): a tunnel with a problem first (a cut, then the others that tunSev calls yellow), then every LOCATION together - the country of the
+/* the ORDER of the tunnel list (the owner, 2026-10-26: "when there is a problem the cards must not change their place - the places are fixed"; on 2026-10-21 a tunnel with a problem had been put first): every LOCATION together - the country of the
    foreign server, by its name in English, an unknown one last - the locations in alphabetical order, the tunnels of a location by name. A placeholder of a tunnel that is being built again takes the place of the row it replaces (the page does not jump). */
 const tunKeyRow = t => t.id < 0 && state.tunRowCache && state.tunRowCache.get(t.name) || t;
 const tunLoc = t => { const s = (state.serversCache || []).find(x => x.name === t.foreign_name), c = s && /^[A-Za-z]{2}$/.test(s.country || "") ? s.country.toUpperCase() : ""; if (!c) return "zzzz"; try { return new Intl.DisplayNames(["en"], {type: "region"}).of(c) || c; } catch (e) { return c; } };
-const tunSevRank = t => { const s = tunSev(t); return s === "sev-red" ? 0 : s ? 1 : 2; };
-const tunCmp = (x, y) => { const a = tunKeyRow(x), b = tunKeyRow(y); return tunSevRank(a) - tunSevRank(b) || tunLoc(a).localeCompare(tunLoc(b), undefined, {sensitivity: "base"}) || String(a.name).localeCompare(String(b.name), undefined, {sensitivity: "base"}); };
+const tunCmp = (x, y) => { const a = tunKeyRow(x), b = tunKeyRow(y); return tunLoc(a).localeCompare(tunLoc(b), undefined, {sensitivity: "base"}) || String(a.name).localeCompare(String(b.name), undefined, {sensitivity: "base"}); };
 /* the tunnels of one TYPE sit together (the owner, 2026-10-22: "categorise them by the type of the tunnel" - and, after he saw head rows between them: "not separated like this, the same as before, only fix how they are placed"):
-   ONE list, no head rows - the tunnels of a type (what the Type column says, "BACKHAUL · tcpmux") follow each other, each type in the order above (a problem first, then by location, then by name). The types: the one that
-   holds a cut first, then the one that holds another problem, then the others - the biggest first, then by name. */
+   ONE list, no head rows - the tunnels of a type (what the Type column says, "BACKHAUL · tcpmux") follow each other, each type in the order above (by location, then by name). The types: the biggest first, then by name - a problem moves nothing. */
 const tunKind = t => { const k = tunKeyRow(t); return String(k.type || "").toUpperCase() + (k.transport ? " · " + String(k.transport).replace("l3:", "") : ""); };
 const tunGroups = rows => {
   const g = new Map();
   [...rows].sort(tunCmp).forEach(t => { const k = tunKind(t); if (!g.has(k)) g.set(k, []); g.get(k).push(t); });
-  return [...g].map(([k, a]) => ({k, a, bad: a.filter(t => tunSevRank(tunKeyRow(t)) < 2).length, rank: Math.min(...a.map(t => tunSevRank(tunKeyRow(t))))}))
-    .sort((x, y) => x.rank - y.rank || y.a.length - x.a.length || x.k.localeCompare(y.k, undefined, {sensitivity: "base"}));
+  return [...g].map(([k, a]) => ({k, a})).sort((x, y) => y.a.length - x.a.length || x.k.localeCompare(y.k, undefined, {sensitivity: "base"}));
 };
 /* the bandwidth of a tunnel (what the Doctor keeps: services/bandwidth.py): the download it can carry, in the plainest words - a number, a bar against its usual level, and "▼ usual" while it is dropped */
 const LINK_TAG = {wg: "WireGuard", fou: "GRE/UDP", gue: "GRE/GUE", ipip: "IPIP", ipipfou: "IPIP/UDP", ipipgue: "IPIP/GUE", ipsec: "IPsec", ipsecnat: "IPsec/UDP", wgchisel: "WG in Chisel", wgchiselfwd: "WG in Chisel (Iran dials)"};      // what a Backhaul tunnel runs over besides GRE (record.link: services/builder.py `link_scripts`)

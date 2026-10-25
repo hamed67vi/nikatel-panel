@@ -17,7 +17,7 @@ def _groups(tunnels):
     start, end = APP.index("const tunKeyRow = t =>"), APP.index("\n", APP.index("const tunCmp = (x, y) =>"))
     g0, g1 = APP.index("const tunKind = t =>"), APP.index("/* the bandwidth of a tunnel (what the Doctor keeps")
     prog = ("const state = {serversCache: [], tunRowCache: new Map()}; const tunSev = t => t.sev || '';\n" + APP[start:end] + "\n" + APP[g0:g1]
-            + "\nconst rows = " + json.dumps(tunnels) + "; console.log(JSON.stringify(tunGroups(rows).map(g => [g.k, g.a.map(t => t.name), g.bad])));")
+            + "\nconst rows = " + json.dumps(tunnels) + "; console.log(JSON.stringify(tunGroups(rows).map(g => [g.k, g.a.map(t => t.name)])));")
     out = subprocess.run([NODE, "-e", prog], check=False, capture_output=True, text=True, timeout=30)
     assert out.returncode == 0, out.stderr
     return json.loads(out.stdout)
@@ -37,12 +37,14 @@ def test_the_tunnels_are_grouped_by_the_type_the_type_column_says_the_biggest_gr
 
 
 @pytest.mark.skipif(NODE is None, reason="node is not installed")
-def test_a_group_with_a_cut_comes_first_then_one_with_another_problem_and_inside_a_group_the_problem_is_first():
+def test_a_problem_moves_neither_a_group_nor_a_tunnel_inside_it():
+    """The owner, 2026-10-26: "when there is a problem the cards must not change their place - the places are fixed": the groups are by size, then by name; the tunnels of a group by location, then by name."""
     rows = [_t("a1", "backhaul", "tcpmux"), _t("a2", "backhaul", "tcpmux"), _t("a3", "backhaul", "tcpmux"), _t("y1", "backpack", "wssmux", "sev-yellow"), _t("y2", "backpack", "wssmux"),
             _t("r1", "paqet", "", "sev-red"), _t("c1", "chisel", "fwd")]
     got = _groups(rows)
-    assert [g[0] for g in got] == ["PAQET", "BACKPACK · wssmux", "BACKHAUL · tcpmux", "CHISEL · fwd"]
-    assert [g[2] for g in got] == [1, 1, 0, 0] and got[1][1] == ["y1", "y2"]
+    assert [g[0] for g in got] == ["BACKHAUL · tcpmux", "BACKPACK · wssmux", "CHISEL · fwd", "PAQET"]      # (3, 2, then the two of one - by name: the cut PAQET is NOT first)
+    assert got[1][1] == ["y1", "y2"]
+    assert [g[0] for g in _groups([{**r, "sev": ""} for r in rows])] == [g[0] for g in got]      # (the same whether a tunnel has a problem or not)
 
 
 def test_there_are_no_head_rows_the_tunnels_of_a_type_just_follow_each_other_in_one_list():

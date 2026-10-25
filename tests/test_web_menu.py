@@ -521,14 +521,14 @@ def test_the_server_list_puts_the_servers_with_a_problem_first_then_every_locati
     driver = tmp_path / "order.js"
     driver.write_text(
         "const SRVS = {1: {role: 'foreign', country: 'DE'}, 2: {role: 'foreign', country: 'FI'}, 3: {role: 'iran', country: ''}, 4: {role: 'foreign', country: 'DE'}, 5: {role: 'foreign', country: 'CA'}, 6: {role: 'foreign', country: 'NL'}, 7: {role: 'foreign', country: ''}};\n"
-        "const labServer = p => SRVS[p.id] || null; const TONES = {6: 'bad', 2: 'warn', 5: 'busy', 7: 'off'}; const labRank = p => ({bad: 0, warn: 1, busy: 2, ok: 3, off: 4})[TONES[p.id] || 'ok'];\n"
+        "const labServer = p => SRVS[p.id] || null;\n"
         + code + "\n"
         "const rows = [{id: 1, name: 'DE2'}, {id: 2, name: 'FI'}, {id: 3, name: 'rapido'}, {id: 4, name: 'DE1'}, {id: 5, name: 'CA'}, {id: 6, name: 'NL1'}, {id: 7, name: 'zz'}, {id: 8, name: 'gone'}];\n"
         "process.stdout.write(JSON.stringify(rows.slice().sort(labCmp).map(r => r.name)));\n",
         encoding="utf-8")
     r = subprocess.run([node, str(driver)], capture_output=True, text=True, encoding="utf-8", timeout=60, check=False)
     assert r.returncode == 0, r.stderr[-600:]
-    assert json.loads(r.stdout) == ["FI", "NL1", "CA", "DE1", "DE2", "rapido", "gone", "zz"]      # problems first (by location), then Canada, Germany (by name), Iran, and the unknown location last
+    assert json.loads(r.stdout) == ["CA", "FI", "DE1", "DE2", "rapido", "NL1", "gone", "zz"]      # (since 1.69.144 a problem moves nothing) the locations in alphabetical order - Canada, Finland, Germany (by name), Iran, the Netherlands - and the unknown location last
 
 
 def test_the_lab_row_is_the_owners_drawing_lamp_flag_name_provider_address_cpu_chart_traffic_and_two_buttons():

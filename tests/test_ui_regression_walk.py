@@ -131,40 +131,6 @@ def test_the_range_buttons_of_best_today_are_lit_by_their_number_not_their_words
 
 # ---------------------------------------------------------------- 3. a rebooted server keeps its place and shows no red alarm for what the restart itself causes
 
-RANK_HARNESS = r"""
-const S = {};
-const labTone = p => p.kind === "node" ? "busy" : S[p.id].tone, labServer = p => ({id: p.id}), labIssues = s => S[s.id].iss;
-%(src)s
-const set = (id, tone, iss) => { S[id] = {tone, iss: iss.map(i => typeof i === "string" ? {txt: i} : i)}; return labRank({id}); };
-const cut = txt => (txt.startsWith("GRE") ? {txt, gre: true} : {txt});      // (the GRE tag carries gre: true, "N tunnels down" is known by its words)
-const out = {};
-out.healthy_then_rebooted = [set(6, "ok", []), set(6, "busy", ["Offline", cut("GRE ✕"), cut("2 tunnels down")])];
-out.problem_then_rebooted = [set(7, "warn", ["CPU 99%"]), set(7, "busy", ["CPU 99%", "Offline"])];
-out.tunnel_problem_then_rebooted = [set(8, "warn", [cut("2 tunnels down")]), set(8, "busy", ["Offline", cut("2 tunnels down")])];
-out.healthy_then_a_new_problem_while_busy = [set(9, "ok", []), set(9, "busy", ["Filtered"])];
-out.no_memory_only_restart = set(10, "busy", ["Offline", "SSH ✕", cut("GRE ✕")]);
-out.no_memory_a_real_problem = set(11, "busy", ["Offline", "Bad route"]);
-out.back_to_healthy = [set(12, "busy", ["Offline"]), set(12, "ok", []), set(12, "busy", ["Offline", cut("GRE ✕")])];
-out.red_stays_first = set(13, "bad", ["Offline"]);
-console.log(JSON.stringify(out));
-"""
-
-
-@needs_node
-def test_a_healthy_server_that_is_rebooted_does_not_jump_to_the_top_when_its_tunnels_go_down():
-    """The owner, 2026-10-20 (1.69.37, 1.69.41): "no jump". 1.69.49 now marks the tunnels of a server that goes off down within seconds, and the rank of a busy server counted them as problems of its own
-    ("GRE ✕", "2 tunnels down" are not the "Offline" the rank already ignored): a healthy server that was being rebooted went to the top of the list."""
-    src = "\n".join(_line(LAB_JS, k) for k in ("const labBusyOk", "const labRestartCut", "const labRankLast", "const labRank ="))
-    r = _node(RANK_HARNESS.replace("%(src)s", src))
-    assert r["healthy_then_rebooted"] == [3, 2]      # (healthy, then busy: the group of the healthy, not of the problems)
-    assert r["problem_then_rebooted"] == [1, 1]      # (a problem of its own stays with the problems)
-    assert r["tunnel_problem_then_rebooted"] == [1, 1]      # (and a server whose only problem was a tunnel does not drop to the middle either)
-    assert r["healthy_then_a_new_problem_while_busy"] == [3, 1]      # (Filtered is not what a restart causes: it goes up)
-    assert r["no_memory_only_restart"] == 2 and r["no_memory_a_real_problem"] == 1      # (a page opened in the middle of a reboot has no memory: the same rules by the issues)
-    assert r["back_to_healthy"] == [2, 3, 2]
-    assert r["red_stays_first"] == 0
-
-
 CHIPS_HARNESS = r"""
 const esc = x => String(x), LAB_ISS_IC = {bad: "", warn: ""};
 const srvBusy = s => s.busy, labIssues = s => s.iss;

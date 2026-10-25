@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.69.144 - A problem moves nothing: the places of the server cards and of the tunnel cards are fixed
+
+The owner (2026-10-26, with a picture of the tunnel list): "in the server cards and the tunnel cards, when there is a problem their place in the list must not change - the places of the cards are fixed".
+
+- **What changed** (`lab.js labCmp`, `app.js tunCmp`, `tunGroups`): since 1.69.19 / 1.69.62 a server or a tunnel with a problem went to the TOP of its list, so a card jumped whenever something went wrong or came right again. Now the order has nothing to do with the state: the **servers** stand by location (Iran, then the countries in alphabetical order, an unknown one last), then by name; the **tunnels** stand in groups by type (the biggest group first, then by name), inside a group by the location of the foreign server, then by name. A card that gets a problem - a red lamp, a cut tag, a yellow sign - stays exactly where it is; it is still red or yellow, still counted in the chips and found by the Problems filter. The rank code that only the old order used (`labRank`, `labRankLast`, `tunSevRank`) is gone, with the tests of it; what a rebooted server shows (no red chips for what the restart causes) is not changed.
+- **Proved**: `tests/test_tunnel_order.py`, `tests/test_tunnel_groups.py` and `tests/test_web_menu.py` run the real comparisons in node: the same list whether a tunnel has a problem or not, a cut and a yellow tunnel stand where their name puts them, a tunnel that is being built again stands where its name puts it; on a private demo panel in the built-in browser I made two more tunnels cut and two more servers offline and read both lists before and after: the 14 servers and the 12 tunnels were in exactly the same order, the new problems only changed their lamps and tags.
+- **Not proved**: the owner's own lists; the other lists that have an order of their own (the nodes of a PasarGuard panel, the Doctor's lists) - not changed.
 ## 1.69.143 - The warning sign of the tunnel list: no "×4", and only for two tunnels between the same two servers
 
 The owner (2026-10-25, with a picture of "PDE01 ⚠ ×4" on four rows): "remove these numbers x4 altogether", then "show no warning at all - unless the tunnel has the same Iran server AND the same foreign server".
