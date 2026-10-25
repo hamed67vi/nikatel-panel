@@ -291,22 +291,15 @@ def test_the_question_with_several_answers_is_a_stack_of_flat_macos_buttons_in_e
     assert 'html[data-mode="light"] body #ask .ask-box .ask-act.ask-choices button { background-color: rgba(60, 70, 100, .09) !important; }' in css
     assert 'cls: "danger-fill", note: "the old one is removed first, then the new one is built"' in APP and 'cls: "pri", note: "the old one stays; both run"' in APP      # (the two answers of the picture)
 
-def test_the_x2_mark_of_a_foreign_server_that_ends_several_tunnels_is_smaller_and_paler():
-    """The owner, 2026-10-24, with a picture of "DE2 ⚠ ×2": "make this ×2 tag paler and a little smaller" - 9 px instead of 10.5 px, a tighter capsule, 60 % of its colour until the pointer is on it (measured in the browser:
-    font 10.5 -> 9 px, side padding 6 -> 5 px, opacity 1 -> 0.6)."""
+def test_the_warning_sign_of_the_tunnel_list_is_only_for_two_tunnels_between_the_same_two_servers_and_has_no_number():
+    """The owner, 2026-10-25, with a picture of "PDE01 ⚠ ×4": "remove these numbers x4 altogether", "show no warning at all - unless the tunnel has the same Iran server AND the same foreign server": the sign (a
+    pale 9 px "⚠", since 1.69.132) is drawn only for a tunnel that has another tunnel between the same pair; a foreign server that ends several tunnels from different Iran servers has none, and the sign carries no count."""
     css = (WEB / "lab.css").read_text(encoding="utf-8")
     rule = css.split("html body #page .dup {", 1)[1].split("}", 1)[0]
-    for part in ("font-size: 9px", "font-weight: 700", "padding: 0 5px", "opacity: .6"):
+    for part in ("font-size: 9px", "opacity: .6"):
         assert part in rule
-    assert "html body #page .dup:hover { opacity: .95; }" in css
-    assert 'class="dup" title="This foreign server ends' in APP      # (the mark itself is not changed: the same hint, the same tooltip)
-
-def test_the_rail_of_icons_has_no_chevrons_and_every_icon_is_the_same_box_in_the_middle_of_its_item():
-    """The owner, 2026-10-25, with a picture of the narrow side bar (a rail of icons): "fix the size of these and make them responsive". The chevron of an item that has pages under it (a 7 px box drawn with ::after, `position: static`
-    in app.css) was a flex child of the 46 px item: it pushed the icon 10 px off the middle and was cut by the edge of the rail, so Servers, Network, Panel and Settings looked different from Dashboard.
-    Measured in the browser at 1100 and 800 px: every item 46 x 40, every icon box 24 x 24 and 0 px off the middle (before: 4 of 5 icons -10 px off); at 1300 px the menu with its chevrons is as before."""
-    css = (WEB / "fluid.css").read_text(encoding="utf-8")
-    rail = css.split("@media (max-width: 1180px) and (not ((max-width: 760px) and (pointer: coarse))) {", 1)[1].split("\n}\n", 1)[0]
-    assert 'html body nav#nav a:not([data-page="dashboard"])::after, html body #nav a::after { content: none !important; display: none !important; }' in rail      # (more specific than the chevron rule of app.css, which is !important too)
-    assert "html body #nav a .ic { flex: none; width: 24px; height: 24px; margin: 0; }" in rail
-    assert "html body #nav a { justify-content: center; width: 100%; height: 40px; padding: 0; gap: 0; }" in rail
+    assert "fcount" not in APP and "×${" not in APP.split("const dupMark = t =>", 1)[1].split("\n", 1)[0]      # (no count of the foreign server, no number in the sign)
+    line = APP.split("const pairKey = t =>", 1)[1].split("\n", 1)[0]
+    assert "t.iran_name" in line and "t.foreign_name" in line and "pcount[pairKey(t)] = (pcount[pairKey(t)] || 0) + 1" in line
+    mark = APP.split("const dupMark = t =>", 1)[1].split("\n", 1)[0]
+    assert "pcount[pairKey(t)] > 1" in mark and ">⚠</span>" in mark and "Another tunnel joins the same two servers" in mark

@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.69.143 - The warning sign of the tunnel list: no "×4", and only for two tunnels between the same two servers
+
+The owner (2026-10-25, with a picture of "PDE01 ⚠ ×4" on four rows): "remove these numbers x4 altogether", then "show no warning at all - unless the tunnel has the same Iran server AND the same foreign server".
+
+- **What changed** (`app.js dupMark`): the sign beside the foreign server of a tunnel row used to say "⚠ ×N" whenever the foreign server ended more than one tunnel - even from different Iran servers, which is normal. It is drawn now only for a tunnel that has another tunnel between the SAME Iran server and the SAME foreign server, and it is just the pale 9 px "⚠" (no number); its tooltip names the other tunnel(s): "Another tunnel joins the same two servers: … Is that on purpose?". A foreign server that ends several tunnels from different Iran servers shows nothing.
+- **Proved**: `tests/test_fluid_layout.py` pins the pair rule (the key is the Iran name and the foreign name), the missing count and the sign; on a private demo panel in the built-in browser with 12 tunnels - several sharing a foreign server, two sharing both servers - only those two rows showed the "⚠", with the other one's name in the tip; before, every row of a shared foreign server showed "⚠ ×2".
+- **Not proved**: the owner's list (the pair is read by the names of the two servers, as the list shows them); a rename of a server while two tunnels share it (the next draw follows).
 ## 1.69.142 - The narrow side bar (the rail of icons) has no cut chevrons and every icon is the same box in the middle
 
 The owner (2026-10-25, with a picture of the rail): "fix the size of these and make them responsive".
