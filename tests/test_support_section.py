@@ -47,12 +47,13 @@ echo "END\\n";
 
 CONFIG = """<?php
 function getMainKeys(){
-    global $buttonValues, $from_id, $admin;
+    global $buttonValues, $from_id, $admin, $botState;
     $mainKeys = array();
     $mainKeys = array_merge($mainKeys, [
         [['text'=>$buttonValues['sharj'],'callback_data'=>"increaseMyWallet"]],
         [['text'=>$buttonValues['application_links'],'callback_data'=>"reciveApplications"],['text'=>$buttonValues['my_info'],'callback_data'=>"myInfo"]],
         (($from_id != $admin) ? [['text'=>$buttonValues['invite_friends'],'callback_data'=>"inviteFriends"]] : []),
+        ((($botState['searchState'] ?? 'on') == 'on') ? [['text'=>$buttonValues['search_config'] ?? 'S','callback_data'=>"showUUIDLeft"]] : []),
     ]);
     return json_encode(['inline_keyboard' => $mainKeys]);
 }
@@ -88,14 +89,14 @@ def _run_bot(d, **env):
 
 
 # ----------------------------------------------------------------------------------------------- the installer
-def test_the_installer_puts_five_marked_lines_and_takes_them_out_byte_for_byte(bot, tmp_path):
+def test_the_installer_puts_six_marked_lines_and_takes_them_out_byte_for_byte(bot, tmp_path):
     env = _env(tmp_path)
     before = {n: (bot / n).read_bytes() for n in ("bot.php", "config.php")}
     dry = _install("--dry-run", str(bot), env=env)
     assert "nothing replaced" in dry.stdout and (bot / "bot.php").read_bytes() == before["bot.php"] and not (bot / "support_section.php").exists()
     out = _install(str(bot), env=env).stdout
-    assert "4 line(s) put in" in out and "1 line(s) put in" in out
-    assert (bot / "bot.php").read_text(encoding="utf-8").count("// [support]") == 4 and (bot / "config.php").read_text(encoding="utf-8").count("// [support]") == 1
+    assert "4 line(s) put in" in out and "2 line(s) put in" in out
+    assert (bot / "bot.php").read_text(encoding="utf-8").count("// [support]") == 4 and (bot / "config.php").read_text(encoding="utf-8").count("// [support]") == 2
     assert (bot / "support_section.php").read_bytes() == HELPER.read_bytes()
     assert oct((bot / "bot.php").stat().st_mode & 0o777) == "0o640"                       # (the mode of the old file is kept)
     for n in ("bot.php", "config.php"):
@@ -125,11 +126,14 @@ def test_the_installer_refuses_when_a_place_is_not_as_expected_and_changes_nothi
 def test_a_half_installed_state_is_completed_and_a_broken_php_file_is_not_touched(bot, tmp_path):
     env = _env(tmp_path)
     _install(str(bot), env=env)
-    cfg = (bot / "config.php").read_text(encoding="utf-8").replace(" // [support]", "")
-    (bot / "config.php").write_text(cfg, encoding="utf-8")                      # (bot.php has its lines, config.php lost its row)
-    out = _install(str(bot), env=env).stdout
-    assert "bot.php: already installed" in out and "config.php: 1 line(s) put in" in out
-    assert (bot / "bot.php").read_text(encoding="utf-8").count("// [support]") == 4 and (bot / "config.php").read_text(encoding="utf-8").count("// [support]") == 1
+    full = (bot / "config.php").read_bytes()
+    for lost in ("supMenuRow", "supJoinMenuRows"):      # (bot.php has its lines, config.php lost one of its two lines - also the state of a bot that got the first set of lines only)
+        (bot / "config.php").write_text("".join(ln for ln in full.decode("utf-8").splitlines(keepends=True) if lost not in ln), encoding="utf-8")
+        out = _install(str(bot), env=env).stdout
+        assert "bot.php: already installed" in out and "config.php: 1 line(s) put in, 1 already there" in out, out
+        assert (bot / "bot.php").read_text(encoding="utf-8").count("// [support]") == 4 and (bot / "config.php").read_text(encoding="utf-8").count("// [support]") == 2
+        now = (bot / "config.php").read_text(encoding="utf-8")
+        assert now.count("? supMenuRow()") == 1 and now.count("= supJoinMenuRows($mainKeys)") == 1      # (nothing doubled)
     _install("--uninstall", str(bot), env=env)
     (bot / "bot.php").write_text(BOT.rstrip("\n").rstrip(";"), encoding="utf-8")      # (a missing semicolon at the end: php -l must stop it)
     before = (bot / "bot.php").read_bytes()
@@ -182,15 +186,42 @@ def test_the_stage_gives_the_section_to_the_admins_first_and_a_customer_gets_exa
             new = bool([b for b in _buttons(out) if "url" in b])
             assert new == gets and out.count("EDIT") == 1 and "END" in out and err == "", (state, who, out, err)      # (whoever is not covered gets the old screen: it is still there, unchanged)
             assert ("OLD" in out) == (not gets)
-            cfg = subprocess.run([PHP, "-d", "display_errors=1", "-r", f"require 'support_section.php'; $botState = json_decode('{json.dumps(state)}', true); $userInfo = ['isAdmin' => false]; $buttonValues = ['sharj' => 'A', 'application_links' => 'B', 'my_info' => 'C', 'invite_friends' => 'D']; $from_id = {who}; $admin = 1; include 'config.php'; echo getMainKeys();"],
-                                 check=False, capture_output=True, text=True, cwd=bot)
-            rows = json.loads(cfg.stdout)["inline_keyboard"]
+            rows = _menu(bot, state, who)
             flat = [b["callback_data"] for r in rows for b in r]
-            assert ("supportSection" in flat) == gets, (state, who, cfg.stdout, cfg.stderr)
+            assert ("supportSection" in flat) == gets, (state, who, rows)
             if gets:
-                assert flat.index("supportSection") == flat.index("myInfo") + 1      # (the row under "apps / my info")
+                assert [b["callback_data"] for b in next(r for r in rows if len(r) == 2 and r[1]["callback_data"] == "showUUIDLeft")] == ["supportSection", "showUUIDLeft"]      # (side by side with the subscription button)
             else:
-                assert flat == ["increaseMyWallet", "reciveApplications", "myInfo"] + (["inviteFriends"] if who != "1" else [])      # (the menu of a person who is not covered has the old buttons only)
+                assert flat == ["increaseMyWallet", "reciveApplications", "myInfo"] + (["inviteFriends"] if who != "1" else []) + ["showUUIDLeft"]      # (the menu of a person who is not covered has the old buttons only)
+
+
+def _menu(bot, state, who="7", **values):
+    """the main menu the installed stand-in draws for a person ('1' is the admin) in a bot with this BOT_STATES"""
+    vals = {"sharj": "A", "application_links": "B", "my_info": "C", "invite_friends": "D", "search_config": "E"} | values
+    code = (f"require 'support_section.php'; $botState = json_decode({json.dumps(json.dumps(state))}, true); $userInfo = ['isAdmin' => false]; $buttonValues = json_decode({json.dumps(json.dumps(vals))}, true); "
+            f"$from_id = {who}; $admin = 1; include 'config.php'; echo getMainKeys();")
+    r = subprocess.run([PHP, "-d", "display_errors=1", "-r", code], check=False, capture_output=True, text=True, cwd=bot)
+    assert r.returncode == 0, r.stdout + r.stderr
+    return json.loads(r.stdout)["inline_keyboard"]
+
+
+def test_the_main_menu_button_opens_the_operators_chat_next_to_the_subscription_button(bot, tmp_path):
+    """the owner (2026-10-25, translated): "put these two side by side, for now the support button must open the support account's chat, and a prettier support emoji" """
+    _install(str(bot), env=_env(tmp_path))
+    on = {"supportSection": "on", "supportID": "@op_chat"}
+    rows = _menu(bot, on)
+    row = next(r for r in rows if any(b.get("callback_data") == "showUUIDLeft" for b in r))
+    assert len(row) == 2 and row[0]["url"] == "https://t.me/op_chat" and "🎧" in row[0]["text"] and row[1]["callback_data"] == "showUUIDLeft"      # (one row: support first, the subscription button after it)
+    assert [b for r in rows for b in r if "url" in b or b.get("callback_data") == "supportSection"] == [row[0]]      # (one support button, no row of its own)
+    for state, what in (({"supportChat": "off"}, "the direct chat is switched off: the support screen"), ({"supportButton": "section"}, "supportButton = section: the support screen"), ({"supportID": "@ab"}, "a link Telegram would refuse: the support screen"), ({"supportID": ""}, "no support id: the support screen")):
+        row = next(r for r in _menu(bot, dict(on, **state)) if any(b.get("callback_data") == "showUUIDLeft" for b in r))
+        assert len(row) == 2 and row[0] == {"text": row[0]["text"], "callback_data": "supportSection"}, what
+    rows = _menu(bot, dict(on, searchState="off"))      # (no subscription button for him: the support button keeps a row of its own)
+    solo = [r for r in rows if r and "url" in r[0]]
+    assert len(solo) == 1 and len(solo[0]) == 1 and solo[0][0]["url"] == "https://t.me/op_chat" and not any(b.get("callback_data") == "showUUIDLeft" for r in rows for b in r)
+    named = next(r for r in _menu(bot, on, support_section="MY LABEL") if any(b.get("callback_data") == "showUUIDLeft" for b in r))
+    assert named[0]["text"] == "MY LABEL"      # (the owner can still rename it in the button texts)
+    assert not any("url" in b or b.get("callback_data") == "supportSection" for r in _menu(bot, {"supportSection": "admin", "supportID": "@op_chat"}, "7") for b in r)      # (a customer the stage does not cover: none)
 
 
 def test_a_follow_up_in_a_ticket_does_not_reach_the_old_handler_but_a_first_message_does(bot, tmp_path):
@@ -216,6 +247,14 @@ def test_the_operator_link_is_only_a_link_telegram_accepts():
     assert got["https://t.me/op_chat"] == "https://t.me/op_chat" and got["http://t.me/+AbC123"] == "http://t.me/+AbC123"
     for bad in ("", "ab", "@a b", "https://t.me/", "javascript:alert(1)", "@1abc", "https://evil.example/op_chat", "tg://resolve?domain=x", "none"):
         assert got[bad] == "", bad
+
+
+def test_the_texts_of_the_screen_are_keys_of_the_button_values():
+    """so that the admin's "edit buttons" panel lists them and their emoji can be made premium (the owner, 2026-10-25: "add the support's emoji to the list")"""
+    got = _php("""$bv = ['back_button' => 'BACK', 'support_new_ticket' => 'N', 'support_open_tickets' => 'O', 'support_all_tickets' => 'A', 'support_direct_chat' => 'C'];
+echo json_encode([supScreenRows(['supportID' => '@op_chat'], $bv), supScreenRows(['supportID' => '@op_chat'], ['back_button' => 'BACK'])]);""")
+    assert [b["text"] for r in got[0] for b in r] == ["N", "O", "A", "C", "BACK"]
+    assert "🎧" not in json.dumps(got[1], ensure_ascii=False) and len([b for r in got[1] for b in r]) == 5      # (without the keys the defaults are used: the same five buttons)
 
 
 def test_the_screen_rows_and_the_switch():

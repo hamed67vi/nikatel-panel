@@ -6,7 +6,8 @@
  * and in the ticket, when the customer writes again, his message must not go up (a new message to the admins)"; and: "the changes must not hurt the other parts of the bot, and
  * only the admins must be able to test it".
  *
- *   - main menu: one button "support" (callback supportSection) -> the screen below;
+ *   - main menu: one button "support", side by side with the "add or see subscription" button; it opens the operator's own Telegram chat (BOT_STATES supportButton = "chat", the default, while the direct
+ *     chat is on and supportID is a good link) or else the screen below (callback supportSection; supportButton = "section" asks for it);
  *   - the screen: ticket buttons (new ticket, open tickets, all tickets) and a button that opens the operator's own Telegram chat (the bot's supportID setting);
  *     BOT_STATES supportChat = "off" hides that button, then only the ticket is left;
  *   - a follow-up in a ticket (the customer writes again while the last message of the ticket is still his own, nobody answered): the message is saved in the ticket and the admins get
@@ -44,12 +45,47 @@ function supVisible(): bool
     return $m === 'on' || ($m === 'admin' && supIsAdmin());
 }
 
+/** what the support button of the main menu does: "chat" (the default: it opens the operator's own Telegram chat) or "section" (it opens the support screen with the tickets); BOT_STATES supportButton */
+function supButtonMode(array $botState): string
+{
+    return (string) ($botState['supportButton'] ?? 'chat') === 'section' ? 'section' : 'chat';
+}
+
+/** the support button of the main menu: a url button to the operator's chat while that is on and the link is good, otherwise the button of the support screen */
+function supMenuButton(): array
+{
+    global $botState, $buttonValues;
+    $label = (string) ($buttonValues['support_section'] ?? '🎧 پشتیبانی');
+    $url = supButtonMode((array) $botState) === 'chat' && supChatOn((array) $botState) ? supChatUrl((array) $botState) : '';
+    return $url !== '' ? ['text' => $label, 'url' => $url] : ['text' => $label, 'callback_data' => "supportSection"];
+}
+
 /** the row of the main menu: the support button, or nothing */
 function supMenuRow(): array
 {
-    global $buttonValues;
-    if (!supVisible()) return [];
-    return [['text' => $buttonValues['support_section'] ?? '🛂 پشتیبانی', 'callback_data' => "supportSection"]];
+    return supVisible() ? [supMenuButton()] : [];
+}
+
+/** the rows of the main menu are built; puts the support button into the row of the "add or see subscription" button (side by side) when both are there; anything unexpected: the rows as they are */
+function supJoinMenuRows(array $rows): array
+{
+    try {
+        $mine = $search = null;
+        $button = supMenuButton();
+        foreach ($rows as $i => $row) {
+            if (!is_array($row)) continue;
+            foreach ($row as $b) {
+                if (is_array($b) && ($b['callback_data'] ?? '') === 'showUUIDLeft') $search = $i;
+            }
+            if (count($row) === 1 && ($row[0] ?? null) === $button) $mine = $i;
+        }
+        if ($mine === null || $search === null || $mine === $search) return $rows;
+        array_unshift($rows[$search], $button);
+        unset($rows[$mine]);
+        return array_values($rows);
+    } catch (Throwable $e) {
+        return $rows;
+    }
 }
 
 /** the link of the operator's own chat from the bot's supportID setting (@name, name or a t.me link); '' when it is not a link Telegram accepts (one wrong link makes Telegram refuse the whole keyboard) */
@@ -65,12 +101,13 @@ function supChatUrl(array $botState): string
 /** the buttons of the customer's support screen */
 function supScreenRows(array $botState, array $buttonValues): array
 {
+    /* the texts are keys of the bot's $buttonValues (settings/values.php), so that the admin's "edit buttons" panel lists them and their emoji can be made premium; the words after ?? are the defaults */
     $rows = [
-        [['text' => "✉️ ثبت تیکت", 'callback_data' => "usersNewTicket"]],
-        [['text' => "تیکت های باز 📨", 'callback_data' => "usersOpenTickets"], ['text' => "📮 لیست تیکت ها", 'callback_data' => "userAllTickets"]],
+        [['text' => (string) ($buttonValues['support_new_ticket'] ?? "✉️ ثبت تیکت"), 'callback_data' => "usersNewTicket"]],
+        [['text' => (string) ($buttonValues['support_open_tickets'] ?? "تیکت های باز 📨"), 'callback_data' => "usersOpenTickets"], ['text' => (string) ($buttonValues['support_all_tickets'] ?? "📮 لیست تیکت ها"), 'callback_data' => "userAllTickets"]],
     ];
     $url = supChatOn($botState) ? supChatUrl($botState) : '';
-    if ($url !== '') $rows[] = [['text' => "💬 چت مستقیم با اپراتور", 'url' => $url]];
+    if ($url !== '') $rows[] = [['text' => (string) ($buttonValues['support_direct_chat'] ?? "💬 چت مستقیم با اپراتور"), 'url' => $url]];
     $rows[] = [['text' => $buttonValues['back_button'], 'callback_data' => "mainMenu"]];
     return $rows;
 }

@@ -1,16 +1,18 @@
 #!/usr/bin/env bash
 # The support section of the shop bot: a "support" button in the main menu -> tickets + a button for the operator's own chat (switchable), and quiet follow-ups in a ticket.
 #   bash scripts/install-support-section.sh [--dry-run | --uninstall] <bot dir>        e.g. /var/www/bot
-# Copies bot/menu/support_section.php next to bot.php and puts FIVE marked lines (every one ends with "// [support]") into the bot's own files:
+# Copies bot/menu/support_section.php next to bot.php and puts SIX marked lines (every one ends with "// [support]") into the bot's own files:
 #   bot.php    1) the include of support_section.php at the top (only when the file is there);
 #              2) before the handler of the button "supportSection": the new screen (tickets + the operator's chat); when it answers, the old handler is skipped;
 #              3) before the handler of "ticketsList" (admins): the ticket menu with the stage of the section and the switch of the direct chat (also the callbacks toggleSupportStage, toggleSupportChat);
 #              4) before the handler of the customer's message in a ticket (step sendMsg_<id>): a follow-up (the last message of the ticket is the customer's own) is saved and NOT sent to the admins again;
-#   config.php 5) one row "support" in the main menu (getMainKeys), under the row of the apps and "my info" - an empty row for whoever the stage does not cover.
+#   config.php 5) one row "support" in the main menu (getMainKeys), under the row of the apps and "my info" - an empty row for whoever the stage does not cover;
+#              6) just before getMainKeys() returns: the support button is put into the row of the "add or see subscription" button (side by side). The button opens the operator's own Telegram chat while
+#                 BOT_STATES supportButton is not "section" and the direct chat is on (else the support screen). Every line is looked at on its own: a bot with an older set of lines gets the missing ones.
 # STAGED: BOT_STATES supportSection = "admin" (the default: the button, the screen and the quiet follow-ups exist for the admins only; every customer gets exactly the old bot), "on" (everybody), "off" (nobody);
 # the admin's ticket menu has the button that turns it admin -> on -> off -> admin.
 # Nothing of the old code is changed or removed: every new line calls support_section.php behind function_exists() and the old handler is still there for the case that it returns false.
-# The old files are kept in $BACKUP_DIR (default /root/backups); php -l runs on the new files BEFORE they replace the old ones; --uninstall takes the five lines out again (byte for byte) and removes support_section.php.
+# The old files are kept in $BACKUP_DIR (default /root/backups); php -l runs on the new files BEFORE they replace the old ones; --uninstall takes the six lines out again (byte for byte) and removes support_section.php.
 # The direct chat switch: BOT_STATES supportChat = "off" (the admin's ticket menu has the button); the operator's link is the bot's supportID setting.
 set -euo pipefail
 MODE=install
@@ -40,6 +42,7 @@ BOT = [
 CONF = [
     ("        [['text'=>$buttonValues['application_links'],'callback_data'=>\"reciveApplications\"],['text'=>$buttonValues['my_info'],'callback_data'=>\"myInfo\"]],\n",
      "        (function_exists('supMenuRow') ? supMenuRow() : [])," + TAG + "\n", "after"),
+    ("    return json_encode(['inline_keyboard' => $mainKeys]);\n", "    if (function_exists('supJoinMenuRows')) $mainKeys = supJoinMenuRows($mainKeys);" + TAG + "\n", "before"),
 ]
 
 def load(p):
@@ -51,40 +54,34 @@ def save(p, s, crlf):
     open(p, "w", encoding="utf-8", newline="").write(s.replace("\n", "\r\n") if crlf else s)
 
 def run(src, dst, edits, name):
+    """every edit is looked at on its own: one that is there (its exact line x1) is kept, one that is not is put in - so a bot that has an older set of lines gets the new ones, and nothing is doubled"""
     s, crlf = load(src)
-    has = s.count(TAG)
+    present = [e for e in edits if s.count(e[1]) == 1]
+    missing = [e for e in edits if s.count(e[1]) == 0]
+    if len(present) + len(missing) != len(edits) or s.count(TAG) != len(present):
+        print(f"{name}: the marked lines are not as the installer wrote them ({s.count(TAG)} marked, {len(present)} known): not touching it", file=sys.stderr); sys.exit(3)
     if mode == "uninstall":
-        if has == 0:
-            print(f"{name}: not installed")
-        else:
-            for anchor, ins, how in edits:
-                if s.count(ins) != 1:
-                    print(f"{name}: the marked lines are not as the installer wrote them (x{s.count(ins)}): not uninstalling", file=sys.stderr); sys.exit(3)
-            for anchor, ins, how in edits:
-                s = s.replace(ins, "", 1)
-            print(f"{name}: {len(edits)} line(s) taken out")
+        for anchor, ins, how in present:
+            s = s.replace(ins, "", 1)
+        print(f"{name}: {len(present)} line(s) taken out" if present else f"{name}: not installed")
     else:
-        if has:
-            if has != len(edits):
-                print(f"{name}: {has} marked line(s) found, {len(edits)} expected: not touching it", file=sys.stderr); sys.exit(3)
-            print(f"{name}: already installed")
-        else:
-            if mode != "uninstall":
-                if not s.startswith("<?php\n") and name == "bot.php":
-                    print("bot.php does not start with <?php + newline: not installing", file=sys.stderr); sys.exit(3)
-                for anchor, ins, how in edits:
-                    if (s.count(anchor) != 1) and not (how == "after" and anchor == "<?php\n" and s.startswith(anchor)):
-                        print(f"{name}: the place for  {anchor.strip()[:70]}  is not as expected (x{s.count(anchor)}; want 1): not installing", file=sys.stderr); sys.exit(3)
-            for anchor, ins, how in edits:
+        if missing:
+            if not s.startswith("<?php\n") and name == "bot.php":
+                print("bot.php does not start with <?php + newline: not installing", file=sys.stderr); sys.exit(3)
+            for anchor, ins, how in missing:
+                if (s.count(anchor) != 1) and not (how == "after" and anchor == "<?php\n" and s.startswith(anchor)):
+                    print(f"{name}: the place for  {anchor.strip()[:70]}  is not as expected (x{s.count(anchor)}; want 1): not installing", file=sys.stderr); sys.exit(3)
+            for anchor, ins, how in missing:
                 if anchor == "<?php\n":
                     s = anchor + ins + s[len(anchor):]
                 elif how == "before":
                     s = s.replace(anchor, ins + anchor, 1)
                 else:
                     s = s.replace(anchor, anchor + ins, 1)
-            print(f"{name}: {len(edits)} line(s) put in")
+            print(f"{name}: {len(missing)} line(s) put in" + (f", {len(present)} already there" if present else ""))
+        else:
+            print(f"{name}: already installed")
     save(dst, s, crlf)
-
 run(b_src, b_dst, BOT, "bot.php")
 run(c_src, c_dst, CONF, "config.php")
 PY

@@ -24,7 +24,7 @@ TG_LOG, TLOCK = [], threading.Lock()
 
 # ------------------------------------------------------------------ db
 def sql(q):
-    r = subprocess.run(["mariadb", "--no-defaults", "-S", SOCK, "-uroot", "-N", "-B", DB, "-e", q], capture_output=True, text=True)
+    r = subprocess.run(["mariadb", "--no-defaults", "--default-character-set=utf8mb4", "-S", SOCK, "-uroot", "-N", "-B", DB, "-e", q], capture_output=True, text=True)
     if r.returncode:
         raise RuntimeError(r.stderr.strip()[:300] + " :: " + q[:120])
     return r.stdout.strip()
@@ -105,7 +105,7 @@ $dbUserName = 'mini'; $dbPassword = 'mini-test-pw'; $dbName = '{DB}'; $USDTPrice
 """)
         net = re.search(r"\$range\s*=\s*\[\s*['\"]([0-9.]+)/", open(f"{ORIG}/config.php", encoding="utf-8").read())      # (check() lets only Telegram's networks in: the first one of the bot's own list)
         open(f"{T}/{name}/prepend.php", "w").write(f"<?php $_SERVER['REMOTE_ADDR'] = '{net.group(1)}';\n")
-    for script in ("install-support-section.sh", "install-agent-discount-notice.sh", "install-menu-user-id.sh"):      # (the mods of the bot are put in: they must live together)
+    for script in ("install-support-section.sh", "install-agent-discount-notice.sh", "install-menu-user-id.sh", "install-emoji-extra.sh"):      # (the mods of the bot are put in: they must live together)
         r = subprocess.run(["bash", f"{MOD}/scripts/{script}", f"{T}/after"], capture_output=True, text=True, env=dict(os.environ, BACKUP_DIR=f"{T}/bk"))
         if r.returncode:
             print(r.stdout, r.stderr); sys.exit(2)
@@ -114,7 +114,11 @@ $dbUserName = 'mini'; $dbPassword = 'mini-test-pw'; $dbName = '{DB}'; $USDTPrice
     vals = open(vp, encoding="utf-8").read()
     prompt = "🔰 لطفا یکی از دکمه های زیر را انتخاب کنید:"
     assert vals.count(prompt) == 2, vals.count(prompt)
-    open(vp, "w", encoding="utf-8").write(vals.replace(prompt, prompt + "\n\n🎫 شناسه عددی: MENU-ID"))
+    vals = vals.replace(prompt, prompt + "\n\n🎫 شناسه عددی: MENU-ID")
+    search = "    'search_config'=>"
+    assert vals.count(search) == 1
+    keys = "    'support_section'=>'🎧 پشتیبانی',\n    'support_new_ticket'=>'✉️ ثبت تیکت',\n    'support_open_tickets'=>'تیکت های باز 📨',\n    'support_all_tickets'=>'📮 لیست تیکت ها',\n    'support_direct_chat'=>'💬 چت مستقیم با اپراتور',\n"
+    open(vp, "w", encoding="utf-8").write(vals.replace(search, keys + search))      # (the keys the owner's panel lists: the support texts)
 
 
 def reset(states=None, support_id="@test_support"):
@@ -206,6 +210,7 @@ def last_markup(chat, since=0):
 
 def datas(bs): return [b.get("callback_data") for b in bs if "callback_data" in b]
 def urls(bs): return [b.get("url") for b in bs if "url" in b]
+def has_support(bs): return any(b.get("callback_data") == "supportSection" or "\U0001F3A7" in b.get("text", "") for b in bs)      # (the support button of the main menu: the url button to the operator or the button of the support screen)
 
 
 # ------------------------------------------------------------------ scenarios
@@ -230,9 +235,34 @@ def admin_notices(since=0):
 def mm1(port, after):
     reset(); problems = []
     c, t = post(port, cb(U, "mainMenu"))
-    d = datas(last_markup(U))
-    if ("supportSection" in d) != after:
-        problems.append(f"supportSection in the main menu = {'supportSection' in d} (callbacks: {d[:12]}) HTTP {c} {t[:80]}")
+    bs = last_markup(U)
+    if has_support(bs) != after:
+        problems.append(f"support button in the main menu = {has_support(bs)} (callbacks: {datas(bs)[:12]}, urls: {urls(bs)}) HTTP {c} {t[:80]}")
+    return problems
+
+
+@scn("MB1", "the support button of the main menu sits in ONE row with the subscription button, opens the operator's chat (url, a headset emoji) and falls back to the support screen when the chat is off / the link is bad / supportButton = section")
+def mb1(port, after):
+    problems = []
+    for label, states, support_id, want_url in (("default", {}, "@test_support", True), ("chat off", {"supportChat": "off"}, "@test_support", False), ("supportButton = section", {"supportButton": "section"}, "@test_support", False), ("bad link", {}, "@ab", False)):
+        reset(states=states, support_id=support_id)
+        for uid in (U, ADMIN):
+            post(port, cb(uid, "mainMenu"))
+            rows = [r for r in json.loads(([m for m in sent(uid) if m["markup"]] or [{"markup": "{}"}])[-1]["markup"]).get("inline_keyboard", []) if r]
+            row = next((r for r in rows if any(b.get("callback_data") == "showUUIDLeft" for b in r)), None)
+            if row is None:
+                problems.append(f"{label}: no row with the subscription button"); continue
+            mine = [b for r in rows for b in r if b.get("callback_data") == "supportSection" or "\U0001F3A7" in b.get("text", "")]      # (the agency-panel button of the bot has the same url: the headset or the callback tells which one is ours)
+            if not after:
+                if mine:
+                    problems.append(f"{label}: the old bot has a support button")
+                continue
+            if len(mine) != 1 or row[0] != mine[0] or len(row) != 2 or row[1].get("callback_data") != "showUUIDLeft":
+                problems.append(f"{label} ({uid}): the support button must be the first of the subscription button's row: {row} / {mine}"); continue
+            if want_url and not (mine[0].get("url") == "https://t.me/test_support" and "\U0001F3A7" in mine[0]["text"]):
+                problems.append(f"{label} ({uid}): should be a url button with the headset emoji: {mine[0]}")
+            if not want_url and mine[0].get("callback_data") != "supportSection":
+                problems.append(f"{label} ({uid}): should open the support screen: {mine[0]}")
     return problems
 
 
@@ -314,8 +344,8 @@ def st1(port, after):
     problems = []
     for mode, admin_sees, user_sees in ((None, True, False), ("admin", True, False), ("on", True, True), ("off", False, False)):
         reset(states={"supportSection": mode})
-        post(port, cb(ADMIN, "mainMenu")); a = "supportSection" in datas(last_markup(ADMIN))
-        post(port, cb(U, "mainMenu")); u = "supportSection" in datas(last_markup(U))
+        post(port, cb(ADMIN, "mainMenu")); a = has_support(last_markup(ADMIN))
+        post(port, cb(U, "mainMenu")); u = has_support(last_markup(U))
         rows = [r for r in (json.loads(([m for m in sent(U) if m["markup"]] or [{"markup": "{}"}])[-1]["markup"]).get("inline_keyboard") or []) if r]      # (the customer's main menu without the empty rows the bot builds anyway)
         if not rows:
             problems.append(f"{mode}: could not read the customer's main menu")
@@ -528,6 +558,29 @@ def mu1(port, after):
                 problems.append(f"user {uid} ({m['method']}, parse={m['parse']!r}): the id line should be 'id: {want}': {m['text'][-70:]!r}")
         if after and {m["parse"] for m in menus} == {""}:
             problems.append("no parse mode on any menu message: the check of the markup did not run")
+    return problems
+
+
+@scn("EL1", "the emoji list of the panel 'edit buttons' (peEmojiList): the support emoji and the emoji of the buttons that are written in the code, and the admin's own main-menu button, are in the list (after); the old bot's list has none of them")
+def el1(port, after):
+    problems = []
+    sql("DELETE FROM setting WHERE type LIKE 'MAIN_BUTTONS%'")
+    sql("INSERT INTO setting (type, value) VALUES ('MAIN_BUTTONS\u2668\ufe0f made by the admin', 'x')")
+    tree = f"{T}/{'after' if after else 'before'}"
+    probe = tree + "/_el_probe.php"
+    open(probe, "w").write('<?php error_reporting(0); include "settings/values.php"; require "premium_emoji.php"; mysqli_report(MYSQLI_REPORT_OFF); $connection = new mysqli("localhost", "mini", "mini-test-pw", "' + DB + '"); $connection->set_charset("utf8mb4"); echo json_encode(array_map(fn($x) => $x["e"], peEmojiList()), JSON_UNESCAPED_UNICODE);')
+    r = subprocess.run(["php", "-d", f"mysqli.default_socket={SOCK}", probe], capture_output=True, text=True, cwd=tree)
+    os.remove(probe)
+    try:
+        listed = [x.replace("\ufe0f", "") for x in json.loads(r.stdout)]
+    except ValueError:
+        return [f"the probe printed no list: {r.stdout[:100]!r} {r.stderr[:100]!r}"]
+    for e, what in (("\U0001F3A7", "the support button"), ("\U0001F4AC", "the direct chat button"), ("\U0001F530", "a button of the code (the agency panel)"), ("\U0001F519", "a button of the code (back)"), ("\u2668", "a main-menu button of the admin")):
+        if (e.replace("\ufe0f", "") in listed) != after:
+            problems.append(f"{what} ({e}) is {'in' if e in listed else 'not in'} the list of the {'new' if after else 'old'} bot, want {'in' if after else 'not in'}")
+    if after and len(listed) < 100:
+        problems.append(f"the list should have grown a lot, it has {len(listed)} emoji")
+    sql("DELETE FROM setting WHERE type LIKE 'MAIN_BUTTONS%'")
     return problems
 
 

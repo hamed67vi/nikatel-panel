@@ -95,7 +95,7 @@ def test_the_installer_refuses_a_bot_that_is_not_as_expected(bot, tmp_path):
 def test_it_lives_together_with_the_support_section_installer(bot, tmp_path):
     """both put a line right under <?php; either can be taken out first and the file comes back byte for byte"""
     env = _env(tmp_path)
-    (bot / "config.php").write_text("<?php\nfunction getMainKeys(){\n    $mainKeys = array_merge([], [\n        [['text'=>$buttonValues['application_links'],'callback_data'=>\"reciveApplications\"],['text'=>$buttonValues['my_info'],'callback_data'=>\"myInfo\"]],\n    ]);\n    return json_encode($mainKeys);\n}\n", encoding="utf-8")
+    (bot / "config.php").write_text("<?php\nfunction getMainKeys(){\n    $mainKeys = array_merge([], [\n        [['text'=>$buttonValues['application_links'],'callback_data'=>\"reciveApplications\"],['text'=>$buttonValues['my_info'],'callback_data'=>\"myInfo\"]],\n    ]);\n    return json_encode([\'inline_keyboard\' => $mainKeys]);\n}\n", encoding="utf-8")
     support = BOT.replace("if(preg_match('/^editAgentDiscount", "if($data==\"supportSection\"){\n    echo \"old\";\n}\nif($data==\"ticketsList\" and ($from_id == $admin || $userInfo['isAdmin'] == true)){\n    echo \"old\";\n}\nif(preg_match('/^sendMsg_(.*)/',$userInfo['step'],$match)  and $text!=$buttonValues['cancel']){\n    echo \"old\";\n}\nif(preg_match('/^editAgentDiscount", 1)
     (bot / "bot.php").write_text(support, encoding="utf-8")
     orig = {n: (bot / n).read_bytes() for n in ("bot.php", "config.php")}
