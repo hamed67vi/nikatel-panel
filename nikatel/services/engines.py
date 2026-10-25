@@ -240,6 +240,22 @@ def prefetch() -> dict:
     return out
 
 
+def _copy_to_node(node: Node, engine: str, f: Path) -> None:
+    """Copy the core `f` (the panel's cache) next to its place on the server (`<bin>.nikatel.new`) with scp: nothing runs from it yet. The Xray gateway keeps its binary in a directory of its own, made first. RuntimeError with
+    the sentence when the copy fails. (The Update button used to send the binary as base64 through the `put_file` action: its path and size rules refuse a core - on 2026-10-25 an update of Xray failed on all 29 servers at once.)"""
+    e = ENGINES[engine]
+
+    if e["bin"].startswith("/opt/nikatel-xgw/"):
+        run_action(node, "xgw_mkdir", timeout=30)
+
+    s = get_settings()
+    opts = ["-i", str(s.ssh_key), "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=accept-new", "-o", f"UserKnownHostsFile={s.known_hosts}", "-o", "ConnectTimeout=15"]
+    r = subprocess.run(["scp", *opts, "-P", str(node.port), "--", str(f), f"{ssh_target(node)}:{e['bin']}.nikatel.new"], capture_output=True, text=True, timeout=300, check=False)
+
+    if r.returncode != 0:
+        raise RuntimeError(f"could not copy {e['title']} to {node.host}: " + r.stderr.strip()[:120])
+
+
 def ensure_on_node(node: Node, engine: str, say=None, only_missing: bool = False) -> bool:
     """The node runs the same build of the core as the panel's cache. Returns True when it was (re)installed. With `only_missing` a core that is there is left exactly as it is (another build may be what
     the tunnels of that server run - a server added to the panel often has tunnels already): it is put there only when it is not."""
@@ -254,16 +270,7 @@ def ensure_on_node(node: Node, engine: str, say=None, only_missing: bool = False
     if f"SHA={sha}" in run_script(node, "engine_sha", {"BIN": e["bin"]}, timeout=30):
         return False
 
-    if e["bin"].startswith("/opt/nikatel-xgw/"):
-        run_action(node, "xgw_mkdir", timeout=30)                  # (the Xray gateway keeps its binary in a directory of its own: it is made before the copy)
-
-    s = get_settings()
-    opts = ["-i", str(s.ssh_key), "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=accept-new", "-o", f"UserKnownHostsFile={s.known_hosts}", "-o", "ConnectTimeout=15"]
-    r = subprocess.run(["scp", *opts, "-P", str(node.port), "--", str(f), f"{ssh_target(node)}:{e['bin']}.nikatel.new"], capture_output=True, text=True, timeout=300, check=False)
-
-    if r.returncode != 0:
-        raise RuntimeError(f"could not copy {e['title']} to {node.host}: " + r.stderr.strip()[:120])
-
+    _copy_to_node(node, engine, f)
     out = run_action(node, "engine_swap", {"BIN": e["bin"], "SHA": sha, "UNITS": "nikatel-none.service"}, timeout=120)
 
     if "SWAPPED" not in out:
@@ -305,9 +312,22 @@ def install_on(server_id: int, names=None, step=None) -> dict:
     return out
 
 
+_SWAP_LOCK = threading.Lock()
+
+
+def swap_unhealthy(out: str) -> list[str]:
+    """Pure: the units that did NOT come back after the restart of a swap (the line `NOT_ACTIVE: unit unit` of the `engine_swap` action), [] when all did or nothing was restarted."""
+    for line in str(out).splitlines():
+        if line.startswith("NOT_ACTIVE:"):
+            return line.split(":", 1)[1].split()
+
+    return []
+
+
 def update(engine: str, only_missing: bool = False) -> dict:
     """Download, verify, copy to every server that runs this core and is outdated and restart its units - or, with `only_missing`, copy it to the servers that have not got it (nothing is restarted: no
-    unit uses it yet). Synchronous; takes minutes."""
+    unit uses it yet). Synchronous; takes minutes. The copies go four at a time, the swaps (which restart the units that RUN the core) one server at a time, and the first unit that does not come back
+    active after its restart stops the update there (`job["halt"]`): the other servers are not touched."""
     if engine not in ENGINES:
         raise ValueError("unknown engine")
 
@@ -350,10 +370,19 @@ def update(engine: str, only_missing: bool = False) -> dict:
                     ensure_on_node(node, engine, only_missing=True)
                     return {"name": name, "state": "ok", "detail": "installed"}
 
-                import base64
+                _copy_to_node(node, engine, newest)                      # (the slow part, four servers at a time: only a file next to the binary - nothing runs from it yet)
 
-                run_action(node, "put_file", {"PATH": ENGINES[engine]["bin"] + ".nikatel.new", "B64": base64.b64encode(binary).decode(), "MODE": "0755"}, timeout=240)
-                out = run_action(node, "engine_swap", {"BIN": ENGINES[engine]["bin"], "SHA": sha, "UNITS": ENGINES[engine]["units"]}, timeout=120)
+                with _SWAP_LOCK:                                         # (the swap restarts the units that run the core: ONE server at a time, so that what stands behind them is never all down at once)
+                    if job.get("halt"):
+                        return {"name": name, "state": "failed", "detail": "not tried: " + job["halt"]}
+
+                    out = run_action(node, "engine_swap", {"BIN": ENGINES[engine]["bin"], "SHA": sha, "UNITS": ENGINES[engine]["units"]}, timeout=120)
+                    bad = swap_unhealthy(out)
+
+                    if bad:
+                        job["halt"] = f"{', '.join(bad)} on {name} did not come back after its restart: the update stopped there, the other servers were not touched"
+                        return {"name": name, "state": "failed", "detail": job["halt"][:140]}
+
                 return {"name": name, "state": "ok" if "SWAPPED" in out else "failed", "detail": out.strip()[-120:]}
             except (SSHError, ValueError, RuntimeError, OSError, subprocess.SubprocessError) as e:
                 return {"name": name, "state": "failed", "detail": str(e)[:140]}

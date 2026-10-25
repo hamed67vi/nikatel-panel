@@ -258,11 +258,13 @@ def test_install_puts_a_core_on_the_servers_that_have_not_got_it_and_update_leav
 
     monkeypatch.setattr(engines, "get_settings", lambda: types.SimpleNamespace(data_dir=tmp_path / "data", read_only=False))
     monkeypatch.setattr(engines, "_download", lambda engine: ("v9.9.9", b"b" * 1_200_000))
-    wrote = []
+    wrote, copied = [], []
+    monkeypatch.setattr(engines, "_copy_to_node", lambda node, engine, f: copied.append((node.host, engine)))
     monkeypatch.setattr(engines, "run_action", lambda node, name, params=None, timeout=0: (wrote.append((node.host, name)), "SWAPPED units=")[1])
     engines._STATE["result"] = {"paqet": {"nodes": [{"name": "a1", "state": "not installed"}, {"name": "b1", "state": "current"}, {"name": "c1", "state": "outdated"}]}}
     only = engines.update("paqet")
     assert sorted(i["name"] for i in only["items"]) == ["c1"] and only["kind"] == "update"               # Update: the outdated ones only
+    assert copied == [("203.0.113.63", "paqet")] and wrote == [("203.0.113.63", "engine_swap")]            # (the copy goes by scp, the swap is the only action: no file is sent as base64 through put_file)
     assert (tmp_path / "engines" / "paqet").read_bytes() == b"b" * 1_200_000                           # the panel's cache follows the update: a tunnel built later does not put the old build back
     put = []
     monkeypatch.setattr(engines, "ensure_on_node", lambda node, name, say=None, only_missing=False: put.append((node.host, name, only_missing)) or True)

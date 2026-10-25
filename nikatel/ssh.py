@@ -1387,8 +1387,10 @@ if [ $ok = 1 ]; then echo "LISTENING"; else echo "NOTLISTEN"; fi
     "engine_swap": (r"""set -e; NEW='@BIN@.nikatel.new'; [ -f "$NEW" ] || { echo NO_FILE; exit 2; }
 S=$(sha256sum "$NEW" | awk '{print $1}'); [ "$S" = '@SHA@' ] || { rm -f "$NEW"; echo BAD_SHA; exit 3; }
 chmod 755 "$NEW"; mv -f "$NEW" '@BIN@'
-U=$(systemctl list-units --all --no-legend --plain '@UNITS@' 2>/dev/null | awk '{print $1}' | tr '\n' ' ')
+# only the units that RUN (or crashed) are restarted: a unit that is stopped on purpose is never started by an update, and a server that runs no unit of this core restarts nothing. After the restart every one of them must be active again ("NOT_ACTIVE: ..." otherwise: the caller stops the update there).
+U=$(systemctl list-units --state=active,activating,failed --no-legend --plain '@UNITS@' 2>/dev/null | awk '{print $1}' | tr '\n' ' ')
 for u in $U; do systemctl restart "$u" || true; done; echo "SWAPPED units=$U"
+if [ -n "$U" ]; then sleep 3; B=""; for u in $U; do systemctl is-active --quiet "$u" || B="$B $u"; done; [ -n "$B" ] && echo "NOT_ACTIVE:$B"; fi; true
 """, {"BIN": r"^/(usr/local/bin|opt/nikatel-xgw)/[A-Za-z0-9._-]{1,40}$", "SHA": r"^[0-9a-f]{64}$", "UNITS": r"^[A-Za-z0-9*._-]{1,40}$"}),
 
     # reboot the server (the tunnel units come back with systemd)
