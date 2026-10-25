@@ -51,6 +51,7 @@ class Plan:
     ports: list[int] = field(default_factory=list)
     ping_iface: str = ""      # a tunnel with no GRE link is still measured (latency, loss, traffic): over its own L3 link when it has one (BackPack Direct) ...
     ping: str = ""            # ... else by ping to the foreign server's address; only measured and shown: the state of the tunnel is never judged by it (see `judge`)
+    targets: list[int] = field(default_factory=list)      # the ports the FOREIGN server must have a listener on (where the forwarded ports are delivered): only asked, never part of the state - see `no_service`
 
 
 def link_of(t: Tunnel) -> tuple[str, str]:
@@ -104,6 +105,39 @@ def ping_target(t: Tunnel) -> tuple[str, str]:
 
 
 def plan_for(t: Tunnel) -> Plan:
+    plan = _plan_for(t)
+    plan.targets = foreign_targets(t)
+    return plan
+
+
+def foreign_targets(t: Tunnel) -> list[int]:
+    """The ports on the FOREIGN server that the forwarded ports are delivered to ("8079:8075,443" -> 8075, 443), from the port map the panel wrote when it built the tunnel or changed its ports. Nothing for a tunnel found on
+    the servers (no map the panel can trust), for a standby or a strand (they follow their tunnel) and for a map it cannot read: where it does not know, it does not judge."""
+    mapping = str((t.record or {}).get("port_mapping") or "")
+
+    if not mapping or is_standby(t):
+        return []
+
+    out: list[int] = []
+
+    for item in mapping.split(","):
+        m = re.fullmatch(r"\s*(\d{1,5})(?:[:=](\d{1,5}))?\s*", item)
+
+        if m is None:
+            return []
+
+        p = int(m.group(2) or m.group(1))
+
+        if not 1 <= p <= 65535:
+            return []
+
+        if p not in out:
+            out.append(p)
+
+    return out[:60]
+
+
+def _plan_for(t: Tunnel) -> Plan:
     name, typ, tr, port = sname(t), t.type.lower(), (t.transport or "tcpmux").lower(), int(t.port or 0)
     ports = [int(p) for p in (t.forwarded_ports or []) if str(p).isdigit()]
 
@@ -141,7 +175,8 @@ class Side:
     rtt_ms: float | None = None
     loss_pct: float | None = None
     listen: dict[int, bool] = field(default_factory=dict)
-    data_port: int = 0           # the forwarded port that was asked for one HTTP answer
+    target_listen: dict[int, bool] = field(default_factory=dict)      # the foreign side: does anything listen on the port the tunnel delivers to (only the ports that were asked and answered)
+    data_port: int = 0          # the forwarded port that was asked for one HTTP answer
     data_code: str = ""          # its answer: an HTTP code, "000" = nothing came back, "" = not asked
     data_ms: float | None = None  # how long that answer took (the latency of the users' path when the ping over the link is blocked)
     now: int = 0
@@ -181,6 +216,8 @@ def parse_side(out: str) -> Side:
                 s.loss_pct = 100.0
         elif p[0] == "LISTEN" and len(p) >= 3:
             s.listen[int(p[1])] = p[2] != "0"
+        elif p[0] == "TLISTEN" and len(p) >= 3 and p[1].isdigit():
+            s.target_listen[int(p[1])] = p[2] != "0"
         elif p[0] == "DATA" and len(p) >= 3:
             s.data_port, s.data_code = int(p[1]), ("000" if set(p[2]) == {"0"} else p[2])      # curl prints 000 itself when it fails: "000000" and "0" mean the same
 
@@ -308,6 +345,35 @@ def ping_verdict(loss_pct: float | None, data_code: str, ext: tuple | None) -> t
         return None, True
 
     return loss_pct, False
+
+
+NO_SERVICE_AFTER = 3          # looks in a row that found no listener behind the tunnel, ...
+NO_SERVICE_FOR = 90           # ... over at least this many seconds (an Xray that restarts is back in a few seconds; the fast lane looks every ~8 s), before a tunnel is called "connected, no service"
+
+
+def no_service(prev: dict, targets: list[int], answer: dict[int, bool], now: int) -> dict:
+    """Pure: what the look at the foreign server's listeners says about a tunnel that is UP but may lead nowhere (the owner, 2026-10-25: a new tunnel to port 8079 was "connected" while nothing listened on 8079 on the
+    foreign server, and its users got 502). `prev`: the last answer of this function (kept in the tunnel's detail); `targets`: the ports it must deliver to; `answer`: {port: something listens} for the ports that were asked
+    AND answered this time. The tunnel's state is never changed by it - the tunnel itself is fine. Returns {} when every asked port has a listener, `prev` unchanged when nothing was asked (a quick look, a server that did not
+    answer), else {"ports": [no listener], "all": none of the targets has one, "fails": looks in a row, "first": when it began, "confirmed": NO_SERVICE_AFTER looks over NO_SERVICE_FOR seconds, "told": the event was sent}."""
+    asked = [p for p in targets if p in answer]
+
+    if not asked:
+        return dict(prev)
+
+    missing = [p for p in asked if not answer[p]]
+
+    if not missing:
+        return {}
+
+    fails = int(prev.get("fails", 0)) + 1
+    first = int(prev.get("first") or now)
+    out = {"ports": missing, "all": len(missing) == len(targets), "fails": fails, "first": first, "confirmed": fails >= NO_SERVICE_AFTER and now - first >= NO_SERVICE_FOR}
+
+    if prev.get("told"):
+        out["told"] = True
+
+    return out
 
 
 TCP_REVERSE = frozenset({"bp:tcpmux", "bp:tcp", "bp:stealth", "bp:wss", "bp:wssmux", "bp:ws", "bp:wsmux", "chisel", "chisel:tls"})      # the control port is a TCP port on the IRAN server and the FOREIGN server dials it
@@ -520,6 +586,7 @@ def _query(node: Node, plan: Plan, is_iran: bool, quick: bool = False) -> Side:
               "IFACE": (plan.iface or plan.ping_iface) if is_iran else "",
               "PEER": (plan.iran_peer or plan.ping) if is_iran and not quick else "",
               "PORTS": " ".join(str(p) for p in plan.ports) if is_iran and not quick else "",
+              "TARGETS": " ".join(str(p) for p in plan.targets) if not is_iran and not quick else "",
               "QUICK": "1" if quick else ""}
 
     for attempt in (1, 2):
@@ -679,6 +746,8 @@ def _check_tunnel(tunnel_id: int, fresh_ext: bool = False, quick: bool = False) 
             tcp_rtt = None
     now = int(time.time())
     rx, tx = throughput(prev, iran.now, iran.rx_bytes, iran.tx_bytes)      # what crossed the card between two checks
+    prev_ns = dict(prev.get("no_service") or {})
+    ns = no_service(prev_ns, plan.targets, foreign.target_listen, now)      # does anything listen where the tunnel delivers (a look at the foreign server; the state of the tunnel is not touched)
 
     with session() as db:
         t = db.get(Tunnel, tunnel_id)
@@ -711,7 +780,20 @@ def _check_tunnel(tunnel_id: int, fresh_ext: bool = False, quick: bool = False) 
         # latency: the ping over the link; when that is blocked, how long the users' request took (from the other Iran server, else on the server)
         t.rtt_ms = iran.rtt_ms if iran.rtt_ms is not None else tcp_rtt if tcp_rtt is not None else (ext[1] if ext is not None and ext[1] is not None else iran.data_ms)
         t.rx_mbps, t.tx_mbps = rx, tx
-        t.detail = {"iran_units": iran.units, "foreign_units": foreign.units, "iface": iran.iface_state,
+        label = f"{t.name} ({t.iran.name} ⇄ {t.foreign.name})"
+
+        if sb:
+            ns = {}                  # a standby is never judged for this: it follows its tunnel
+        elif ns.get("confirmed") and state in ("up", "degraded"):
+            if not ns.get("told"):
+                gone = ", ".join(str(p) for p in ns["ports"])
+                emit(db, "warn", "tunnels", f"Tunnel {label} is connected, but it has no service: nothing listens on port {gone} of the foreign server {t.foreign.name}"
+                     + ("" if ns["all"] else " (its other ports do answer)") + ". The tunnel itself is fine - the inbound the users reach through it is missing there: add it on that port, or point the tunnel at a port that has one (Ports…).", t.name)
+                ns["told"] = True
+        elif not ns and prev_ns.get("told"):
+            emit(db, "ok", "tunnels", f"Tunnel {label}: something listens on port {', '.join(str(p) for p in prev_ns.get('ports') or [])} of the foreign server again - the service is back.", t.name)
+
+        t.detail = {"iran_units": iran.units, "foreign_units": foreign.units, "iface": iran.iface_state, "no_service": ns or None,
                     "loss_pct": loss, "ping_blocked": ping_blocked, "ping_over": ping_over, "listen": {str(k): v for k, v in iran.listen.items()},
                     "rx_bytes": iran.rx_bytes, "tx_bytes": iran.tx_bytes, "now": iran.now,
                     "iran_error": iran.error, "foreign_error": foreign.error, "streak": streak,
@@ -724,7 +806,6 @@ def _check_tunnel(tunnel_id: int, fresh_ext: bool = False, quick: bool = False) 
             t.state = state
             t.state_since = now
             went_bad = state in ("down", "degraded") and not sb          # a standby that falls is never "a tunnel that was cut": the standby job rebuilds it quietly
-            label = f"{t.name} ({t.iran.name} ⇄ {t.foreign.name})"
 
             if sb:
                 pass              # no event, no alert, no repair: a standby is not in the list, and nobody is told that a spare is being mended

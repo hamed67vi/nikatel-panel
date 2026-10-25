@@ -942,6 +942,8 @@ html body #page .tun-tbl .cut-tag { display: inline-flex; align-items: center; h
 html body #page .tun-tbl .cut-tag.unk { color: #aeb7ca; background: rgba(255, 255, 255, .06); border-color: rgba(255, 255, 255, .14); }
 html[data-mode="light"] body #page .tun-tbl .cut-tag { color: #b4232f; background: #fdecee; border-color: rgba(200, 40, 60, .4); }
 html[data-mode="light"] body #page .tun-tbl .cut-tag.unk { color: #4a566e; background: rgba(30, 50, 100, .07); border-color: rgba(30, 50, 100, .22); }
+html body #page .tun-tbl .cut-tag.svc { color: var(--warn); background: rgba(255, 196, 77, .13); border-color: rgba(255, 196, 77, .4); margin-right: 6px; }      /* "no service": the tunnel is up, nothing listens at its far port (amber, not the red of a cut) */
+html[data-mode="light"] body #page .tun-tbl .cut-tag.svc { color: #8a5a00; background: #fff4de; border-color: rgba(190, 120, 0, .4); }
 html body #page .tun-tbl .bwcap.pend { align-items: center; gap: 6px; font-size: 11px; font-weight: 600; }
 html body #page .tun-tbl .bwcap.pend .spin { display: inline-block; width: 10px; height: 10px; border-radius: 50%; border: 2px solid rgba(255, 255, 255, .18); border-top-color: var(--mut); animation: spin .8s linear infinite; }
 html[data-mode="light"] body #page .tun-tbl .bwcap.pend .spin { border-color: rgba(30, 50, 100, .18); border-top-color: var(--mut); }

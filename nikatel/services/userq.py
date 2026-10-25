@@ -188,6 +188,10 @@ def explain_users(f: dict) -> tuple[str, str]:
     if f.get("state") not in (None, "up"):
         return "tunnel_down", f"The tunnel itself is {f['state']}: that is what its users feel."
 
+    if f.get("no_service"):
+        return "no_service", (f"The tunnel is connected, but nothing listens on port {', '.join(str(p) for p in f['no_service'])} of the foreign server: the inbound its users reach through it is missing there. "
+                              "Add the inbound on that port, or point the tunnel at a port that has one (Ports…).")
+
     if f.get("bw_state") == "drop":
         return "tunnel_slow", f"The bandwidth of the tunnel dropped ({f.get('bw_text', '')}): that is what its users feel - see the look at the bandwidth."
 
@@ -356,8 +360,9 @@ def _facts(tunnel_id: int) -> dict:
         ux = dict((t.record or {}).get("ux") or {})
         bw = dict((t.record or {}).get("bw") or {})
         state = t.state
+        ns = dict((t.detail or {}).get("no_service") or {})
 
-    return {**f, "state": state, "n_bad": len(ux.get("bad") or []), "known": ux.get("known", 0), "bw_state": bw.get("state"),
+    return {**f, "state": state, "n_bad": len(ux.get("bad") or []), "known": ux.get("known", 0), "bw_state": bw.get("state"), "no_service": ns.get("ports") if ns.get("confirmed") else [],
             "bw_text": f"{bw['down']:.0f} Mb/s" if bw.get("down") is not None else "", "ux": ux}
 
 

@@ -373,9 +373,11 @@ if [ -n "@PEER@" ]; then
   echo "PEER @PEER@ $(echo "$P" | awk -F/ '/^rtt/{print $5}') $(echo "$P" | grep -o '[0-9]*% packet loss' | cut -d% -f1)"
 fi
 for p in @PORTS@; do echo "LISTEN $p $(ss -ltnH 2>/dev/null | grep -c ":$p ")"; done
+# the FOREIGN side, the ports the tunnel delivers to: does anything LISTEN on each (TCP or UDP)? "TLISTEN <port> <1|0>". One `ss` for all of them; nothing is printed when `ss` is missing or says nothing (a server always listens on SSH), so a tool that is not there never reads as "no service".
+if [ -n "@TARGETS@" ] && command -v ss >/dev/null 2>&1; then ss -ltunH 2>/dev/null | awk -v ports='@TARGETS@' 'BEGIN{n=split(ports,a," "); for(i=1;i<=n;i++) want[a[i]]=1} {c++; m=split($(NF-1),x,":"); p=x[m]; if (p in want) l[p]=1} END{if (c>0) for(i=1;i<=n;i++) print "TLISTEN", a[i], ((a[i] in l) ? 1 : 0)}'; fi
 wait
 echo "NOW $(date +%s)"
-""", {"UNITS": _UNITS, "IFACE": r"^([A-Za-z0-9][A-Za-z0-9._-]{0,14})?$", "PEER": r"^(\d{1,3}(\.\d{1,3}){3})?$", "PORTS": _PORTS, "QUICK": r"^[01]?$"}),
+""", {"UNITS": _UNITS, "IFACE": r"^([A-Za-z0-9][A-Za-z0-9._-]{0,14})?$", "PEER": r"^(\d{1,3}(\.\d{1,3}){3})?$", "PORTS": _PORTS, "TARGETS": _PORTS, "QUICK": r"^[01]?$"}),
 
     # the sentinel (services/sentinel.py), every 5 s, ONE command per server for ALL its tunnels: the state of every unit, of every GRE card and three quick pings of every GRE peer, in parallel (about two seconds when a
     # peer is silent). "UNIT <name> <state>", "IFACE <card> <state>" (the state is empty when there is no such card), "PEER <ip> <loss %>", "NOW <seconds>". Read-only.
