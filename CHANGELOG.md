@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.69.142 - The narrow side bar (the rail of icons) has no cut chevrons and every icon is the same box in the middle
+
+The owner (2026-10-25, with a picture of the rail): "fix the size of these and make them responsive".
+
+- **Cause** (`app.css` side menu, `fluid.css` rail): under 1180 px the side bar is a rail 56 px wide with an icon per page. The chevron that app.css draws after an item that has pages under it (Servers, Network, Panel, Settings) is a 7 px box with `position: static` - so in the rail it was a second flex child of the 46 px item: the icon was pushed 10 px left of the middle and the chevron was cut by the edge of the rail, while Dashboard (no chevron) stood in the middle. The rail rules hid the labels but not the chevron.
+- **Fix** (`fluid.css`, the rail block only): the rail has no chevrons (a click opens the page; its tabs are in the bar under the header), every icon is the same 24 px box (the 21 px drawing) in the middle of its 46 x 40 px item. The menu of a wide window (1181 px and over) with its chevrons and group toggles is not touched; neither is the bottom bar of a phone.
+- **Proved**: `tests/test_fluid_layout.py` pins the rules; measured on a private demo panel in the built-in browser: at 1100 and at 800 px the rail is 56 px, every item 46 x 40, every icon box 24 x 24 and 0 px off the middle, no chevron (before, at 1100 px: 4 of the 5 icons were 9-10 px off the middle with a chevron beside them); at 1300 px the menu is 246 px wide with its four group toggles as before.
+- **Not proved**: a picture of it (the pane is small and hidden: measurements and one reduced screenshot); the light theme and the right-to-left layout (the rules take no colour); a real touch tablet.
 ## 1.69.141 - The Update button of the cores works (it failed on every server) and is careful with the users: one server at a time, only running units, stops at the first unit that does not come back
 
 > **In short:** the owner pressed Update on Xray (29 servers) and it failed on every one within six seconds - the update sent the core as base64 through the `put_file` action, whose path and size rules refuse a core; the screen still said "✓ 0 updated". Nothing was copied or restarted, so nobody was cut. Now the core is copied with scp (like a build does), the swap restarts only units that RUN (a stopped unit is never started), the servers are swapped one at a time, and the first unit that does not come back active after its restart stops the update there. The screen tells the truth about failures.

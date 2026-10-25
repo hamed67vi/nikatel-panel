@@ -300,3 +300,13 @@ def test_the_x2_mark_of_a_foreign_server_that_ends_several_tunnels_is_smaller_an
         assert part in rule
     assert "html body #page .dup:hover { opacity: .95; }" in css
     assert 'class="dup" title="This foreign server ends' in APP      # (the mark itself is not changed: the same hint, the same tooltip)
+
+def test_the_rail_of_icons_has_no_chevrons_and_every_icon_is_the_same_box_in_the_middle_of_its_item():
+    """The owner, 2026-10-25, with a picture of the narrow side bar (a rail of icons): "fix the size of these and make them responsive". The chevron of an item that has pages under it (a 7 px box drawn with ::after, `position: static`
+    in app.css) was a flex child of the 46 px item: it pushed the icon 10 px off the middle and was cut by the edge of the rail, so Servers, Network, Panel and Settings looked different from Dashboard.
+    Measured in the browser at 1100 and 800 px: every item 46 x 40, every icon box 24 x 24 and 0 px off the middle (before: 4 of 5 icons -10 px off); at 1300 px the menu with its chevrons is as before."""
+    css = (WEB / "fluid.css").read_text(encoding="utf-8")
+    rail = css.split("@media (max-width: 1180px) and (not ((max-width: 760px) and (pointer: coarse))) {", 1)[1].split("\n}\n", 1)[0]
+    assert 'html body nav#nav a:not([data-page="dashboard"])::after, html body #nav a::after { content: none !important; display: none !important; }' in rail      # (more specific than the chevron rule of app.css, which is !important too)
+    assert "html body #nav a .ic { flex: none; width: 24px; height: 24px; margin: 0; }" in rail
+    assert "html body #nav a { justify-content: center; width: 100%; height: 40px; padding: 0; gap: 0; }" in rail
