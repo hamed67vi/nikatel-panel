@@ -308,7 +308,7 @@ def tg_msgs(method=None, chat=None):
 def make_pki():
     d = f"{B}/pki"
     os.makedirs(d, exist_ok=True)
-    if not os.path.exists(f"{d}/tg.pem"):
+    if not os.path.exists(f"{d}/tg.pem") or subprocess.run(f"openssl x509 -checkend 3600 -noout -in {d}/tg.pem", shell=True, capture_output=True).returncode != 0:      # (the test certificate lives 3 days: a run after that must make a new one, or every message to the fake Telegram fails)
         subprocess.run(f"cd {d} && openssl req -x509 -newkey rsa:2048 -nodes -keyout ca.key -out ca.pem -days 3 -subj /CN=sec-test-ca 2>/dev/null && "
                        f"openssl req -newkey rsa:2048 -nodes -keyout tg.key -out tg.csr -subj /CN=api.telegram.org 2>/dev/null && printf 'subjectAltName=DNS:api.telegram.org' > ext.cnf && "
                        f"openssl x509 -req -in tg.csr -CA ca.pem -CAkey ca.key -CAcreateserial -out tg.pem -days 3 -extfile ext.cnf 2>/dev/null", shell=True, check=True)
@@ -1077,6 +1077,163 @@ def tq1():
     if on1 is not True or off is not False:
         problems.append(f"features.support_chat: default {on1} (want True), switched off {off} (want False)")
     return bool(problems), "; ".join(problems) if problems else "follow-ups are quiet, the first message after an answer is announced once, the chat switch is a feature flag"
+
+@scn("TN1", "LOW", "BOT_STATES miniTicketNew = off: no NEW ticket from the Mini App (features.ticket_new false, ticket_new refused: no row, nothing to the admins); a reply in an open ticket still works; unset / on: unchanged")
+def tn1():
+    problems = []
+    reset(); mk_user(U)
+    c, j, t = call("ticket_new", {"title": "t", "text": "first", "category": "tech"})
+    if not ok(j):
+        problems.append(f"by default a new ticket must work: {t[:80]}")
+    if (call("me")[1] or {}).get("features", {}).get("ticket_new") is not True:
+        problems.append("features.ticket_new should be true by default")
+    reset(states={"miniTicketNew": "off"}); mk_user(U)
+    sql(f"INSERT INTO chats (user_id, create_date, title, category, state, rate) VALUES ({U}, {int(time.time())}, 'old', 'tech', 1, 0)")
+    cid = int(q1("SELECT MAX(id) FROM chats"))
+    sql(f"INSERT INTO chats_info (chat_id, sent_date, msg_type, text) VALUES ({cid}, {int(time.time())}, 'ADMIN', 'answer')")
+    n_chats, n_tg = q1("SELECT COUNT(*) FROM chats"), len(tg_msgs("sendMessage"))
+    c, j, t = call("ticket_new", {"title": "t", "text": "second", "category": "tech"})
+    if ok(j) or q1("SELECT COUNT(*) FROM chats") != n_chats or len(tg_msgs("sendMessage")) != n_tg:
+        problems.append(f"switched off, a new ticket was still made or announced: ok={ok(j)}, rows {n_chats} -> {q1('SELECT COUNT(*) FROM chats')}")
+    if (call("me")[1] or {}).get("features", {}).get("ticket_new") is not False:
+        problems.append("features.ticket_new should be false when it is switched off")
+    c, j, t = call("ticket_reply", {"id": cid, "text": "thanks"})
+    if not ok(j) or q1(f"SELECT COUNT(*) FROM chats_info WHERE chat_id={cid}") != "2":
+        problems.append(f"a reply in an open ticket must still work: {t[:80]}")
+    c, j, t = call("tickets")
+    if not ok(j) or len(j.get("tickets", [])) != 1:
+        problems.append("the list of tickets must still be there")
+    return bool(problems), "; ".join(problems) if problems else "new tickets are switched off cleanly, replies and the list still work, the default is unchanged"
+
+# ===== discount codes of the bot (table discounts) in the buy sheet
+def mk_code(code, **kw):
+    f = {"typ": "percent", "amount": 10, "exp": 0, "count": -1, "can": 1, "aud": "all", "aud_user": None, "target": "all", "tid": None, "minp": 0, "maxd": None, "active": 1, "used": None}
+    f.update(kw)
+    nul = lambda v: "NULL" if v is None else str(int(v))
+    sql(f"INSERT INTO discounts (hash_id, type, amount, expire_date, expire_count, used_by, can_use, audience_type, audience_user_id, target_type, target_id, min_price, max_discount, is_active) VALUES "
+        f"({esc(code)}, {esc(f['typ'])}, {int(f['amount'])}, {int(f['exp'])}, {int(f['count'])}, {'NULL' if f['used'] is None else esc(json.dumps(f['used']))}, {int(f['can'])}, {esc(f['aud'])}, {nul(f['aud_user'])}, {esc(f['target'])}, {nul(f['tid'])}, {int(f['minp'])}, {nul(f['maxd'])}, {int(f['active'])})")
+
+
+def code_row(code):
+    a = q1(f"SELECT expire_count FROM discounts WHERE hash_id = {esc(code)}")
+    b = q1(f"SELECT COALESCE(used_by, '') FROM discounts WHERE hash_id = {esc(code)}") or ""
+    return (int(a) if a not in (None, "") else None), (json.loads(b) if b.startswith("[") else [])
+
+
+def dc_setup(agent=False):
+    reset(); mk_user(U, wal=1_000_000, agent=1 if agent else 0, disc='{"normal":"0"}' if agent else None)
+    sql("INSERT INTO server_categories (id, server_id, title, step) VALUES (2, '1', 'cat2', 2)")
+    sql("INSERT INTO server_plans (id, fileid, catid, server_id, inbound_id, acount, limitip, title, protocol, days, volume, type, price, descr, pic, active, step, date, custom_sni) VALUES (2, '', 2, 1, 0, 10, 1, 'plan2', 'vless', 30, 50, 'x', 90000, 'd', '', 1, 0, '', NULL)")
+
+
+@scn("DC1", "HIGH", "discount codes in the Mini App follow the bot's rules (percent / amount, cap, minimum, expiry, uses left, switched off, audience, target, uses per customer): the page's check, the price charged and the use taken agree, a refused code charges and changes nothing")
+def dc1():
+    now = int(time.time())
+    # (name, code fields, agent?, setup before, expected price paid or None = refused)
+    cases = [
+        ("percent 10", {}, False, None, 117_000), ("amount 50k", {"typ": "amount", "amount": 50_000}, False, None, 80_000), ("amount over the price", {"typ": "amount", "amount": 500_000}, False, None, 0),
+        ("percent 100", {"amount": 100}, False, None, 0), ("percent above 100 is 100", {"amount": 150}, False, None, 0), ("negative amount never raises the price", {"typ": "amount", "amount": -5000}, False, None, 130_000),
+        ("cap", {"amount": 50, "maxd": 20_000}, False, None, 110_000), ("minimum met", {"minp": 100_000}, False, None, 117_000), ("minimum not met", {"minp": 200_000}, False, None, None),
+        ("expired", {"exp": now - 10}, False, None, None), ("not expired", {"exp": now + 3600}, False, None, 117_000), ("no uses left", {"count": 0}, False, None, None), ("uses left", {"count": 5}, False, None, 117_000),
+        ("switched off", {"active": 0}, False, None, None),
+        ("agents only, a customer", {"aud": "agents"}, False, None, None), ("agents only, an agent", {"aud": "agents"}, True, None, 117_000), ("non agents, an agent", {"aud": "non_agents"}, True, None, None), ("non agents, a customer", {"aud": "non_agents"}, False, None, 117_000),
+        ("one user, him", {"aud": "user", "aud_user": U}, False, None, 117_000), ("one user, somebody else", {"aud": "user", "aud_user": U + 1}, False, None, None),
+        ("buyers, a first-time customer", {"aud": "buyers"}, False, None, None), ("buyers, a customer who paid", {"aud": "buyers"}, False, "paid", 117_000),
+        ("non buyers, a first-time customer", {"aud": "non_buyers"}, False, None, 117_000), ("non buyers, a customer who paid", {"aud": "non_buyers"}, False, "paid", None),
+        ("has an order, none", {"aud": "has_active_order"}, False, None, None), ("has an order, one", {"aud": "has_active_order"}, False, "order", 117_000), ("no order, none", {"aud": "no_active_order"}, False, None, 117_000), ("no order, one", {"aud": "no_active_order"}, False, "order", None),
+        ("target plan 1", {"target": "plan", "tid": 1}, False, None, 117_000), ("target plan 2", {"target": "plan", "tid": 2}, False, None, None), ("target server 1", {"target": "server", "tid": 1}, False, None, 117_000), ("target server 9", {"target": "server", "tid": 9}, False, None, None),
+        ("target category 1", {"target": "category", "tid": 1}, False, None, 117_000), ("target category 2", {"target": "category", "tid": 2}, False, None, None),
+        ("one use each, used", {"can": 1, "used": [U]}, False, None, None), ("two uses each, used once", {"can": 2, "used": [U]}, False, None, 117_000), ("unlimited per customer", {"can": -1, "used": [U, U, U]}, False, None, 117_000),
+        ("somebody else used it", {"can": 1, "used": [U + 1]}, False, None, 117_000),
+    ]
+    problems = []
+    for name, kw, agent, pre, want in cases:
+        dc_setup(agent)
+        if pre == "paid":
+            sql(f"INSERT INTO pays (hash_id, user_id, type, plan_id, server_id, price, request_date, state, agent_bought, agent_count) VALUES ('h{U}', {U}, 'BUY_SUB', 1, 1, 130000, {now}, 'paid_with_wallet', 0, 0)")
+        if pre == "order":
+            mk_service(U)
+        mk_code("CODE1", **kw)
+        w0, n0, row0 = wallet(), len(PU), code_row("CODE1")
+        c, jc, tc = call("discount_check", {"plan_id": 1, "code": "CODE1"})
+        chk = jc.get("price") if ok(jc) else None
+        if (chk is None) != (want is None) or (want is not None and chk != want):
+            problems.append(f"{name}: the page's check says {chk}, want {want} ({tc[:70]})")
+        if code_row("CODE1") != row0:
+            problems.append(f"{name}: only asking changed the code {row0} -> {code_row('CODE1')}")
+        c, j, t = call("buy", {"plan_id": 1, "code": "CODE1", "rid": "dc1" + os.urandom(5).hex()})
+        if want is None:
+            if ok(j) or wallet() != w0 or len(PU) != n0 or code_row("CODE1") != row0:
+                problems.append(f"{name}: a refused code still bought or changed something: ok={ok(j)}, charged {w0 - wallet()}, accounts +{len(PU) - n0}, code {row0} -> {code_row('CODE1')}")
+            continue
+        if not ok(j) or w0 - wallet() != want or len(PU) != n0 + 1:
+            problems.append(f"{name}: paid {w0 - wallet()} (want {want}), ok={ok(j)}, accounts +{len(PU) - n0}: {t[:90]}"); continue
+        if q1(f"SELECT price FROM pays WHERE user_id={U} AND type='BUY_SUB' AND state='paid_with_wallet' ORDER BY id DESC LIMIT 1") != str(want) or q1(f"SELECT amount FROM orders_list WHERE userid='{U}' ORDER BY id DESC LIMIT 1") != str(want):
+            problems.append(f"{name}: the pays / orders rows do not carry the price paid")
+        cnt, used = code_row("CODE1")
+        want_cnt = row0[0] if row0[0] in (-1, None) else row0[0] - 1
+        if (want > 0 or want == 0) and (used != row0[1] + [U] or cnt != want_cnt) and want != 130_000:
+            problems.append(f"{name}: the use was not taken: count {row0[0]} -> {cnt}, used_by {row0[1]} -> {used}")
+    return bool(problems), "; ".join(problems[:6]) if problems else f"{len(cases)} cases: the check, the price paid and the use taken agree with the bot's rules"
+
+
+@scn("DC2", "HIGH", "discount codes: the last use goes to ONE of two customers asking at once, the same key used again takes nothing twice, a failed panel call takes nothing, asking is rate limited, odd strings are harmless, the switch works")
+def dc2():
+    problems = []
+    now = int(time.time())
+    # the last use, two customers at once
+    dc_setup(); mk_user(U + 1, wal=1_000_000); mk_code("LAST", count=1)
+    w0 = (wallet(U), wallet(U + 1)); n0 = len(PU)
+    res = par(2, lambda i: call("buy", {"plan_id": 1, "code": "LAST", "rid": f"dc2race{i}" + os.urandom(4).hex()}, uid=U + i))
+    paid = sorted(w0[i] - wallet(U + i) for i in range(2))
+    cnt, used = code_row("LAST")
+    if len(PU) - n0 != sum(1 for r in res if ok(r[1])) or cnt != 0 or len(used) != 1 or paid.count(117_000) != 1 or any(p not in (0, 117_000, 130_000) for p in paid):
+        problems.append(f"the last use: paid {paid}, accounts +{len(PU) - n0}, answers {[ok(r[1]) for r in res]}, count {cnt}, used_by {used}")
+    if paid.count(117_000) == 1 and 130_000 in paid:
+        problems.append("the loser paid the full price although he asked with a code: he must be refused (and asked again), not charged differently")
+    # the same key again, a failed panel call, the switch
+    dc_setup(); mk_code("ONCE", count=3, can=-1)
+    rid = "dc2rid" + os.urandom(4).hex()
+    for _ in range(3):
+        call("buy", {"plan_id": 1, "code": "ONCE", "rid": rid})
+    cnt, used = code_row("ONCE")
+    if cnt != 2 or used != [U] or wallet() != 1_000_000 - 117_000 or len(PU) != 1:
+        problems.append(f"the same key three times: count {cnt} (want 2), used_by {used}, wallet {wallet()}, accounts {len(PU)}")
+    PANEL["fail_create"] = 500
+    c, j, t = call("buy", {"plan_id": 1, "code": "ONCE", "rid": "dc2fail" + os.urandom(4).hex()}); PANEL["fail_create"] = None
+    if ok(j) or code_row("ONCE") != (2, [U]) or wallet() != 1_000_000 - 117_000:
+        problems.append(f"a failed panel call must take nothing: ok={ok(j)}, code {code_row('ONCE')}, wallet {wallet()}")
+    reset(states={"miniDiscountCode": "off"}); mk_user(U, wal=1_000_000); mk_code("OFF1")
+    c1, j1, t1 = call("discount_check", {"plan_id": 1, "code": "OFF1"}); c2, j2, t2 = call("buy", {"plan_id": 1, "code": "OFF1", "rid": "dc2off" + os.urandom(4).hex()}); c3, j3, t3 = call("buy", {"plan_id": 1, "rid": "dc2on" + os.urandom(4).hex()})
+    feat = (call("me")[1] or {}).get("features", {}).get("discount_code")
+    if ok(j1) or ok(j2) or not ok(j3) or wallet() != 870_000 or feat is not False or code_row("OFF1") != (-1, []):
+        problems.append(f"the switch: check ok={ok(j1)}, buy with a code ok={ok(j2)}, buy without ok={ok(j3)}, wallet {wallet()}, feature {feat}")
+    # a plan that costs nothing: the code takes no use; an agent's price is the base
+    dc_setup(); sql("INSERT INTO server_plans (id, fileid, catid, server_id, inbound_id, acount, limitip, title, protocol, days, volume, type, price, descr, pic, active, step, date, custom_sni) VALUES (3, '', 1, 1, 0, 10, 1, 'free', 'vless', 30, 1, 'x', 0, 'd', '', 1, 0, '', NULL)"); mk_code("TRIAL", count=3)
+    call("buy", {"plan_id": 3, "code": "TRIAL", "rid": "dc2try" + os.urandom(4).hex()})
+    if code_row("TRIAL") != (3, []):
+        problems.append(f"a code on a plan that costs nothing used a use up: {code_row('TRIAL')}")
+    dc_setup(agent=True); sql(f"UPDATE users SET discount_percent = '{{\"normal\":\"20\"}}' WHERE userid = '{U}'"); mk_code("AG10")
+    c, j, t = call("buy", {"plan_id": 1, "code": "AG10", "rid": "dc2ag" + os.urandom(4).hex()})
+    if not ok(j) or 1_000_000 - wallet() != 93_600:
+        problems.append(f"an agent pays 104000 and the code takes 10% of THAT: paid {1_000_000 - wallet()} (want 93600): {t[:80]}")
+    # asking is rate limited; odd strings are harmless
+    dc_setup(); mk_code("REAL")
+    codes = ["", "nope", "'", "\" OR 1=1 -- ", "REAL' OR '1'='1", "\x00", "a" * 300, "%", "REAL%", "ریال", "{\"a\":1}"]
+    for s in codes:
+        c, j, t = call("discount_check", {"plan_id": 1, "code": s})
+        if j is None or c >= 500 or (ok(j) and s != "REAL"):
+            problems.append(f"the code {s[:20]!r}: HTTP {c} ok={ok(j)} {t[:60]}"); break
+    dc_setup(); mk_code("REAL")
+    last = None
+    for i in range(14):
+        last = call("discount_check", {"plan_id": 1, "code": f"wrong{i}"})
+    if last[0] != 429:
+        problems.append(f"14 wrong codes in a row were not slowed down: last HTTP {last[0]}")
+    c, j, t = call("buy", {"plan_id": 1, "code": "REAL", "rid": "dc2thr" + os.urandom(4).hex()})
+    if ok(j) and last[0] == 429:
+        problems.append("while slowed down a buy with a code still went through")
+    return bool(problems), "; ".join(problems[:6]) if problems else "the last use goes to one customer, retries and failures take nothing, asking is rate limited, odd strings are harmless, the switch works, an agent's base price is used"
 
 # ===== injection and web basics
 SQLI = ["'", "\"", "' OR '1'='1", "1' OR '1'='1' -- ", "1; DROP TABLE users; -- ", "' UNION SELECT 1,2,3 -- ", "\\", "%27", "1 AND SLEEP(2)", "') OR 1=1 -- ", "0x27", "\x00", "a' or 1=1#", "1) UNION SELECT password FROM server_config -- ", "O'Brien", "%' OR '%'='", "{\"a\":\"'\"}"]

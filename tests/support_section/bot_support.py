@@ -87,7 +87,7 @@ class Proxy(socketserver.StreamRequestHandler):
 def make_pki():
     d = f"{B}/pki"
     os.makedirs(d, exist_ok=True)
-    if not os.path.exists(f"{d}/tg.pem"):
+    if not os.path.exists(f"{d}/tg.pem") or subprocess.run(f"openssl x509 -checkend 3600 -noout -in {d}/tg.pem", shell=True, capture_output=True).returncode != 0:      # (the test certificate lives 3 days: a run after that must make a new one, or every message to the fake Telegram fails)
         subprocess.run(f"cd {d} && openssl req -x509 -newkey rsa:2048 -nodes -keyout ca.key -out ca.pem -days 3 -subj /CN=sec-test-ca 2>/dev/null && "
                        f"openssl req -newkey rsa:2048 -nodes -keyout tg.key -out tg.csr -subj /CN=api.telegram.org 2>/dev/null && printf 'subjectAltName=DNS:api.telegram.org' > ext.cnf && "
                        f"openssl x509 -req -in tg.csr -CA ca.pem -CAkey ca.key -CAcreateserial -out tg.pem -days 3 -extfile ext.cnf 2>/dev/null", shell=True, check=True)

@@ -45,7 +45,7 @@ const ctx = {
 ctx.window = ctx; ctx.scrollTo = () => {};
 // "payflow": what the page sends with a payment (a key per sheet) and when it keeps or drops it
 const bodies = [];
-if (process.argv[3] === "payflow") ctx.fetch = async (url, opt) => { const a = /a=(\w+)/.exec(url)[1]; let b = {}; try { b = JSON.parse(opt.body); } catch (e) {} bodies.push({ a, b }); if (R.__net) throw new Error("net"); return { json: async () => (R[a] || { ok: false, error: "no " + a }) }; };
+if (process.argv[3] === "payflow" || process.argv[3] === "discount") ctx.fetch = async (url, opt) => { const a = /a=(\w+)/.exec(url)[1]; let b = {}; try { b = JSON.parse(opt.body); } catch (e) {} bodies.push({ a, b }); if (R.__net) throw new Error("net"); return { json: async () => (R[a] || { ok: false, error: "no " + a }) }; };
 if (process.argv[3] === "noconnect") R.me = { ok: false, error: "down" };
 // "hostile": the support id and the bot name come from the database / baseInfo.php; a quote in them must stay inside the string of the handler (not end it and run the rest)
 const HOSTILE = "x');alert(1);('";
@@ -63,11 +63,14 @@ if (process.argv[3] === "buymerge" || process.argv[3] === "buymerge1") {      //
 if (process.argv[3] === "history") {      // the wallet page: the last three rows at once, the older ones (and the cashbacks) behind one button
   R.history.pays = [1, 2, 3, 4, 5].map(i => ({ type: "خرید سرویس", kind: "BUY_SUB", price: 1000 * i, state: "paid_with_wallet", state_fa: "از کیف پول", at: NOW - i, note: "" }));
 }
+if (process.argv[3] === "nodiscount") R.me.features.discount_code = false;      // the owner switched the discount-code field off: no field in the buy sheet
+if (process.argv[3] === "discount") R.discount_check = { ok: true, code: HOSTILE, discount: 30000, price: 100000, list_price: 130000 };
+if (process.argv[3] === "noticket") R.me.features.ticket_new = false;      // the owner switched new tickets off in the Mini App for now: no "new ticket" button on the support page
 if (process.argv[3] === "nochat") R.me.features.support_chat = false;      // the admin switched the direct chat off: no card that opens the operator's chat
 if (process.argv[3] === "hostile") { R.me.support = HOSTILE; R.me.bot = HOSTILE; R.me.features.card = false; }
 ctx.Telegram = { WebApp: { initData: "x=1", initDataUnsafe: {}, colorScheme: "dark", ready() {}, expand() {}, onEvent() {}, setHeaderColor() {}, setBackgroundColor() {}, enableClosingConfirmation() {}, BackButton: { onClick() {}, show() {}, hide() {} } } };
 vm.createContext(ctx);
-vm.runInContext(src + "\n;globalThis.__X = Object.fromEntries(['VIEWS','AFTER','S','esc','js','T','GB','left','leftTx','vol','ltr','boot','setTab','renewSheet','extraSheet','reportSheet','buySheet','render','doBuy','doRenew','doExtra','RID','buyPick','buyBack','buyCatPick','histMore'].map(n => [n, (() => { try { return eval(n); } catch (e) { return undefined; } })()]));", ctx);
+vm.runInContext(src + "\n;globalThis.__X = Object.fromEntries(['VIEWS','AFTER','S','esc','js','T','GB','left','leftTx','vol','ltr','boot','setTab','renewSheet','extraSheet','reportSheet','buySheet','render','doBuy','doRenew','doExtra','RID','buyPick','buyBack','buyCatPick','histMore','dcApply','dcClear'].map(n => [n, (() => { try { return eval(n); } catch (e) { return undefined; } })()]));", ctx);
 const X = ctx.__X;
 const out = { values: {}, errors: [], calls };
 const tick = () => new Promise(r => setImmediate(r));
@@ -92,7 +95,26 @@ const tick = () => new Promise(r => setImmediate(r));
       plans3: (step3.match(/buySheet\(/g) || []).length, tabs3: 0, again: back === step1 };
     console.log(JSON.stringify(out)); return;
   }
-  if (process.argv[3] === "nochat" || process.argv[3] === "chat") {
+  if (process.argv[3] === "discount" || process.argv[3] === "nodiscount") {
+    R.buy = { ok: true, order_id: 9, remark: "r", wallet: 1, cashback: 0, sub: "", links: [], expire: 0, discount: 30000 };
+    X.S.plans = R.plans.plans; X.S.me = R.me.user;      // plan 11 costs 130000, the wallet has 500000
+    X.buySheet(11); const sheet0 = els["sheet-body"].innerHTML;
+    if (process.argv[3] === "nodiscount") { out.values.nodiscount = { field: sheet0.includes("dc-code") || sheet0.includes("dcApply") }; console.log(JSON.stringify(out)); return; }
+    mk("dc-code").value = "  " + HOSTILE + "  "; await X.dcApply(11);
+    const sheet1 = els["sheet-body"].innerHTML;
+    await X.doBuy(11);
+    X.buySheet(11); const sheet2 = els["sheet-body"].innerHTML;
+    const buy = bodies.filter(b => b.a === "buy").map(b => b.b), chk = bodies.filter(b => b.a === "discount_check").map(b => b.b);
+    out.values.discount = { field: sheet0.includes('id="dc-code"') && sheet0.includes("dcApply(11)") && !sheet0.includes("readonly"), plain: sheet0.includes("پرداخت " + X.T(130000) + " تومان"),
+      checkBody: chk.length === 1 && chk[0].plan_id === 11 && chk[0].code === HOSTILE, applied: sheet1.includes("readonly") && sheet1.includes("dcClear(11)") && sheet1.includes('value="' + X.esc(HOSTILE) + '"'),
+      newPrice: sheet1.includes("پرداخت " + X.T(100000) + " تومان") && sheet1.includes('<s class="mut">' + X.T(130000) + "</s>") && sheet1.includes(X.T(30000)),
+      buyBody: buy.length === 1 && buy[0].plan_id === 11 && buy[0].code === HOSTILE && typeof buy[0].rid === "string", after: sheet2.includes('id="dc-code"') && !sheet2.includes("readonly") };
+    console.log(JSON.stringify(out)); return;
+  }  if (process.argv[3] === "noticket" || process.argv[3] === "ticket") {
+    X.S.stack = [{ v: "tickets" }]; await X.render(); await tick(); await tick();
+    out.values.ticket = { newButton: HTML.some(h => h.includes("go('ticket_new'")), list: HTML.some(h => h.includes("tk-list")), chat: HTML.some(h => h.includes("sup_port")) };
+    console.log(JSON.stringify(out)); return;
+  }  if (process.argv[3] === "nochat" || process.argv[3] === "chat") {
     for (const v of ["home", "more", "tickets"]) { X.S.stack = [{ v }]; await X.render(); await tick(); }
     out.values.chat = { cards: HTML.filter(h => h.includes("sup_port")).length, tickets: HTML.some(h => h.includes("tk-list")) };
     console.log(JSON.stringify(out)); return;

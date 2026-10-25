@@ -300,23 +300,36 @@ function paintPlans() {
   box.innerHTML = (buySrv ? `<button class="btn sm ghost mb" onclick="buyBack()">› همه‌ی نوع سرویس‌ها</button>` : "") + buyNotes() +
     Object.keys(by).map(srv => `<div class="card"><h3>${esc(srv)}</h3>${by[srv].map(x => `<div class="plan ${x.sold_out || !S.sell ? "off" : ""}" onclick="${x.sold_out || !S.sell ? "" : `buySheet(${x.id})`}"><div class="grow"><div class="pt">${esc(x.title)}</div><div class="pd">${vol(x.volume)}، ${x.days ? T(x.days) + " روز" : "بدون محدودیت زمان"}${x.users > 0 ? "، " + T(x.users) + " کاربر" : ""}${x.sold_out ? "، <b>تمام شد</b>" : ""}</div>${x.descr ? `<div class="pd">${esc(x.descr)}</div>` : ""}</div><div class="pr"><b>${T(x.price)}</b>${x.discount ? `<s>${T(x.list_price)}</s> ` : ""}<small>تومان</small></div></div>`).join("")}</div>`).join("");
 }
+/* the discount code of the plan whose sheet is open: {plan, code, price, discount}; the server works the price out again when the customer pays */
+let DC = null;
+function dcFor(x) { return S.feat.discount_code !== false && DC && DC.plan === x.id ? DC : null; }
+async function dcApply(id) {
+  const code = ($("dc-code").value || "").trim(); if (!code) return;
+  const r = await api("discount_check", {plan_id: id, code});
+  if (!r.ok) { const n = $("dc-note"); if (n) n.innerHTML = `<div class="note bad mt">${esc(r.error)}</div>`; else toast(r.error, "bad"); return; }
+  DC = {plan: id, code: r.code, price: r.price, discount: r.discount}; buySheet(id);
+}
+function dcClear(id) { DC = null; buySheet(id); }
 function buySheet(id) {
   const x = (S.plans || []).find(p => p.id === id); if (!x) return;
-  const wallet = S.me ? S.me.wallet : 0, short = x.price - wallet;
+  const dc = dcFor(x), pay = dc ? dc.price : x.price;
+  const wallet = S.me ? S.me.wallet : 0, short = pay - wallet;
   sheet(`<h3>${esc(x.title)}</h3>
-    <div class="grid"><div class="tile"><small>سرور</small><b>${esc(planHead(x))}</b></div><div class="tile"><small>قیمت</small><b>${T(x.price)} تومان</b></div><div class="tile"><small>حجم</small><b>${vol(x.volume)}</b></div><div class="tile"><small>مدت</small><b>${x.days ? T(x.days) + " روز" : "نامحدود"}</b></div></div>
+    <div class="grid"><div class="tile"><small>سرور</small><b>${esc(planHead(x))}</b></div><div class="tile"><small>قیمت</small><b>${dc ? `<s class="mut">${T(x.price)}</s> ` : ""}${T(pay)} تومان</b></div><div class="tile"><small>حجم</small><b>${vol(x.volume)}</b></div><div class="tile"><small>مدت</small><b>${x.days ? T(x.days) + " روز" : "نامحدود"}</b></div></div>
     ${x.descr ? `<div class="note descr mt">${esc(x.descr)}</div>` : ""}
     ${x.discount ? `<div class="note ok mt">تخفیف همکار: ${T(x.discount)}٪ (قیمت اصلی ${T(x.list_price)} تومان)</div>` : ""}
     ${S.feat.hold ? `<div class="note mt">⏱ زمان سرویس از اولین اتصال شروع می‌شود.</div>` : ""}
+    ${S.feat.discount_code !== false ? `<div class="mt"><label class="lb">کد تخفیف</label><div class="row"><input class="input grow" id="dc-code" placeholder="کد تخفیف را وارد کن" autocomplete="off" value="${dc ? esc(dc.code) : ""}"${dc ? " readonly" : ""}>${dc ? `<button class="btn" onclick="dcClear(${x.id})">حذف</button>` : `<button class="btn pri" onclick="dcApply(${x.id})">اعمال</button>`}</div>${dc ? `<div class="note ok mt">✅ ${T(dc.discount)} تومان تخفیف اعمال شد.</div>` : `<div id="dc-note"></div>`}</div>` : ""}
     <div class="row mt"><span class="mut">کیف پول</span><b>${T(wallet)} تومان</b></div>
     ${short > 0 ? `<div class="note bad mt">${T(short)} تومان کم داری.</div><div class="btns"><button class="btn pri" onclick="closeSheet();setTab('wallet');topupStart(${short})">💳 شارژ کیف پول</button><button class="btn" onclick="closeSheet()">بعداً</button></div>`
-      : `<div class="btns"><button class="btn pri" id="do-buy" onclick="doBuy(${x.id})">پرداخت ${T(x.price)} تومان از کیف پول</button><button class="btn" onclick="closeSheet()">انصراف</button></div>`}`);
+      : `<div class="btns"><button class="btn pri" id="do-buy" onclick="doBuy(${x.id})">پرداخت ${T(pay)} تومان از کیف پول</button><button class="btn" onclick="closeSheet()">انصراف</button></div>`}`);
 }
 async function doBuy(id) {
   if (S.busy) return; S.busy = true; const b = $("do-buy"); b.disabled = true; b.innerHTML = '<i class="spin"></i> در حال ساخت سرویس…';
-  const r = await api("buy", {plan_id: id, rid: ridFor("buy:" + id)}); S.busy = false; if (!r.net) delete RID["buy:" + id];
+  const dc = dcFor((S.plans || []).find(p => p.id === id) || {id});
+  const r = await api("buy", {plan_id: id, rid: ridFor("buy:" + id), code: dc ? dc.code : ""}); S.busy = false; if (!r.net) delete RID["buy:" + id];
   if (!r.ok) { toast(r.error, "bad"); b.disabled = false; b.textContent = "دوباره تلاش کن"; if (r.short) { closeSheet(); setTab("wallet"); topupStart(r.short); } return; }
-  closeSheet(); hap("ok"); S.services = null; if (S.me) S.me.services++;
+  closeSheet(); hap("ok"); DC = null; S.services = null; if (S.me) S.me.services++;
   S.stack = [{v: "services"}, {v: "bought", p: r}]; render();
 }
 VIEWS.bought = async r => `
@@ -471,7 +484,7 @@ async function spin() {
 }
 
 /* ---- tickets */
-VIEWS.tickets = async p => `<div class="title">🎫 پشتیبانی <button class="btn sm pri" onclick="go('ticket_new',{svc:${js(p.svc || "")}})">+ تیکت جدید</button></div>${chatOn() ? `<div class="card tap" onclick="openLink(${js("https://t.me/" + S.support)})"><div class="row"><div><b>گفتگوی مستقیم</b><div class="sm mut">${ltr("@" + S.support)}</div></div><span class="chev">‹</span></div></div>` : ""}<div id="tk-list" class="list"><div class="loading"><i class="spin"></i>…</div></div>`;
+VIEWS.tickets = async p => `<div class="title">🎫 پشتیبانی ${S.feat.ticket_new !== false ? `<button class="btn sm pri" onclick="go('ticket_new',{svc:${js(p.svc || "")}})">+ تیکت جدید</button>` : ""}</div>${chatOn() ? `<div class="card tap" onclick="openLink(${js("https://t.me/" + S.support)})"><div class="row"><div><b>گفتگوی مستقیم</b><div class="sm mut">${ltr("@" + S.support)}</div></div><span class="chev">‹</span></div></div>` : ""}<div id="tk-list" class="list"><div class="loading"><i class="spin"></i>…</div></div>`;
 AFTER.tickets = async () => {
   const r = await api("tickets"); const box = $("tk-list"); if (!box) return;
   if (!r.ok) { box.innerHTML = `<div class="empty">${esc(r.error)}</div>`; return; }

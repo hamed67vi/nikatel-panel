@@ -242,6 +242,64 @@ function priceFor(array $me, array $plan): array {
     if ($pct > 0) $price -= (int) floor($price * $pct / 100);
     return [max(0, $price), 1, $pct];
 }
+/* ---------------------------------------------------------------- discount codes: the bot's own table `discounts`, the same rules as applyDiscountToPay() of the bot's config.php */
+/** the code's row when it can be used now (switched on, not expired, uses left), else null; $lock = read it FOR UPDATE (inside a transaction) */
+function discountRow(string $code, bool $lock = false): ?array {
+    if ($code === '' || mb_strlen($code) > 64) return null;
+    try {
+        $r = row("SELECT * FROM discounts WHERE hash_id = ? AND (expire_date > ? OR expire_date = 0) AND (expire_count > 0 OR expire_count = -1) AND is_active = 1 LIMIT 1" . ($lock ? " FOR UPDATE" : ''), [$code, time()]);
+    } catch (Throwable $e) { return null; }      // (a bot without the table: every code is simply unknown)
+    return $r ?: null;
+}
+/** may THIS customer use the code for THIS plan at this price? [true, the discount in toman] or [false, the sentence for him] (the bot's rules: audience, target, minimum price, uses per customer, percent or amount, the cap) */
+function discountApply(array $d, array $me, int $uid, array $plan, int $price): array {
+    $audience = (string) ($d['audience_type'] ?? '') ?: 'all';
+    $isAgent = (int) ($me['is_agent'] ?? 0) === 1;
+    $paidBuys = fn() => (int) (row("SELECT COUNT(*) AS c FROM pays WHERE user_id = ? AND state IN ('auto_cart_approved','approved','paid','paid_with_wallet')", [$uid])['c'] ?? 0) > 0;      // (the bot does not count a wallet purchase as a purchase here; the Mini App only pays from the wallet, so it does)
+    $hasOrder = fn() => (int) (row("SELECT COUNT(*) AS c FROM orders_list WHERE userid = ?", [$uid])['c'] ?? 0) > 0;
+    $allowed = match ($audience) {
+        'user' => (int) ($d['audience_user_id'] ?? 0) === $uid,
+        'agents' => $isAgent,
+        'non_agents' => !$isAgent,
+        'buyers' => $paidBuys(),
+        'non_buyers' => !$paidBuys(),
+        'has_active_order' => $hasOrder(),
+        'no_active_order' => !$hasOrder(),
+        default => true,
+    };
+    if (!$allowed) return [false, mainText('discount_not_for_user', mainText('not_valid_discount_code', 'این کد تخفیف برای شما معتبر نیست.'))];
+    $target = (string) ($d['target_type'] ?? '') ?: 'all';
+    $tid = (int) ($d['target_id'] ?? 0);
+    $fits = match ($target) {
+        'plan' => $tid === (int) $plan['id'],
+        'server' => $tid === (int) $plan['server_id'],
+        'category' => $tid === (int) $plan['catid'],
+        default => true,
+    };
+    if (!$fits) return [false, mainText('discount_not_for_service', mainText('not_valid_discount_code', 'این کد تخفیف برای این سرویس معتبر نیست.'))];
+    $min = (int) ($d['min_price'] ?? 0);
+    if ($min > 0 && $price < $min) return [false, str_replace('MINPRICE', fa($min) . ' تومان', mainText('discount_min_price', 'حداقل مبلغ سفارش برای این کد MINPRICE است.'))];
+    $used = json_decode((string) ($d['used_by'] ?? ''), true); if (!is_array($used)) $used = [];
+    $mine = count(array_filter($used, fn($u) => (int) $u === $uid));
+    $canUse = (int) ($d['can_use'] ?? 1);
+    if ($canUse !== -1 && $canUse <= $mine) return [false, mainText('discount_user_limit', 'شما قبلاً از این کد استفاده کرده‌اید.')];
+    $amount = max(0, (int) ($d['amount'] ?? 0));
+    $value = (string) ($d['type'] ?? '') === 'percent' ? (int) floor($price * min(100, $amount) / 100) : $amount;
+    $cap = (int) ($d['max_discount'] ?? 0);
+    if ($cap > 0 && $value > $cap) $value = $cap;
+    return [true, max(0, min($price, $value))];
+}
+/** uses the code up, inside the purchase's transaction: read FOR UPDATE again, the checks once more, one use less and the customer in used_by - two customers asking for the last use cannot both get it. null = done, else the sentence for the customer */
+function discountConsume(string $code, array $me, int $uid, array $plan, int $price): ?string {
+    $d = discountRow($code, true);
+    if (!$d) return mainText('discount_not_found', mainText('not_valid_discount_code', 'کد تخفیف معتبر نیست.'));
+    [$ok, $why] = discountApply($d, $me, $uid, $plan, $price);
+    if (!$ok) return (string) $why;
+    $used = json_decode((string) ($d['used_by'] ?? ''), true); if (!is_array($used)) $used = [];
+    $used[] = $uid;
+    run("UPDATE discounts SET used_by = ?, expire_count = IF(expire_count = -1, -1, expire_count - 1) WHERE id = ?", [json_encode($used), (int) $d['id']]);
+    return null;
+}
 /** remark like the bot (buy_helpers.php buildRemark) */
 function makeRemark(string $srvRemark, int $uid): string {
     global $botState;
@@ -534,7 +592,7 @@ case 'me': {
     $support = trim((string) ($botState['supportID'] ?? ''));
     out(['ok' => true,
         'user' => ['id' => $uid, 'name' => trim((string) $me['name']), 'username' => trim((string) ($me['username'] ?? '')), 'wallet' => (int) $me['wallet'], 'agent' => $isAgent, 'services' => $cnt, 'pending_topups' => $pending, 'since' => (int) ($me['date'] ?? 0)],
-        'features' => ['sell' => on('sellState', 'on'), 'buy_groups' => buyGroups(), 'support_chat' => on('supportChat', 'on'), 'wallet' => on('walletState', 'on'), 'card' => on('cartToCartState'), 'gift' => on('giftState'), 'wheel' => on('wheelState'), 'report' => on('reportState'),
+        'features' => ['sell' => on('sellState', 'on'), 'buy_groups' => buyGroups(), 'support_chat' => on('supportChat', 'on'), 'ticket_new' => on('miniTicketNew', 'on'), 'discount_code' => on('miniDiscountCode', 'on'), 'wallet' => on('walletState', 'on'), 'card' => on('cartToCartState'), 'gift' => on('giftState'), 'wheel' => on('wheelState'), 'report' => on('reportState'),
             'renew' => on('renewAccountState', 'on'), 'addvolume' => on('increaseVolumeState', 'on'), 'adddays' => on('increaseTimeState', 'on'), 'apps' => $apps > 0, 'hold' => on('onHoldState'),
             'cashback' => (float) ($botState['cashbackPercent'] ?? 0), 'referral' => (int) settingValue('INVITE_BANNER_AMOUNT') > 0, 'sub' => on('subLinkState', 'on'), 'configs' => on('configLinkState', 'on')],
         'amounts' => $amounts, 'min_topup' => MIN_TOPUP, 'support' => ltrim($support, '@'), 'bot' => (string) ($botUsername ?? ''), 'start' => (string) ($user['start_param'] ?? '')]);
@@ -598,6 +656,20 @@ case 'plans': {
     out(['ok' => true, 'plans' => $plans, 'sell' => on('sellState', 'on'), 'wallet' => wallet($uid), 'cashback' => (float) ($botState['cashbackPercent'] ?? 0)]);
 }
 
+case 'discount_check': {
+    if (!on('miniDiscountCode', 'on')) fail('کد تخفیف فعال نیست.');
+    $code = trim((string) ($body['code'] ?? ''));
+    $plan = row("SELECT * FROM server_plans WHERE id = ? AND active = 1", [(int) ($body['plan_id'] ?? 0)]);
+    if (!$plan) fail('این پلن در دسترس نیست.', 404);
+    if ($code === '') fail('کد را وارد کن.');
+    if (throttled($uid, 'discount', 10, 900)) fail('Too many wrong codes; try again in a few minutes.', 429);      // (a script could try codes as fast as it likes)
+    [$list] = priceFor($me, $plan);
+    $dRow = discountRow($code);
+    $why = $dRow ? discountApply($dRow, $me, $uid, $plan, $list) : [false, mainText('discount_not_found', mainText('not_valid_discount_code', 'کد تخفیف معتبر نیست.'))];
+    if (!$why[0]) { throttleHit($uid, 'discount'); fail((string) $why[1]); }
+    out(['ok' => true, 'code' => $code, 'discount' => (int) $why[1], 'list_price' => $list, 'price' => max(0, $list - (int) $why[1])]);
+}
+
 case 'buy': {
     $ridBuy = ridOf($body);
     if ($ridBuy !== '' && ($first = row("SELECT order_id FROM pays WHERE user_id = ? AND payid = ? AND state = 'paid_with_wallet' LIMIT 1", [$uid, $ridBuy])) && (int) $first['order_id'] > 0) buyAgain((int) $first['order_id'], $uid, wallet($uid));
@@ -610,6 +682,16 @@ case 'buy': {
     if ((int) $plan['inbound_id'] === 0 && (int) $srv['ucount'] <= 0) fail(mainText('out_of_server_capacity', 'ظرفیت این سرور پر شده است.'));
     if ((int) $plan['inbound_id'] !== 0 && (int) $plan['acount'] <= 0) fail(mainText('out_of_connection_capacity', 'ظرفیت این پلن پر شده است.'));
     [$price, $agentBought] = priceFor($me, $plan);
+    /* a discount code of the bot (table discounts): checked here with the bot's rules, used up inside the purchase's transaction below; the price is worked out HERE, never taken from the page */
+    $dCode = trim((string) ($body['code'] ?? '')); $dValue = 0; $listPrice = $price;
+    if ($dCode !== '') {
+        if (!on('miniDiscountCode', 'on')) fail('کد تخفیف فعال نیست.');
+        if (throttled($uid, 'discount', 10, 900)) fail('Too many wrong codes; try again in a few minutes.', 429);
+        $dRow = discountRow($dCode);
+        $why = $dRow ? discountApply($dRow, $me, $uid, $plan, $price) : [false, mainText('discount_not_found', mainText('not_valid_discount_code', 'کد تخفیف معتبر نیست.'))];
+        if (!$why[0]) { throttleHit($uid, 'discount'); fail((string) $why[1]); }
+        $dValue = (int) $why[1]; $price -= $dValue;
+    }
     $planInfo = json_decode((string) ($plan['custom_sni'] ?? ''), true); if (!is_array($planInfo)) $planInfo = [];
     $days = (int) $plan['days']; $gb = (float) $plan['volume'];
     /* a plan that costs nothing is the bot's test account: one per customer (users.freetrial = 'used'), admins and agents on a 100 % discount excepted - the Mini App sold it again and again */
@@ -619,8 +701,9 @@ case 'buy': {
     if ($isTrial && !$trialExempt && ($me['freetrial'] ?? '') === 'used') fail('شما اکانت تست را قبلا استفاده کرده اید.');
     if (!takeSlot($plan, $srv)) fail((int) $plan['inbound_id'] === 0 ? mainText('out_of_server_capacity', 'ظرفیت این سرور پر شده است.') : mainText('out_of_connection_capacity', 'ظرفیت این پلن پر شده است.'));
 
-    $r = payWithWallet($uid, $price, ['type' => 'BUY_SUB', 'plan_id' => (int) $plan['id'], 'server_id' => (int) $srv['id'], 'volume' => $gb, 'day' => $days, 'description' => (string) $plan['title'], 'agent_bought' => $agentBought, 'rid' => ridOf($body)], function (string $hash) use ($uid, $plan, $srv, $planInfo, $gb, $days, $price, $agentBought, $isTrial, $trialExempt) {
+    $r = payWithWallet($uid, $price, ['type' => 'BUY_SUB', 'plan_id' => (int) $plan['id'], 'server_id' => (int) $srv['id'], 'volume' => $gb, 'day' => $days, 'description' => (string) $plan['title'] . ($dValue > 0 ? ' · ' . $dCode . ' (-' . $dValue . ')' : ''), 'agent_bought' => $agentBought, 'rid' => ridOf($body)], function (string $hash) use ($uid, $me, $plan, $srv, $planInfo, $gb, $days, $price, $listPrice, $dCode, $dValue, $agentBought, $isTrial, $trialExempt) {
         if ($isTrial && !$trialExempt && (row("SELECT freetrial FROM users WHERE userid = ? FOR UPDATE", [$uid])['freetrial'] ?? '') === 'used') return ['ok' => false, 'error' => 'شما اکانت تست را قبلا استفاده کرده اید.'];      // (read again under the row lock: two taps at once)
+        if ($dValue > 0 && ($why = discountConsume($dCode, $me, $uid, $plan, $listPrice)) !== null) return ['ok' => false, 'error' => $why];      // (the last use of a code taken by somebody else a moment ago: nothing is charged, the page asks again)
         $remark = makeRemark((string) $srv['remark'], $uid);
         $made = panelCreateUser($srv, $remark, $gb, $days, $planInfo);
         if (!$made['ok'] && stripos((string) $made['msg'], 'exist') !== false) { $remark .= random_int(1111, 99999); $made = panelCreateUser($srv, $remark, $gb, $days, $planInfo); }
@@ -646,9 +729,9 @@ case 'buy': {
 
     $back = cashback($uid, $price);
     $sub = on('subLinkState', 'on') ? $r['sub'] : '';
-    tgText($uid, "✅ <b>خرید شما انجام شد</b>\n\n📦 " . h($plan['title']) . "\n🌍 " . h($srv['label']) . "\n🔖 <code>" . h($r['remark']) . "</code>\n⏳ " . ($days > 0 ? $days . " روز" : "نامحدود") . " · 🔋 " . rtrim(rtrim(number_format($gb, 2), '0'), '.') . " گیگ\n💰 " . fa($price) . " تومان از کیف پول" . ($sub !== '' ? "\n\n🔗 لینک اشتراک:\n<code>" . h($sub) . "</code>" : '') . "\n\nجزئیات و کانفیگ‌ها در مینی‌اپ 👇");
-    tellAdmins("🛍 <b>خرید جدید (مینی‌اپ)</b>\n\n👤 " . userLink($uid, (string) $me['name']) . " · <code>$uid</code>" . ($isAgent ? " · همکار" : '') . "\n📦 " . h($plan['title']) . " · " . h($srv['label']) . "\n🔖 <code>" . h($r['remark']) . "</code>\n💰 " . fa($price) . " تومان (کیف پول)" . ($back ? "\n🎁 کش‌بک: " . fa($back) . " تومان" : '') . "\n💳 موجودی بعد از خرید: " . fa($r['wallet'] + $back) . " تومان");
-    out(['ok' => true, 'order_id' => $r['order_id'], 'remark' => $r['remark'], 'wallet' => $r['wallet'] + $back, 'cashback' => $back, 'sub' => $sub, 'sub_alt' => $r['sub_alt'] ?? [], 'links' => on('configLinkState', 'on') ? $r['links'] : [], 'expire' => $r['expire']]);
+    tgText($uid, "✅ <b>خرید شما انجام شد</b>\n\n📦 " . h($plan['title']) . "\n🌍 " . h($srv['label']) . "\n🔖 <code>" . h($r['remark']) . "</code>\n⏳ " . ($days > 0 ? $days . " روز" : "نامحدود") . " · 🔋 " . rtrim(rtrim(number_format($gb, 2), '0'), '.') . " گیگ\n💰 " . fa($price) . " تومان از کیف پول" . ($dValue > 0 ? "\n🏷 کد تخفیف: <code>" . h($dCode) . "</code> (" . fa($dValue) . " تومان تخفیف)" : '') . ($sub !== '' ? "\n\n🔗 لینک اشتراک:\n<code>" . h($sub) . "</code>" : '') . "\n\nجزئیات و کانفیگ‌ها در مینی‌اپ 👇");
+    tellAdmins("🛍 <b>خرید جدید (مینی‌اپ)</b>\n\n👤 " . userLink($uid, (string) $me['name']) . " · <code>$uid</code>" . ($isAgent ? " · همکار" : '') . "\n📦 " . h($plan['title']) . " · " . h($srv['label']) . "\n🔖 <code>" . h($r['remark']) . "</code>\n💰 " . fa($price) . " تومان (کیف پول)" . ($dValue > 0 ? "\n🏷 کد تخفیف: <code>" . h($dCode) . "</code> (" . fa($dValue) . " تومان تخفیف از " . fa($listPrice) . ")" : '') . ($back ? "\n🎁 کش‌بک: " . fa($back) . " تومان" : '') . "\n💳 موجودی بعد از خرید: " . fa($r['wallet'] + $back) . " تومان");
+    out(['ok' => true, 'order_id' => $r['order_id'], 'remark' => $r['remark'], 'wallet' => $r['wallet'] + $back, 'cashback' => $back, 'discount' => $dValue, 'sub' => $sub, 'sub_alt' => $r['sub_alt'] ?? [], 'links' => on('configLinkState', 'on') ? $r['links'] : [], 'expire' => $r['expire']]);
 }
 
 case 'renew': {
@@ -906,7 +989,8 @@ case 'ticket_messages': {
 }
 
 case 'ticket_new': {
-    $title = mb_substr(trim((string) ($body['title'] ?? '')), 0, 80);
+    if (!on('miniTicketNew', 'on')) fail('ثبت تیکت جدید فعلاً فعال نیست.');      // (BOT_STATES miniTicketNew = off: the owner switched new tickets off in the Mini App for now; replies in an open ticket still work)
+    $title =mb_substr(trim((string) ($body['title'] ?? '')), 0, 80);
     $text = mb_substr(trim((string) ($body['text'] ?? '')), 0, 2000);
     $cat = mb_substr(trim((string) ($body['category'] ?? '')), 0, 60) ?: 'مینی‌اپ';
     if ($title === '' || $text === '') fail('عنوان و متن را بنویس.');

@@ -160,7 +160,7 @@ def test_one_payment_key_is_one_payment():
     for name in ("buy", "renew", "addvolume"):
         assert "ridOf($body)" in _case(name)
     assert "buyAgain(" in _case("buy") and "!empty($r['duplicate'])" in _case("renew") and "!empty($r['duplicate'])" in _case("addvolume")
-    assert 'api("buy", {plan_id: id, rid: ridFor("buy:" + id)})' in JS and 'api("renew", {id, rid: ridFor("renew:" + id)})' in JS and "rid: ridFor(rk)" in JS
+    assert 'api("buy", {plan_id: id, rid: ridFor("buy:" + id), code: dc ? dc.code : ""})' in JS and 'api("renew", {id, rid: ridFor("renew:" + id)})' in JS and "rid: ridFor(rk)" in JS
     assert "net: true" in JS and "if (!r.net) delete RID" in JS
 
 
@@ -356,10 +356,48 @@ def test_the_page_shows_the_helper_links_and_the_apps_by_system_with_the_recomme
     assert v["apps"]["pills"] == 2 and v["apps"]["recFirst"] and v["apps"]["noMarker"]
 
 
+@pytest.mark.skipif(NODE is None, reason="node is not installed here")
+def test_the_new_ticket_button_is_gone_from_the_support_page_when_it_is_switched_off():
+    """the owner (2026-10-26, translated): "for now switch this option off and do not show it there" (the "+ new ticket" button of the Mini App's support page): BOT_STATES miniTicketNew = off"""
+    def run(mode):
+        res = json.loads(subprocess.run([NODE, str(DRIVER), str(MINI / "app.js"), mode], capture_output=True, text=True, timeout=90, check=True).stdout)
+        assert "crash" not in res and res["errors"] == [], res
+        return res["values"]["ticket"]
+    on, off = run("ticket"), run("noticket")
+    assert on["newButton"] and on["list"]                              # (the default: the button is there)
+    assert not off["newButton"] and off["list"]                        # (switched off: no button, the list of the tickets stays)
+    api = (MINI / "api.php").read_text(encoding="utf-8")
+    assert "'ticket_new' => on('miniTicketNew', 'on')" in api
+    case = api[api.index("case 'ticket_new'"):api.index("case 'ticket_reply'")]
+    assert "if (!on('miniTicketNew', 'on')) fail(" in case and case.index("miniTicketNew") < case.index("INSERT INTO chats")      # (refused on the server too, before anything is written)
+    assert "miniTicketNew" not in api[api.index("case 'ticket_reply'"):api.index("case 'report'")]                                    # (a reply in an open ticket is not affected)
+
+@pytest.mark.skipif(NODE is None, reason="node is not installed here")
+def test_the_buy_sheet_has_a_field_for_a_discount_code_and_the_server_does_the_sums():
+    """the owner (2026-10-26, translated): "add a section for the discount code" (with a screenshot of the buy sheet): a field + "apply" under the plan, the price shown with the code, the code sent with the purchase;
+    the page never says what the price is - the server asks the bot's own table `discounts` again when the customer pays"""
+    def run(mode):
+        res = json.loads(subprocess.run([NODE, str(DRIVER), str(MINI / "app.js"), mode], capture_output=True, text=True, timeout=90, check=True).stdout)
+        assert "crash" not in res and res["errors"] == [], res
+        return res["values"]
+    d = run("discount")["discount"]
+    assert d["field"] and d["plain"]                                   # (the field and the apply button; the price without a code)
+    assert d["checkBody"] and d["applied"] and d["newPrice"]           # (the code - trimmed, with a quote in it - is sent, shown escaped, the new price and the old one crossed out)
+    assert d["buyBody"] and d["after"]                                 # (the purchase carries the code and a key; after it the sheet starts clean)
+    assert run("nodiscount")["nodiscount"]["field"] is False           # (switched off: no field)
+    api = (MINI / "api.php").read_text(encoding="utf-8")
+    assert "'discount_code' => on('miniDiscountCode', 'on')" in api
+    buy = api[api.index("case 'buy'"):api.index("case 'renew'")]
+    assert buy.index("discountApply(") < buy.index("takeSlot(") < buy.index("discountConsume(") < buy.index("panelCreateUser(")      # (checked before a slot is taken, used up inside the transaction BEFORE the panel is called)
+    fn = api[api.index("function discountApply("):api.index("function discountConsume(")]
+    for word in ("'user'", "'agents'", "'non_agents'", "'buyers'", "'non_buyers'", "'has_active_order'", "'no_active_order'", "'plan'", "'server'", "'category'", "min_price", "max_discount", "can_use", "used_by", "'percent'"):
+        assert word in fn, word                                        # (every rule of the bot's applyDiscountToPay)
+    assert "FOR UPDATE" in api[api.index("function discountRow("):api.index("function discountApply(")] and "expire_count = IF(expire_count = -1, -1, expire_count - 1)" in api
+
 def test_only_web_links_are_opened_and_the_files_have_a_new_version_for_the_cache():
     assert r'if (!/^https?:\/\//i.test(u)) return;' in JS
     html = (MINI / "index.html").read_text(encoding="utf-8")
-    assert "app.css?v=3.0.9" in html and "app.js?v=3.0.9" in html
+    assert "app.css?v=3.0.11" in html and "app.js?v=3.0.11" in html
 
 
 # ---------------------------------------------------------------------------------------------- the whole attack harness (opt in)
