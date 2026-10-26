@@ -79,7 +79,7 @@ async function boot() {
   if (!INIT) { $("app").innerHTML = `<div class="card c"><div style="font-size:40px">🤖</div><h3 style="justify-content:center">این صفحه فقط از داخل تلگرام باز می‌شود</h3><div class="mut sm">مینی‌اپ را از دکمه‌ی داخل ربات باز کن.</div></div>`; $("sub").textContent = "خارج از تلگرام"; return; }
   const r = await api("me");
   if (!r.ok) { $("app").innerHTML = `<div class="card c"><div style="font-size:40px">⚠️</div><div class="mt">${esc(r.error)}</div><button class="btn mt" onclick="boot()">دوباره</button></div>`; $("sub").textContent = "خطا"; return; }
-  S.me = r.user; S.feat = r.features || {}; S.amounts = r.amounts || []; S.bot = r.bot || ""; S.support = r.support || ""; S.min_topup = r.min_topup || 100000;
+  S.me = r.user; S.feat = r.features || {}; S.amounts = r.amounts || []; S.bot = r.bot || ""; S.support = r.support || ""; S.min_topup = r.min_topup || 100000; S.max_topup = r.max_topup || 10000000; S.topup_step = r.topup_step || 50000;
   $("hello").textContent = "سلام " + (S.me.name || "") + " 👋";
   $("ava").textContent = (Array.from((S.me.name || "").trim())[0] || "👤").toUpperCase();      // (charAt(0) cut an emoji at the start of a name in half)
   $("sub").textContent = S.me.agent ? "همکار فروش" : (S.me.services ? T(S.me.services) + " سرویس فعال" : "خوش آمدی");
@@ -347,7 +347,7 @@ VIEWS.wallet = async () => {
     <div class="card"><div class="row wrap"><div><small class="mut">موجودی</small><div style="font-size:26px;font-weight:800;white-space:nowrap">${T(S.me ? S.me.wallet : 0)} <small class="mut" style="font-size:12px">تومان</small></div></div><div class="c">${S.me && S.me.pending_topups ? `<span class="pill warn">${T(S.me.pending_topups)} رسید در انتظار تأیید</span>` : `<span class="pill ok">آماده</span>`}</div></div></div>
     ${tp ? `<div class="card" id="tp-resume"><h3>شارژ ناتمام <span class="pill warn">${T(tp.amount)} تومان</span></h3><div class="sm mut">هنوز رسید این شارژ را نفرستاده‌ای.</div><div class="btns"><button class="btn pri" onclick="go('topup',{resume:1})">ادامه و ارسال رسید</button><button class="btn" onclick="topupCancel()">لغو</button></div></div>` : ""}
     ${F.wallet && F.card ? `<div class="card"><h3>شارژ کیف پول</h3><div class="amounts" id="amounts">${(S.amounts.length ? S.amounts : [100000, 200000, 500000]).map(a => `<button onclick="amountPick(${a},this)">${T(a)}<br><small class="mut xs">تومان</small></button>`).join("")}</div>
-      <label class="lb">یا مبلغ دلخواه (تومان)</label><input class="input num" id="tp-amount" type="number" inputmode="numeric" min="${S.min_topup || 100000}" step="1000" placeholder="مثلاً 150000" oninput="document.querySelectorAll('#amounts button').forEach(b=>b.classList.remove('on'))">
+      <label class="lb">یا مبلغ دلخواه (تومان)</label><input class="input num" id="tp-amount" type="number" inputmode="numeric" min="${S.min_topup || 100000}" max="${S.max_topup || 10000000}" step="${S.topup_step || 50000}" placeholder="مثلاً 150000" oninput="document.querySelectorAll('#amounts button').forEach(b=>b.classList.remove('on'))">
       <button class="btn pri w mt" onclick="topupStart()">💳 ادامه (کارت‌به‌کارت)</button></div>` : F.wallet ? `<div class="card"><div class="note">شارژ از این‌جا فعلاً فعال نیست؛ از منوی ربات کیف پول را شارژ کن.</div><button class="btn w mt" onclick="openLink(${js("https://t.me/" + S.bot + "?start=wallet")})">🤖 باز کردن ربات</button></div>` : ""}
     <div class="card"><h3>تاریخچه</h3><div id="hist" class="list"><div class="sk" style="height:46px"></div></div></div>`;
 };
@@ -370,9 +370,11 @@ function histMore() {
   more.style.display = open ? "" : "none"; btn.textContent = open ? "بستن" : "نمایش بقیه‌ی تاریخچه"; hap();
 }
 async function topupStart(prefill) {
-  if (prefill) { setTab("wallet"); await new Promise(r => setTimeout(r, 60)); const i = $("tp-amount"); if (i) i.value = Math.max(S.min_topup || 100000, Math.ceil(prefill / 10000) * 10000); return; }
+  if (prefill) { setTab("wallet"); await new Promise(r => setTimeout(r, 60)); const i = $("tp-amount"); if (i) { const st = S.topup_step || 50000; i.value = Math.min(S.max_topup || 10000000, Math.max(S.min_topup || 100000, Math.ceil(prefill / st) * st)); } return; }
   const i = $("tp-amount"), amount = parseInt(i && i.value, 10) || 0;
   if (amount < (S.min_topup || 100000)) { toast("مبلغ را انتخاب کن (حداقل " + T(S.min_topup || 100000) + " تومان)", "bad"); return; }
+  if (amount > (S.max_topup || 10000000)) { toast("حداکثر مبلغ قابل شارژ " + T(S.max_topup || 10000000) + " تومان است", "bad"); return; }
+  if (amount % (S.topup_step || 50000) !== 0) { toast("مبلغ باید مضربی از " + T(S.topup_step || 50000) + " تومان باشد", "bad"); return; }
   const btn = document.querySelector("#app .btn.pri.w"); if (btn) { btn.disabled = true; btn.innerHTML = '<i class="spin"></i> ثبت درخواست…'; }
   const r = await api("topup", {amount});
   if (!r.ok) { toast(r.error, "bad"); if (btn) { btn.disabled = false; btn.textContent = "💳 ادامه (کارت‌به‌کارت)"; } return; }

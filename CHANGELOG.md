@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.69.148 - The Mini App wallet top-up follows the bot's rules exactly
+
+> **In short:** the owner (2026-10-27, translated from Persian): "make it exactly like its bot". The shop bot's wallet top-up (`bot.php`) takes at least 100,000 and at most 10,000,000 toman, a typed amount must be a multiple of 50,000, and its preset buttons are fixed (100,000 / 200,000 / 300,000 / 500,000 / 1,000,000 / 2,000,000 / 5,000,000; the bot ignores its `walletAmounts` setting). The Mini App now does the same: `api.php` has `MIN_TOPUP = 100000`, `MAX_TOPUP = 10000000` (it was 50,000,000), `TOPUP_STEP = 50000` and `TOPUP_PRESETS`, `topup` refuses with the bot's sentences ("at least 100,000", "at most 10,000,000", "a multiple of 50,000"), `me` gives the page the presets and the three limits (`min_topup`, `max_topup`, `topup_step`), and the page (`app.js`, cache 3.0.13) uses them for the amount field (`min`, `max`, `step`), the checks before the request and the "top up the missing amount" shortcut (rounded up to a multiple of 50,000 inside the limits).
+
+- **Why the presets are fixed**: the Mini App listed the bot's `walletAmounts` setting, which the bot itself never reads; it would have shown buttons the bot does not have.
+- **Proved**: the attack harness - 44 scenarios, 0 holes; the new TP1 judges 11 amounts (0, 50,000, 99,999, 100,000, 120,000, 150,000, 9,950,000, 10,000,000, 10,000,001, 10,050,000, 50,000,000) exactly like the bot and checks the presets and the limits that `me` gives; PY4 (odd amounts) now wants every accepted price to be a multiple of 50,000 inside the limits; PY12 uses distinct valid amounts; `tests/test_miniapp_security.py` + `tests/test_miniapp_layout.py` (50 passed). Put on the main bot at once (backup of the old files kept). **Not proved**: a tap in the real Telegram.
+
 ## 1.69.147 - The Mini App wallet top-up: at least 100,000 toman
 
 > **In short:** the owner (2026-10-27, translated from Persian): "the least a wallet top-up may be is 100,000 toman, in the bot and in the Mini App". The shop bot already worked that way (`bot.php`: the typed amount below 100,000 is refused, the preset buttons start at 100,000); the Mini App still let 10,000 through. Now `MIN_TOPUP` of `api.php` is 100,000, so `topup` refuses anything lower (the sentence names the range), the wallet page asks for at least that (`min` of the amount field, the message of the pay button, the fallback of `S.min_topup`), and the shortcut that tops up "the missing amount" never fills in less than the minimum.

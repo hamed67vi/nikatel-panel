@@ -44,7 +44,9 @@ if (!function_exists('exOnHoldDays')) {
 
 const GB = 1073741824;
 const MIN_TOPUP = 100000;      // (the owner, 2026-10-27: the least a wallet top-up may be is 100,000 toman, in the bot and in the Mini App)
-const MAX_TOPUP = 50000000;
+const MAX_TOPUP = 10000000;      // (exactly the bot's own top-up rules, bot.php: at least 100,000, at most 10,000,000, and a typed amount must be a multiple of 50,000)
+const TOPUP_STEP = 50000;
+const TOPUP_PRESETS = [100000, 200000, 300000, 500000, 1000000, 2000000, 5000000];      // (the bot's fixed preset buttons)
 const RECEIPT_MAX_BYTES = 6 * 1024 * 1024;
 
 /* a broken character in a text of the database (a plan description cut in the middle of a letter) must not turn the whole answer into an empty page */
@@ -590,14 +592,14 @@ case 'me': {
     $cnt = (int) (row("SELECT COUNT(*) AS n FROM orders_list WHERE userid = ? AND status = 1", [$uid])['n'] ?? 0);
     $pending = (int) (row("SELECT COUNT(*) AS n FROM pays WHERE user_id = ? AND type = 'INCREASE_WALLET' AND state = 'have_sent'", [$uid])['n'] ?? 0);
     $apps = (int) (row("SELECT COUNT(*) AS n FROM needed_sofwares WHERE status = 1")['n'] ?? 0);
-    $amounts = array_values(array_filter(array_map('intval', explode(',', (string) ($botState['walletAmounts'] ?? '100000,200000,300000,500000,1000000'))), fn($v) => $v >= MIN_TOPUP));
+    $amounts = TOPUP_PRESETS;      // (the bot ignores its walletAmounts setting and shows fixed buttons: the Mini App shows the same ones)
     $support = trim((string) ($botState['supportID'] ?? ''));
     out(['ok' => true,
         'user' => ['id' => $uid, 'name' => trim((string) $me['name']), 'username' => trim((string) ($me['username'] ?? '')), 'wallet' => (int) $me['wallet'], 'agent' => $isAgent, 'services' => $cnt, 'pending_topups' => $pending, 'since' => (int) ($me['date'] ?? 0)],
         'features' => ['sell' => on('sellState', 'on'), 'buy_groups' => buyGroups(), 'support_chat' => on('supportChat', 'on'), 'ticket_new' => on('miniTicketNew', 'on'), 'discount_code' => on('miniDiscountCode', 'on') && !$isAgent, 'wallet' => on('walletState', 'on'), 'card' => on('cartToCartState'), 'gift' => on('giftState'), 'wheel' => on('wheelState'), 'report' => on('reportState'),
             'renew' => on('renewAccountState', 'on'), 'addvolume' => on('increaseVolumeState', 'on'), 'adddays' => on('increaseTimeState', 'on'), 'apps' => $apps > 0, 'hold' => on('onHoldState'),
             'cashback' => (float) ($botState['cashbackPercent'] ?? 0), 'referral' => (int) settingValue('INVITE_BANNER_AMOUNT') > 0, 'sub' => on('subLinkState', 'on'), 'configs' => on('configLinkState', 'on')],
-        'amounts' => $amounts, 'min_topup' => MIN_TOPUP, 'support' => ltrim($support, '@'), 'bot' => (string) ($botUsername ?? ''), 'start' => (string) ($user['start_param'] ?? '')]);
+        'amounts' => $amounts, 'min_topup' => MIN_TOPUP, 'max_topup' => MAX_TOPUP, 'topup_step' => TOPUP_STEP, 'support' => ltrim($support, '@'), 'bot' => (string) ($botUsername ?? ''), 'start' => (string) ($user['start_param'] ?? '')]);
 }
 
 case 'services': {
@@ -808,7 +810,9 @@ case 'topup': {   // card to card: a pending INCREASE_WALLET like the bot's star
     if (!on('walletState', 'on')) fail('کیف پول غیرفعال است.');
     if (!on('cartToCartState')) fail('پرداخت کارت‌به‌کارت فعال نیست؛ از داخل ربات شارژ کنید.');
     $amount = (int) ($body['amount'] ?? 0);
-    if ($amount < MIN_TOPUP || $amount > MAX_TOPUP) fail('مبلغ باید بین ' . fa(MIN_TOPUP) . ' و ' . fa(MAX_TOPUP) . ' تومان باشد.');
+    if ($amount < MIN_TOPUP) fail('لطفا مقداری بیشتر یا مساوی ' . fa(MIN_TOPUP) . ' تومان وارد کنید.');
+    if ($amount > MAX_TOPUP) fail('حداکثر مبلغ قابل شارژ کیف پول ' . fa(MAX_TOPUP) . ' تومان می‌باشد.');
+    if ($amount % TOPUP_STEP !== 0) fail('مبلغ واردشده باید مضربی از ' . fa(TOPUP_STEP) . ' تومان باشد.');
     db()->begin_transaction();
     row("SELECT wallet FROM users WHERE userid = ? FOR UPDATE", [$uid]);      // one top-up request at a time for this customer (8 at once left 2 pending rows and let a 4th receipt through)
     $waiting = (int) (row("SELECT COUNT(*) AS n FROM pays WHERE user_id = ? AND type = 'INCREASE_WALLET' AND state = 'have_sent'", [$uid])['n'] ?? 0);

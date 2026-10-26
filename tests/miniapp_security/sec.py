@@ -570,12 +570,36 @@ def py4():
         rows = sql(f"SELECT price FROM pays WHERE user_id={U} AND type='INCREASE_WALLET'")
         price = int(rows[0][0]) if rows else None
         if ok(j):
-            if not (100000 <= price <= 50_000_000 and price == j["amount"] and j["exact"] - j["amount"] in range(100, 1000)):
+            if not (100000 <= price <= 10_000_000 and price % 50000 == 0 and price == j["amount"] and j["exact"] - j["amount"] in range(100, 1000)):
                 problems.append(f"amount={v!r}: stored {price}, answered {j.get('amount')}/{j.get('exact')}")
         elif rows:
             problems.append(f"amount={v!r}: refused but a pays row was written ({price})")
     return bool(problems), "; ".join(problems[:6]) if problems else f"{len(vals)} odd top-up amounts handled"
 
+
+@scn("TP1", "HIGH", "top-up amount = the bot's own rules: at least 100,000, at most 10,000,000, a multiple of 50,000; the page is given the bot's preset buttons and the three limits")
+def tp1():
+    problems = []
+    cases = [(0, False), (50000, False), (99999, False), (100000, True), (120000, False), (150000, True), (9_950_000, True), (10_000_000, True), (10_000_001, False), (10_050_000, False), (50_000_000, False)]
+    for amt, want in cases:
+        reset()
+        mk_user(U)
+        c, j, t = call("topup", {"amount": amt})
+        rows = sql(f"SELECT price FROM pays WHERE user_id={U} AND type='INCREASE_WALLET'")
+        got = bool(ok(j))
+        if got != want:
+            problems.append(f"{amt}: answered ok={got}, the bot's rules say {want}")
+        elif want and (not rows or int(rows[0][0]) != amt):
+            problems.append(f"{amt}: accepted but the stored price is {rows}")
+        elif not want and rows:
+            problems.append(f"{amt}: refused but a pays row was written")
+    reset()
+    mk_user(U)
+    c, j, t = call("me")
+    j = j or {}
+    if j.get("amounts") != [100000, 200000, 300000, 500000, 1000000, 2000000, 5000000] or (j.get("min_topup"), j.get("max_topup"), j.get("topup_step")) != (100000, 10000000, 50000):
+        problems.append(f"me gives amounts={j.get('amounts')} limits={(j.get('min_topup'), j.get('max_topup'), j.get('topup_step'))}")
+    return bool(problems), "; ".join(problems[:6]) if problems else f"{len(cases)} amounts judged like the bot; presets and limits exposed"
 
 @scn("PY5", "HIGH", "price tampering: price / discount / agent fields in the request body change nothing; the charge is the plan price in the DB")
 def py5():
@@ -685,7 +709,7 @@ def py11():
 @scn("PY12", "MED", "top-up requests in parallel: at most one pending row, and the 3-receipts-waiting limit holds")
 def py12():
     reset(); mk_user(U)
-    r = par(8, lambda i: call("topup", {"amount": 100000 + i * 1000}))
+    r = par(8, lambda i: call("topup", {"amount": 100000 + i * 50000}))
     pend = int(q1(f"SELECT COUNT(*) FROM pays WHERE user_id={U} AND type='INCREASE_WALLET' AND state='pending'"))
     reset(); mk_user(U)
     for i in range(3):
