@@ -570,7 +570,7 @@ def py4():
         rows = sql(f"SELECT price FROM pays WHERE user_id={U} AND type='INCREASE_WALLET'")
         price = int(rows[0][0]) if rows else None
         if ok(j):
-            if not (10000 <= price <= 50_000_000 and price == j["amount"] and j["exact"] - j["amount"] in range(100, 1000)):
+            if not (100000 <= price <= 50_000_000 and price == j["amount"] and j["exact"] - j["amount"] in range(100, 1000)):
                 problems.append(f"amount={v!r}: stored {price}, answered {j.get('amount')}/{j.get('exact')}")
         elif rows:
             problems.append(f"amount={v!r}: refused but a pays row was written ({price})")

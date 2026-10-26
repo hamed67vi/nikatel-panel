@@ -43,7 +43,7 @@ if (!function_exists('exOnHoldDays')) {
 }
 
 const GB = 1073741824;
-const MIN_TOPUP = 10000;
+const MIN_TOPUP = 100000;      // (the owner, 2026-10-27: the least a wallet top-up may be is 100,000 toman, in the bot and in the Mini App)
 const MAX_TOPUP = 50000000;
 const RECEIPT_MAX_BYTES = 6 * 1024 * 1024;
 

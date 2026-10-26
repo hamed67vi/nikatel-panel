@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.69.147 - The Mini App wallet top-up: at least 100,000 toman
+
+> **In short:** the owner (2026-10-27, translated from Persian): "the least a wallet top-up may be is 100,000 toman, in the bot and in the Mini App". The shop bot already worked that way (`bot.php`: the typed amount below 100,000 is refused, the preset buttons start at 100,000); the Mini App still let 10,000 through. Now `MIN_TOPUP` of `api.php` is 100,000, so `topup` refuses anything lower (the sentence names the range), the wallet page asks for at least that (`min` of the amount field, the message of the pay button, the fallback of `S.min_topup`), and the shortcut that tops up "the missing amount" never fills in less than the minimum.
+
+- **Server** (`api.php`): `const MIN_TOPUP = 100000`; it also decides which of the bot's `walletAmounts` buttons the Mini App lists (only those at or above it) and is sent to the page as `min_topup`.
+- **Page** (`app.js`, cache 3.0.12): the three fallbacks `10000` became `100000`; `topupStart(prefill)` uses `max(min_topup, rounded missing amount)`.
+- **Not changed**: the bot's own rule (100,000 minimum, 10,000,000 maximum, multiples of 50,000 for a typed amount); the Mini App keeps its own maximum of 50,000,000 and has no "multiple of 50,000" rule - say if you want it.
+- **Proved**: the attack harness (43 scenarios, 0 holes; the odd-amount scenario PY4 now wants the stored price to be at least 100,000 and shows 10,000 / 99,999 refused), `tests/test_miniapp_security.py` and `tests/test_miniapp_layout.py` (50 passed). Put on the main bot at once (backup of the old files kept). **Not proved**: a tap in the real Telegram.
+
 ## 1.69.146 - A customer with an active agency plan takes no discount code
 
 > **In short:** the owner (2026-10-26, translated from Persian): "whoever has an active agency plan must not accept a discount code any more". In the Mini App the discount-code field is not shown to an agent and the server refuses a code from him (`discount_check` and `buy`); in the bot's own flow `scripts/install-agent-no-code.sh` puts ONE marked line (`// [no-agent-code]`) into `applyDiscountToPay()` of `config.php`. A refused agent is told in one sentence that he already has the agency discount, pays the price he would have paid without a code, and the code is NOT used up.
