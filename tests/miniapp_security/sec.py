@@ -1343,6 +1343,42 @@ def cf1():
     return bool(problems), "; ".join(problems[:6]) if problems else "the configs follow the bot's switch, and the tools' configs button gets them for its people only"
 
 
+@scn("BT1", "HIGH", "the messages that carry the subscription link (a purchase, a new link) also carry the bot's 'show configs' button (showCfgO<his order id>): only while the bot has configs_button.php and BOT_STATES cfgButton is not off; the text still holds the link only")
+def bt1():
+    problems = []
+    mod = f"{B}/bot/configs_button.php"
+    try:
+        for have, state, want in ((True, None, True), (True, "off", False), (False, None, False)):
+            reset(states={"miniServiceTools": "on", **({"cfgButton": state} if state else {})})
+            if have:
+                open(mod, "w").write("<?php\n")
+            elif os.path.exists(mod):
+                os.remove(mod)
+            mk_user(U, wal=1_000_000); su = mk_service(U)
+            c, j, t = call("buy", {"plan_id": 1}); oid = j.get("order_id")
+            c2, j2, t2 = call("service_link", {"id": su})
+            if not ok(j) or not ok(j2):
+                problems.append(f"have={have} state={state}: buy {t[:60]} / link {t2[:60]}"); continue
+            for what, key, order in (("purchase", "خرید شما انجام شد", oid), ("new link", "لینک اشتراک شما تغییر کرد", su)):
+                msgs = [m for m in tg_msgs("sendMessage", U) if key in m["text"]]
+                if len(msgs) != 1:
+                    problems.append(f"have={have} state={state}: {len(msgs)} '{what}' messages"); continue
+                try:
+                    d = [b.get("callback_data") for r in json.loads(msgs[0]["markup"] or "{}").get("inline_keyboard", []) for b in r]
+                except ValueError:
+                    d = ["?"]
+                if want and d != [f"showCfgO{order}"]:
+                    problems.append(f"{what}: want the button showCfgO{order}, got {d}")
+                if not want and d:
+                    problems.append(f"have={have} state={state}: {what} carries buttons {d}")
+                if "vless://" in msgs[0]["text"] or "vmess://" in msgs[0]["text"]:
+                    problems.append(f"{what}: a config is in the text")
+    finally:
+        if os.path.exists(mod):
+            os.remove(mod)
+    return bool(problems), "; ".join(problems[:6]) if problems else "the purchase and the new-link messages carry the show-configs button for the buyer's own order, and only while the bot has the file and the switch is not off"
+
+
 @scn("SV4", "HIGH", "delete his own service: the account leaves the panel, the order row goes, the slot comes back once (two taps at once too), the admins are told; another customer's service, a refusing or dead panel change nothing; an account already gone from the panel is deleted too; at most 10 an hour")
 def sv4():
     problems = []

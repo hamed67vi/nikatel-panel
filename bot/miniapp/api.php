@@ -187,6 +187,13 @@ function tgText(int|string $chat, string $html, ?array $markup = null): ?array {
     if ($markup) $d['reply_markup'] = json_encode($markup, JSON_UNESCAPED_UNICODE);
     return tg('sendMessage', $d);
 }
+/* the bot's "show configs" button under a message that carries the subscription link (the owner, 2026-10-27: "only the subscription link, but add a show-configs button"): the tap goes to the bot (configs_button.php),
+   which sends the customer his own configs; no button when that file is not there or BOT_STATES cfgButton is "off" */
+function cfgButton(int $orderId): ?array {
+    global $botState;
+    if ($orderId <= 0 || !is_file(__DIR__ . '/../configs_button.php') || ($botState['cfgButton'] ?? '') === 'off') return null;
+    return ['inline_keyboard' => [[['text' => '📋 نمایش کانفیگ‌ها', 'callback_data' => 'showCfgO' . $orderId]]]];
+}
 function h(string|int|null $s): string { return htmlspecialchars((string) $s, ENT_QUOTES, 'UTF-8'); }
 function userLink(int $uid, string $name): string { return "<a href=\"tg://user?id=$uid\">" . h($name !== '' ? $name : (string) $uid) . "</a>"; }
 function fa(int|float $n): string { return number_format((float) $n); }
@@ -714,7 +721,7 @@ case 'service_link': {   // a new subscription link: the old link and the old co
     if (!$n || $n['sub'] === '') fail('پاسخی از سرور نیامد؛ صفحه‌ی سرویس را دوباره باز کن و لینک را از همان‌جا بردار.');
     $token = strpos($n['sub'], '/sub/') !== false ? explode('?', explode('/sub/', $n['sub'], 2)[1], 2)[0] : (string) $o['token'];
     run("UPDATE orders_list SET token = ?" . ($n['links'] ? ", link = ?" : "") . " WHERE id = ?", array_merge([$token], $n['links'] ? [json_encode($n['links'], JSON_UNESCAPED_SLASHES)] : [], [(int) $o['id']]));      // (what the bot's "change link" saves: the new token and the new configs)
-    if (on('subLinkState', 'on')) tgText($uid, "✅ <b>لینک اشتراک شما تغییر کرد</b>\n\n🔖 <code>" . h($o['remark']) . "</code>\n\n🔗 لینک اشتراک جدید:\n<code>" . h($n['sub']) . "</code>\n\n♻️ لینک و کانفیگ‌های قبلی دیگر کار نمی‌کنند؛ لینک اشتراک قبلی را از برنامه پاک کن و این لینک را وارد کن.");
+    if (on('subLinkState', 'on')) tgText($uid, "✅ <b>لینک اشتراک شما تغییر کرد</b>\n\n🔖 <code>" . h($o['remark']) . "</code>\n\n🔗 لینک اشتراک جدید:\n<code>" . h($n['sub']) . "</code>\n\n♻️ لینک و کانفیگ‌های قبلی دیگر کار نمی‌کنند؛ لینک اشتراک قبلی را از برنامه پاک کن و این لینک را وارد کن.", cfgButton((int) $o['id']));
     out(['ok' => true]);
 }
 
@@ -837,7 +844,7 @@ case 'buy': {
 
     $back = cashback($uid, $price);
     $sub = on('subLinkState', 'on') ? $r['sub'] : '';
-    tgText($uid, "✅ <b>خرید شما انجام شد</b>\n\n📦 " . h($plan['title']) . "\n🌍 " . h($srv['label']) . "\n🔖 <code>" . h($r['remark']) . "</code>\n⏳ " . ($days > 0 ? $days . " روز" : "نامحدود") . " · 🔋 " . rtrim(rtrim(number_format($gb, 2), '0'), '.') . " گیگ\n💰 " . fa($price) . " تومان از کیف پول" . ($dValue > 0 ? "\n🏷 کد تخفیف: <code>" . h($dCode) . "</code> (" . fa($dValue) . " تومان تخفیف)" : '') . ($sub !== '' ? "\n\n🔗 لینک اشتراک:\n<code>" . h($sub) . "</code>" : '') . "\n\nجزئیات و کانفیگ‌ها در مینی‌اپ 👇");
+    tgText($uid, "✅ <b>خرید شما انجام شد</b>\n\n📦 " . h($plan['title']) . "\n🌍 " . h($srv['label']) . "\n🔖 <code>" . h($r['remark']) . "</code>\n⏳ " . ($days > 0 ? $days . " روز" : "نامحدود") . " · 🔋 " . rtrim(rtrim(number_format($gb, 2), '0'), '.') . " گیگ\n💰 " . fa($price) . " تومان از کیف پول" . ($dValue > 0 ? "\n🏷 کد تخفیف: <code>" . h($dCode) . "</code> (" . fa($dValue) . " تومان تخفیف)" : '') . ($sub !== '' ? "\n\n🔗 لینک اشتراک:\n<code>" . h($sub) . "</code>" : '') . "\n\nجزئیات و کانفیگ‌ها در مینی‌اپ 👇", cfgButton((int) $r['order_id']));
     tellAdmins("🛍 <b>خرید جدید (مینی‌اپ)</b>\n\n👤 " . userLink($uid, (string) $me['name']) . " · <code>$uid</code>" . ($isAgent ? " · همکار" : '') . "\n📦 " . h($plan['title']) . " · " . h($srv['label']) . "\n🔖 <code>" . h($r['remark']) . "</code>\n💰 " . fa($price) . " تومان (کیف پول)" . ($dValue > 0 ? "\n🏷 کد تخفیف: <code>" . h($dCode) . "</code> (" . fa($dValue) . " تومان تخفیف از " . fa($listPrice) . ")" : '') . ($back ? "\n🎁 کش‌بک: " . fa($back) . " تومان" : '') . "\n💳 موجودی بعد از خرید: " . fa($r['wallet'] + $back) . " تومان");
     out(['ok' => true, 'order_id' => $r['order_id'], 'remark' => $r['remark'], 'wallet' => $r['wallet'] + $back, 'cashback' => $back, 'discount' => $dValue, 'sub' => $sub, 'sub_alt' => $r['sub_alt'] ?? [], 'links' => on('configLinkState', 'on') ? $r['links'] : [], 'expire' => $r['expire']]);
 }
