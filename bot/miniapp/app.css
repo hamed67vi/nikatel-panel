@@ -86,6 +86,7 @@ b, strong { font-weight: 700; }
 .btn.pri { background: var(--grad); border-color: transparent; color: var(--acc-txt); box-shadow: 0 6px 18px rgba(124,131,255,.35), inset 0 1px 0 rgba(255,255,255,.35); text-shadow: 0 1px 2px rgba(8,20,70,.4); }      /* (white on the cyan end of the gradient is 1.7:1: the soft shadow keeps the label readable) */
 .btn.ok { background: linear-gradient(135deg, #0f9f6e, #3ddc97); border-color: transparent; color: #fff; box-shadow: 0 6px 18px rgba(61,220,151,.3), inset 0 1px 0 rgba(255,255,255,.35); }
 .btn.danger { color: var(--bad); border-color: rgba(255,107,139,.35); }
+.qri { flex: none; vertical-align: -3px; } h3 > .qri { margin-inline-end: 6px; }
 .btn.sm { height: 40px; padding: 0 14px; font-size: 12px; } .btn.w { width: 100%; } .btn.ghost { background: transparent; box-shadow: none; backdrop-filter: none; -webkit-backdrop-filter: none; }
 .btns { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
 /* a button row never cuts a label (the owner, 2026-10-20: "Pay 130,000 Toman from the wallet" was cut on both sides on a narrow phone): the buttons share the row, the main one gets the larger part, and a label that does not fit goes on a second line instead of being clipped */
@@ -121,10 +122,26 @@ b, strong { font-weight: 700; }
 .amounts button:active { transform: scale(.96); } .amounts button.on { border-color: var(--line-hi); box-shadow: 0 0 0 3px rgba(124,131,255,.18), var(--edge); background: var(--glass-hi); }
 
 /* ---- plan cards */
-.plan { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 14px; border-radius: var(--r2); margin-bottom: 7px; cursor: pointer; transition: transform .14s var(--ease), filter .3s; }
-.plan:active { transform: scale(.985); } .plan.off { opacity: .55; cursor: default; }
-.plan .pt { font-weight: 800; } .plan .pd { color: var(--mut); font-size: 11.5px; margin-top: 2px; white-space: pre-line; }
-.plan .pr { text-align: center; direction: ltr; flex: 0 0 auto; min-width: 74px; padding: 6px 10px; border-radius: 14px; background: var(--grad); color: #fff; text-shadow: 0 1px 2px rgba(8,20,70,.4); box-shadow: 0 6px 16px rgba(124,131,255,.3), inset 0 1px 0 rgba(255,255,255,.35); } .plan .pr b { font-size: 15px; display: block; line-height: 1.2; } .plan .pr s { color: rgba(255,255,255,.75); font-size: 11px; } .plan .pr small { color: rgba(255,255,255,.85); font-size: 10.5px; }
+/* a plan: name + badge, size / time / users as chips, the description as a short list, and the price with the buy button at the foot */
+.plan { position: relative; display: block; padding: 14px 16px 12px; border-radius: 20px; margin-bottom: 10px; cursor: pointer; overflow: hidden; box-shadow: var(--shadow), var(--edge); transition: transform .14s var(--ease), filter .3s, border-color .3s; }
+.plan::before { content: ""; position: absolute; top: 14px; bottom: 14px; inset-inline-start: 0; width: 3px; border-radius: 3px; background: var(--grad); opacity: .85; }
+.plan:active { transform: scale(.985); } .plan.off { opacity: .55; cursor: default; } .plan.off::before { background: var(--line); }
+.plan .ph { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.plan .pt { font-weight: 800; font-size: 15.5px; line-height: 1.5; min-width: 0; overflow-wrap: anywhere; }
+.plan .pc { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.plan .pc span { display: inline-flex; align-items: center; gap: 4px; height: 24px; padding: 0 10px; border-radius: 999px; font-size: 11.5px; font-weight: 700; white-space: nowrap; background: var(--panel); border: 1px solid var(--line); }
+.plan .pf { list-style: none; margin: 10px 0 0; padding: 10px 0 0; border-top: 1px solid var(--line); display: grid; gap: 4px; }
+.plan .pf li { display: flex; gap: 8px; align-items: flex-start; color: var(--mut); font-size: 12px; line-height: 1.8; }
+.plan .pf li i { flex: 0 0 18px; text-align: center; font-style: normal; font-size: 13px; }
+.plan .pf li i.dot { align-self: center; flex-basis: 5px; width: 5px; height: 5px; margin: 0 6.5px; border-radius: 50%; background: var(--acc); }
+.plan .pf.clamp:not(.open) { max-height: 88px; overflow: hidden; -webkit-mask-image: linear-gradient(#000 60%, transparent); mask-image: linear-gradient(#000 60%, transparent); }
+.plan .pmore { display: block; margin: 2px auto 0; padding: 4px 12px; border: 0; background: none; color: var(--link); font-size: 11.5px; font-weight: 700; cursor: pointer; }
+.plan .pb { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--line); }
+.plan .pp { display: flex; align-items: baseline; flex-wrap: wrap; gap: 3px 6px; min-width: 0; }
+.plan .pp b { font-size: 20px; font-weight: 800; line-height: 1.2; letter-spacing: .2px; }
+.plan .pp small { color: var(--mut); font-size: 11.5px; } .plan .pp s { color: var(--mut); font-size: 11.5px; opacity: .85; }
+.plan .pgo { flex: none; display: inline-flex; align-items: center; justify-content: center; min-width: 98px; height: 38px; padding: 0 18px; border-radius: 999px; font-size: 13px; font-weight: 800; background: var(--grad); color: #fff; text-shadow: 0 1px 2px rgba(8,20,70,.4); box-shadow: 0 8px 20px rgba(124,131,255,.32), inset 0 1px 0 rgba(255,255,255,.4); }
+.plan.off .pgo { background: var(--panel); color: var(--mut); text-shadow: none; box-shadow: none; border: 1px solid var(--line); }
 
 /* ---- inputs */
 .input, textarea.input { width: 100%; height: 46px; padding: 0 14px; border-radius: 999px; background: rgba(255,255,255,.06); box-shadow: inset 0 1px 2px rgba(0,0,0,.25); color: var(--txt); outline: none; backdrop-filter: none; -webkit-backdrop-filter: none; transition: border-color .2s, box-shadow .2s; }

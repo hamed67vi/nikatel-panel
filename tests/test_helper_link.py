@@ -157,6 +157,6 @@ def test_the_mini_app_reads_the_same_switch_and_has_the_new_emoji():
     fn = fn[:fn.index("\n    $token = $savedToken;")]
     assert "($botState['helperLink'] ?? 'mini') === 'off'" in fn and "global $botState;" in fn      # (off = nowhere; mini and both = shown here)
     js = (MINI / "app.js").read_text(encoding="utf-8")
-    assert "<h3>📎 لینک کمکی اشتراک</h3>" in js and "🔁" not in js.split("const altBox")[1].split("\n")[0]
+    assert "<h3>📎 لینک کمکی اشتراک " in js and "🔁" not in js.split("const altBox")[1].split("\n")[0]
     html = (MINI / "index.html").read_text(encoding="utf-8")
-    assert re.findall(r"\?v=(\d+\.\d+\.\d+)", html) == ["3.0.18", "3.0.18"]      # (a new Mini App: Telegram must not keep the old files)
+    assert re.findall(r"\?v=(\d+\.\d+\.\d+)", html) == ["3.0.21", "3.0.21"]      # (a new Mini App: Telegram must not keep the old files)

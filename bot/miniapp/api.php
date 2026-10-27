@@ -46,7 +46,7 @@ const GB = 1073741824;
 const MIN_TOPUP = 100000;      // (the owner, 2026-10-27: the least a wallet top-up may be is 100,000 toman, in the bot and in the Mini App)
 const MAX_TOPUP = 10000000;      // (exactly the bot's own top-up rules, bot.php: at least 100,000, at most 10,000,000, and a typed amount must be a multiple of 50,000)
 const TOPUP_STEP = 50000;
-const TOPUP_PRESETS = [100000, 200000, 300000, 500000, 1000000, 2000000, 5000000];      // (the bot's fixed preset buttons)
+const TOPUP_PRESETS = [100000, 300000, 500000, 1000000, 2000000, 5000000];      // (the bot's fixed preset buttons, without 200,000: six buttons are two full rows of three on the page - the owner, 2026-10-27)
 const RECEIPT_MAX_BYTES = 6 * 1024 * 1024;
 
 /* a broken character in a text of the database (a plan description cut in the middle of a letter) must not turn the whole answer into an empty page */
@@ -558,9 +558,11 @@ function panelRemoveUser(array $srv, string $remark): bool {
     [$code] = panelHttp('DELETE', rtrim((string) $srv['panel_url'], '/') . panelUserPath($srv, $remark), $tok, null, 15);
     return ($code >= 200 && $code < 300) || $code === 404;
 }
-/** the order of a service-page tool: the tools must be switched on for this customer, the order must be his and live on a panel */
-function toolOrder(array $body, int $uid): array {
-    if (!serviceTools()) fail('این امکان فعلاً فعال نیست.', 403);
+/** the order of a service-page tool: the tools must be switched on for this customer, the order must be his and live on a panel;
+    $agentOnly = the tools only an agent (همکار) has - disable and delete (the owner, 2026-10-27: "show disable and delete only to the agent"): it is who the customer IS, not the stage of the other tools */
+function toolOrder(array $body, int $uid, bool $agentOnly = false): array {
+    global $isAgent;
+    if ($agentOnly ? !$isAgent : !serviceTools()) fail($agentOnly ? 'این امکان فقط برای همکاران فعال است.' : 'این امکان فعلاً فعال نیست.', 403);
     $o = orderOf((int) ($body['id'] ?? 0), $uid);
     if (!$o || empty($o['panel_url'])) fail('سرویس پیدا نشد.', 404);
     return $o;
@@ -690,11 +692,12 @@ case 'service': {
     out(['ok' => true, 'service' => ['id' => (int) $o['id'], 'remark' => $o['remark'], 'server' => $o['label'], 'server_id' => (int) $o['server_id'], 'expire' => (int) $o['expire_date'], 'bought' => (int) $o['date'], 'active' => (int) $o['status'] === 1,
         'plan' => $plan ? ['id' => (int) $plan['id'], 'title' => $plan['title'], 'volume' => (float) $plan['volume'], 'days' => (int) $plan['days']] : null,
         'live' => $live ? array_diff_key($live, ['links' => 1]) : null, 'status_fa' => $live ? statusFa($live['status']) : null, 'sub' => on('subLinkState', 'on') ? ($live['sub'] ?? '') : '', 'sub_alt' => subAlt($o['sub_links'] ?? '', (string) ($live['sub'] ?? ''), (string) ($o['token'] ?? '')), 'links' => (on('configLinkState', 'on') || serviceTools()) ? $links : [],      // (the bot hides the configs when configLinkState is off; whoever has the service-page tools has the "configs" button, which the owner asked for, so it gets them)
-        'tools' => serviceTools() ? ['toggle' => !$live ? null : ($live['status'] === 'active' ? 'disable' : ($live['status'] === 'disabled' && selfOff((int) $o['id']) ? 'enable' : null))] : null]]);      // (tools.toggle: what the enable / disable button does now - none when the panel did not answer, the status is expired / limited / on hold, or an admin disabled it)
+        'tools' => serviceTools() ? ['update' => $live !== null] : null,      // (the tools of the stage: configs, QR, change link, update - "update" needs the panel to answer)
+        'agent' => $isAgent ? ['toggle' => !$live ? null : ($live['status'] === 'active' ? 'disable' : ($live['status'] === 'disabled' && selfOff((int) $o['id']) ? 'enable' : null)), 'delete' => true] : null]]);      // (agent.toggle: what the enable / disable button does now - none when the panel did not answer, the status is expired / limited / on hold, or an admin disabled it; only an agent has disable and delete)
 }
 
-case 'service_toggle': {   // the customer switches his own service off, and on again (never one an admin disabled)
-    $o = toolOrder($body, $uid);
+case 'service_toggle': {   // the agent switches his own service off, and on again (never one an admin disabled)
+    $o = toolOrder($body, $uid, true);
     $want = is_string($body['want'] ?? null) ? $body['want'] : '';
     if (!in_array($want, ['active', 'disabled'], true)) fail('درخواست نامعتبر است.');
     $live = panelGetUser($o, (string) $o['remark']);
@@ -729,8 +732,21 @@ case 'service_link': {   // a new subscription link: the old link and the old co
     out(['ok' => true]);
 }
 
-case 'service_delete': {   // the customer deletes his own service for good: no refund (as in the bot)
+case 'service_update': {   // the configs of the service are read from the panel again and saved - what the bot's "update" button does; the customer is told to refresh the subscription in his app
     $o = toolOrder($body, $uid);
+    if (throttled($uid, 'svcupd', 10, 3600)) fail('تعداد دفعات زیاد است؛ کمی بعد دوباره تلاش کنید.', 429);
+    $live = panelGetUser($o, (string) $o['remark']);
+    if (!$live) fail('ارتباط با سرور برقرار نشد؛ بروزرسانی انجام نشد.');
+    $links = $live['links'] ?: ($live['sub'] !== '' ? linksFromSub($live['sub']) : []);
+    $links = array_values(array_filter(is_array($links) ? $links : [], fn($l) => is_string($l) && $l !== ''));
+    if (!$links) fail('کانفیگی از سرور دریافت نشد؛ کمی بعد دوباره تلاش کنید.');
+    throttleHit($uid, 'svcupd');
+    run("UPDATE orders_list SET link = ? WHERE id = ? AND userid = ?", [json_encode($links, JSON_UNESCAPED_SLASHES), (int) $o['id'], $uid]);
+    out(['ok' => true, 'count' => count($links)]);
+}
+
+case 'service_delete': {   // the agent deletes his own service for good: no refund (as in the bot)
+    $o = toolOrder($body, $uid, true);
     if (throttled($uid, 'svcdel', 10, 3600)) fail('تعداد دفعات زیاد است؛ کمی بعد دوباره تلاش کنید.', 429);
     throttleHit($uid, 'svcdel');
     if (!panelRemoveUser($o, (string) $o['remark'])) fail('سرور پاسخ نداد؛ سرویس حذف نشد. چند دقیقه دیگر دوباره تلاش کنید.');

@@ -400,16 +400,17 @@ def test_the_tools_of_the_service_page_are_staged_and_every_action_checks_the_ow
     stage = SRC[SRC.index("function serviceTools()"):SRC.index("function selfOffTable()")]
     assert "'miniServiceTools'" in stage and "'admin'" in stage and "in_array((int) $uid, (array) $admins, true)" in stage      # (unset = the admins only)
     tool = SRC[SRC.index("function toolOrder("):SRC.index("function panelDeleteUser(")]
-    assert "if (!serviceTools()) fail(" in tool and "orderOf((int) ($body['id'] ?? 0), $uid)" in tool      # (the stage and the owner are checked before anything is done)
+    assert "!serviceTools()" in tool and "!$isAgent" in tool and "orderOf((int) ($body['id'] ?? 0), $uid)" in tool      # (the stage and the owner are checked before anything is done)
     cases = {}
-    for act in ("service_toggle", "service_link", "service_delete"):
+    for act in ("service_toggle", "service_link", "service_update", "service_delete"):
         case = SRC[SRC.index(f"case '{act}'"):]
         cases[act] = case[:case.index("\n}\n")]
-        assert "toolOrder($body, $uid)" in cases[act] and "throttled($uid," in cases[act], act
+        assert "toolOrder($body, $uid" in cases[act] and "throttled($uid," in cases[act], act
+        assert ("toolOrder($body, $uid, true)" in cases[act]) == (act in ("service_toggle", "service_delete")), act      # (disable and delete are the agents' own, the other tools are the stage's)
     assert "selfOff((int) $o['id'])" in cases["service_toggle"]      # (an account an admin disabled is never switched on by the customer)
     assert "> 0 && (int) $o['status'] === 1" in cases["service_delete"] and cases["service_delete"].index("panelRemoveUser(") < cases["service_delete"].index("DELETE FROM orders_list")      # (the panel first; the slot goes back once)
     assert "panelGetUser(" in cases["service_link"] and cases["service_link"].index("panelGetUser(") < cases["service_link"].index("panelRevokeSub(")
-    for word in ("F.svc_tools && s.tools", "cfgSheet()", "qrSheet()", "linkSheet(${s.id})", "deleteSheet(${s.id})", "toggleSheet(${s.id}", "api(\"service_link\"", "api(\"service_toggle\"", "api(\"service_delete\""):
+    for word in ("F.svc_tools && s.tools", "cfgSheet()", "qrOf(", "linkSheet(${s.id})", "deleteSheet(${s.id})", "toggleSheet(${s.id}", "api(\"service_link\"", "api(\"service_toggle\"", "api(\"service_delete\"", "updateSheet(${s.id})", "api(\"service_update\""):
         assert word in JS, word
 
 
@@ -433,7 +434,7 @@ def test_the_configs_button_of_the_tools_is_always_there_and_gets_the_configs():
 def test_only_web_links_are_opened_and_the_files_have_a_new_version_for_the_cache():
     assert r'if (!/^https?:\/\//i.test(u)) return;' in JS
     html = (MINI / "index.html").read_text(encoding="utf-8")
-    assert "app.css?v=3.0.18" in html and "app.js?v=3.0.18" in html
+    assert "app.css?v=3.0.21" in html and "app.js?v=3.0.21" in html
 
 
 # ---------------------------------------------------------------------------------------------- the whole attack harness (opt in)

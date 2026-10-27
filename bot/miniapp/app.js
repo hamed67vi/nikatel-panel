@@ -107,7 +107,7 @@ const VIEWS = {}, AFTER = {};
 VIEWS.home = async () => {
   const F = S.feat;
   const qa = [
-    F.sell && ["🛍", "خرید سرویس", "setTab('buy')"],
+    F.sell && ["🛒", "خرید سرویس", "setTab('buy')"],
     ["📦", "سرویس‌ها", "setTab('services')"],
     F.wallet && ["💳", "شارژ کیف پول", "setTab('wallet')"],
     ["🎫", "پشتیبانی", "go('tickets')"],
@@ -117,9 +117,11 @@ VIEWS.home = async () => {
     F.apps && ["📱", "اپلیکیشن‌ها", "go('apps')"],
   ].filter(Boolean);
   const hero = F.wallet ? `<div class="card hero"><small>موجودی کیف پول</small><div class="bal">${T(S.me ? S.me.wallet : 0)}<small>تومان</small></div>${S.me && S.me.pending_topups ? `<span class="pill warn">${T(S.me.pending_topups)} رسید در انتظار تأیید</span>` : `<span class="pill ok">آماده‌ی خرید</span>`}
-      <div class="hbtns">${F.card ? `<button class="btn pri" onclick="setTab('wallet')">💳 شارژ کیف پول</button>` : ""}${F.sell ? `<button class="btn" onclick="setTab('buy')">🛍 خرید سرویس</button>` : ""}</div></div>` : "";
+      <div class="hbtns">${F.card ? `<button class="btn pri" onclick="setTab('wallet')">💳 شارژ کیف پول</button>` : ""}${F.sell ? `<button class="btn" onclick="setTab('buy')">🛒 خرید سرویس</button>` : ""}</div></div>` : "";
   return `${hero}
-    <div class="card"><h3>سرویس‌های من <span class="pill" id="h-count">${S.me ? T(S.me.services) : "—"}</span></h3><div id="h-svc" class="list"><div class="sk" style="height:58px"></div></div></div>
+    <div class="card"><h3>سرویس‌های من <span style="display:flex;gap:6px;align-items:center"><button class="pill" style="cursor:pointer" onclick="homeSearch()" aria-label="جستجو">🔍</button><span class="pill" id="h-count">${S.me ? T(S.me.services) : "—"}</span></span></h3>
+      <div id="h-sbox" hidden style="margin-bottom:8px"><input class="input" id="h-q" type="text" inputmode="search" enterkeyhint="search" autocomplete="off" placeholder="جستجوی سرویس…" oninput="homeFind()" style="height:38px"></div>
+      <div id="h-svc" class="list"><div class="sk" style="height:58px"></div></div></div>
     <div class="card"><h3>دسترسی سریع</h3><div class="qa" style="--cols:${qa.length <= 4 ? Math.max(qa.length, 1) : qa.length <= 6 ? 3 : 4}">${qa.map(q => `<button onclick="${q[2]}"><i>${q[0]}</i>${q[1]}</button>`).join("")}</div></div>
     ${chatOn() ? `<div class="card tap" onclick="openLink(${js("https://t.me/" + S.support)})"><div class="row"><div><b>ارتباط مستقیم با پشتیبانی</b><div class="sm mut">${ltr("@" + S.support)}</div></div><span class="chev">‹</span></div></div>` : ""}`;
 };
@@ -127,12 +129,32 @@ AFTER.home = async () => {
   const r = await loadServices();
   const box = $("h-svc"); if (!box) return;
   if (!r.ok) { box.innerHTML = `<div class="empty">${esc(r.error)}</div>`; return; }
-  const act = r.services.filter(s => s.active).slice(0, 3);
-  $("h-count").textContent = T(r.services.filter(s => s.active).length);
-  box.innerHTML = act.length ? act.map(svcRow).join("") + (r.services.length > 3 ? `<button class="btn w ghost sm" onclick="setTab('services')">همه‌ی سرویس‌ها (${T(r.services.length)})</button>` : "")
-    : `<div class="empty">هنوز سرویسی نداری.${S.feat.sell ? `<br><button class="btn pri mt" onclick="setTab('buy')">🛍 خرید اولین سرویس</button>` : ""}</div>`;
-  loadLive(act.map(s => s.id));
+  paintHome();
 };
+function paintHome() {      // (the first three active services; the search below shows others instead while something is typed)
+  const box = $("h-svc"); if (!box || !S.services) return;
+  const act = S.services.filter(s => s.active).slice(0, 3);
+  $("h-count").textContent = T(S.services.filter(s => s.active).length);
+  box.innerHTML = act.length ? act.map(svcRow).join("") + (S.services.length > 3 ? `<button class="btn w ghost sm" onclick="setTab('services')">همه‌ی سرویس‌ها (${T(S.services.length)})</button>` : "")
+    : `<div class="empty">هنوز سرویسی نداری.${S.feat.sell ? `<br><button class="btn pri mt" onclick="setTab('buy')">🛒 خرید اولین سرویس</button>` : ""}</div>`;
+  loadLive(act.map(s => s.id));
+}
+/* ---- search: a small 🔍 in the header of "my services" (the home card and the services page); it looks through ALL of the customer's services - name and server - as he types, active or not */
+const svcNorm = s => String(s == null ? "" : s).toLowerCase().replace(/[۰-۹]/g, c => "۰۱۲۳۴۵۶۷۸۹".indexOf(c)).replace(/[٠-٩]/g, c => "٠١٢٣٤٥٦٧٨٩".indexOf(c)).replace(/ي/g, "ی").replace(/ك/g, "ک").replace(/[\s‌‎‏]+/g, "");
+function svcMatch(q) { const k = svcNorm(q); return k ? (S.services || []).filter(s => (svcNorm(s.remark) + "\n" + svcNorm(s.server)).includes(k)) : null; }      // (null = nothing typed)
+function homeSearch() {
+  const b = $("h-sbox"); if (!b) return;
+  b.hidden = !b.hidden;
+  if (!b.hidden) $("h-q").focus(); else { $("h-q").value = ""; paintHome(); }
+}
+function homeFind() {
+  if (!S.services) return;
+  const q = $("h-q").value, hit = svcMatch(q); if (hit === null) { paintHome(); return; }
+  const show = hit.slice(0, 8);
+  $("h-svc").innerHTML = show.length ? show.map(svcRow).join("") + (hit.length > show.length ? `<button class="btn w ghost sm" onclick="homeMore()">همه‌ی ${T(hit.length)} نتیجه</button>` : "") : `<div class="empty">سرویسی با این نام پیدا نشد.</div>`;
+  loadLive(show.map(s => s.id));
+}
+function homeMore() { S.stack = [{v: "services", q: $("h-q").value}]; hap(); render(); }
 
 /* ---- services */
 async function loadServices(force) { if (S.services && !force) return {ok: true, services: S.services}; const r = await api("services"); if (r.ok) S.services = r.services; return r; }
@@ -151,15 +173,23 @@ async function loadLive(ids) {   // the live numbers from the panels, three at a
   const worker = async () => { while (i < todo.length) { const id = todo[i++]; const r = await api("live", {id}); S.live[id] = r.ok && r.live ? Object.assign(r.live, {status_fa: r.status_fa}) : null; const el = $("svc-" + id), s = (S.services || []).find(x => x.id === id); if (el && s) el.outerHTML = svcRow(s); } };
   await Promise.all([worker(), worker(), worker()]);
 }
-VIEWS.services = async () => `<div class="title">سرویس‌های من <small id="s-count"></small></div><div class="seg" id="s-seg"><button class="on" onclick="svcFilter('active',this)">فعال</button><button onclick="svcFilter('all',this)">همه</button></div><div id="s-list" class="list"><div class="loading"><i class="spin"></i>در حال بارگذاری…</div></div>`;
+VIEWS.services = async () => { const q = cur().q || ""; return `<div class="title">سرویس‌های من <span style="display:flex;gap:8px;align-items:center"><small id="s-count"></small><button class="pill" style="cursor:pointer" onclick="svcSearch()" aria-label="جستجو">🔍</button></span></div>
+  <div id="s-sbox" ${q ? "" : "hidden"} style="margin-bottom:8px"><input class="input" id="s-q" type="text" inputmode="search" enterkeyhint="search" autocomplete="off" placeholder="جستجوی سرویس…" value="${esc(q)}" oninput="svcFind()" style="height:38px"></div>
+  <div class="seg" id="s-seg"><button class="on" onclick="svcFilter('active',this)">فعال</button><button onclick="svcFilter('all',this)">همه</button></div><div id="s-list" class="list"><div class="loading"><i class="spin"></i>در حال بارگذاری…</div></div>`; };
 let svcMode = "active";
 function svcFilter(m, btn) { svcMode = m; document.querySelectorAll("#s-seg button").forEach(b => b.classList.toggle("on", b === btn)); paintServices(); }
 function paintServices() {
-  const all = S.services || [], list = svcMode === "all" ? all : all.filter(s => s.active);
-  $("s-count").textContent = T(list.length) + " سرویس";
-  $("s-list").innerHTML = list.length ? list.map(svcRow).join("") : `<div class="empty">${svcMode === "all" ? "هنوز سرویسی نداری." : "سرویس فعالی نداری."}${S.feat.sell ? `<br><button class="btn pri mt" onclick="setTab('buy')">🛍 خرید سرویس</button>` : ""}</div>`;
+  const all = S.services || [], hit = svcMatch(cur().q || ""), list = hit || (svcMode === "all" ? all : all.filter(s => s.active));      // (while something is typed the search looks through all of them, active or not)
+  $("s-count").textContent = T(list.length) + (hit ? " نتیجه" : " سرویس");
+  $("s-list").innerHTML = list.length ? list.map(svcRow).join("") : `<div class="empty">${hit ? "سرویسی با این نام پیدا نشد." : svcMode === "all" ? "هنوز سرویسی نداری." : "سرویس فعالی نداری."}${!hit && S.feat.sell ? `<br><button class="btn pri mt" onclick="setTab('buy')">🛒 خرید سرویس</button>` : ""}</div>`;
   loadLive(list.map(s => s.id));
 }
+function svcSearch() {      // (the typed words live on the view's own stack entry: a tap on a service and back keeps them, a tab switch starts empty)
+  const b = $("s-sbox"); if (!b) return;
+  b.hidden = !b.hidden;
+  if (!b.hidden) $("s-q").focus(); else { cur().q = ""; $("s-q").value = ""; paintServices(); }
+}
+function svcFind() { cur().q = $("s-q").value; paintServices(); }
 AFTER.services = async () => { const r = await loadServices(true); if (!r.ok) { $("s-list").innerHTML = `<div class="empty">${esc(r.error)}</div>`; return; } paintServices(); };
 
 VIEWS.service = async p => `<div id="svc-detail"><div class="loading"><i class="spin"></i>در حال خواندن از سرور…</div></div>`;
@@ -172,6 +202,7 @@ AFTER.service = async p => {
   const F = S.feat;
   S.svc = s;
   const tl = !!(F.svc_tools && s.tools);      // (the new tools of this page: staged - the admins first, then everybody; the support button leaves the page with them)
+  const ag = s.agent || null;      // (disable and delete belong to the agents (همکار) only - whatever the stage of the other tools is)
   box.innerHTML = `
     <div class="title"><span class="ell2">${esc(s.remark)}</span><span class="pill ${st}">${esc(r.service.status_fa || (s.active ? "فعال" : "غیرفعال"))}</span></div>
     <div class="card">
@@ -183,7 +214,7 @@ AFTER.service = async p => {
       </div>
       ${L === null && s.active ? `<div class="note warn mt">ارتباط با پنل این سرور برقرار نشد؛ اعداد زنده فعلاً در دسترس نیست.</div>` : ""}
     </div>
-    ${s.sub ? `<div class="card"><h3>لینک اشتراک <button class="btn sm" onclick="copy(${js(s.sub)})">📋 کپی</button></h3><div class="code" onclick="copy(${js(s.sub)})">${esc(s.sub)}<span class="cp">📋</span></div><div class="qr hide" id="qr"></div><div class="btns">${tl ? "" : `<button class="btn sm" onclick="showQr(${js(s.sub)})">▦ QR</button>`}${F.apps ? `<button class="btn sm" onclick="go('apps')">📱 برنامه‌ی اتصال</button>` : ""}</div></div>` : ""}
+    ${s.sub ? `<div class="card"><h3>لینک اشتراک <button class="btn sm" onclick="qrOf(${js(s.sub)})">${QR_ICON} QR</button></h3><div class="code" onclick="copy(${js(s.sub)})">${esc(s.sub)}<span class="cp">📋</span></div><div class="btns">${F.apps ?`<button class="btn sm" onclick="go('apps')">📱 برنامه‌ی اتصال</button>` : ""}</div></div>` : ""}
     ${s.sub ? altBox(s.sub_alt) : ""}
     ${!tl && s.links && s.links.length ? `<div class="card"><h3>کانفیگ‌ها <span class="pill">${T(s.links.length)}</span></h3>${s.links.slice(0, 12).map(l => `<div class="code mb" onclick="copy(${js(l)})">${esc(l.length > 110 ? l.slice(0, 110) + "…" : l)}<span class="cp">📋</span></div>`).join("")}${s.links.length > 1 ? `<button class="btn w sm" onclick="copy(${js(s.links.join("\n"))}, 'همه‌ی کانفیگ‌ها کپی شد ✓')">📋 کپی همه</button>` : ""}</div>` : ""}
     <div class="card"><h3>مدیریت سرویس</h3><div class="grid">
@@ -191,35 +222,56 @@ AFTER.service = async p => {
       ${F.addvolume ? `<button class="btn" onclick="extraSheet(${s.id},'volume')">➕ حجم اضافه</button>` : ""}
       ${F.adddays ? `<button class="btn" onclick="extraSheet(${s.id},'days')">⏳ زمان اضافه</button>` : ""}
       ${tl ? `<button class="btn" onclick="cfgSheet()">📋 کانفیگ‌ها</button>` : ""}
-      ${tl && s.sub ? `<button class="btn" onclick="qrSheet()">▦ QR</button>` : ""}
+      ${tl && s.tools.update ? `<button class="btn" onclick="updateSheet(${s.id})">♻️ بروزرسانی اشتراک</button>` : ""}
       ${tl && L ? `<button class="btn" onclick="linkSheet(${s.id})">🔗 تغییر لینک</button>` : ""}
-      ${tl && s.tools.toggle ? `<button class="btn" onclick="toggleSheet(${s.id},${js(s.tools.toggle)})">${s.tools.toggle === "disable" ? "⏸ غیرفعال‌سازی" : "▶️ فعال‌سازی"}</button>` : ""}
+      ${ag && ag.toggle ? `<button class="btn" onclick="toggleSheet(${s.id},${js(ag.toggle)})">${ag.toggle === "disable" ? "⏸ غیرفعال‌سازی" : "▶️ فعال‌سازی"}</button>` : ""}
       ${F.report ? `<button class="btn" onclick="reportSheet(${s.id})">🛠 گزارش اختلال</button>` : ""}
-      ${tl ? `<button class="btn danger" onclick="deleteSheet(${s.id})">🗑 حذف اشتراک</button>` : `<button class="btn" onclick="go('tickets',{svc:${js(s.remark)}})">🎫 پشتیبانی</button>`}
+      ${ag ? `<button class="btn danger" onclick="deleteSheet(${s.id})">🗑 حذف اشتراک</button>` : ""}
+      ${tl ? "" : `<button class="btn" onclick="go('tickets',{svc:${js(s.remark)}})">🎫 پشتیبانی</button>`}
     </div></div>`;
 };
 /* the tools of the service page (shown to the admins first: BOT_STATES miniServiceTools) */
-function qrImg(text) {      // (a whole number of pixels per square, as showQr does; null when the library is missing or the text is too long)
+function qrImg(text) {      // (a whole number of pixels per square: the picture is shown as it is made, never shrunk to a size that blurs the squares; null when the library is missing or the text is too long)
   if (typeof qrcode !== "function") return null;
   try { const q = qrcode(0, "M"); q.addData(text); q.make(); const cell = Math.max(2, Math.floor(216 / q.getModuleCount())); return `<img alt="QR" src="${q.createDataURL(cell, 0)}">`; } catch (e) { return null; }
 }
-function qrSheet() {
-  const s = S.svc; if (!s || !s.sub) return;
-  const im = qrImg(s.sub);
-  sheet(`<h3>▦ QR لینک اشتراک</h3>${im ? `<div class="qr">${im}</div>` : `<div class="note bad">لینک برای QR خیلی بلند است.</div>`}<div class="code mt" onclick="copy(${js(s.sub)})">${esc(s.sub)}<span class="cp">📋</span></div><div class="btns"><button class="btn" onclick="closeSheet()">بستن</button></div>`);
+/* the icon of the QR buttons: a small QR code (three finder squares and a few modules) drawn as an inline picture in the colour of the button text - the grid character it replaces looked like a table */
+const QR_ICON = `<svg class="qri" viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M3 3h8v8H3V3zm2 2v4h4V5H5zM13 3h8v8h-8V3zm2 2v4h4V5h-4zM3 13h8v8H3v-8zm2 2v4h4v-4H5z"/><rect x="6" y="6" width="2" height="2"/><rect x="16" y="6" width="2" height="2"/><rect x="6" y="16" width="2" height="2"/><rect x="13" y="13" width="3" height="3"/><rect x="18" y="13" width="3" height="2"/><rect x="13" y="18" width="2" height="3"/><rect x="17" y="17" width="4" height="4"/></svg>`;
+/* the QR of one link in a sheet, the link under it (a tap on it copies it): the button beside the main subscription link, beside each helper link, on the service page and on the page after a purchase */
+function qrBlock(text) {      // (the picture, or the reason there is none, and the link under it: a tap on the link copies it)
+  const im = qrImg(text);
+  return `${im ? `<div class="qr">${im}</div>` : `<div class="note bad">${typeof qrcode !== "function" ? "کتابخانه‌ی QR بارگذاری نشد." : "لینک برای QR خیلی بلند است."}</div>`}<div class="code mt" onclick="copy(${js(text)})">${esc(text)}<span class="cp">📋</span></div>`;
+}
+function qrOf(text, title) {
+  sheet(`<h3>${QR_ICON}QR ${esc(title || "لینک اشتراک")}</h3>${qrBlock(text)}<div class="btns"><button class="btn" onclick="closeSheet()">بستن</button></div>`);
+}
+function qrMany(joined, title) {      // (the helper links: one button in the header of their card, one QR for each link in the sheet)
+  const list = String(joined || "").split("\n").filter(Boolean);
+  if (list.length === 1) { qrOf(list[0], title); return; }
+  if (list.length) sheet(`<h3>${QR_ICON}QR ${esc(title || "")}</h3>${list.map(qrBlock).join("")}<div class="btns"><button class="btn" onclick="closeSheet()">بستن</button></div>`);
 }
 function cfgSheet() {
   const s = S.svc; if (!s) return;
   if (!s.links || !s.links.length) { sheet(`<h3>📋 کانفیگ‌ها</h3><div class="note">کانفیگی برای نمایش پیدا نشد؛ از لینک اشتراک استفاده کن.</div><div class="btns"><button class="btn w" onclick="closeSheet()">باشه</button></div>`); return; }
   sheet(`<h3>📋 کانفیگ‌ها <span class="pill">${T(s.links.length)}</span></h3>
     <div id="cfg-qr" class="qr hide"></div>
-    ${s.links.slice(0, 12).map((l, i) => `<div class="copyrow mb"><div class="code" onclick="copy(${js(l)})">${esc(l.length > 70 ? l.slice(0, 70) + "…" : l)}<span class="cp">📋</span></div><button class="btn sm" onclick="cfgQr(${i})">▦</button></div>`).join("")}
+    ${s.links.slice(0, 12).map((l, i) => `<div class="copyrow mb"><div class="code" onclick="copy(${js(l)})">${esc(l.length > 70 ? l.slice(0, 70) + "…" : l)}<span class="cp">📋</span></div><button class="btn sm" onclick="cfgQr(${i})" aria-label="QR">${QR_ICON}</button></div>`).join("")}
     <div class="btns">${s.links.length > 1 ? `<button class="btn" onclick="copy(${js(s.links.join("\n"))}, 'همه‌ی کانفیگ‌ها کپی شد ✓')">📋 کپی همه</button>` : ""}<button class="btn" onclick="closeSheet()">بستن</button></div>`);
 }
 function cfgQr(i) {
   const l = S.svc && S.svc.links[i], box = $("cfg-qr"); if (!l || !box) return;
   const im = qrImg(l); if (!im) { toast("این کانفیگ برای QR خیلی بلند است", "bad"); return; }
   box.innerHTML = im; box.classList.remove("hide"); box.scrollIntoView({block: "nearest", behavior: "smooth"});
+}
+function updateSheet(id) {
+  sheet(`<h3>♻️ بروزرسانی اشتراک</h3><div class="note">کانفیگ‌های این سرویس دوباره از سرور خوانده و ذخیره می‌شوند. بعد از آن داخل برنامه‌ی اتصال، اشتراک را بروزرسانی کن (یا لینک اشتراک را دوباره وارد کن).</div>
+    <div class="btns"><button class="btn pri" id="do-update" onclick="doUpdate(${id})">بروزرسانی</button><button class="btn" onclick="closeSheet()">انصراف</button></div>`);
+}
+async function doUpdate(id) {
+  if (S.busy) return; S.busy = true; const b = $("do-update"); if (b) { b.disabled = true; b.innerHTML = '<i class="spin"></i> در حال بروزرسانی…'; }
+  const r = await api("service_update", {id}); S.busy = false;
+  if (!r.ok) { toast(r.error, "bad"); if (b) { b.disabled = false; b.textContent = "دوباره"; } return; }
+  closeSheet(); toast("بروزرسانی انجام شد ✓ (" + T(r.count) + " کانفیگ)", "ok"); delete S.live[id]; render();
 }
 function linkSheet(id) {
   sheet(`<h3>🔗 تغییر لینک اشتراک</h3><div class="note">لینک اشتراک و کانفیگ‌های فعلی از کار می‌افتند و یک لینک و کانفیگ جدید ساخته می‌شود. بعد از آن لینک قبلی را از برنامه پاک کن و لینک جدید را وارد کن.</div>
@@ -254,13 +306,7 @@ async function doDelete(id) {
   closeSheet(); toast("اشتراک حذف شد ✓", "ok"); delete S.live[id]; S.services = null; S.me.services = Math.max(0, (S.me.services || 1) - 1); setTab("services");
 }
 /* the helper subscription links of the server (the bot's "لینک کمکی اشتراک"): the same token on the server's other domains, for when the main link does not open */
-const altBox = list => list && list.length ? `<div class="card"><h3>📎 لینک کمکی اشتراک</h3>${list.map(u => `<div class="code mb" onclick="copy(${js(u)})">${esc(u)}<span class="cp">📋</span></div>`).join("")}<div class="note">اگر لینک اصلی اشتراک کار نکرد از لینک کمکی اشتراک استفاده کنید.</div></div>` : "";
-function showQr(text) {
-  const box = $("qr"); if (!box) return;
-  if (typeof qrcode !== "function") { toast("کتابخانه‌ی QR بارگذاری نشد", "bad"); return; }
-  if (!box.classList.contains("hide")) { box.classList.add("hide"); return; }
-  try { const q = qrcode(0, "M"); q.addData(text); q.make(); const cell = Math.max(2, Math.floor(216 / q.getModuleCount())); box.innerHTML = `<img alt="QR" src="${q.createDataURL(cell, 0)}">`; box.classList.remove("hide"); } catch (e) { toast("لینک برای QR خیلی بلند است", "bad"); }      // (a whole number of pixels per square: the picture is shown as it is made, never shrunk to a size that blurs the squares)
-}
+const altBox = list => list && list.length ? `<div class="card"><h3>📎 لینک کمکی اشتراک <button class="btn sm" onclick="qrMany(${js(list.join("\n"))}, 'لینک کمکی')">${QR_ICON} QR</button></h3>${list.map(u => `<div class="code mb" onclick="copy(${js(u)})">${esc(u)}<span class="cp">📋</span></div>`).join("")}<div class="note">اگر لینک اصلی اشتراک کار نکرد از لینک کمکی اشتراک استفاده کنید.</div></div>` : "";
 async function renewSheet(id) {
   sheet(`<div class="loading"><i class="spin"></i>محاسبه‌ی قیمت…</div>`);
   const q = await api("quote", {id});
@@ -357,7 +403,26 @@ function paintPlans() {
   if (S.feat.buy_groups) list.sort((a, b) => a.price - b.price || a.id - b.id);      // (the plans of a kind and a category in one list by price, the bot's order, also when two servers were merged into it)
   const by = {}; list.forEach(x => (by[planHead(x)] = by[planHead(x)] || []).push(x));
   box.innerHTML = (buySrv ? `<button class="btn sm ghost mb" onclick="buyBack()">› همه‌ی نوع سرویس‌ها</button>` : "") + buyNotes() +
-    Object.keys(by).map(srv => `<div class="card"><h3>${esc(srv)}</h3>${by[srv].map(x => `<div class="plan ${x.sold_out || !S.sell ? "off" : ""}" onclick="${x.sold_out || !S.sell ? "" : `buySheet(${x.id})`}"><div class="grow"><div class="pt">${esc(x.title)}</div><div class="pd">${vol(x.volume)}، ${x.days ? T(x.days) + " روز" : "بدون محدودیت زمان"}${x.users > 0 ? "، " + T(x.users) + " کاربر" : ""}${x.sold_out ? "، <b>تمام شد</b>" : ""}</div>${x.descr ? `<div class="pd">${esc(x.descr)}</div>` : ""}</div><div class="pr"><b>${T(x.price)}</b>${x.discount ? `<s>${T(x.list_price)}</s> ` : ""}<small>تومان</small></div></div>`).join("")}</div>`).join("");
+    Object.keys(by).map(srv => `<div class="card"><h3>${esc(srv)}</h3>${by[srv].map(planCard).join("")}</div>`).join("");
+}
+/* one plan: the name and a badge, the size / time / users as small chips, what the plan gives as a short list (the description of the bot, a line each; its own emoji is the bullet, the first three lines show and a button
+   opens the rest), and at the bottom the price with the old one struck and the buy button; the whole card opens the buy sheet, as before */
+const PLAN_EMO = /^(\p{Extended_Pictographic}(?:️|‍\p{Extended_Pictographic}|\p{Emoji_Modifier})*)\s*(.*)$/u;
+function planFeat(line) { const m = PLAN_EMO.exec(line); return m && m[2] ? `<li><i>${esc(m[1])}</i><span>${esc(m[2])}</span></li>` : `<li><i class="dot"></i><span>${esc(line)}</span></li>`; }
+function planCard(x) {
+  const off = x.sold_out || !S.sell, lines = String(x.descr || "").split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+  const pct = x.list_price > x.price ? Math.max(1, Math.round((x.list_price - x.price) * 100 / x.list_price)) : 0;
+  return `<div class="plan ${off ? "off" : ""}" onclick="${off ? "" : `buySheet(${x.id})`}">
+    <div class="ph"><div class="pt">${esc(x.title)}</div>${x.sold_out ? `<span class="pill bad">تمام شد</span>` : pct ? `<span class="pill ok">${T(pct)}٪ تخفیف</span>` : ""}</div>
+    <div class="pc"><span>📦 ${vol(x.volume)}</span><span>⏳ ${x.days ? T(x.days) + " روز" : "بدون محدودیت زمان"}</span>${x.users > 0 ? `<span>👤 ${T(x.users)} کاربر</span>` : ""}</div>
+    ${lines.length ? `<ul class="pf${lines.length > 3 ? " clamp" : ""}">${lines.map(planFeat).join("")}</ul>${lines.length > 3 ? `<button class="pmore" onclick="planMore(this, event)">نمایش بیشتر ⌄</button>` : ""}` : ""}
+    <div class="pb"><div class="pp"><b>${T(x.price)}</b><small>تومان</small>${pct ? `<s>${T(x.list_price)}</s>` : ""}</div><span class="pgo">${x.sold_out ? "ناموجود" : off ? "—" : "خرید ‹"}</span></div></div>`;
+}
+function planMore(btn, ev) {      // (the card itself opens the buy sheet: this tap must not)
+  if (ev && ev.stopPropagation) ev.stopPropagation();
+  const ul = btn.previousElementSibling; if (!ul) return;
+  const open = !ul.classList.contains("open"); ul.classList.toggle("open", open);
+  btn.textContent = open ? "نمایش کمتر ⌃" : "نمایش بیشتر ⌄";
 }
 /* the discount code of the plan whose sheet is open: {plan, code, price, discount}; the server works the price out again when the customer pays */
 let DC = null;
@@ -393,7 +458,7 @@ async function doBuy(id) {
 }
 VIEWS.bought = async r => `
   <div class="card c"><div style="font-size:44px">🎉</div><h3 style="justify-content:center">سرویس شما ساخته شد</h3><div class="sm mut">نام سرویس: <b>${esc(r.remark)}</b>${r.cashback ? `، کش‌بک ${T(r.cashback)} تومان به کیف پولت برگشت` : ""}</div></div>
-  ${r.sub ? `<div class="card"><h3>لینک اشتراک <button class="btn sm" onclick="copy(${js(r.sub)})">📋 کپی</button></h3><div class="code" onclick="copy(${js(r.sub)})">${esc(r.sub)}<span class="cp">📋</span></div><div class="qr hide" id="qr"></div><div class="btns"><button class="btn sm" onclick="showQr(${js(r.sub)})">▦ QR</button>${S.feat.apps ? `<button class="btn sm" onclick="go('apps')">📱 برنامه‌ی اتصال</button>` : ""}</div><div class="note mt">لینک اشتراک را در برنامه‌ی اتصال (v2rayNG، Streisand، Hiddify…) وارد کن؛ کانفیگ‌ها خودکار می‌آیند. همین لینک در چت ربات هم برایت فرستاده شد.</div></div>` : ""}
+  ${r.sub ? `<div class="card"><h3>لینک اشتراک <button class="btn sm" onclick="qrOf(${js(r.sub)})">${QR_ICON} QR</button></h3><div class="code" onclick="copy(${js(r.sub)})">${esc(r.sub)}<span class="cp">📋</span></div><div class="btns">${S.feat.apps ? `<button class="btn sm" onclick="go('apps')">📱 برنامه‌ی اتصال</button>` : ""}</div><div class="note mt">لینک اشتراک را در برنامه‌ی اتصال (v2rayNG، Streisand، Hiddify…) وارد کن؛ کانفیگ‌ها خودکار می‌آیند. همین لینک در چت ربات هم برایت فرستاده شد.</div></div>` : ""}
   ${r.sub ? altBox(r.sub_alt) : ""}
   ${r.links && r.links.length ? `<div class="card"><h3>کانفیگ‌ها <span class="pill">${T(r.links.length)}</span></h3>${r.links.slice(0, 8).map(l => `<div class="code mb" onclick="copy(${js(l)})">${esc(l.length > 110 ? l.slice(0, 110) + "…" : l)}<span class="cp">📋</span></div>`).join("")}</div>` : ""}
   <div class="btns"><button class="btn pri" onclick="S.stack=[{v:'services'},{v:'service',p:{id:${r.order_id}}}];render()">📦 جزئیات سرویس</button><button class="btn" onclick="setTab('home')">خانه</button></div>`;
@@ -417,7 +482,7 @@ AFTER.wallet = async () => {
   const cls = s => ({approved: "ok", auto_cart_approved: "ok", paid: "ok", paid_with_wallet: "info", have_sent: "warn", pending: "warn", declined: "bad", low_wallet: "bad", expired_have_sent: "bad", expired_pending: "bad"}[s] || "");
   const rows = r.pays.filter(p => p.state !== "pending" || p.kind !== "INCREASE_WALLET");
   const done = s => s === "approved" || s === "auto_cart_approved" || s === "paid" || s === "paid_with_wallet";      // only a payment that went through moves the wallet: a refused or expired one shows its amount without a sign
-  const item = p => `<div class="item static"><div class="ic">${p.kind === "INCREASE_WALLET" ? "💳" : p.kind === "BUY_SUB" || p.kind === "RENEW_ACCOUNT" ? "🛍" : "➕"}</div><div class="tx"><div class="row"><b>${esc(p.type)}</b><span class="pill ${cls(p.state)}">${esc(p.state_fa)}</span></div><small>${when(p.at)}${p.note ? "، " + esc(p.note) : ""}</small></div><b class="ltr amt${done(p.state) ? "" : " mut"}">${done(p.state) ? (p.kind === "INCREASE_WALLET" ? "+" : "−") : ""}${T(p.price)}</b></div>`;
+  const item = p => `<div class="item static"><div class="ic">${p.kind === "INCREASE_WALLET" ? "💳" : p.kind === "BUY_SUB" || p.kind === "RENEW_ACCOUNT" ? "🛒" : "➕"}</div><div class="tx"><div class="row"><b>${esc(p.type)}</b><span class="pill ${cls(p.state)}">${esc(p.state_fa)}</span></div><small>${when(p.at)}${p.note ? "، " + esc(p.note) : ""}</small></div><b class="ltr amt${done(p.state) ? "" : " mut"}">${done(p.state) ? (p.kind === "INCREASE_WALLET" ? "+" : "−") : ""}${T(p.price)}</b></div>`;
   const cb = r.cashback.length ? `<div class="sm mut mt">کش‌بک‌ها</div>` + r.cashback.slice(0, 5).map(c => `<div class="item static"><div class="ic">🎁</div><div class="tx"><b>کش‌بک خرید</b><small>${when(c.at)}، خرید ${T(c.order)} تومان</small></div><b class="ltr amt">+${T(c.back)}</b></div>`).join("") : "";
   const rest = rows.slice(3).map(item).join("") + cb;      // the last three show at once; the older ones (and the cashbacks) wait behind one button
   box.innerHTML = rows.length ? rows.slice(0, 3).map(item).join("") + (rest ? `<div id="hist-more" style="display:none">${rest}</div><button class="btn w mt" id="hist-btn" onclick="histMore()">نمایش بقیه‌ی تاریخچه</button>` : "")
@@ -536,7 +601,7 @@ AFTER.referral = async () => {
   if (!r.ok) { box.innerHTML = `<div class="card"><div class="empty">${esc(r.error)}</div></div>`; return; }
   const share = "https://t.me/share/url?url=" + encodeURIComponent(r.link) + "&text=" + encodeURIComponent("با این لینک عضو شو 👇");
   box.innerHTML = `<div class="card"><div class="grid"><div class="tile"><small>دعوت‌شده‌ها</small><b>${T(r.invited)}</b></div><div class="tile"><small>خریدار شده</small><b>${T(r.buyers)}</b></div></div>
-    ${r.reward ? `<div class="note ok mt">🎁 برای هر خرید دوستانت (به‌جز پرداخت با کیف پول) ${T(r.reward)} تومان به کیف پولت اضافه می‌شود.</div>` : ""}${r.text ? `<div class="note mt">${r.text}</div>` : ""}
+    ${r.reward ? `<div class="note ok mt">🎁 برای هر خرید دوستانت (به‌جز پرداخت با کیف پول) ${T(r.reward)} تومان به کیف پولت اضافه می‌شود.</div>` : ""}
     <label class="lb">لینک دعوت تو</label><div class="code" onclick="copy(${js(r.link)})">${esc(r.link)}<span class="cp">📋</span></div>
     <div class="btns"><button class="btn pri" onclick="openLink(${js(share)})">📤 اشتراک‌گذاری</button><button class="btn" onclick="copy(${js(r.link)})">📋 کپی</button></div></div>`;
 };

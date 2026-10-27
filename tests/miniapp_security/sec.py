@@ -612,7 +612,7 @@ def tp1():
     mk_user(U)
     c, j, t = call("me")
     j = j or {}
-    if j.get("amounts") != [100000, 200000, 300000, 500000, 1000000, 2000000, 5000000] or (j.get("min_topup"), j.get("max_topup"), j.get("topup_step")) != (100000, 10000000, 50000):
+    if j.get("amounts") != [100000, 300000, 500000, 1000000, 2000000, 5000000] or (j.get("min_topup"), j.get("max_topup"), j.get("topup_step")) != (100000, 10000000, 50000):
         problems.append(f"me gives amounts={j.get('amounts')} limits={(j.get('min_topup'), j.get('max_topup'), j.get('topup_step'))}")
     return bool(problems), "; ".join(problems[:6]) if problems else f"{len(cases)} amounts judged like the bot; presets and limits exposed"
 
@@ -1153,7 +1153,11 @@ def svc_tools_of(sid, who=U):
     return ((call("service", {"id": sid}, uid=who)[1] or {}).get("service") or {}).get("tools")
 
 
-@scn("SV1", "HIGH", "service-page tools are staged (miniServiceTools unset / admin = the admins only, on = everybody, off = nobody): features.svc_tools, service.tools and the three actions follow it, a refused call changes nothing; ids that are not the caller's own are refused; no initData = refused")
+def svc_agent_of(sid, who=U):
+    return ((call("service", {"id": sid}, uid=who)[1] or {}).get("service") or {}).get("agent")
+
+
+@scn("SV1", "HIGH", "service-page tools are staged (miniServiceTools unset / admin = the admins only, on = everybody, off = nobody): features.svc_tools, service.tools and the stage's actions (change link, update) follow it, a refused call changes nothing; disable and delete are not part of the stage (the agents' own: AG1) but refuse a non-agent too; ids that are not the caller's own are refused; no initData = refused")
 def sv1():
     problems = []
     for mode, want_u, want_a in ((None, False, True), ("admin", False, True), ("on", True, True), ("off", False, False)):
@@ -1167,15 +1171,23 @@ def sv1():
             if want:
                 continue
             snap = (PANEL["modifies"], PANEL["revokes"], PANEL["deletes"], PU[f"svc{who}"]["status"], q1("SELECT COUNT(*) FROM orders_list"))
-            for a, b in (("service_toggle", {"want": "disabled"}), ("service_link", {}), ("service_delete", {})):
+            for a, b in (("service_link", {}), ("service_update", {})):
                 c, j, tx = call(a, dict(b, id=sid), uid=who)
                 if ok(j) or c != 403:
                     problems.append(f"mode {mode}: {a} by {'a customer' if who == U else 'an admin'} answered {c} ok={ok(j)}, want a refusal (403)")
             if snap != (PANEL["modifies"], PANEL["revokes"], PANEL["deletes"], PU[f"svc{who}"]["status"], q1("SELECT COUNT(*) FROM orders_list")):
                 problems.append(f"mode {mode}: a refused tool still changed something")
-    tools_state("on"); mk_user(U); mk_user(V)
+        snap = (PANEL["modifies"], PANEL["revokes"], PANEL["deletes"], PU[f"svc{U}"]["status"], q1("SELECT COUNT(*) FROM orders_list"))
+        for who, sid in ((U, su), (ADMIN, sa)):      # (disable and delete: never for a customer or an admin who is not an agent, in any stage)
+            for a, b in (("service_toggle", {"want": "disabled"}), ("service_delete", {})):
+                c, j, tx = call(a, dict(b, id=sid), uid=who)
+                if ok(j) or c != 403:
+                    problems.append(f"mode {mode}: {a} by {'a customer' if who == U else 'an admin'} who is not an agent answered {c} ok={ok(j)}, want a refusal (403)")
+        if snap != (PANEL["modifies"], PANEL["revokes"], PANEL["deletes"], PU[f"svc{U}"]["status"], q1("SELECT COUNT(*) FROM orders_list")):
+            problems.append(f"mode {mode}: a refused disable / delete still changed something")
+    tools_state("on"); mk_user(U, agent=1); mk_user(V, agent=1)
     su, sv = mk_service(U), mk_service(V)
-    for a, b in (("service_toggle", {"want": "disabled"}), ("service_link", {}), ("service_delete", {})):
+    for a, b in (("service_toggle", {"want": "disabled"}), ("service_link", {}), ("service_update", {}), ("service_delete", {})):
         for bad in (sv, 0, -1, 999999999, "abc", "", None):
             c, j, tx = call(a, dict(b, id=bad), uid=U)
             if ok(j):
@@ -1185,20 +1197,20 @@ def sv1():
             problems.append(f"{a} without initData answered {c} ok={ok(j)}")
     if PU[f"svc{V}"]["status"] != "active" or PU[f"svc{U}"]["status"] != "active" or PANEL["deletes"] or PANEL["revokes"] or PANEL["modifies"] or q1("SELECT COUNT(*) FROM orders_list") != "2":
         problems.append(f"the refused calls changed the panel or the orders: modifies {PANEL['modifies']}, revokes {PANEL['revokes']}, deletes {PANEL['deletes']}")
-    return bool(problems), "; ".join(problems[:6]) if problems else "the tools follow the stage (admins first), every refusal changes nothing, foreign / bad ids and missing initData are refused"
+    return bool(problems), "; ".join(problems[:6]) if problems else "the tools follow the stage (admins first), disable / delete refuse a non-agent in every stage, every refusal changes nothing, foreign / bad ids and missing initData are refused"
 
 
 @scn("SV2", "HIGH", "enable / disable: a customer switches his own service off and on; an account an ADMIN disabled, or an expired one, is never switched on by him; a refusing panel leaves it as it was; a late page is a no-op; at most 20 switches an hour")
 def sv2():
     problems = []
-    tools_state("on"); mk_user(U); mk_user(V); su = mk_service(U); rem = f"svc{U}"
+    tools_state("on"); mk_user(U, agent=1); mk_user(V, agent=1); su = mk_service(U); rem = f"svc{U}"      # (disable / enable is the agents' own)
 
     def tog(want, uid=U, sid=None):
         return call("service_toggle", {"id": sid or su, "want": want}, uid=uid)
 
     def state():
         return PU[rem]["status"], q1(f"SELECT COUNT(*) FROM miniapp_selfoff WHERE order_id={su}")
-    tl = lambda: (svc_tools_of(su) or {}).get("toggle")
+    tl = lambda: (svc_agent_of(su) or {}).get("toggle")
     if tl() != "disable":
         problems.append(f"an active service offers {tl()!r}, want 'disable'")
     c, j, t = tog("disabled")
@@ -1405,7 +1417,7 @@ def bt1():
 @scn("SV4", "HIGH", "delete his own service: the account leaves the panel, the order row goes, the slot comes back once (two taps at once too), the admins are told; another customer's service, a refusing or dead panel change nothing; an account already gone from the panel is deleted too; at most 10 an hour")
 def sv4():
     problems = []
-    tools_state("on"); mk_user(U); mk_user(V)
+    tools_state("on"); mk_user(U, agent=1); mk_user(V, agent=1)      # (delete is the agents' own)
     s1, sv = mk_service(U, "del1"), mk_service(V)
 
     def slots():
@@ -1457,6 +1469,74 @@ def sv4():
     if last != 429 or not 1 <= done <= 10:
         problems.append(f"the hourly limit: {done} more deletes went through, then {last} (want 429 after at most 10 in all)")
     return bool(problems), "; ".join(problems[:6]) if problems else "account + order removed, the slot back once, admins told, foreign / refused / dead-panel cases change nothing, the limit holds"
+
+
+@scn("SV5", "HIGH", "update the subscription: the configs of the service are read from the panel again and saved on the order (what the bot's update button does); staged like the other tools; another customer's service, a dead panel and a panel without configs change nothing; at most 10 an hour")
+def sv5():
+    problems = []
+    tools_state("on"); mk_user(U); mk_user(V); su, sv = mk_service(U), mk_service(V); rem = f"svc{U}"
+    PU[rem]["links"] = ["vless://fresh1@h.invalid:443#a", "vless://fresh2@h.invalid:443#b"]
+    c, j, t = call("service_update", {"id": su})
+    row = json.loads(q1(f"SELECT link FROM orders_list WHERE id={su}") or "[]")
+    if not ok(j) or j.get("count") != 2 or row != PU[rem]["links"]:
+        problems.append(f"update: {t[:80]}, saved {row}")
+    before = q1(f"SELECT link FROM orders_list WHERE id={sv}")
+    c, j, t = call("service_update", {"id": sv})
+    if ok(j) or c != 404 or q1(f"SELECT link FROM orders_list WHERE id={sv}") != before:
+        problems.append(f"another customer's service: answered {c}, ok={ok(j)}")
+    keep = q1(f"SELECT link FROM orders_list WHERE id={su}")
+    PANEL["down"] = True
+    c, j, t = call("service_update", {"id": su})
+    PANEL["down"] = False
+    if ok(j) or q1(f"SELECT link FROM orders_list WHERE id={su}") != keep:
+        problems.append(f"a dead panel: ok={ok(j)}, the saved configs changed")
+    old, oldsub = PU[rem]["links"], PU[rem]["subscription_url"]; PU[rem]["links"] = []; PU[rem]["subscription_url"] = ""      # (no configs and no subscription page to read them from)
+    c, j, t = call("service_update", {"id": su})
+    PU[rem]["links"], PU[rem]["subscription_url"] = old, oldsub
+    if ok(j) or q1(f"SELECT link FROM orders_list WHERE id={su}") != keep:
+        problems.append(f"a panel without configs: ok={ok(j)}, the saved configs changed")
+    for mode in ("admin", "off"):      # (the stage: a customer has it only when it is "on")
+        tools_state(mode); mk_user(U); su2 = mk_service(U)
+        c, j, t = call("service_update", {"id": su2})
+        if ok(j) or c != 403:
+            problems.append(f"stage {mode}: a customer's update answered {c} ok={ok(j)}, want 403")
+    tools_state("on"); mk_user(U); su3 = mk_service(U)
+    done, last = 0, None
+    for i in range(14):
+        c, j, t = call("service_update", {"id": su3})
+        if ok(j):
+            done += 1
+        else:
+            last = c
+            break
+    if last != 429 or not 8 <= done <= 10:
+        problems.append(f"the hourly limit: {done} updates went through, then {last} (want 429 after at most 10)")
+    return bool(problems), "; ".join(problems[:6]) if problems else "the configs are read again and saved, foreign / dead-panel / empty cases change nothing, the stage and the limit hold"
+
+
+@scn("AG1", "HIGH", "disable and delete belong to the agents (همکار) only, whatever the stage of the other tools is: service.agent is there for an agent (switch + delete) and null for everybody else - an admin who is not an agent too -; service_toggle / service_delete refuse a non-agent (403) and change nothing, and work for an agent also while the tools are the admins' only or switched off")
+def ag1():
+    problems = []
+    for mode in (None, "admin", "on", "off"):
+        tools_state(mode); mk_user(U); mk_user(ADMIN); mk_user(V, agent=1); mk_user(ADMIN2, agent=1)
+        sv_, sa2 = mk_service(V), mk_service(ADMIN2)
+        for who, sid in ((U, mk_service(U)), (ADMIN, mk_service(ADMIN))):
+            if svc_agent_of(sid, who) is not None:
+                problems.append(f"mode {mode}: a non-agent ({'customer' if who == U else 'admin'}) is offered agent tools")
+        for who, sid in ((V, sv_), (ADMIN2, sa2)):
+            a = svc_agent_of(sid, who)
+            if not a or a.get("toggle") != "disable" or a.get("delete") is not True:
+                problems.append(f"mode {mode}: an agent ({'customer' if who == V else 'admin'}) is offered {a!r}")
+        c, j, t = call("service_toggle", {"id": sv_, "want": "disabled"}, uid=V)
+        if not ok(j) or PU[f"svc{V}"]["status"] != "disabled":
+            problems.append(f"mode {mode}: an agent could not switch his service off: {t[:80]}")
+        c, j, t = call("service_toggle", {"id": sv_, "want": "active"}, uid=V)
+        if not ok(j) or PU[f"svc{V}"]["status"] != "active":
+            problems.append(f"mode {mode}: an agent could not switch it on again: {t[:80]}")
+        c, j, t = call("service_delete", {"id": sa2}, uid=ADMIN2)
+        if not ok(j) or f"svc{ADMIN2}" in PU or q1(f"SELECT COUNT(*) FROM orders_list WHERE id={sa2}") != "0":
+            problems.append(f"mode {mode}: an agent could not delete his service: {t[:80]}")
+    return bool(problems), "; ".join(problems[:6]) if problems else "agents (customers and admins) have switch + delete in every stage, nobody else is offered them, and a non-agent is refused (SV1)"
 
 
 # ===== discount codes of the bot (table discounts) in the buy sheet

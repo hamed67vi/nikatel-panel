@@ -70,7 +70,7 @@ if (process.argv[3] === "nochat") R.me.features.support_chat = false;      // th
 if (process.argv[3] === "hostile") { R.me.support = HOSTILE; R.me.bot = HOSTILE; R.me.features.card = false; }
 ctx.Telegram = { WebApp: { initData: "x=1", initDataUnsafe: {}, colorScheme: "dark", ready() {}, expand() {}, onEvent() {}, setHeaderColor() {}, setBackgroundColor() {}, enableClosingConfirmation() {}, BackButton: { onClick() {}, show() {}, hide() {} } } };
 vm.createContext(ctx);
-vm.runInContext(src + "\n;globalThis.__X = Object.fromEntries(['VIEWS','AFTER','S','esc','js','T','GB','left','leftTx','vol','ltr','boot','setTab','renewSheet','extraSheet','reportSheet','buySheet','render','doBuy','doRenew','doExtra','RID','buyPick','buyBack','buyCatPick','histMore','dcApply','dcClear'].map(n => [n, (() => { try { return eval(n); } catch (e) { return undefined; } })()]));", ctx);
+vm.runInContext(src + "\n;globalThis.__X = Object.fromEntries(['VIEWS','AFTER','S','esc','js','T','GB','left','leftTx','vol','ltr','boot','setTab','renewSheet','extraSheet','reportSheet','buySheet','render','doBuy','doRenew','doExtra','RID','buyPick','buyBack','buyCatPick','histMore','dcApply','dcClear','homeSearch','homeFind','homeMore','svcSearch','svcFind','back','qrOf','qrMany','cfgSheet','planMore','updateSheet','doUpdate'].map(n => [n, (() => { try { return eval(n); } catch (e) { return undefined; } })()]));", ctx);
 const X = ctx.__X;
 const out = { values: {}, errors: [], calls };
 const tick = () => new Promise(r => setImmediate(r));
@@ -136,6 +136,152 @@ const tick = () => new Promise(r => setImmediate(r));
     out.values.buymerge = { cards1: (step1.match(/onclick="buyPick\(/g) || []).length, noS2: !step1.includes("S2"), s1n: /[4۴] پلن/.test(step1), s3: step1.includes("S3"), order: step1.indexOf("S1") < step1.indexOf("S3"),
       tabs2: (seg2.match(/buyCatPick/g) || []).length, c1plans: (step2.match(/buySheet\(/g) || []).length, c1both: step2.includes("plan11") && step2.includes("plan13") && !step2.includes("plan14"), byPrice: step2.indexOf("plan13") < step2.indexOf("plan11"),
       cards2: (step2.match(/<h3>/g) || []).length, head2: step2.includes("<h3>S1</h3>") && !step2.includes("S2"), unlimOnly: unlim.includes("plan16") && !unlim.includes("plan11") && unlim.includes("<h3>S1</h3>") && !unlim.includes("S2") };
+    console.log(JSON.stringify(out)); return;
+  }
+  if (process.argv[3] === "search") {      // the small search button of "my services": the home card and the services page look through ALL services (name, server), active or not
+    R.services.services = [{ id: 7, remark: BADNAME, server: "🇩🇪 S\"1", expire: NOW + 5 * 86400, active: true }, { id: 8, remark: "old", server: "S2", expire: NOW - 3600, active: false }]
+      .concat([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(i => ({ id: 20 + i, remark: "tak_" + (100 + i), server: "Tak ی کا", expire: NOW + 86400 * i, active: true })));
+    X.S.services = null; X.S.stack = [{ v: "home" }]; await X.render(); await tick(); await tick();      // (the app's own start already cached the two services of the default data)
+    const rows = h => (h.match(/onclick="go\('service'/g) || []).length;
+    const home0 = els["h-svc"].innerHTML, box = mk("h-sbox"), inp = mk("h-q"), res = {};
+    box.hidden = true;      // (the page draws it with the hidden attribute)
+    res.header = HTML.some(h => h.includes('onclick="homeSearch()"') && h.includes("🔍") && h.includes('id="h-count"') && h.includes('id="h-q"'));
+    res.default3 = rows(home0) === 3 && home0.includes("setTab('services')");      // (three active services and the "all" button, as before)
+    X.homeSearch(); res.opened = box.hidden === false;
+    inp.value = "old"; X.homeFind(); res.inactiveFound = rows(els["h-svc"].innerHTML) === 1 && els["h-svc"].innerHTML.includes("old");
+    inp.value = "  OLD  "; X.homeFind(); res.caseAndBlanks = rows(els["h-svc"].innerHTML) === 1;
+    inp.value = "zzz"; X.homeFind(); res.none = rows(els["h-svc"].innerHTML) === 0 && els["h-svc"].innerHTML.includes("پیدا نشد");
+    inp.value = "tak"; X.homeFind(); const many = els["h-svc"].innerHTML; res.many = rows(many) === 8 && many.includes("homeMore()") && many.includes(X.T(12));
+    inp.value = "۱۰۳"; X.homeFind(); res.persianDigits = rows(els["h-svc"].innerHTML) === 1 && els["h-svc"].innerHTML.includes("tak_103");
+    inp.value = "ي كا"; X.homeFind(); res.arabicLetters = rows(els["h-svc"].innerHTML) === 8;      // (typed with an Arabic yeh and kaf - an Arabic keyboard - it finds the Persian letters of the server name)
+    inp.value = "a\"b"; X.homeFind(); res.hostileQuery = rows(els["h-svc"].innerHTML) === 1;      // (a quote in the query is just text)
+    const isDefault = h => rows(h) === 3 && h.includes("setTab('services')");      // (the same three rows and the "all" button; the live numbers already loaded may differ)
+    inp.value = ""; X.homeFind(); res.backToDefault = isDefault(els["h-svc"].innerHTML);
+    inp.value = "tak"; X.homeFind(); X.homeSearch(); res.closed = box.hidden === true && inp.value === "" && isDefault(els["h-svc"].innerHTML);
+    inp.value = "tak"; X.homeMore(); await tick(); await tick();
+    res.moreOpensServices = X.S.stack.length === 1 && X.S.stack[0].v === "services" && X.S.stack[0].q === "tak";
+    const page = HTML.filter(h => h.includes('id="s-q"')).pop() || "";
+    res.pagePrefilled = page.includes('value="tak"') && page.includes('id="s-sbox"') && !/id="s-sbox"\s+hidden/.test(page) && page.includes('onclick="svcSearch()"');
+    res.pageList = rows(els["s-list"].innerHTML) === 12 && els["s-count"].textContent.includes(X.T(12) + " نتیجه");
+    const sq = mk("s-q"); sq.value = "old"; X.svcFind(); res.pageInactive = rows(els["s-list"].innerHTML) === 1 && X.S.stack[0].q === "old";      // (the active tab is on, the search still finds the inactive one)
+    sq.value = "nothing"; X.svcFind(); res.pageNone = rows(els["s-list"].innerHTML) === 0 && els["s-list"].innerHTML.includes("پیدا نشد") && !els["s-list"].innerHTML.includes("خرید سرویس");
+    const sbox = mk("s-sbox"); sbox.hidden = false; X.svcSearch(); res.pageClosed = sbox.hidden === true && !X.S.stack[0].q && rows(els["s-list"].innerHTML) === 13;      // (13 = the active ones)
+    X.S.stack = [{ v: "services", q: BADNAME }]; await X.render(); await tick(); await tick();
+    const hostile = HTML.filter(h => h.includes('id="s-q"')).pop() || "";
+    res.escaped = hostile.includes('value="' + X.esc(BADNAME) + '"') && !hostile.includes('value="' + BADNAME + '"');
+    X.S.stack = [{ v: "services" }, { v: "service", p: { id: 7 } }]; X.S.stack[0].q = "tak"; X.back(); await tick(); await tick();
+    res.keptOnBack = (HTML.filter(h => h.includes('id="s-q"')).pop() || "").includes('value="tak"');      // (a tap on a service and back keeps the typed words)
+    X.setTab("wallet"); await tick(); X.setTab("services"); await tick(); await tick();
+    res.freshOnTab = (HTML.filter(h => h.includes('id="s-q"')).pop() || "").includes('value=""');      // (a tab switch starts empty)
+    out.values.search = res;
+    console.log(JSON.stringify(out)); return;
+  }
+  if (process.argv[3] === "qr") {      // the link cards: a QR button (a real QR icon) where the copy button was, one in the heading row of the helper links, the QR in a sheet with the link under it
+    const card = (h, head) => { const i = h.indexOf("<h3>" + head); return i < 0 ? "" : h.slice(i, h.indexOf("</h3>", i) + 5); };
+    const res = {};
+    X.S.stack = [{ v: "services" }, { v: "service", p: { id: 7 } }]; await X.render(); await tick(); await tick();
+    const page = els["svc-detail"].innerHTML, head = card(page, "لینک اشتراک");
+    res.mainHeader = head.includes('onclick="qrOf(') && head.includes('class="qri"') && head.includes("QR</button>") && !head.includes("کپی") && !head.includes("copy(");      // (no copy button any more: the QR button is in its place)
+    res.iconNotGlyph = !page.includes("▦") && head.includes("<svg") && head.includes('fill="currentColor"');      // (a real QR picture, not the grid character that looked like a table)
+    res.linkStillCopies = /<div class="code" onclick="copy\(/.test(page.slice(page.indexOf(head), page.indexOf("لینک کمکی")));      // (a tap on the link itself still copies it)
+    res.noInlineQr = !page.includes('id="qr"') && !page.includes("showQr(");
+    res.appsButton = page.includes("go('apps')");
+    const alt = page.slice(page.indexOf("<h3>📎 لینک کمکی اشتراک"), page.indexOf("کانفیگ‌ها <span")), altHead = card(page, "📎 لینک کمکی اشتراک");
+    res.helperHeader = altHead.includes('onclick="qrMany(') && altHead.includes('class="qri"') && altHead.includes("QR</button>") && !altHead.includes("copy(");      // (the QR button is in the row of the card's name, like the main link's)
+    res.helperRows = !alt.includes("copyrow") && (alt.match(/<div class="code mb" onclick="copy\(/g) || []).length === 2 && (alt.match(/onclick="qrMany\(/g) || []).length === 1 && alt.includes("لینک کمکی')");
+    const manage = page.slice(page.indexOf("مدیریت سرویس"));
+    res.manageNoDuplicate = !manage.includes("qrOf(") && !manage.includes("qrMany(") && !manage.includes('class="qri"');
+    X.S.feat = Object.assign({}, X.S.feat, { svc_tools: true }); R.service.service.tools = { update: true };      // (the people who have the new tools: the header button is the same, the manage card has no second one)
+    X.S.stack = [{ v: "services" }, { v: "service", p: { id: 7 } }]; await X.render(); await tick(); await tick();
+    const page2 = els["svc-detail"].innerHTML, manage2 = page2.slice(page2.indexOf("مدیریت سرویس"));
+    res.toolsSame = card(page2, "لینک اشتراک").includes('onclick="qrOf(') && !manage2.includes("qrOf(") && !manage2.includes('class="qri"') && page2.includes("cfgSheet()");
+    res.cfgRowsHaveIcon = (() => { X.cfgSheet(); const s = els["sheet-body"].innerHTML; return s.includes('onclick="cfgQr(0)" aria-label="QR"><svg') && !s.includes("▦"); })();
+    const bought = await X.VIEWS.bought({ ok: true, order_id: 7, remark: BADNAME, cashback: 0, sub: "https://h.example/sub/a\"b", sub_alt: ["https://alt1.example/sub/a\"b", "https://alt2.example/sub/c"], links: ["vless://a"] });
+    const bh = card(bought, "لینک اشتراک");
+    res.boughtHeader = bh.includes('onclick="qrOf(') && !bh.includes("کپی") && !bought.includes('id="qr"') && !bought.includes("showQr(") && (bought.match(/onclick="qrOf\(/g) || []).length === 1 && (bought.match(/onclick="qrMany\(/g) || []).length === 1;      // (the main link + the helper links' one)
+    // the sheets
+    ctx.qrcode = function () { return { addData() {}, make() {}, getModuleCount: () => 25, createDataURL: () => "data:image/gif;base64,AAAA" }; };
+    X.qrOf("https://h.example/sub/a\"b<c", "لینک کمکی"); const s1 = els["sheet-body"].innerHTML;
+    res.sheetWithQr = s1.includes('<img alt="QR" src="data:image/gif;base64,AAAA">') && s1.includes('class="qri"') && s1.includes("QR لینک کمکی") && s1.includes("a&quot;b&lt;c") && !s1.includes("a\"b<c") && /onclick="copy\(/.test(s1) && s1.includes("closeSheet()");
+    X.qrOf("https://h.example/sub/x"); res.defaultTitle = els["sheet-body"].innerHTML.includes("QR لینک اشتراک");
+    X.qrMany("https://alt1.example/sub/a\nhttps://alt2.example/sub/b", "لینک کمکی"); const s2 = els["sheet-body"].innerHTML;
+    res.manyLinks = (s2.match(/<img alt="QR"/g) || []).length === 2 && s2.includes("alt1.example/sub/a") && s2.includes("alt2.example/sub/b") && (s2.match(/onclick="copy\(/g) || []).length === 2 && s2.includes("QR لینک کمکی");
+    X.qrMany("https://alt1.example/sub/only", "لینک کمکی"); const s3 = els["sheet-body"].innerHTML;
+    res.oneLink = (s3.match(/<img alt="QR"/g) || []).length === 1 && s3.includes("alt1.example/sub/only");
+    els["sheet-body"].innerHTML = "keep"; X.qrMany("", "x"); res.emptyList = els["sheet-body"].innerHTML === "keep";
+    ctx.qrcode = function () { throw new Error("too long"); }; X.qrOf("x".repeat(5000)); res.tooLong = els["sheet-body"].innerHTML.includes("خیلی بلند است") && !els["sheet-body"].innerHTML.includes("<img");
+    delete ctx.qrcode; X.qrOf("https://h.example/sub/y"); res.noLibrary = els["sheet-body"].innerHTML.includes("بارگذاری نشد") && els["sheet-body"].innerHTML.includes("h.example/sub/y");
+    out.values.qr = res;
+    console.log(JSON.stringify(out)); return;
+  }
+  if (process.argv[3] === "plans") {      // the plan cards of the Buy page: name + badge, chips, the description as a short list, price + buy button
+    const mkPlan = (id, o) => Object.assign({ id, title: "plan" + id, descr: "", price: 130000, list_price: 130000, discount: 0, volume: 50, days: 30, users: 1, server: "S1", server_id: 1, category: "c1", sold_out: false }, o);
+    const BIG = ["📦 حجم: 200 گیگابایت", "⏳ مدت اشتراک: یک ماهه (31 روز)", "", "✨ اشتراک ویژه مولتی‌لوکیشن با تانل آی‌پی ثابت", "📶 اتصال پایدار و آپتایم بالا روی همهٔ اپراتورها", "🎮 مناسب گیم، استریم، ترید، وب‌گردی و شبکه‌های اجتماعی", "", "⚠️ در شرایط اینترنت ملی، ضمانت اتصال وجود ندارد.", "بدون ایموجی"].join("\n");
+    R.plans = { ok: true, sell: true, cashback: 0, plans: [
+      mkPlan(1, { title: "200 گیگ ماهانه", descr: BIG, price: 2200000, list_price: 2200000, volume: 200, days: 31 }),
+      mkPlan(2, { title: "یک ماهه 50 گیگ", descr: "🚀 سرعت بالا\n🔒 امن", price: 130000, list_price: 150000, discount: 10 }),
+      mkPlan(3, { title: "تمام‌شده", descr: "🚀 x", sold_out: true }),
+      mkPlan(4, { title: "بدون توضیح", days: 0, volume: 0, users: 0 }),
+      mkPlan(5, { title: "P\"1<b>x</b>", descr: "<script>alert(1)</script>\n🔥 a\"b'c&d" }),
+    ] };
+    X.S.plans = null; X.S.stack = [{ v: "buy" }]; await X.render(); await tick(); await tick();
+    const html = els["b-list"].innerHTML, res = {};
+    if (process.env.PLANS_OUT) fs.writeFileSync(process.env.PLANS_OUT, html);      // (for a look at the real markup in a browser)
+    const parts = html.split(/(?=<div class="plan)/).filter(s => s.startsWith('<div class="plan'));
+    const p1 = parts[0] || "", p2 = parts[1] || "", p3 = parts[2] || "", p4 = parts[3] || "", p5 = parts[4] || "";
+    res.five = parts.length === 5;
+    res.titleAndChips = p1.includes('<div class="pt">200 گیگ ماهانه</div>') && (p1.match(/<div class="pc">(<span>[^<]*<\/span>)+<\/div>/) || [""])[0].split("<span>").length === 4 && p1.includes("📦 ") && p1.includes("⏳ " + X.T(31) + " روز") && p1.includes("👤 " + X.T(1) + " کاربر");
+    res.bigListClamped = p1.includes('<ul class="pf clamp">') && (p1.match(/<li>/g) || []).length === 7 && p1.includes('onclick="planMore(this, event)"') && p1.includes("نمایش بیشتر");
+    res.emojiBullets = p1.includes("<li><i>✨</i><span>اشتراک ویژه مولتی‌لوکیشن با تانل آی‌پی ثابت</span></li>") && p1.includes('<li><i class="dot"></i><span>بدون ایموجی</span></li>') && p1.includes("<li><i>⚠️</i>");
+    res.blankLinesDropped = !p1.includes("<li><i class=\"dot\"></i><span></span></li>");
+    res.price = p1.includes("<b>" + X.T(2200000) + "</b><small>تومان</small>") && !p1.includes("<s>") && !p1.includes("تخفیف") && p1.includes("خرید ‹") && p1.includes("buySheet(1)");
+    res.discount = p2.includes("<s>" + X.T(150000) + "</s>") && p2.includes(X.T(13) + "٪ تخفیف") && p2.includes("<b>" + X.T(130000) + "</b>");
+    res.shortList = p2.includes('<ul class="pf">') && (p2.match(/<li>/g) || []).length === 2 && !p2.includes("planMore");
+    res.soldOut = p3.startsWith('<div class="plan off"') && p3.includes('onclick=""') && p3.includes("تمام شد") && p3.includes("ناموجود") && !p3.includes("buySheet(");
+    res.noDescr = !p4.includes("<ul") && p4.includes("بدون محدودیت زمان") && !p4.includes("👤");
+    res.escaped = p5.includes("P&quot;1&lt;b&gt;x&lt;/b&gt;") && p5.includes("&lt;script&gt;alert(1)&lt;/script&gt;") && !p5.includes("<script>") && !p5.includes("<b>x</b>") && p5.includes("a&quot;b&#39;c&amp;d");
+    res.oneBuyHandlerPerPlan = (html.match(/buySheet\(/g) || []).length === 4;      // (the sold-out one has none)
+    R.plans.sell = false; X.S.plans = null; X.S.stack = [{ v: "buy" }]; await X.render(); await tick(); await tick();
+    const off = els["b-list"].innerHTML; res.sellOff = !off.includes("buySheet(") && (off.match(/class="plan off"/g) || []).length === 5 && off.includes("—");
+    // the "show more" button: opens and closes the list of its own card and never lets the tap reach the card
+    const cl = new Set(), ul = { classList: { contains: x => cl.has(x), toggle: (x, f) => { if (f) cl.add(x); else cl.delete(x); } } };
+    let stopped = 0; const btn = { previousElementSibling: ul, textContent: "نمایش بیشتر ⌄" }, ev = { stopPropagation() { stopped++; } };
+    X.planMore(btn, ev); const a = [cl.has("open"), btn.textContent]; X.planMore(btn, ev); const b = [cl.has("open"), btn.textContent]; X.planMore(btn);
+    res.moreToggles = a[0] === true && a[1] === "نمایش کمتر ⌃" && b[0] === false && b[1] === "نمایش بیشتر ⌄" && cl.has("open") && stopped === 2;
+    out.values.plans = res;
+    console.log(JSON.stringify(out)); return;
+  }
+  if (process.argv[3] === "svctools") {      // the manage card of the service page: update (the stage's tools), disable / delete (the agents only), support (whoever has no tools)
+    const res = {};
+    const page = async (tools, agent) => {
+      R.service.service.tools = tools; R.service.service.agent = agent; X.S.feat = Object.assign({}, X.S.feat, { svc_tools: !!tools });
+      X.S.stack = [{ v: "services" }, { v: "service", p: { id: 7 } }]; await X.render(); await tick(); await tick();
+      const h = els["svc-detail"].innerHTML; return h.slice(h.indexOf("مدیریت سرویس"));
+    };
+    const has = (m, x) => m.includes(x);
+    const A = await page(null, null);      // a customer
+    res.customer = !has(A, "updateSheet(") && !has(A, "linkSheet(") && !has(A, "toggleSheet(") && !has(A, "deleteSheet(") && has(A, "go('tickets'") && has(A, "renewSheet(");
+    const B = await page({ update: true }, null);      // the stage's tools, not an agent (an admin)
+    res.toolsOnly = has(B, "updateSheet(7)") && has(B, "linkSheet(7)") && has(B, "cfgSheet()") && !has(B, "toggleSheet(") && !has(B, "deleteSheet(") && !has(B, "go('tickets'");
+    const C = await page(null, { toggle: "disable", delete: true });      // an agent while the tools are still the admins' only
+    res.agentOnly = has(C, "toggleSheet(7,") && has(C, "⏸ غیرفعال‌سازی") && has(C, "deleteSheet(7)") && has(C, "go('tickets'") && !has(C, "updateSheet(") && !has(C, "linkSheet(") && !has(C, "cfgSheet()");
+    const D = await page({ update: true }, { toggle: "enable", delete: true });      // both: an agent's service he switched off
+    res.both = has(D, "updateSheet(7)") && has(D, "linkSheet(7)") && has(D, "▶️ فعال‌سازی") && has(D, "deleteSheet(7)") && !has(D, "go('tickets'");
+    const E = await page(null, { toggle: null, delete: true });      // an agent's service the panel does not answer for, or an admin disabled: no switch, delete stays
+    res.agentNoSwitch = !has(E, "toggleSheet(") && has(E, "deleteSheet(7)");
+    const F = await page({ update: false }, null);      // the panel did not answer: no update button (the link button needs the live data too)
+    res.noUpdateWithoutPanel = !has(F, "updateSheet(");
+    res.danger = has(D, 'class="btn danger" onclick="deleteSheet(7)"');
+    // the update sheet and its call
+    X.updateSheet(7); const sh = els["sheet-body"].innerHTML;
+    res.updateSheet = sh.includes("بروزرسانی اشتراک") && sh.includes('onclick="doUpdate(7)"') && sh.includes("closeSheet()");
+    R.service_update = { ok: true, count: 4 }; X.S.live[7] = { used: 1 }; const n0 = calls.length;
+    await X.doUpdate(7); await tick(); await tick();
+    res.updateCall = calls.slice(n0).includes("service_update") && calls.slice(n0).includes("service") && X.S.live[7] === undefined && X.S.busy === false;      // (it asks, drops the cached live numbers and draws the page again)
+    R.service_update = { ok: false, error: "no" }; X.updateSheet(7); const n1 = calls.length; const btn = mk("do-update");
+    await X.doUpdate(7); await tick();
+    res.updateRefused = calls.slice(n1).includes("service_update") && !calls.slice(n1).includes("service") && btn.disabled === false && btn.textContent === "دوباره" && X.S.busy === false;      // (a refusal leaves the sheet open with a retry)
+    out.values.svctools = res;
     console.log(JSON.stringify(out)); return;
   }
   if (process.argv[3] === "history") {
