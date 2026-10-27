@@ -433,7 +433,7 @@ def test_the_configs_button_of_the_tools_is_always_there_and_gets_the_configs():
 def test_only_web_links_are_opened_and_the_files_have_a_new_version_for_the_cache():
     assert r'if (!/^https?:\/\//i.test(u)) return;' in JS
     html = (MINI / "index.html").read_text(encoding="utf-8")
-    assert "app.css?v=3.0.17" in html and "app.js?v=3.0.17" in html
+    assert "app.css?v=3.0.18" in html and "app.js?v=3.0.18" in html
 
 
 # ---------------------------------------------------------------------------------------------- the whole attack harness (opt in)

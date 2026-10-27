@@ -1343,6 +1343,29 @@ def cf1():
     return bool(problems), "; ".join(problems[:6]) if problems else "the configs follow the bot's switch, and the tools' configs button gets them for its people only"
 
 
+@scn("HL4", "HIGH", "the helper subscription link (the server's other domains + the same token) is shown by the Mini App - on the service page and in the answer of a purchase - while BOT_STATES helperLink is unset / mini / both / anything else; 'off' hides it, so does subLinkState off; each helper link is a domain + /sub/ + a token")
+def hl4():
+    problems = []
+    for stage, want in ((None, True), ("mini", True), ("both", True), ("junk", True), ("off", False)):
+        reset(states={"miniServiceTools": "on", **({"helperLink": stage} if stage else {})})
+        sql("UPDATE server_config SET sub_links='https://alt.example.com,https://alt2.example.com' WHERE id=1")
+        mk_user(U, wal=1_000_000); su = mk_service(U)
+        s = (call("service", {"id": su})[1] or {}).get("service") or {}
+        c, j, t = call("buy", {"plan_id": 1})
+        a1, a2 = s.get("sub_alt") or [], (j or {}).get("sub_alt") or []
+        if bool(a1) != want or bool(a2) != want:
+            problems.append(f"helperLink={stage!r}: service {a1}, purchase {a2}, want {'two links' if want else 'none'}")
+        elif want and (len(a1) != 2 or len(a2) != 2 or not all(u.startswith("https://alt") and "/sub/" in u for u in a1 + a2)):
+            problems.append(f"helperLink={stage!r}: the links are not as expected: {a1} {a2}")
+    reset(states={"miniServiceTools": "on", "subLinkState": "off"})
+    sql("UPDATE server_config SET sub_links='https://alt.example.com' WHERE id=1")
+    mk_user(U, wal=1_000_000); su = mk_service(U)
+    s = (call("service", {"id": su})[1] or {}).get("service") or {}
+    if s.get("sub_alt"):
+        problems.append(f"subLinkState off: the helper links are still shown: {s.get('sub_alt')}")
+    return bool(problems), "; ".join(problems[:6]) if problems else "the helper links follow BOT_STATES helperLink (shown with unset / mini / both, hidden with off) and the subscription switch"
+
+
 @scn("BT1", "HIGH", "the messages that carry the subscription link (a purchase, a new link) also carry the bot's 'show configs' button (showCfgO<his order id>): only while the bot has configs_button.php, and by the stage BOT_STATES cfgButton (unset / admin = the bot's admins only, on = everybody, off = nobody); the text still holds the link only")
 def bt1():
     problems = []

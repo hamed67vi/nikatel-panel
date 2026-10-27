@@ -254,7 +254,7 @@ async function doDelete(id) {
   closeSheet(); toast("اشتراک حذف شد ✓", "ok"); delete S.live[id]; S.services = null; S.me.services = Math.max(0, (S.me.services || 1) - 1); setTab("services");
 }
 /* the helper subscription links of the server (the bot's "لینک کمکی اشتراک"): the same token on the server's other domains, for when the main link does not open */
-const altBox = list => list && list.length ? `<div class="card"><h3>🔁 لینک کمکی اشتراک</h3>${list.map(u => `<div class="code mb" onclick="copy(${js(u)})">${esc(u)}<span class="cp">📋</span></div>`).join("")}<div class="note">اگر لینک اصلی اشتراک کار نکرد از لینک کمکی اشتراک استفاده کنید.</div></div>` : "";
+const altBox = list => list && list.length ? `<div class="card"><h3>📎 لینک کمکی اشتراک</h3>${list.map(u => `<div class="code mb" onclick="copy(${js(u)})">${esc(u)}<span class="cp">📋</span></div>`).join("")}<div class="note">اگر لینک اصلی اشتراک کار نکرد از لینک کمکی اشتراک استفاده کنید.</div></div>` : "";
 function showQr(text) {
   const box = $("qr"); if (!box) return;
   if (typeof qrcode !== "function") { toast("کتابخانه‌ی QR بارگذاری نشد", "bad"); return; }

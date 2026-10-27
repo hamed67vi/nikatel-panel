@@ -404,7 +404,8 @@ function panelUserPath(array $srv, string $remark): string { return (panelKind($
 /** the helper subscription links of a server for one token: every domain of server_config.sub_links (comma separated) + /sub/<token>, as the bot's buildSubBackupSection writes them;
     the token is the one of the live subscription link when it has one, else the one saved with the order */
 function subAlt($raw, string $liveSub, string $savedToken): array {
-    if (!on('subLinkState', 'on')) return [];
+    global $botState;
+    if (!on('subLinkState', 'on') || ($botState['helperLink'] ?? 'mini') === 'off') return [];      // (BOT_STATES helperLink: "mini" - also when unset - = shown here and not in the bot, "both", "off" = nowhere; see the bot's helper_link.php)
     $token = $savedToken;
     if (strpos($liveSub, '/sub/') !== false) $token = explode('?', explode('/sub/', $liveSub, 2)[1], 2)[0];
     if ($token === '') return [];

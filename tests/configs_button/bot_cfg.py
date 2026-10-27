@@ -114,6 +114,10 @@ $dbUserName = 'mini'; $dbPassword = 'mini-test-pw'; $dbName = '{DB}'; $USDTPrice
     print(r.stdout.strip())
     if r.returncode:
         print(r.stderr); sys.exit(2)
+    r = subprocess.run(["bash", f"{MOD}/scripts/install-helper-link.sh", f"{T}/after"], capture_output=True, text=True, env=dict(os.environ, BACKUP_DIR=f"{T}/bk"))      # (the helper-link module too: the live bot has both)
+    print(r.stdout.strip())
+    if r.returncode:
+        print(r.stderr); sys.exit(2)
 
 
 def reset(states=None, support_id="@test_support", keys=True):
@@ -249,8 +253,8 @@ def reset_cfg(states=None, panel_up=True, live=None, stored=None):
     now = int(time.time())
     for uid, adm in ((ADMIN, 1), (CUST, 0), (OTHER, 0)):
         sql(f"INSERT INTO users (userid, name, username, refcode, wallet, date, step, isAdmin, is_agent) VALUES ('{uid}', 'T{uid}', 't{uid}', '0', 0, '{now - 86400}', 'none', {adm}, 0)")
-    sql(f"INSERT INTO server_config (id, panel_url, ip, sni, header_type, request_header, response_header, security, tlsSettings, type, username, password) VALUES "
-        f"(1, 'http://127.0.0.1:{PANELPORT}', '', '', 'none', '', '', 'none', '', 'marzban', 'u', 'p')")
+    sql(f"INSERT INTO server_config (id, panel_url, ip, sni, header_type, request_header, response_header, security, tlsSettings, type, username, password, sub_links) VALUES "
+        f"(1, 'http://127.0.0.1:{PANELPORT}', '', '', 'none', '', '', 'none', '', 'marzban', 'u', 'p', 'https://token.example.com')")
     sql("INSERT INTO server_info (id, title, ucount, remark, flag, active, state) VALUES (1, 'Srv', '10', 'r', '', 1, 1)")
     sql("INSERT INTO server_categories (id, server_id, title, parent, step, active) VALUES (1, '1', 'Cat', 0, 4, 1)")
     sql("INSERT INTO server_plans (id, fileid, catid, server_id, inbound_id, acount, limitip, title, protocol, days, volume, type, price, descr, pic, active, step, date) VALUES "
@@ -530,6 +534,98 @@ def dl4(port, after):
         has = any("showCfgT" in str(b) for r in out["keys"]["inline_keyboard"] for b in r)
         if has != (want and after): problems.append(f"stage={stage!r} uid={uid}: button {'there' if has else 'missing'}")
         if after and (out["qr"] == sub) != want: problems.append(f"stage={stage!r} uid={uid}: QR is {out['qr']!r}")
+    return problems
+
+
+HELPER = "لینک کمکی"
+HL_STAGES = ((None, False), ("mini", False), ("junk", False), ("both", True), ("off", False))      # (stage -> is the helper link in the BOT's messages)
+
+
+@scn("HL1", "the service page ('my subscriptions' -> one service): the helper link block is gone from the bot's text while BOT_STATES helperLink is unset / mini / off, there with 'both' - and the main link and the rest of the text are untouched")
+def hl1(port, after):
+    problems = []
+    for stage, shown in HL_STAGES:
+        oa, ob = reset_cfg(states={"helperLink": stage})
+        post(port, cb(CUST, f"orderDetails{oa}"))
+        ed = sent(CUST, "editMessageText") or sent(CUST, "sendMessage")
+        if not ed: problems.append(f"stage={stage!r}: the page was not drawn"); continue
+        t = ed[-1]["text"]
+        if (HELPER in t) != (shown or not after): problems.append(f"stage={stage!r}: the helper link is {'there' if HELPER in t else 'gone'}, want {'there' if shown or not after else 'gone'}: {t[-300:]!r}")
+        if TOKEN_A not in t or "♻️" not in t: problems.append(f"stage={stage!r}: the main link or the rest of the text got lost: {t[-200:]!r}")
+        if after and not shown and ("token.example.com" in t or "🔁" in t): problems.append(f"stage={stage!r}: a trace of the helper block is left: {t[-200:]!r}")
+    return problems
+
+
+def send_delivery(port, name, uid):
+    """the bot's own 'new subscription' message, sent for real (buildLinksAndSendQr with sendToUser = true) through a small page next to bot.php; returns the texts the customer got"""
+    open(f"{T}/{name}/hl_send.php", "w").write("""<?php
+require_once __DIR__ . '/config.php';
+require_once __DIR__ . '/buy_helpers.php';
+$botUsername = 'test_shop_bot';
+$response = (object) ['sub_link' => '/sub/' . $_GET['t'], 'vray_links' => ['vless://a@h.example.com:443#a', 'vless://b@h.example.com:443#b', 'vless://c@h.example.com:443#c', 'vless://d@h.example.com:443#d'], 'success' => true];
+buildLinksAndSendQr('marzban', ['panel_url' => 'https://panel.example.com', 'sub_links' => 'https://sub2.example.com,https://sub3.example.com'], $botState, 'https://bot.example.com/', 1, 'uuid', 'vless', 'rem', 443, 'ws', 0, 0, '', '', '',
+    $response, (int) $_GET['u'], 10, 30, ['start_bot' => 'Start'], [0, 1], false, '', sys_get_temp_dir(), true);
+echo 'sent';
+""")
+    import urllib.request
+    n0 = len(TG_LOG)
+    with urllib.request.urlopen(f"http://127.0.0.1:{port}/hl_send.php?t={TOKEN_A}&u={uid}", timeout=60) as r:
+        body = r.read().decode()
+    return body, [m["text"] for m in sent(uid, "sendMessage", n0)]
+
+
+@scn("HL2", "the 'new subscription' message sent for real: the helper link block AND the sentence that sends the customer to it are gone from the bot's text (unset / mini / off), there with 'both'; the main link, the tip line and the keyboard are untouched")
+def hl2(port, after):
+    problems = []
+    name = "after" if after else "before"
+    for stage, shown in HL_STAGES:
+        reset_cfg(states={"helperLink": stage, "cfgButton": "off"})
+        body, ts = send_delivery(port, name, CUST)
+        if body != "sent" or len(ts) != 1: problems.append(f"stage={stage!r}: the message was not sent ({body[:60]!r}, {len(ts)} messages)"); continue
+        t = ts[0]
+        if (HELPER in t) != (shown or not after): problems.append(f"stage={stage!r}: the helper link is {'there' if HELPER in t else 'gone'}: {t[-260:]!r}")
+        if f"https://panel.example.com/sub/{TOKEN_A}" not in t or "💡" not in t: problems.append(f"stage={stage!r}: the main link or the tip line got lost: {t[-200:]!r}")
+        if after and not shown and ("sub2.example.com" in t or "sub3.example.com" in t or "⚠️" in t): problems.append(f"stage={stage!r}: a trace of the helper block is left: {t[-220:]!r}")
+        if after and shown and (f"https://sub2.example.com/sub/{TOKEN_A}" not in t or "⚠️" not in t): problems.append(f"stage='both': the helper block was damaged: {t[-260:]!r}")
+        mk = sent(CUST, "sendMessage")[-1]["markup"]
+        if "mainMenu" not in mk and "test_shop_bot" not in mk: problems.append(f"stage={stage!r}: the keyboard changed: {mk[:100]!r}")
+    return problems
+
+
+@scn("HL3", "the two other messages of the bot that name the helper link ('your link was updated', 'your link was changed'), taken from the bot's own source: the sentence is gone (unset / mini / off) and the rest reads on; with 'both' they are as they were")
+def hl3(port, after):
+    problems = []
+    src = open(f"{T}/before/bot.php", encoding="utf-8").read()
+    open(f"{T}/hl_msgs.php", "w").write("""<?php
+$src = file_get_contents($argv[1]); $mod = $argv[2]; $botState = ['helperLink' => $argv[3]];
+if (is_file($mod)) require $mod;
+preg_match_all('/\\$successMessage = (.*?);\\s*\\n/s', $src, $m);
+$out = [];
+foreach ($m[1] as $expr) { $s = eval('return ' . $expr . ';'); if (strpos($s, 'کمکی') === false) continue; $out[] = [$s, function_exists('hlOutgoing') ? hlOutgoing(['text' => $s])['text'] : $s]; }
+echo json_encode($out, JSON_UNESCAPED_UNICODE);
+""")
+    for stage, shown in HL_STAGES:
+        r = subprocess.run(["php", f"{T}/hl_msgs.php", f"{T}/before/bot.php", f"{T}/after/helper_link.php" if after else "/nonexistent", stage or "mini"], capture_output=True, text=True, timeout=60)
+        try:
+            pairs = json.loads(r.stdout)
+        except Exception:
+            problems.append(f"stage={stage!r}: driver: {(r.stdout + r.stderr)[:200]}"); continue
+        if len(pairs) != 2: problems.append(f"stage={stage!r}: {len(pairs)} messages of the bot name the helper link, 2 expected (the source changed: look again)"); continue
+        for orig, now in pairs:
+            if ("کمکی" in now) != (shown or not after): problems.append(f"stage={stage!r}: {'still names' if 'کمکی' in now else 'no longer names'} the helper link: {now[:140]!r}")
+            if after and not shown and (len(now) < len(orig) - 90 or "برای شما" not in now and "لینک را وارد نرم افزار کنید" not in now): problems.append(f"stage={stage!r}: too much was cut: {now[:200]!r}")
+    return problems
+
+
+@scn("IN2", "the helper-link lines are in the installed config.php (two marked lines, the include before the hook), php -l, the module is the repo's")
+def in2(port, after):
+    problems = []
+    if not after: return problems
+    s = open(f"{T}/after/config.php", encoding="utf-8").read()
+    if s.count("[helper-link]") != 2: problems.append(f"{s.count('[helper-link]')} marked lines")
+    elif s.index("helper_link.php") > s.index("hlOutgoing(") or s.index("hlOutgoing(") > s.index("peOutgoing($datas)"): problems.append("the lines are not in the expected order")
+    if subprocess.run(["php", "-l", f"{T}/after/helper_link.php"], capture_output=True).returncode: problems.append("php -l helper_link.php")
+    if open(f"{T}/after/helper_link.php", "rb").read() != open(f"{MOD}/bot/menu/helper_link.php", "rb").read(): problems.append("the module is not the repo's")
     return problems
 
 
