@@ -290,13 +290,11 @@ async function extraSheet(id, kind) {
   S.extra = {id, kind, unit, presets, wallet: q.wallet, n: presets[0] ? presets[0].n : 0, price: presets[0] ? presets[0].price : 0};
   sheet(`<h3>${isVol ? "➕ حجم اضافه" : "⏳ زمان اضافه"}</h3>
     <div class="amounts" id="ex-presets">${presets.map(p => `<button class="${p.n === S.extra.n ? "on" : ""}" onclick="extraPick(${p.n},${p.price},this)">${T(p.n)} ${isVol ? "گیگ" : "روز"}<br><small class="mut xs">${T(p.price)} ت</small></button>`).join("")}</div>
-    ${unit > 0 ? `<label class="lb">یا مقدار دلخواه (${T(unit)} تومان هر ${isVol ? "گیگ" : "روز"})</label><input class="input num" id="ex-n" type="number" min="1" inputmode="numeric" placeholder="${isVol ? "گیگ" : "روز"}" oninput="extraCustom(this.value)">` : ""}
     <div class="row mt"><span class="mut">مبلغ</span><b id="ex-price">${T(S.extra.price)} تومان</b></div>
     <div class="row"><span class="mut">کیف پول</span><b>${T(q.wallet)} تومان</b></div>
     <div class="btns"><button class="btn pri" id="do-extra" onclick="doExtra()">پرداخت از کیف پول</button><button class="btn" onclick="closeSheet()">انصراف</button></div>`);
 }
-function extraPick(n, price, btn) { S.extra.n = n; S.extra.price = price; document.querySelectorAll("#ex-presets button").forEach(b => b.classList.toggle("on", b === btn)); const i = $("ex-n"); if (i) i.value = ""; $("ex-price").textContent = T(price) + " تومان"; }
-function extraCustom(v) { const n = Math.max(0, parseInt(v, 10) || 0); S.extra.n = n; S.extra.price = n * S.extra.unit; document.querySelectorAll("#ex-presets button").forEach(b => b.classList.remove("on")); $("ex-price").textContent = T(S.extra.price) + " تومان"; }
+function extraPick(n, price, btn) { S.extra.n = n; S.extra.price = price; document.querySelectorAll("#ex-presets button").forEach(b => b.classList.toggle("on", b === btn)); $("ex-price").textContent = T(price) + " تومان"; }
 async function doExtra() {
   const E = S.extra; if (!E || !E.n || !E.price) { toast("مقدار را انتخاب کن", "bad"); return; }
   if (E.price > E.wallet) { closeSheet(); toast("موجودی کافی نیست؛ " + T(E.price - E.wallet) + " تومان کم داری", "bad"); setTab("wallet"); topupStart(E.price - E.wallet); return; }

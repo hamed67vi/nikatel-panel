@@ -565,6 +565,8 @@ def py3():
                 unit = 2500 if kind == "volume" else 1500
                 preset = {5: 12000} if kind == "volume" else {7: 9000}
                 want = preset.get(int(n), unit * int(n))
+                if int(n) not in preset:
+                    problems.append(f"{act} amount={v!r}: a custom amount ({n}) went through at the per-unit price while the bot has packs")
                 if not (n >= 1 and charged == want and charged > 0 and float(n).is_integer()):
                     problems.append(f"{act} amount={v!r}: charged {charged}, panel got {n} (want {want})")
             elif charged != 0 or gb != 0 or days != 0:
@@ -1298,6 +1300,33 @@ def sv3():
     if last != 429 or not 3 <= done <= 6:
         problems.append(f"the hourly limit: {done} more changes went through, then {last} (want 429 after at most 6 in all)")
     return bool(problems), "; ".join(problems[:6]) if problems else "revoke + new token and configs saved, told once, page shows it, refusals change nothing, the limit holds"
+
+
+@scn("EX1", "HIGH", "extra volume / days are sold in the bot's packs only: a custom amount at the per-unit price (100 toman a day against 6,000 in the packs) is refused and charges nothing; a pack is sold at its price; with no packs at all only the sizes the page lists are sold")
+def ex1():
+    problems = []
+    for kind, act, pack, price, wanted_unit in (("volume", "addvolume", 5, 12000, 2500), ("days", "adddays", 7, 9000, 1500)):
+        reset()
+        mk_user(U, wal=10_000_000); oid = mk_service(U); rem = f"svc{U}"
+        lim0, exp0, w0 = PU[rem]["data_limit"], PU[rem]["expire"], wallet()
+        for n in (1, 2, 3, 6, 8, 10, 31, 100):
+            c, j, t = call(act, {"id": oid, "amount": n})
+            if ok(j) or wallet() != w0 or PU[rem]["data_limit"] != lim0 or PU[rem]["expire"] != exp0:
+                problems.append(f"{kind}: a custom amount {n} (the bot has packs): ok={ok(j)}, charged {w0 - wallet()}")
+        c, j, t = call(act, {"id": oid, "amount": pack})
+        if not ok(j) or w0 - wallet() != price:
+            problems.append(f"{kind}: the pack {pack}: {t[:80]}, charged {w0 - wallet()} (want {price})")
+        reset()
+        sql("DELETE FROM increase_plan"); sql("DELETE FROM increase_day")
+        mk_user(U, wal=10_000_000); oid = mk_service(U); rem = f"svc{U}"
+        w0 = wallet()
+        c, j, t = call(act, {"id": oid, "amount": 3})
+        if ok(j) or wallet() != w0:
+            problems.append(f"{kind}: no packs, a size the page does not list (3): ok={ok(j)}, charged {w0 - wallet()}")
+        c, j, t = call(act, {"id": oid, "amount": 10})
+        if not ok(j) or w0 - wallet() != wanted_unit * 10:
+            problems.append(f"{kind}: no packs, a listed size (10): {t[:80]}, charged {w0 - wallet()} (want {wanted_unit * 10})")
+    return bool(problems), "; ".join(problems[:6]) if problems else "custom amounts refused with nothing charged, packs sold at their price, no-packs fallback only for the listed sizes"
 
 
 @scn("SV4", "HIGH", "delete his own service: the account leaves the panel, the order row goes, the slot comes back once (two taps at once too), the admins are told; another customer's service, a refusing or dead panel change nothing; an account already gone from the panel is deleted too; at most 10 an hour")

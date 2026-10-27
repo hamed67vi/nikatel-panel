@@ -882,6 +882,9 @@ case 'adddays': {
     if ($n < 1 || $n > ($isVol ? 2000 : 1000)) fail('مقدار نامعتبر است.');
     $preset = row($isVol ? "SELECT id, price FROM increase_plan WHERE volume = ? LIMIT 1" : "SELECT id, price FROM increase_day WHERE volume = ? LIMIT 1", [$n]);
     $unit = (int) ($botState[$isVol ? 'gbPrice' : 'dayPrice'] ?? 0);
+    /* only what the page offers: one of the bot's packs (a custom amount at the per-unit price was 100 toman a day against 6,000 in the packs); only when the bot has no packs at all, the sizes the page lists at the per-unit price */
+    $packs = (int) (row($isVol ? "SELECT COUNT(*) AS n FROM increase_plan" : "SELECT COUNT(*) AS n FROM increase_day")['n'] ?? 0);
+    if (!$preset && ($packs > 0 || !in_array($n, [1, 5, 10, 20, 30, 50], true))) fail('مقدار نامعتبر است.');
     $price = $preset ? (int) $preset['price'] : $unit * $n;
     if ($price <= 0) fail('قیمت این مورد تعریف نشده است.');
     if ($isAgent) { [$p] = priceFor($me, ['id' => (int) $o['fileid'], 'server_id' => (int) $o['server_id'], 'price' => $price]); $price = $p; }      // (the bot looks the plan percentage up by the plan of the order)

@@ -413,10 +413,19 @@ def test_the_tools_of_the_service_page_are_staged_and_every_action_checks_the_ow
         assert word in JS, word
 
 
+def test_extra_volume_and_days_are_sold_in_the_bots_packs_only():
+    """the owner (2026-10-27, translated): remove the custom amount (it was 100 toman a day / a GB against 6,000 / 13,000 in the packs)"""
+    for word in ("extraCustom", 'id="ex-n"', "مقدار دلخواه"):
+        assert word not in JS, word      # (the page has the packs only)
+    c = _case("addvolume")
+    check = "if (!$preset && ($packs > 0 ||"
+    assert check in c and c.index(check) < c.index("payWithWallet(") and "increase_plan" in c and "increase_day" in c      # (a non-pack amount is refused before anything is charged)
+
+
 def test_only_web_links_are_opened_and_the_files_have_a_new_version_for_the_cache():
     assert r'if (!/^https?:\/\//i.test(u)) return;' in JS
     html = (MINI / "index.html").read_text(encoding="utf-8")
-    assert "app.css?v=3.0.15" in html and "app.js?v=3.0.15" in html
+    assert "app.css?v=3.0.16" in html and "app.js?v=3.0.16" in html
 
 
 # ---------------------------------------------------------------------------------------------- the whole attack harness (opt in)
