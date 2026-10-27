@@ -397,7 +397,7 @@ def test_the_buy_sheet_has_a_field_for_a_discount_code_and_the_server_does_the_s
 def test_only_web_links_are_opened_and_the_files_have_a_new_version_for_the_cache():
     assert r'if (!/^https?:\/\//i.test(u)) return;' in JS
     html = (MINI / "index.html").read_text(encoding="utf-8")
-    assert "app.css?v=3.0.13" in html and "app.js?v=3.0.13" in html
+    assert "app.css?v=3.0.14" in html and "app.js?v=3.0.14" in html
 
 
 # ---------------------------------------------------------------------------------------------- the whole attack harness (opt in)

@@ -348,7 +348,7 @@ VIEWS.wallet = async () => {
     ${tp ? `<div class="card" id="tp-resume"><h3>شارژ ناتمام <span class="pill warn">${T(tp.amount)} تومان</span></h3><div class="sm mut">هنوز رسید این شارژ را نفرستاده‌ای.</div><div class="btns"><button class="btn pri" onclick="go('topup',{resume:1})">ادامه و ارسال رسید</button><button class="btn" onclick="topupCancel()">لغو</button></div></div>` : ""}
     ${F.wallet && F.card ? `<div class="card"><h3>شارژ کیف پول</h3><div class="amounts" id="amounts">${(S.amounts.length ? S.amounts : [100000, 200000, 500000]).map(a => `<button onclick="amountPick(${a},this)">${T(a)}<br><small class="mut xs">تومان</small></button>`).join("")}</div>
       <label class="lb">یا مبلغ دلخواه (تومان)</label><input class="input num" id="tp-amount" type="number" inputmode="numeric" min="${S.min_topup || 100000}" max="${S.max_topup || 10000000}" step="${S.topup_step || 50000}" placeholder="مثلاً 150000" oninput="document.querySelectorAll('#amounts button').forEach(b=>b.classList.remove('on'))">
-      <button class="btn pri w mt" onclick="topupStart()">💳 ادامه (کارت‌به‌کارت)</button></div>` : F.wallet ? `<div class="card"><div class="note">شارژ از این‌جا فعلاً فعال نیست؛ از منوی ربات کیف پول را شارژ کن.</div><button class="btn w mt" onclick="openLink(${js("https://t.me/" + S.bot + "?start=wallet")})">🤖 باز کردن ربات</button></div>` : ""}
+      <button class="btn pri w mt" onclick="topupStart()">💳 ادامه (کارت‌به‌کارت)</button>${F.currency ? `<button class="btn w mt" id="tp-cur" onclick="topupStart(0,'currency')">💎 پرداخت ارزی</button>` : ""}</div>` : F.wallet ? `<div class="card"><div class="note">شارژ از این‌جا فعلاً فعال نیست؛ از منوی ربات کیف پول را شارژ کن.</div><button class="btn w mt" onclick="openLink(${js("https://t.me/" + S.bot + "?start=wallet")})">🤖 باز کردن ربات</button></div>` : ""}
     <div class="card"><h3>تاریخچه</h3><div id="hist" class="list"><div class="sk" style="height:46px"></div></div></div>`;
 };
 function amountPick(a, btn) { document.querySelectorAll("#amounts button").forEach(b => b.classList.toggle("on", b === btn)); $("tp-amount").value = a; }
@@ -369,15 +369,15 @@ function histMore() {
   const open = more.style.display === "none";
   more.style.display = open ? "" : "none"; btn.textContent = open ? "بستن" : "نمایش بقیه‌ی تاریخچه"; hap();
 }
-async function topupStart(prefill) {
+async function topupStart(prefill, method) {
   if (prefill) { setTab("wallet"); await new Promise(r => setTimeout(r, 60)); const i = $("tp-amount"); if (i) { const st = S.topup_step || 50000; i.value = Math.min(S.max_topup || 10000000, Math.max(S.min_topup || 100000, Math.ceil(prefill / st) * st)); } return; }
   const i = $("tp-amount"), amount = parseInt(i && i.value, 10) || 0;
   if (amount < (S.min_topup || 100000)) { toast("مبلغ را انتخاب کن (حداقل " + T(S.min_topup || 100000) + " تومان)", "bad"); return; }
   if (amount > (S.max_topup || 10000000)) { toast("حداکثر مبلغ قابل شارژ " + T(S.max_topup || 10000000) + " تومان است", "bad"); return; }
   if (amount % (S.topup_step || 50000) !== 0) { toast("مبلغ باید مضربی از " + T(S.topup_step || 50000) + " تومان باشد", "bad"); return; }
-  const btn = document.querySelector("#app .btn.pri.w"); if (btn) { btn.disabled = true; btn.innerHTML = '<i class="spin"></i> ثبت درخواست…'; }
-  const r = await api("topup", {amount});
-  if (!r.ok) { toast(r.error, "bad"); if (btn) { btn.disabled = false; btn.textContent = "💳 ادامه (کارت‌به‌کارت)"; } return; }
+  const btn = (method === "currency" && $("tp-cur")) || document.querySelector("#app .btn.pri.w"), label = btn ? btn.textContent : ""; if (btn) { btn.disabled = true; btn.innerHTML = '<i class="spin"></i> ثبت درخواست…'; }
+  const r = await api("topup", {amount, method: method === "currency" ? "currency" : "card"});
+  if (!r.ok) { toast(r.error, "bad"); if (btn) { btn.disabled = false; btn.textContent = label; } return; }
   S.topup = Object.assign({at: Date.now()}, r); try { localStorage.setItem("nk.topup", JSON.stringify(S.topup)); } catch (e) {}
   go("topup", {});
 }
@@ -385,6 +385,7 @@ function topupCancel() { if (S.topup) api("cancel_topup", {hash: S.topup.hash});
 VIEWS.topup = async () => {
   const t = S.topup; if (!t) return `<div class="card"><div class="empty">درخواست شارژی در جریان نیست.</div><button class="btn w" onclick="setTab('wallet')">کیف پول</button></div>`;
   const detail = t.kind === "detail";
+  if (t.v === 2 && !detail) return topupPage(t);      // the currency payment and the "message support" screen (api.php v2: card_text of the bot)
   return `<div class="title">پرداخت کارت‌به‌کارت</div><div class="steps"><i class="on"></i><i class="on"></i><i id="st3"></i></div>
     <div class="card"><h3>۱. مبلغ دقیق را واریز کن</h3>
       <div class="copyrow" onclick="copy('${t.exact}','مبلغ کپی شد ✓')"><div><small class="mut xs">مبلغ دقیق واریز (تومان)</small><br><b>${T(t.exact)}</b></div><span class="btn sm">📋 کپی</span></div>
@@ -398,6 +399,26 @@ VIEWS.topup = async () => {
       <div class="btns"><button class="btn pri" id="rc-send" disabled onclick="receiptSend()">ارسال رسید برای تأیید</button><button class="btn danger" onclick="topupCancel()">لغو درخواست</button></div>
     </div>`;
 };
+/** the top-up page of the currency payment (the tether amount + the wallet) and of a customer who is not trusted with the card yet (the star line + the support id): step 2, the receipt, is the same as the card page's */
+function topupPage(t) {
+  const cur = t.kind === "currency";
+  const step1 = cur ? `<div class="card"><h3>۱. تتر را واریز کن</h3>
+      ${t.usdt ? `<div class="copyrow" onclick="copy('${esc(String(t.usdt))}','مقدار کپی شد ✓')"><div><small class="mut xs">مقدار تتر (USDT)</small><br><b class="ltr">${esc(String(t.usdt))}</b></div><span class="btn sm">📋 کپی</span></div>` : ""}
+      <div class="copyrow" onclick="copy(${js(t.usdt_wallet)},'آدرس کپی شد ✓')"><div><small class="mut xs">آدرس کیف پول (شبکه BEP20)</small><br><b class="ltr" style="font-size:12px">${esc(t.usdt_wallet)}</b></div><span class="btn sm">📋 کپی</span></div>
+      <div class="note mt">${t.text || ""}</div>
+      <div class="xs mut mt">⏱ این درخواست یک ساعت اعتبار دارد. مبلغ انتخابی: ${T(t.amount)} تومان؛ همان ${T(t.amount)} تومان به کیف پولت اضافه می‌شود.</div>
+    </div>` : `<div class="card"><h3>۱. شماره کارت را از پشتیبانی بگیر</h3>
+      <div class="note">${t.text || ""}</div>
+      ${t.support ? `<button class="btn pri w mt" onclick="openLink(${js("https://t.me/" + t.support)})">💬 پیام به پشتیبانی</button>` : ""}
+      <div class="xs mut mt">⏱ این درخواست یک ساعت اعتبار دارد. مبلغ انتخابی: ${T(t.amount)} تومان.</div>
+    </div>`;
+  return `<div class="title">${cur ? "پرداخت ارزی" : "پرداخت کارت‌به‌کارت"}</div><div class="steps"><i class="on"></i><i class="on"></i><i id="st3"></i></div>
+    ${step1}
+    <div class="card"><h3>۲. تصویر رسید را بفرست</h3>
+      <label class="drop" id="drop"><input type="file" id="rc-file" accept="image/*" onchange="receiptPicked(this)"><div style="font-size:30px">🧾</div><div>برای انتخاب تصویر رسید ضربه بزن</div><small class="xs">JPG یا PNG، حداکثر ۶ مگابایت</small></label>
+      <div class="btns"><button class="btn pri" id="rc-send" disabled onclick="receiptSend()">ارسال رسید برای تأیید</button><button class="btn danger" onclick="topupCancel()">لغو درخواست</button></div>
+    </div>`;
+}
 let receiptFile = null;
 function receiptPicked(inp) {
   const f = inp.files && inp.files[0]; receiptFile = f || null;

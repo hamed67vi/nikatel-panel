@@ -17,7 +17,7 @@ function mk(id) {
 const NOW = Math.floor(Date.now() / 1000), BADNAME = "a\"b'c<d>&e";
 const R = {
   me: { ok: true, user: { id: 1, name: "🔥 Ali", username: "a", wallet: 500000, agent: false, services: 1, pending_topups: 1, since: NOW - 86400 * 90 },
-    features: { sell: true, wallet: true, card: true, gift: true, wheel: true, report: true, renew: true, addvolume: true, adddays: true, apps: true, hold: true, referral: true }, amounts: [100000, 200000], min_topup: 20000, support: "sup_port", bot: "my_bot", start: "" },
+    features: { sell: true, wallet: true, card: true, currency: true, gift: true, wheel: true, report: true, renew: true, addvolume: true, adddays: true, apps: true, hold: true, referral: true }, amounts: [100000, 200000], min_topup: 20000, support: "sup_port", bot: "my_bot", start: "" },
   services: { ok: true, services: [{ id: 7, remark: BADNAME, server: "🇩🇪 S\"1", expire: NOW + 5 * 86400, active: true }, { id: 8, remark: "old", server: "S2", expire: NOW - 3600, active: false }] },
   live: { ok: true, id: 7, live: { used: 1073741824 * 8.5, limit: 1073741824 * 50, expire: NOW + 86400, status: "active", hold: 0 }, status_fa: "فعال" },
   service: { ok: true, service: { id: 7, remark: BADNAME, server: "S\"1", expire: NOW + 5 * 86400, active: true, plan: { id: 1, title: "p\"q'r" }, status_fa: "فعال",
@@ -183,6 +183,7 @@ const tick = () => new Promise(r => setImmediate(r));
   S.plans = R.plans.plans; X.buySheet(11);
   await X.renewSheet(7); await X.extraSheet(7, "volume"); await X.extraSheet(7, "days"); X.reportSheet(7);
   for (const kind of ["detail", "usdt"]) { S.topup = { kind, amount: 150000, exact: 150357, hash: "h", card: "6037997512345678", holder: "h\"1", usdt_wallet: "TXyZ\"abc", usdt: 3.4, text: "<b>x</b>" }; HTML.push(await X.VIEWS.topup()); }
+  for (const kind of ["gift", "currency"]) { S.topup = { v: 2, kind, amount: 150000, exact: 150357, hash: "h", support: "sup_p\"ort", usdt_wallet: kind === "currency" ? "0xAb\"c" : "", usdt: kind === "currency" ? 3.4 : 0, text: "<b>x</b>" }; HTML.push(await X.VIEWS.topup()); }      // (the currency page and the "message support" page of the card_text change)
   HTML.push(await X.VIEWS.bought({ ok: true, order_id: 7, remark: BADNAME, cashback: 5, sub: "https://h.example/sub/a\"b", sub_alt: ["https://alt1.example/sub/a\"b"], links: ["vless://a\"b", "vmess://c"] }));
   HTML.push(await X.VIEWS.topup_done({ amount: 5 }));
   out.values.htmlParts = HTML.length;

@@ -139,6 +139,13 @@ function botTexts(): array {
 }
 function mainText(string $key, string $fallback = ''): string { [$m] = botTexts(); $v = $m[$key] ?? $fallback; return is_string($v) ? $v : $fallback; }
 function buttonText(string $key, string $fallback): string { [, $b] = botTexts(); $v = $b[$key] ?? $fallback; return is_string($v) && trim($v) !== '' ? $v : $fallback; }
+/* the card-to-card screen and the currency payment (the owner, 2026-10-27, translated: "the card-to-card part shows only: to get the card number message support + the support id; an old customer sees the card number" / "add the currency payment under card-to-card"):
+   the same words as the bot's card_text.php (scripts/install-card-text.sh); a text of his in the bot's texts file (ctc_card_note, ctc_currency_text) wins here too. BOT_STATES ctcCurrency = off hides the currency button. */
+function ctcNote(): string { return mainText('ctc_card_note', "⭐️ در صورتی که <b>مشتری قدیمی یا معرفی شده</b> هستید برای دریافت <b>شماره کارت</b> به پشتیبانی پیام ارسال بفرمایید"); }
+function ctcCurrencyTpl(): string { return mainText('ctc_currency_text', "❇️ برای شارژ یا خرید <b>مطابق توضیحات زیر</b> اقدام کنید.\n\n💎 مقدار <code>PRICE-USDT USDT</code> را به آدرس کیف پول زیر واریز کنید.\n\n<code>USDT-WALLET</code>\n\n✅ واریز تتر باید روی <b>شبکه BEP20 (BSC)</b> باشد. رسید تتر باید دارای <b>هش تراکنش</b> باشد."); }
+/** the support id of the bot as a bare user name (@name, name or a t.me link of a user), '' when there is none */
+function ctcSupportName(): string { global $botState; $id = trim((string) ($botState['supportID'] ?? '')); return (preg_match('~^https?://t\.me/([A-Za-z0-9_]{3,})/?$~i', $id, $m) || preg_match('/^@?([A-Za-z0-9_]{3,})$/', $id, $m)) ? $m[1] : ''; }
+function ctcCurrencyOn(): bool { $k = settingJson('PAYMENT_KEYS'); return on('cartToCartState') && on('ctcCurrency', 'on') && trim((string) ($k['tronwallet'] ?? '')) !== ''; }
 /** the bot's texts use a little HTML; only harmless tags reach the browser */
 /* The invite text of the bot is kept by the bot as a message record ({"type":"text","text":"..."}) in some versions: the page shows the words of it, and nothing at all when what is kept is not words (the owner, 2026-10-20: a raw {"type":"text","text":"\u0644..."} was drawn in the invite page). */
 function bannerText($raw): string {
@@ -596,7 +603,7 @@ case 'me': {
     $support = trim((string) ($botState['supportID'] ?? ''));
     out(['ok' => true,
         'user' => ['id' => $uid, 'name' => trim((string) $me['name']), 'username' => trim((string) ($me['username'] ?? '')), 'wallet' => (int) $me['wallet'], 'agent' => $isAgent, 'services' => $cnt, 'pending_topups' => $pending, 'since' => (int) ($me['date'] ?? 0)],
-        'features' => ['sell' => on('sellState', 'on'), 'buy_groups' => buyGroups(), 'support_chat' => on('supportChat', 'on'), 'ticket_new' => on('miniTicketNew', 'on'), 'discount_code' => on('miniDiscountCode', 'on') && !$isAgent, 'wallet' => on('walletState', 'on'), 'card' => on('cartToCartState'), 'gift' => on('giftState'), 'wheel' => on('wheelState'), 'report' => on('reportState'),
+        'features' => ['sell' => on('sellState', 'on'), 'buy_groups' => buyGroups(), 'support_chat' => on('supportChat', 'on'), 'ticket_new' => on('miniTicketNew', 'on'), 'discount_code' => on('miniDiscountCode', 'on') && !$isAgent, 'wallet' => on('walletState', 'on'), 'card' => on('cartToCartState'), 'currency' => ctcCurrencyOn(), 'gift' => on('giftState'), 'wheel' => on('wheelState'), 'report' => on('reportState'),
             'renew' => on('renewAccountState', 'on'), 'addvolume' => on('increaseVolumeState', 'on'), 'adddays' => on('increaseTimeState', 'on'), 'apps' => $apps > 0, 'hold' => on('onHoldState'),
             'cashback' => (float) ($botState['cashbackPercent'] ?? 0), 'referral' => (int) settingValue('INVITE_BANNER_AMOUNT') > 0, 'sub' => on('subLinkState', 'on'), 'configs' => on('configLinkState', 'on')],
         'amounts' => $amounts, 'min_topup' => MIN_TOPUP, 'max_topup' => MAX_TOPUP, 'topup_step' => TOPUP_STEP, 'support' => ltrim($support, '@'), 'bot' => (string) ($botUsername ?? ''), 'start' => (string) ($user['start_param'] ?? '')]);
@@ -809,6 +816,8 @@ case 'adddays': {
 case 'topup': {   // card to card: a pending INCREASE_WALLET like the bot's startWalletPayment, plus the card details
     if (!on('walletState', 'on')) fail('کیف پول غیرفعال است.');
     if (!on('cartToCartState')) fail('پرداخت کارت‌به‌کارت فعال نیست؛ از داخل ربات شارژ کنید.');
+    $method = ($body['method'] ?? '') === 'currency' ? 'currency' : 'card';
+    if ($method === 'currency' && !ctcCurrencyOn()) fail('پرداخت ارزی فعال نیست؛ از داخل ربات شارژ کنید.');
     $amount = (int) ($body['amount'] ?? 0);
     if ($amount < MIN_TOPUP) fail('لطفا مقداری بیشتر یا مساوی ' . fa(MIN_TOPUP) . ' تومان وارد کنید.');
     if ($amount > MAX_TOPUP) fail('حداکثر مبلغ قابل شارژ کیف پول ' . fa(MAX_TOPUP) . ' تومان می‌باشد.');
@@ -832,12 +841,15 @@ case 'topup': {   // card to card: a pending INCREASE_WALLET like the bot's star
     $joined = (int) ($me['date'] ?? 0);
     $trusted = $isAgent || ($joined > 0 && $joined < $cutoff && ($approvedBefore >= 1 || $approved >= 2)) || ($joined > 0 && $joined <= time() - 10 * 86400 && $approved >= 3);
     $type = $amount >= 12000000 ? 'usdt' : ($trusted && !empty($keys['bankAccount']) ? 'detail' : 'gift');
-    $usdRate = (float) ($type === 'usdt' || $type === 'gift' ? ($isAgent && !empty($USDTPriceagent) ? $USDTPriceagent : ($USDTPrice ?? 0)) : 0);
+    $usdRate = (float) (($isAgent && !empty($USDTPriceagent)) ? $USDTPriceagent : ($USDTPrice ?? 0));      // (the card message shows the tether equivalent too: it was 0.00 here before)
     $usdt = $usdRate > 0 ? round($exact / $usdRate, 2) : 0;
-    $tpl = mainText($type === 'detail' ? 'brw_cart_to_cart_detail' : 'brw_cart_to_cart_usdt');
+    if ($method === 'currency') $type = 'currency';      // the tether message for everybody
+    elseif ($type !== 'detail') $type = 'gift';      // a customer the bot does not trust yet (or an amount above 12,000,000): the star line + the support id, no card, no wallet
+    $supportName = ctcSupportName();
+    $tpl = $type === 'detail' ? mainText('brw_cart_to_cart_detail') : ($type === 'currency' ? ctcCurrencyTpl() : ctcNote() . ($supportName !== '' ? "\n\n🎧 پشتیبانی: @" . h($supportName) : ''));
     $text = strtr($tpl, ['PRICE-TOMAN-ROUND' => fa($amount), 'ACCOUNT-NUMBER' => (string) ($keys['bankAccount'] ?? '---'), 'HOLDER-NAME' => (string) ($keys['holderName'] ?? '---'), 'PRICE-TOMAN' => fa($exact), 'PRICE-RIAL' => fa($exact * 10), 'PRICE-USDT' => number_format($usdt, 2, '.', ''), 'USDT-WALLET' => (string) ($keys['tronwallet'] ?? '---')]);
-    out(['ok' => true, 'hash' => $hash, 'amount' => $amount, 'exact' => $exact, 'kind' => $type, 'card' => $type === 'detail' ? (string) ($keys['bankAccount'] ?? '') : '', 'holder' => $type === 'detail' ? (string) ($keys['holderName'] ?? '') : '',
-        'usdt_wallet' => $type !== 'detail' ? (string) ($keys['tronwallet'] ?? '') : '', 'usdt' => $usdt, 'text' => safeHtml($text), 'expires_in' => 3600]);
+    out(['ok' => true, 'v' => 2, 'hash' => $hash, 'amount' => $amount, 'exact' => $exact, 'kind' => $type, 'support' => $type === 'gift' ? $supportName : '', 'card' => $type === 'detail' ? (string) ($keys['bankAccount'] ?? '') : '', 'holder' => $type === 'detail' ? (string) ($keys['holderName'] ?? '') : '',
+        'usdt_wallet' => $type === 'currency' ? (string) ($keys['tronwallet'] ?? '') : '', 'usdt' => $type === 'currency' ? $usdt : 0, 'text' => safeHtml($text), 'expires_in' => 3600]);
 }
 
 case 'cancel_topup': {
