@@ -133,17 +133,30 @@ def test_the_keyboard_of_the_new_subscription_message_gets_the_button_as_its_fir
 $kb = json_encode(['inline_keyboard' => [[['text' => 'Start', 'url' => 'https://t.me/x?start=mainMenu']]]]);
 $long = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.' . str_repeat('A', 200) . '.sig';
 $res = [];
-$on = json_decode(cfgBtnKeys($kb, $long, ['configLinkState' => 'off']), true)['inline_keyboard'];
+$H = ['configLinkState' => 'off', 'cfgButton' => 'on'];      // (hidden configs, the stage open to everybody)
+$on = json_decode(cfgBtnKeys($kb, $long, $H), true)['inline_keyboard'];
 $res['rows'] = $on;
-$res['same_hash'] = cfgBtnKeys($kb, $long, ['configLinkState' => 'off']) === cfgBtnKeys($kb, $long, ['configLinkState' => 'off']);
+$res['same_hash'] = cfgBtnKeys($kb, $long, $H) === cfgBtnKeys($kb, $long, $H);
 $res['len'] = strlen($on[0][0]['callback_data']);
-$res['shown'] = cfgBtnKeys($kb, $long, ['configLinkState' => 'on']) === $kb;
+$res['shown'] = cfgBtnKeys($kb, $long, ['configLinkState' => 'on', 'cfgButton' => 'on']) === $kb;
 $res['unset'] = cfgBtnKeys($kb, $long, []) === $kb;      // (nothing says the configs are hidden: nothing changes)
-$res['switched_off'] = cfgBtnKeys($kb, $long, ['configLinkState' => 'off', 'cfgButton' => 'off']) === $kb;
-$res['no_token'] = cfgBtnKeys($kb, '', ['configLinkState' => 'off']) === $kb;
-$res['bad_json'] = cfgBtnKeys('not json', $long, ['configLinkState' => 'off']) === 'not json';
-$res['no_keyboard'] = cfgBtnKeys('{"a":1}', $long, ['configLinkState' => 'off']) === '{"a":1}';
+$res['switched_off'] = cfgBtnKeys($kb, $long, ['configLinkState' => 'off', 'cfgButton' => 'off'], 111) === $kb;
+$res['no_token'] = cfgBtnKeys($kb, '', $H) === $kb;
+$res['bad_json'] = cfgBtnKeys('not json', $long, $H) === 'not json';
+$res['no_keyboard'] = cfgBtnKeys('{"a":1}', $long, $H) === '{"a":1}';
 $res['other_tokens_differ'] = cfgBtnHash('a') !== cfgBtnHash('b') && strlen(cfgBtnHash('a')) === 12;
+$GLOBALS['admin'] = 111; $GLOBALS['admins_list'] = [222];
+$off = ['configLinkState' => 'off'];
+$res['stage'] = [
+  'unset_customer' => cfgBtnKeys($kb, $long, $off, 5) === $kb,
+  'unset_main_admin' => cfgBtnKeys($kb, $long, $off, 111) !== $kb,
+  'admin_list_admin' => cfgBtnKeys($kb, $long, $off + ['cfgButton' => 'admin'], 222) !== $kb,
+  'admin_customer' => cfgBtnKeys($kb, $long, $off + ['cfgButton' => 'admin'], 5) === $kb,
+  'junk_customer' => cfgBtnKeys($kb, $long, $off + ['cfgButton' => 'junk'], 5) === $kb,
+  'on_customer' => cfgBtnKeys($kb, $long, $off + ['cfgButton' => 'on'], 5) !== $kb,
+  'off_admin' => cfgBtnKeys($kb, $long, $off + ['cfgButton' => 'off'], 111) === $kb,
+  'no_uid' => cfgBtnKeys($kb, $long, $off + ['cfgButton' => 'admin']) === $kb,
+];
 echo json_encode($res, JSON_UNESCAPED_UNICODE);
 """)
     assert out["rows"][0] == [{"text": "📋 نمایش کانفیگ‌ها", "callback_data": out["rows"][0][0]["callback_data"]}]
@@ -151,29 +164,35 @@ echo json_encode($res, JSON_UNESCAPED_UNICODE);
     assert out["rows"][1][0]["text"] == "Start" and len(out["rows"]) == 2
     assert out["len"] <= 64      # (a callback may not be longer than 64 bytes: a Marzban token is)
     assert out["same_hash"] and out["shown"] and out["unset"] and out["switched_off"] and out["no_token"] and out["bad_json"] and out["no_keyboard"] and out["other_tokens_differ"]
+    assert all(out["stage"].values()), out["stage"]      # (unset / admin / junk = the bot's admins only; on = everybody; off = nobody; no uid = nobody)
 
 
 def test_the_qr_is_the_subscription_link_only_while_the_configs_are_hidden(tmp_path):
     out = _php_json(tmp_path, r"""
+$GLOBALS['admin'] = 111;
 echo json_encode([
-  cfgBtnQr('vless://cfg', 'https://p/sub/t', ['configLinkState' => 'off']),
-  cfgBtnQr('vless://cfg', 'https://p/sub/t', ['configLinkState' => 'on']),
-  cfgBtnQr('vless://cfg', '', ['configLinkState' => 'off']),
-  cfgBtnQr('vless://cfg', 'https://p/sub/t', []),
-  cfgBtnQr('vless://cfg', 'https://p/sub/t', ['configLinkState' => 'off', 'cfgButton' => 'off']),
+  cfgBtnQr('vless://cfg', 'https://p/sub/t', ['configLinkState' => 'off', 'cfgButton' => 'on'], 5),
+  cfgBtnQr('vless://cfg', 'https://p/sub/t', ['configLinkState' => 'on', 'cfgButton' => 'on'], 5),
+  cfgBtnQr('vless://cfg', '', ['configLinkState' => 'off', 'cfgButton' => 'on'], 5),
+  cfgBtnQr('vless://cfg', 'https://p/sub/t', [], 5),
+  cfgBtnQr('vless://cfg', 'https://p/sub/t', ['configLinkState' => 'off', 'cfgButton' => 'off'], 111),
+  cfgBtnQr('vless://cfg', 'https://p/sub/t', ['configLinkState' => 'off'], 111),
+  cfgBtnQr('vless://cfg', 'https://p/sub/t', ['configLinkState' => 'off'], 5),
 ]);
 """)
-    assert out == ["https://p/sub/t", "vless://cfg", "vless://cfg", "vless://cfg", "vless://cfg"]
+    assert out == ["https://p/sub/t", "vless://cfg", "vless://cfg", "vless://cfg", "vless://cfg", "https://p/sub/t", "vless://cfg"]      # (the last two: the stage's default - an admin gets the sub-link QR, a customer the old one)
 
 
 def test_the_button_of_the_service_page_and_the_list_of_configs(tmp_path):
     out = _php_json(tmp_path, r"""
 $flat = [['text' => 'a', 'callback_data' => 'b']];
+$GLOBALS['admin'] = 111;
+$H = ['configLinkState' => 'off', 'cfgButton' => 'on'];
 echo json_encode([
-  cfgBtnFlat($flat, 42, ['configLinkState' => 'off']),
-  cfgBtnFlat($flat, 42, ['configLinkState' => 'on']) === $flat,
-  cfgBtnFlat($flat, 0, ['configLinkState' => 'off']) === $flat,
-  cfgBtnFlat('x', 42, ['configLinkState' => 'off']),
+  cfgBtnFlat($flat, 42, $H, 5),
+  cfgBtnFlat($flat, 42, ['configLinkState' => 'on', 'cfgButton' => 'on'], 5) === $flat,
+  cfgBtnFlat($flat, 0, $H, 5) === $flat,
+  cfgBtnFlat('x', 42, $H, 5),
   cfgBtnLinks('["vless://a", "", " vmess://b ", 5, null]'),
   cfgBtnLinks(['x', ['y']]),
   cfgBtnLinks((object) ['0' => 'z']),
@@ -190,16 +209,18 @@ def test_the_handler_leaves_every_other_tap_alone(tmp_path):
     out = _php_json(tmp_path, r"""
 $res = [];
 foreach (['mainMenu', 'showQrConfig5', 'showCfgO', 'showCfgOx', 'showCfgT123', 'showCfgTXYZXYZXYZXYZ', 'showCfgO5 ', '', null] as $d) { $data = $d; $res[] = cfgBtnHandle(); }
+$data = 'showCfgO5'; $from_id = 5; $botState = []; $res[] = cfgBtnHandle();      // (a customer's tap while the stage is the admins' only: handled - and refused, nothing is sent or read)
 echo json_encode($res);
 """)
-    assert out == [False] * 9
+    assert out == [False] * 9 + [True]
 
 
 def test_the_mini_app_messages_with_the_subscription_link_carry_the_button():
     api = (MINI / "api.php").read_text(encoding="utf-8")
     helper = api[api.index("function cfgButton("):]
     helper = helper[:helper.index("\n}\n")]
-    assert "is_file(__DIR__ . '/../configs_button.php')" in helper and "($botState['cfgButton'] ?? '') === 'off'" in helper      # (no file, no button; the owner's switch)
+    assert "is_file(__DIR__ . '/../configs_button.php')" in helper      # (no file, no button)
+    assert "$m = (string) ($botState['cfgButton'] ?? 'admin');" in helper and "!($m === 'on' || ($m !== 'off' && $isAdm))" in helper      # (the stage: unset / admin = the admins only, on = everybody, off = nobody)
     assert "'callback_data' => 'showCfgO' . $orderId" in helper
     assert 'cfgButton((int) $r[\'order_id\']));' in api      # (the purchase message: the order just made)
     assert 'cfgButton((int) $o[\'id\']));' in api      # (the "your link changed" message: the order whose link changed)

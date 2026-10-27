@@ -235,12 +235,14 @@ TOKEN_B = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9." + "B" * 60 + ".sig"
 BTN_TEXT = "نمایش کانفیگ"
 HASH_A = __import__("hashlib").md5(TOKEN_A.encode()).hexdigest()[:12]
 HASH_B = __import__("hashlib").md5(TOKEN_B.encode()).hexdigest()[:12]
+TOKEN_C = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9." + "C" * 60 + ".sig"
+ADMIN_ORDER = [0]      # (the id of the admin's own service, set by reset_cfg)
 
 
 def reset_cfg(states=None, panel_up=True, live=None, stored=None):
     sql("SET FOREIGN_KEY_CHECKS=0; DELETE FROM users; DELETE FROM chats; DELETE FROM chats_info; DELETE FROM setting; DELETE FROM pays; DELETE FROM orders_list; "
         "DELETE FROM server_config; DELETE FROM server_plans; DELETE FROM server_info; DELETE FROM server_categories")
-    st = {"botState": "on", "sellState": "on", "walletState": "on", "searchState": "on", "configLinkState": "off", "subLinkState": "on"}
+    st = {"botState": "on", "sellState": "on", "walletState": "on", "searchState": "on", "configLinkState": "off", "subLinkState": "on", "cfgButton": "on"}      # ("on" = everybody: the stage has its own scenarios)
     st.update(states or {})
     st = {k: v for k, v in st.items() if v is not None}
     sql(f"INSERT INTO setting (type, value) VALUES ('BOT_STATES', {esc(json.dumps(st))}), ('PAYMENT_KEYS', {esc(json.dumps({'bankAccount': '1', 'holderName': 'x'}))})")
@@ -254,7 +256,7 @@ def reset_cfg(states=None, panel_up=True, live=None, stored=None):
     sql("INSERT INTO server_plans (id, fileid, catid, server_id, inbound_id, acount, limitip, title, protocol, days, volume, type, price, descr, pic, active, step, date) VALUES "
         "(1, '1', 1, 1, 0, 5, 1, 'Plan', 'vless', 30, 50, 'unlimited', 100000, '', '', 1, 10, '0')")
     ids = []
-    for uid, remark, tok in ((CUST, "user_a", TOKEN_A), (OTHER, "user_b", TOKEN_B)):
+    for uid, remark, tok in ((CUST, "user_a", TOKEN_A), (OTHER, "user_b", TOKEN_B), (ADMIN, "user_adm", TOKEN_C)):
         sql(f"INSERT INTO orders_list (userid, token, transid, fileid, server_id, inbound_id, remark, uuid, protocol, expire_date, link, amount, status, date, notif, rahgozar, agent_bought) VALUES "
             f"('{uid}', {esc(tok)}, '', 1, 1, 0, '{remark}', '', 'vless', {now + 86400 * 20}, {esc(json.dumps(STORED if stored is None else stored))}, 100000, 1, '{now}', 0, 0, 0)")
         ids.append(int(sql(f"SELECT id FROM orders_list WHERE remark = '{remark}'")))
@@ -264,7 +266,8 @@ def reset_cfg(states=None, panel_up=True, live=None, stored=None):
         os.remove(f)      # (the bot lets a customer tap once in three seconds)
     with TLOCK:
         TG_LOG.clear()
-    return ids
+    ADMIN_ORDER[0] = ids[2]
+    return ids[0], ids[1]
 
 
 def texts(uid, since=0):
@@ -420,21 +423,21 @@ def sp1(port, after):
 
 # ------------------------------------------------------------------ the 'new subscription' message (the bot's own buildLinksAndSendQr, run on its own file)
 DRIVER = r"""<?php
-$dir = $argv[1]; $state = json_decode($argv[2], true); $links = json_decode($argv[3], true); $tok = $argv[4]; chdir($dir);
-$botUsername = 'test_shop_bot'; $botState = $state;
+$dir = $argv[1]; $state = json_decode($argv[2], true); $links = json_decode($argv[3], true); $tok = $argv[4]; $rcpt = (int) $argv[5]; chdir($dir);
+$botUsername = 'test_shop_bot'; $botState = $state; $admin = 900001; $admins_list = [900001, 900002];
 require $dir . '/buy_helpers.php';
 if (is_file($dir . '/configs_button.php')) require_once $dir . '/configs_button.php';
 $response = (object) ['sub_link' => '/sub/' . $tok, 'vray_links' => $links, 'success' => true];
 [$token, $vray, $uniq, $text, $keys, $qr] = buildLinksAndSendQr('marzban', ['panel_url' => 'https://panel.example.com', 'sub_links' => 'https://sub2.example.com'], $botState, 'https://bot.example.com/', 1, 'uuid', 'vless', 'rem', 443, 'ws', 0, 0, '', '', '',
-    $response, 777, 10, 30, ['start_bot' => 'Start'], [0, 1], false, '', null, false);
+    $response, $rcpt, 10, 30, ['start_bot' => 'Start'], [0, 1], false, '', null, false);
 echo json_encode(['token' => $token, 'text' => $text, 'keys' => json_decode($keys, true), 'qr' => $qr, 'vray' => json_decode($vray, true)], JSON_UNESCAPED_UNICODE);
 """
 
 
-def delivery(after, state, links):
+def delivery(after, state, links, uid=777):
     name = "after" if after else "before"
     open(f"{T}/driver.php", "w").write(DRIVER)
-    r = subprocess.run(["php", "-d", "display_errors=1", f"{T}/driver.php", f"{T}/{name}", json.dumps(state), json.dumps(links), TOKEN_A], capture_output=True, text=True, timeout=60)
+    r = subprocess.run(["php", "-d", "display_errors=1", f"{T}/driver.php", f"{T}/{name}", json.dumps(state), json.dumps(links), TOKEN_A, str(uid)], capture_output=True, text=True, timeout=60)
     try:
         return json.loads(r.stdout)
     except Exception:
@@ -444,7 +447,7 @@ def delivery(after, state, links):
 @scn("DL1", "the 'new subscription' message while the configs are hidden: the subscription link (main + helper) and NO config in the text; the keyboard's first row is the button (callback <= 64 bytes); the QR is the subscription link")
 def dl1(port, after):
     problems = []
-    out = delivery(after, {"subLinkState": "on", "configLinkState": "off"}, LIVE)      # (three links: the old code drew a config's QR)
+    out = delivery(after, {"subLinkState": "on", "configLinkState": "off", "cfgButton": "on"}, LIVE)      # (three links: the old code drew a config's QR)
     rows_ = out["keys"]["inline_keyboard"]
     flat = [b for r in rows_ for b in r]
     sub = f"https://panel.example.com/sub/{TOKEN_A}"
@@ -467,7 +470,7 @@ def dl1(port, after):
 @scn("DL2", "the same message when the configs are shown (configLinkState on): as before - configs in the text, no button, the QR as before; and with cfgButton = off: no button")
 def dl2(port, after):
     problems = []
-    on = delivery(after, {"subLinkState": "on", "configLinkState": "on"}, LIVE)
+    on = delivery(after, {"subLinkState": "on", "configLinkState": "on", "cfgButton": "on"}, LIVE)
     if "vless://live-1" not in on["text"]: problems.append("the configs must be in the text while they are shown")
     if any("showCfg" in str(b) for r in on["keys"]["inline_keyboard"] for b in r): problems.append("a button although the configs are in the text")
     if on["qr"] != LIVE[1]: problems.append(f"the QR changed: {on['qr']!r}")
@@ -479,9 +482,54 @@ def dl2(port, after):
 @scn("DL3", "no subscription link at all (subLinkState off): the QR stays what it was (never empty), the button is there")
 def dl3(port, after):
     problems = []
-    out = delivery(after, {"subLinkState": "off", "configLinkState": "off"}, LIVE)
+    out = delivery(after, {"subLinkState": "off", "configLinkState": "off", "cfgButton": "on"}, LIVE)
     if not out["qr"]: problems.append("empty QR")
     if after and not any("showCfgT" in str(b) for r in out["keys"]["inline_keyboard"] for b in r): problems.append("the button is missing")
+    return problems
+
+
+@scn("ST1", "the stage (BOT_STATES cfgButton: unset / admin / anything else = the bot's admins only, on = everybody, off = nobody): a tap of somebody the stage keeps out gets the 'not active for you' alert and NO config - even on his own service; an admin gets his configs")
+def st1(port, after):
+    problems = []
+    if not after: return problems
+    for stage, who, want in ((None, CUST, False), (None, ADMIN, True), ("admin", CUST, False), ("admin", ADMIN, True), ("junk", CUST, False), ("on", CUST, True), ("on", ADMIN, True), ("off", CUST, False), ("off", ADMIN, False)):
+        oa, ob = reset_cfg(states={"cfgButton": stage})
+        oid = oa if who == CUST else ADMIN_ORDER[0]
+        post(port, cb(who, f"showCfgO{oid}"))
+        t = all_text(who)
+        got = "new.example.com" in t
+        if got != want: problems.append(f"stage={stage!r} {'customer' if who == CUST else 'admin'}: configs {'sent' if got else 'not sent'}, want {'sent' if want else 'not sent'}")
+        if not want:
+            if not [m for m in sent(None, "answercallbackquery") if "فعال نیست" in m["text"]]: problems.append(f"stage={stage!r}: no 'not active' alert")
+            if "example.com" in t or "user_" in t: problems.append(f"stage={stage!r}: something leaked: {t[:120]!r}")
+    return problems
+
+
+@scn("SP2", "the service page follows the stage: the button for an admin on his own page and for nobody else while the stage is unset / admin; for everybody with 'on'; for nobody with 'off' (the person who LOOKS decides)")
+def sp2(port, after):
+    problems = []
+    for stage, who, want in ((None, CUST, False), (None, ADMIN, True), ("admin", CUST, False), ("on", CUST, True), ("off", ADMIN, False)):
+        oa, ob = reset_cfg(states={"cfgButton": stage})
+        oid = oa if who == CUST else ADMIN_ORDER[0]
+        post(port, cb(who, f"orderDetails{oid}"))
+        ed = sent(who, "editMessageText") or sent(who, "sendMessage")
+        if not ed: problems.append(f"stage={stage!r}: the page was not drawn"); continue
+        has = f"showCfgO{oid}" in datas(ed[-1]["markup"])
+        if has != (want and after): problems.append(f"stage={stage!r} {'customer' if who == CUST else 'admin'}: button {'there' if has else 'missing'}, want {'there' if want and after else 'missing'}")
+    return problems
+
+
+@scn("DL4", "the 'new subscription' message follows the stage by WHO GETS IT: the button and the sub-link QR for an admin while the stage is unset / admin; a customer gets the old keyboard and QR; 'on' = both; 'off' = neither")
+def dl4(port, after):
+    problems = []
+    sub = f"https://panel.example.com/sub/{TOKEN_A}"
+    for stage, uid, want in ((None, 777, False), (None, ADMIN, True), ("admin", 777, False), ("admin", ADMIN2, True), ("on", 777, True), ("off", ADMIN, False)):
+        st = {"subLinkState": "on", "configLinkState": "off"}
+        if stage: st["cfgButton"] = stage
+        out = delivery(after, st, LIVE, uid)
+        has = any("showCfgT" in str(b) for r in out["keys"]["inline_keyboard"] for b in r)
+        if has != (want and after): problems.append(f"stage={stage!r} uid={uid}: button {'there' if has else 'missing'}")
+        if after and (out["qr"] == sub) != want: problems.append(f"stage={stage!r} uid={uid}: QR is {out['qr']!r}")
     return problems
 
 

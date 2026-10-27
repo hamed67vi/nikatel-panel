@@ -188,10 +188,13 @@ function tgText(int|string $chat, string $html, ?array $markup = null): ?array {
     return tg('sendMessage', $d);
 }
 /* the bot's "show configs" button under a message that carries the subscription link (the owner, 2026-10-27: "only the subscription link, but add a show-configs button"): the tap goes to the bot (configs_button.php),
-   which sends the customer his own configs; no button when that file is not there or BOT_STATES cfgButton is "off" */
+   which sends the customer his own configs; no button when that file is not there. Staged like the bot's own button (the owner, 2026-10-27: "for now the admins only"): BOT_STATES cfgButton = 'admin' (also when unset),
+   'on' (everybody), 'off' (nobody) */
 function cfgButton(int $orderId): ?array {
-    global $botState;
-    if ($orderId <= 0 || !is_file(__DIR__ . '/../configs_button.php') || ($botState['cfgButton'] ?? '') === 'off') return null;
+    global $botState, $admins, $uid, $me;
+    $m = (string) ($botState['cfgButton'] ?? 'admin');
+    $isAdm = in_array((int) $uid, (array) $admins, true) || (int) ($me['isAdmin'] ?? 0) === 1;
+    if ($orderId <= 0 || !is_file(__DIR__ . '/../configs_button.php') || !($m === 'on' || ($m !== 'off' && $isAdm))) return null;
     return ['inline_keyboard' => [[['text' => '📋 نمایش کانفیگ‌ها', 'callback_data' => 'showCfgO' . $orderId]]]];
 }
 function h(string|int|null $s): string { return htmlspecialchars((string) $s, ENT_QUOTES, 'UTF-8'); }

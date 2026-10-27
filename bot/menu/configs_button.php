@@ -5,7 +5,8 @@
      cfgBtnQr()      ... and its QR code is the subscription link, never a config (the old code drew a config's QR when the service had three links or fewer)
      cfgBtnFlat()    the buttons of the service page ("my subscriptions" -> one service) get the button
      cfgBtnHandle()  the tap: the customer's own service only; the configs are asked from the panel live (a host moved in the panel, the stored list is old), the stored list is the fallback; sent in as many messages as they need
-   Nothing here draws a button when configLinkState is not "off" (the configs are in the text then). BOT_STATES cfgButton = "off" switches the button off. Every hook asks function_exists() first and every failure is swallowed. */
+   Nothing here draws a button when configLinkState is not "off" (the configs are in the text then). It is STAGED like the Mini App's tools (the owner, 2026-10-27: "for now show it to the admins only, so I can test"):
+   BOT_STATES cfgButton = "admin" (also when unset: the bot's admins only), "on" (everybody), "off" (nobody); the tap is refused for whoever the stage keeps out. Every hook asks function_exists() first and every failure is swallowed. */
 
 const CFGBTN_TEXT = '📋 نمایش کانفیگ‌ها';
 
@@ -14,10 +15,41 @@ function cfgBtnState($botState = null): array {
     return is_array($botState) ? $botState : [];
 }
 
-/** the configs are hidden from the texts (the owner's switch) and the button is not switched off */
-function cfgBtnWanted($botState = null): bool {
-    $s = cfgBtnState($botState);
-    return ($s['configLinkState'] ?? '') === 'off' && ($s['cfgButton'] ?? '') !== 'off';
+/** "on" | "off" | "admin" (anything else, and nothing set, is "admin") */
+function cfgBtnStage($botState = null): string {
+    $m = (string) (cfgBtnState($botState)['cfgButton'] ?? 'admin');
+    return ($m === 'on' || $m === 'off') ? $m : 'admin';
+}
+
+/** one of the bot's admins: the main admin, the list in baseInfo.php, or a user the bot's own "add admin" flagged */
+function cfgBtnIsAdmin(int $uid): bool {
+    global $admin, $admins_list, $connection;
+    if ($uid <= 0) return false;
+    if ((int) ($admin ?? 0) === $uid) return true;
+    if (in_array($uid, array_map('intval', (array) ($admins_list ?? [])), true)) return true;
+    try {
+        if (isset($connection) && $connection instanceof mysqli) {
+            $stmt = $connection->prepare("SELECT `isAdmin` FROM `users` WHERE `userid`=? LIMIT 1");
+            $stmt->bind_param('i', $uid);
+            $stmt->execute();
+            $row = $stmt->get_result()->fetch_assoc();
+            $stmt->close();
+            return !empty($row['isAdmin']);
+        }
+    } catch (Throwable $e) {
+    }
+    return false;
+}
+
+/** the stage lets this person have the button */
+function cfgBtnStageOk(int $uid, $botState = null): bool {
+    $st = cfgBtnStage($botState);
+    return $st === 'on' || ($st === 'admin' && cfgBtnIsAdmin($uid));
+}
+
+/** the configs are hidden from the texts (the owner's switch) and the stage lets this person have the button */
+function cfgBtnWanted($botState = null, int $uid = 0): bool {
+    return (cfgBtnState($botState)['configLinkState'] ?? '') === 'off' && cfgBtnStageOk($uid, $botState);
 }
 
 /** a list of config strings out of a json text / an array / an object: whatever is not a non-empty string is dropped */
@@ -35,11 +67,11 @@ function cfgBtnHash(string $token): string {
     return substr(md5($token), 0, 12);
 }
 
-/** the inline keyboard (json) of the new-subscription message with the button as its first row */
-function cfgBtnKeys($keys, $token, $botState = null) {
+/** the inline keyboard (json) of the new-subscription message with the button as its first row; $uid = who gets the message */
+function cfgBtnKeys($keys, $token, $botState = null, $uid = 0) {
     try {
         $token = (string) $token;
-        if ($token === '' || !cfgBtnWanted($botState)) return $keys;
+        if ($token === '' || !cfgBtnWanted($botState, (int) $uid)) return $keys;
         $kb = json_decode((string) $keys, true);
         if (!is_array($kb) || !isset($kb['inline_keyboard']) || !is_array($kb['inline_keyboard'])) return $keys;
         array_unshift($kb['inline_keyboard'], [['text' => CFGBTN_TEXT, 'callback_data' => 'showCfgT' . cfgBtnHash($token)]]);
@@ -50,15 +82,15 @@ function cfgBtnKeys($keys, $token, $botState = null) {
 }
 
 /** what the QR code of the new-subscription message holds: the subscription link while the configs are hidden */
-function cfgBtnQr($qrLink, $mainSubLink, $botState = null) {
+function cfgBtnQr($qrLink, $mainSubLink, $botState = null, $uid = 0) {
     $sub = (string) $mainSubLink;
-    return ($sub !== '' && cfgBtnWanted($botState)) ? $sub : $qrLink;
+    return ($sub !== '' && cfgBtnWanted($botState, (int) $uid)) ? $sub : $qrLink;
 }
 
-/** the button list of one service page */
-function cfgBtnFlat($flat, $orderId, $botState = null) {
+/** the button list of one service page; $uid = who looks at it */
+function cfgBtnFlat($flat, $orderId, $botState = null, $uid = 0) {
     try {
-        if (!is_array($flat) || (int) $orderId <= 0 || !cfgBtnWanted($botState)) return $flat;
+        if (!is_array($flat) || (int) $orderId <= 0 || !cfgBtnWanted($botState, (int) $uid)) return $flat;
         $flat[] = ['text' => CFGBTN_TEXT, 'callback_data' => 'showCfgO' . (int) $orderId];
         return $flat;
     } catch (Throwable $e) {
@@ -72,7 +104,12 @@ function cfgBtnHandle(): bool {
     if (!is_string($data ?? null) || !preg_match('/^showCfg(?:T([0-9a-f]{12})|O([0-9]{1,12}))$/', $data, $m)) return false;
     $uid = (int) ($from_id ?? 0);
     try {
-        if (function_exists('bot') && !empty($GLOBALS['callbackId'])) bot('answercallbackquery', ['callback_query_id' => $GLOBALS['callbackId']]);      // (the spinner stops now; the answer comes as messages)
+        $cb = (function_exists('bot') && !empty($GLOBALS['callbackId'])) ? (string) $GLOBALS['callbackId'] : '';
+        if (!cfgBtnStageOk($uid)) {      // (the stage keeps him out: a made-up tap gets nothing either)
+            if ($cb !== '') bot('answercallbackquery', ['callback_query_id' => $cb, 'text' => 'این امکان هنوز برای شما فعال نیست.', 'show_alert' => true]);
+            return true;
+        }
+        if ($cb !== '') bot('answercallbackquery', ['callback_query_id' => $cb]);      // (the spinner stops now; the answer comes as messages)
         if ($uid > 0) cfgBtnShow($uid, (string) ($m[1] ?? ''), (int) ($m[2] ?? 0));
     } catch (Throwable $e) {
         error_log('configs-button: ' . $e->getMessage());

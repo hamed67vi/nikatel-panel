@@ -5,7 +5,8 @@
 #   bot.php          1) the include of configs_button.php at the top (only when the file is there);  2) right after check(): cfgBtnHandle() answers a tap on the button (and exits)
 #   config.php       3) in getOrderDetailKeys() (the service page of "my subscriptions"): cfgBtnFlat() adds the button to the buttons of the page
 #   buy_helpers.php  4) in buildLinksAndSendQr() (the "new subscription" message after a purchase): cfgBtnQr() makes its QR code the subscription link, never a config;  5) cfgBtnKeys() adds the button to its keyboard
-# Nothing is drawn unless BOT_STATES configLinkState = "off" (the configs are in the text otherwise); BOT_STATES cfgButton = "off" switches the button off. Every hook asks function_exists() first, so a bot without
+# Nothing is drawn unless BOT_STATES configLinkState = "off" (the configs are in the text otherwise). Staged: BOT_STATES cfgButton = "admin" (also when unset: the bot's admins only), "on" (everybody), "off" (nobody);
+# the tap is refused for whoever the stage keeps out. Every hook asks function_exists() first, so a bot without
 # configs_button.php behaves as before. Nothing else of the old code is changed.
 # The old files are kept in $BACKUP_DIR (default /root/backups); php -l runs on every new file BEFORE any file is replaced; --uninstall takes the five lines out again (byte for byte) and removes configs_button.php.
 set -euo pipefail
@@ -26,9 +27,9 @@ d, work, mode = sys.argv[1:4]
 TAG = " // [configs-button]"
 INC = "if (is_file(__DIR__ . '/configs_button.php')) require_once __DIR__ . '/configs_button.php';" + TAG + "\n"
 HANDLE = "if (function_exists('cfgBtnHandle') && cfgBtnHandle()) exit;" + TAG + "\n"
-FLAT = "        if (function_exists('cfgBtnFlat')) $flatButtons = cfgBtnFlat($flatButtons, $id, $botState);" + TAG + "\n"
-QR = "        if (function_exists('cfgBtnQr')) $qrLink = cfgBtnQr($qrLink, $mainSubLink, $botState);" + TAG + "\n"
-KEYS = "        if (function_exists('cfgBtnKeys')) $keys = cfgBtnKeys($keys, $token, $botState);" + TAG + "\n"
+FLAT = "        if (function_exists('cfgBtnFlat')) $flatButtons = cfgBtnFlat($flatButtons, $id, $botState, $from_id);" + TAG + "\n"
+QR = "        if (function_exists('cfgBtnQr')) $qrLink = cfgBtnQr($qrLink, $mainSubLink, $botState, $uid);" + TAG + "\n"
+KEYS = "        if (function_exists('cfgBtnKeys')) $keys = cfgBtnKeys($keys, $token, $botState, $uid);" + TAG + "\n"
 CHECK = "\ncheck();\n"
 QRSUB = "            $flatButtons[] = ['text' => $buttonValues['qr_sub'], 'callback_data' => \"showQrSub{$id}\"];\n"
 QRLINE = "        $qrLink = ($linkCount <= 3 && !empty($link)) ? $link : $mainSubLink;\n"
