@@ -678,7 +678,7 @@ case 'service': {
     $plan = orderPlan($o);
     out(['ok' => true, 'service' => ['id' => (int) $o['id'], 'remark' => $o['remark'], 'server' => $o['label'], 'server_id' => (int) $o['server_id'], 'expire' => (int) $o['expire_date'], 'bought' => (int) $o['date'], 'active' => (int) $o['status'] === 1,
         'plan' => $plan ? ['id' => (int) $plan['id'], 'title' => $plan['title'], 'volume' => (float) $plan['volume'], 'days' => (int) $plan['days']] : null,
-        'live' => $live ? array_diff_key($live, ['links' => 1]) : null, 'status_fa' => $live ? statusFa($live['status']) : null, 'sub' => on('subLinkState', 'on') ? ($live['sub'] ?? '') : '', 'sub_alt' => subAlt($o['sub_links'] ?? '', (string) ($live['sub'] ?? ''), (string) ($o['token'] ?? '')), 'links' => on('configLinkState', 'on') ? $links : [],
+        'live' => $live ? array_diff_key($live, ['links' => 1]) : null, 'status_fa' => $live ? statusFa($live['status']) : null, 'sub' => on('subLinkState', 'on') ? ($live['sub'] ?? '') : '', 'sub_alt' => subAlt($o['sub_links'] ?? '', (string) ($live['sub'] ?? ''), (string) ($o['token'] ?? '')), 'links' => (on('configLinkState', 'on') || serviceTools()) ? $links : [],      // (the bot hides the configs when configLinkState is off; whoever has the service-page tools has the "configs" button, which the owner asked for, so it gets them)
         'tools' => serviceTools() ? ['toggle' => !$live ? null : ($live['status'] === 'active' ? 'disable' : ($live['status'] === 'disabled' && selfOff((int) $o['id']) ? 'enable' : null))] : null]]);      // (tools.toggle: what the enable / disable button does now - none when the panel did not answer, the status is expired / limited / on hold, or an admin disabled it)
 }
 

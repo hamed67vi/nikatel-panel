@@ -1329,6 +1329,20 @@ def ex1():
     return bool(problems), "; ".join(problems[:6]) if problems else "custom amounts refused with nothing charged, packs sold at their price, no-packs fallback only for the listed sizes"
 
 
+@scn("CF1", "HIGH", "configs on the service page: with the bot's configLinkState off the configs reach only the people who have the service-page tools (admins first, then everybody when it is switched on); everybody else still gets none; with it on nothing changed")
+def cf1():
+    problems = []
+    for cfg, mode, want_u, want_a in (("off", None, False, True), ("off", "admin", False, True), ("off", "on", True, True), ("off", "off", False, False), ("on", None, True, True), ("on", "off", True, True)):
+        reset(states={"configLinkState": cfg, **({"miniServiceTools": mode} if mode else {})}); mk_user(U); mk_user(ADMIN)
+        su, sa = mk_service(U), mk_service(ADMIN)
+        for who, sid, want in ((U, su, want_u), (ADMIN, sa, want_a)):
+            s = (call("service", {"id": sid}, uid=who)[1] or {}).get("service") or {}
+            got = bool(s.get("links"))
+            if got is not want:
+                problems.append(f"configLinkState={cfg} tools={mode}: {'customer' if who == U else 'admin'} gets links={got}, want {want}")
+    return bool(problems), "; ".join(problems[:6]) if problems else "the configs follow the bot's switch, and the tools' configs button gets them for its people only"
+
+
 @scn("SV4", "HIGH", "delete his own service: the account leaves the panel, the order row goes, the slot comes back once (two taps at once too), the admins are told; another customer's service, a refusing or dead panel change nothing; an account already gone from the panel is deleted too; at most 10 an hour")
 def sv4():
     problems = []

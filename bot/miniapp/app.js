@@ -190,7 +190,7 @@ AFTER.service = async p => {
       ${F.renew ? `<button class="btn" onclick="renewSheet(${s.id})">🔄 تمدید</button>` : ""}
       ${F.addvolume ? `<button class="btn" onclick="extraSheet(${s.id},'volume')">➕ حجم اضافه</button>` : ""}
       ${F.adddays ? `<button class="btn" onclick="extraSheet(${s.id},'days')">⏳ زمان اضافه</button>` : ""}
-      ${tl && s.links && s.links.length ? `<button class="btn" onclick="cfgSheet()">📋 کانفیگ‌ها</button>` : ""}
+      ${tl ? `<button class="btn" onclick="cfgSheet()">📋 کانفیگ‌ها</button>` : ""}
       ${tl && s.sub ? `<button class="btn" onclick="qrSheet()">▦ QR</button>` : ""}
       ${tl && L ? `<button class="btn" onclick="linkSheet(${s.id})">🔗 تغییر لینک</button>` : ""}
       ${tl && s.tools.toggle ? `<button class="btn" onclick="toggleSheet(${s.id},${js(s.tools.toggle)})">${s.tools.toggle === "disable" ? "⏸ غیرفعال‌سازی" : "▶️ فعال‌سازی"}</button>` : ""}
@@ -209,7 +209,8 @@ function qrSheet() {
   sheet(`<h3>▦ QR لینک اشتراک</h3>${im ? `<div class="qr">${im}</div>` : `<div class="note bad">لینک برای QR خیلی بلند است.</div>`}<div class="code mt" onclick="copy(${js(s.sub)})">${esc(s.sub)}<span class="cp">📋</span></div><div class="btns"><button class="btn" onclick="closeSheet()">بستن</button></div>`);
 }
 function cfgSheet() {
-  const s = S.svc; if (!s || !s.links || !s.links.length) return;
+  const s = S.svc; if (!s) return;
+  if (!s.links || !s.links.length) { sheet(`<h3>📋 کانفیگ‌ها</h3><div class="note">کانفیگی برای نمایش پیدا نشد؛ از لینک اشتراک استفاده کن.</div><div class="btns"><button class="btn w" onclick="closeSheet()">باشه</button></div>`); return; }
   sheet(`<h3>📋 کانفیگ‌ها <span class="pill">${T(s.links.length)}</span></h3>
     <div id="cfg-qr" class="qr hide"></div>
     ${s.links.slice(0, 12).map((l, i) => `<div class="copyrow mb"><div class="code" onclick="copy(${js(l)})">${esc(l.length > 70 ? l.slice(0, 70) + "…" : l)}<span class="cp">📋</span></div><button class="btn sm" onclick="cfgQr(${i})">▦</button></div>`).join("")}

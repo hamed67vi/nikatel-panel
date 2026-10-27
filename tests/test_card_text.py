@@ -194,7 +194,7 @@ def test_the_mini_app_has_the_same_rules_and_words():
     assert "'usdt_wallet' => $type === 'currency'" in topup and "'support' => $type === 'gift'" in topup and "'v' => 2" in topup
     assert "$type !== 'detail'" in topup      # (anybody the bot does not trust yet gets the star line + the support id, never the card or the wallet)
     html = (MINI / "index.html").read_text(encoding="utf-8")
-    assert re.findall(r"\?v=(\d+\.\d+\.\d+)", html) == ["3.0.16", "3.0.16"]      # (a new Mini App: Telegram must not keep the old files)
+    assert re.findall(r"\?v=(\d+\.\d+\.\d+)", html) == ["3.0.17", "3.0.17"]      # (a new Mini App: Telegram must not keep the old files)
 
 
 def test_the_mini_app_support_name_helper(tmp_path):
