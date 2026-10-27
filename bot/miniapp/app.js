@@ -170,6 +170,8 @@ AFTER.service = async p => {
   const s = r.service, L = s.live || null, pct = L && L.limit ? Math.min(100, Math.round(L.used * 100 / L.limit)) : 0;
   const st = L ? (L.status === "active" ? "ok" : L.status === "on_hold" ? "info" : "bad") : (s.active ? "ok" : "bad");
   const F = S.feat;
+  S.svc = s;
+  const tl = !!(F.svc_tools && s.tools);      // (the new tools of this page: staged - the admins first, then everybody; the support button leaves the page with them)
   box.innerHTML = `
     <div class="title"><span class="ell2">${esc(s.remark)}</span><span class="pill ${st}">${esc(r.service.status_fa || (s.active ? "فعال" : "غیرفعال"))}</span></div>
     <div class="card">
@@ -181,17 +183,75 @@ AFTER.service = async p => {
       </div>
       ${L === null && s.active ? `<div class="note warn mt">ارتباط با پنل این سرور برقرار نشد؛ اعداد زنده فعلاً در دسترس نیست.</div>` : ""}
     </div>
-    ${s.sub ? `<div class="card"><h3>لینک اشتراک <button class="btn sm" onclick="copy(${js(s.sub)})">📋 کپی</button></h3><div class="code" onclick="copy(${js(s.sub)})">${esc(s.sub)}<span class="cp">📋</span></div><div class="qr hide" id="qr"></div><div class="btns"><button class="btn sm" onclick="showQr(${js(s.sub)})">▦ QR</button>${F.apps ? `<button class="btn sm" onclick="go('apps')">📱 برنامه‌ی اتصال</button>` : ""}</div></div>` : ""}
+    ${s.sub ? `<div class="card"><h3>لینک اشتراک <button class="btn sm" onclick="copy(${js(s.sub)})">📋 کپی</button></h3><div class="code" onclick="copy(${js(s.sub)})">${esc(s.sub)}<span class="cp">📋</span></div><div class="qr hide" id="qr"></div><div class="btns">${tl ? "" : `<button class="btn sm" onclick="showQr(${js(s.sub)})">▦ QR</button>`}${F.apps ? `<button class="btn sm" onclick="go('apps')">📱 برنامه‌ی اتصال</button>` : ""}</div></div>` : ""}
     ${s.sub ? altBox(s.sub_alt) : ""}
-    ${s.links && s.links.length ? `<div class="card"><h3>کانفیگ‌ها <span class="pill">${T(s.links.length)}</span></h3>${s.links.slice(0, 12).map(l => `<div class="code mb" onclick="copy(${js(l)})">${esc(l.length > 110 ? l.slice(0, 110) + "…" : l)}<span class="cp">📋</span></div>`).join("")}${s.links.length > 1 ? `<button class="btn w sm" onclick="copy(${js(s.links.join("\n"))}, 'همه‌ی کانفیگ‌ها کپی شد ✓')">📋 کپی همه</button>` : ""}</div>` : ""}
+    ${!tl && s.links && s.links.length ? `<div class="card"><h3>کانفیگ‌ها <span class="pill">${T(s.links.length)}</span></h3>${s.links.slice(0, 12).map(l => `<div class="code mb" onclick="copy(${js(l)})">${esc(l.length > 110 ? l.slice(0, 110) + "…" : l)}<span class="cp">📋</span></div>`).join("")}${s.links.length > 1 ? `<button class="btn w sm" onclick="copy(${js(s.links.join("\n"))}, 'همه‌ی کانفیگ‌ها کپی شد ✓')">📋 کپی همه</button>` : ""}</div>` : ""}
     <div class="card"><h3>مدیریت سرویس</h3><div class="grid">
       ${F.renew ? `<button class="btn" onclick="renewSheet(${s.id})">🔄 تمدید</button>` : ""}
       ${F.addvolume ? `<button class="btn" onclick="extraSheet(${s.id},'volume')">➕ حجم اضافه</button>` : ""}
       ${F.adddays ? `<button class="btn" onclick="extraSheet(${s.id},'days')">⏳ زمان اضافه</button>` : ""}
+      ${tl && s.links && s.links.length ? `<button class="btn" onclick="cfgSheet()">📋 کانفیگ‌ها</button>` : ""}
+      ${tl && s.sub ? `<button class="btn" onclick="qrSheet()">▦ QR</button>` : ""}
+      ${tl && L ? `<button class="btn" onclick="linkSheet(${s.id})">🔗 تغییر لینک</button>` : ""}
+      ${tl && s.tools.toggle ? `<button class="btn" onclick="toggleSheet(${s.id},${js(s.tools.toggle)})">${s.tools.toggle === "disable" ? "⏸ غیرفعال‌سازی" : "▶️ فعال‌سازی"}</button>` : ""}
       ${F.report ? `<button class="btn" onclick="reportSheet(${s.id})">🛠 گزارش اختلال</button>` : ""}
-      <button class="btn" onclick="go('tickets',{svc:${js(s.remark)}})">🎫 پشتیبانی</button>
+      ${tl ? `<button class="btn danger" onclick="deleteSheet(${s.id})">🗑 حذف اشتراک</button>` : `<button class="btn" onclick="go('tickets',{svc:${js(s.remark)}})">🎫 پشتیبانی</button>`}
     </div></div>`;
 };
+/* the tools of the service page (shown to the admins first: BOT_STATES miniServiceTools) */
+function qrImg(text) {      // (a whole number of pixels per square, as showQr does; null when the library is missing or the text is too long)
+  if (typeof qrcode !== "function") return null;
+  try { const q = qrcode(0, "M"); q.addData(text); q.make(); const cell = Math.max(2, Math.floor(216 / q.getModuleCount())); return `<img alt="QR" src="${q.createDataURL(cell, 0)}">`; } catch (e) { return null; }
+}
+function qrSheet() {
+  const s = S.svc; if (!s || !s.sub) return;
+  const im = qrImg(s.sub);
+  sheet(`<h3>▦ QR لینک اشتراک</h3>${im ? `<div class="qr">${im}</div>` : `<div class="note bad">لینک برای QR خیلی بلند است.</div>`}<div class="code mt" onclick="copy(${js(s.sub)})">${esc(s.sub)}<span class="cp">📋</span></div><div class="btns"><button class="btn" onclick="closeSheet()">بستن</button></div>`);
+}
+function cfgSheet() {
+  const s = S.svc; if (!s || !s.links || !s.links.length) return;
+  sheet(`<h3>📋 کانفیگ‌ها <span class="pill">${T(s.links.length)}</span></h3>
+    <div id="cfg-qr" class="qr hide"></div>
+    ${s.links.slice(0, 12).map((l, i) => `<div class="copyrow mb"><div class="code" onclick="copy(${js(l)})">${esc(l.length > 70 ? l.slice(0, 70) + "…" : l)}<span class="cp">📋</span></div><button class="btn sm" onclick="cfgQr(${i})">▦</button></div>`).join("")}
+    <div class="btns">${s.links.length > 1 ? `<button class="btn" onclick="copy(${js(s.links.join("\n"))}, 'همه‌ی کانفیگ‌ها کپی شد ✓')">📋 کپی همه</button>` : ""}<button class="btn" onclick="closeSheet()">بستن</button></div>`);
+}
+function cfgQr(i) {
+  const l = S.svc && S.svc.links[i], box = $("cfg-qr"); if (!l || !box) return;
+  const im = qrImg(l); if (!im) { toast("این کانفیگ برای QR خیلی بلند است", "bad"); return; }
+  box.innerHTML = im; box.classList.remove("hide"); box.scrollIntoView({block: "nearest", behavior: "smooth"});
+}
+function linkSheet(id) {
+  sheet(`<h3>🔗 تغییر لینک اشتراک</h3><div class="note">لینک اشتراک و کانفیگ‌های فعلی از کار می‌افتند و یک لینک و کانفیگ جدید ساخته می‌شود. بعد از آن لینک قبلی را از برنامه پاک کن و لینک جدید را وارد کن.</div>
+    <div class="btns"><button class="btn pri" id="do-link" onclick="doLink(${id})">تغییر لینک</button><button class="btn" onclick="closeSheet()">انصراف</button></div>`);
+}
+async function doLink(id) {
+  if (S.busy) return; S.busy = true; const b = $("do-link"); if (b) { b.disabled = true; b.innerHTML = '<i class="spin"></i> در حال ساخت…'; }
+  const r = await api("service_link", {id}); S.busy = false;
+  if (!r.ok) { toast(r.error, "bad"); if (b) { b.disabled = false; b.textContent = "دوباره"; } return; }
+  closeSheet(); toast("لینک جدید ساخته شد ✓", "ok"); delete S.live[id]; render();
+}
+function toggleSheet(id, what) {
+  const off = what === "disable";
+  sheet(`<h3>${off ? "⏸ غیرفعال‌سازی سرویس" : "▶️ فعال‌سازی سرویس"}</h3><div class="note">${off ? "تا وقتی غیرفعال است اتصال کار نمی‌کند و مصرفی ثبت نمی‌شود. هر وقت خواستی از همین‌جا دوباره فعالش کن." : "سرویس دوباره وصل می‌شود."}</div>
+    <div class="btns"><button class="btn pri" id="do-toggle" onclick="doToggle(${id},${js(off ? "disabled" : "active")})">${off ? "غیرفعال کن" : "فعال کن"}</button><button class="btn" onclick="closeSheet()">انصراف</button></div>`);
+}
+async function doToggle(id, want) {
+  if (S.busy) return; S.busy = true; const b = $("do-toggle"); if (b) { b.disabled = true; b.innerHTML = '<i class="spin"></i> لحظه‌ای…'; }
+  const r = await api("service_toggle", {id, want}); S.busy = false;
+  if (!r.ok) { toast(r.error, "bad"); if (b) { b.disabled = false; b.textContent = "دوباره"; } return; }
+  closeSheet(); toast(want === "active" ? "سرویس فعال شد ✓" : "سرویس غیرفعال شد ✓", "ok"); delete S.live[id]; render();
+}
+function deleteSheet(id) {
+  const s = S.svc; const name = s && s.id === id ? s.remark : "";
+  sheet(`<h3>🗑 حذف اشتراک</h3><div class="note bad">آیا از حذف اشتراک ${ltr(name)} مطمئنی؟ با حذف، اشتراک برای همیشه پاک می‌شود؛ این کار برگشت ندارد و هزینه‌ی آن برگردانده نمی‌شود.</div>
+    <div class="btns"><button class="btn danger" id="do-del" onclick="doDelete(${id})">بله، حذف شود</button><button class="btn pri" onclick="closeSheet()">انصراف</button></div>`);
+}
+async function doDelete(id) {
+  if (S.busy) return; S.busy = true; const b = $("do-del"); if (b) { b.disabled = true; b.innerHTML = '<i class="spin"></i> در حال حذف…'; }
+  const r = await api("service_delete", {id}); S.busy = false;
+  if (!r.ok) { toast(r.error, "bad"); if (b) { b.disabled = false; b.textContent = "دوباره"; } return; }
+  closeSheet(); toast("اشتراک حذف شد ✓", "ok"); delete S.live[id]; S.services = null; S.me.services = Math.max(0, (S.me.services || 1) - 1); setTab("services");
+}
 /* the helper subscription links of the server (the bot's "لینک کمکی اشتراک"): the same token on the server's other domains, for when the main link does not open */
 const altBox = list => list && list.length ? `<div class="card"><h3>🔁 لینک کمکی اشتراک</h3>${list.map(u => `<div class="code mb" onclick="copy(${js(u)})">${esc(u)}<span class="cp">📋</span></div>`).join("")}<div class="note">اگر لینک اصلی اشتراک کار نکرد از لینک کمکی اشتراک استفاده کنید.</div></div>` : "";
 function showQr(text) {

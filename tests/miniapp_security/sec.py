@@ -135,7 +135,7 @@ PLOCK = threading.Lock()
 
 def panel_reset():
     PU.clear()
-    PANEL.update(fail_create=None, fail_modify=None, delay_create=0.0, sub_pad=0, creates=0, modifies=0, deletes=0, down=False, hang_after_create=0)
+    PANEL.update(fail_create=None, fail_modify=None, delay_create=0.0, sub_pad=0, creates=0, modifies=0, deletes=0, down=False, hang_after_create=0, fail_delete=None, fail_revoke=None, revokes=0)
 
 
 class Panel(BaseHTTPRequestHandler):
@@ -177,6 +177,17 @@ class Panel(BaseHTTPRequestHandler):
                 return self._send(200, rec)
             except Exception:
                 return None
+        if p.startswith("/api/user/") and p.endswith("/revoke_sub"):
+            if PANEL["fail_revoke"]:
+                return self._send(PANEL["fail_revoke"], {"detail": "boom"})
+            u = urllib.parse.unquote(p[len("/api/user/"):-len("/revoke_sub")])
+            if u in PU:
+                with PLOCK:
+                    PANEL["revokes"] += 1
+                    n = PANEL["revokes"]
+                    PU[u]["subscription_url"] = f"/sub/revoked{n}-{u}"
+                    PU[u]["links"] = [f"vless://new{n}@h.invalid:443?security=tls#{u}"]
+                return self._send(200, PU[u])
         if p.startswith("/api/user/") and p.endswith("/reset"):
             u = urllib.parse.unquote(p[len("/api/user/"):-len("/reset")])
             if u in PU:
@@ -209,6 +220,8 @@ class Panel(BaseHTTPRequestHandler):
     def do_DELETE(self):
         p = self.path
         if p.startswith("/api/user/"):
+            if PANEL["fail_delete"]:
+                return self._send(PANEL["fail_delete"], {"detail": "boom"})
             u = urllib.parse.unquote(p[len("/api/user/"):])
             if u in PU:
                 PANEL["deletes"] += 1
@@ -337,7 +350,7 @@ $buttonValues = [];
 
 
 DATA_TABLES = ["users", "orders_list", "pays", "setting", "server_info", "server_config", "server_plans", "server_categories", "increase_plan", "increase_day", "needed_sofwares", "chats", "chats_info", "discounts", "increase_order"]
-LAZY_TABLES = ["gift_codes", "wheel_log", "cashback_log", "outage_reports", "miniapp_throttle"]
+LAZY_TABLES = ["gift_codes", "wheel_log", "cashback_log", "outage_reports", "miniapp_throttle", "miniapp_selfoff"]
 BASE_STATES = {"botState": "on", "sellState": "on", "walletState": "on", "cartToCartState": "on", "giftState": "on", "wheelState": "on", "reportState": "on", "renewAccountState": "on", "increaseVolumeState": "on",
                "increaseTimeState": "on", "onHoldState": "off", "subLinkState": "on", "configLinkState": "on", "cashbackPercent": "0", "gbPrice": "2500", "dayPrice": "1500", "walletAmounts": "100000,200000,500000",
                "supportID": "@test_support", "wheelHours": "24", "wheelPrizes": "0,1000,2000", "remark": "digits"}
@@ -1128,6 +1141,221 @@ def tn1():
     if not ok(j) or len(j.get("tickets", [])) != 1:
         problems.append("the list of tickets must still be there")
     return bool(problems), "; ".join(problems) if problems else "new tickets are switched off cleanly, replies and the list still work, the default is unchanged"
+
+# ===== the tools of the service page (show configs / QR are page-only): change link, enable / disable, delete - staged by BOT_STATES miniServiceTools
+def tools_state(mode):
+    reset(states={"miniServiceTools": mode} if mode else {})
+
+
+def svc_tools_of(sid, who=U):
+    return ((call("service", {"id": sid}, uid=who)[1] or {}).get("service") or {}).get("tools")
+
+
+@scn("SV1", "HIGH", "service-page tools are staged (miniServiceTools unset / admin = the admins only, on = everybody, off = nobody): features.svc_tools, service.tools and the three actions follow it, a refused call changes nothing; ids that are not the caller's own are refused; no initData = refused")
+def sv1():
+    problems = []
+    for mode, want_u, want_a in ((None, False, True), ("admin", False, True), ("on", True, True), ("off", False, False)):
+        tools_state(mode); mk_user(U); mk_user(ADMIN)
+        su, sa = mk_service(U), mk_service(ADMIN)
+        for who, sid, want in ((U, su, want_u), (ADMIN, sa, want_a)):
+            f = (call("me", uid=who)[1] or {}).get("features", {}).get("svc_tools")
+            t = svc_tools_of(sid, who)
+            if f is not want or (t is not None) is not want:
+                problems.append(f"mode {mode}: {'customer' if who == U else 'admin'} gets features.svc_tools={f} service.tools={t!r}, want {want}")
+            if want:
+                continue
+            snap = (PANEL["modifies"], PANEL["revokes"], PANEL["deletes"], PU[f"svc{who}"]["status"], q1("SELECT COUNT(*) FROM orders_list"))
+            for a, b in (("service_toggle", {"want": "disabled"}), ("service_link", {}), ("service_delete", {})):
+                c, j, tx = call(a, dict(b, id=sid), uid=who)
+                if ok(j) or c != 403:
+                    problems.append(f"mode {mode}: {a} by {'a customer' if who == U else 'an admin'} answered {c} ok={ok(j)}, want a refusal (403)")
+            if snap != (PANEL["modifies"], PANEL["revokes"], PANEL["deletes"], PU[f"svc{who}"]["status"], q1("SELECT COUNT(*) FROM orders_list")):
+                problems.append(f"mode {mode}: a refused tool still changed something")
+    tools_state("on"); mk_user(U); mk_user(V)
+    su, sv = mk_service(U), mk_service(V)
+    for a, b in (("service_toggle", {"want": "disabled"}), ("service_link", {}), ("service_delete", {})):
+        for bad in (sv, 0, -1, 999999999, "abc", "", None):
+            c, j, tx = call(a, dict(b, id=bad), uid=U)
+            if ok(j):
+                problems.append(f"{a} with id {bad!r} was accepted")
+        c, j, tx = call(a, dict(b, id=su), init=False)
+        if ok(j) or c not in (401, 403):
+            problems.append(f"{a} without initData answered {c} ok={ok(j)}")
+    if PU[f"svc{V}"]["status"] != "active" or PU[f"svc{U}"]["status"] != "active" or PANEL["deletes"] or PANEL["revokes"] or PANEL["modifies"] or q1("SELECT COUNT(*) FROM orders_list") != "2":
+        problems.append(f"the refused calls changed the panel or the orders: modifies {PANEL['modifies']}, revokes {PANEL['revokes']}, deletes {PANEL['deletes']}")
+    return bool(problems), "; ".join(problems[:6]) if problems else "the tools follow the stage (admins first), every refusal changes nothing, foreign / bad ids and missing initData are refused"
+
+
+@scn("SV2", "HIGH", "enable / disable: a customer switches his own service off and on; an account an ADMIN disabled, or an expired one, is never switched on by him; a refusing panel leaves it as it was; a late page is a no-op; at most 20 switches an hour")
+def sv2():
+    problems = []
+    tools_state("on"); mk_user(U); mk_user(V); su = mk_service(U); rem = f"svc{U}"
+
+    def tog(want, uid=U, sid=None):
+        return call("service_toggle", {"id": sid or su, "want": want}, uid=uid)
+
+    def state():
+        return PU[rem]["status"], q1(f"SELECT COUNT(*) FROM miniapp_selfoff WHERE order_id={su}")
+    tl = lambda: (svc_tools_of(su) or {}).get("toggle")
+    if tl() != "disable":
+        problems.append(f"an active service offers {tl()!r}, want 'disable'")
+    c, j, t = tog("disabled")
+    if not ok(j) or state() != ("disabled", "1") or tl() != "enable":
+        problems.append(f"switch off: {t[:80]}, state {state()}, offers {tl()!r}")
+    m = PANEL["modifies"]
+    c, j, t = tog("disabled")
+    if not ok(j) or PANEL["modifies"] != m:
+        problems.append("switching off twice was not a no-op")
+    c, j, t = tog("active")
+    if not ok(j) or state() != ("active", "0"):
+        problems.append(f"switch on: {t[:80]}, state {state()}")
+    PU[rem]["status"] = "disabled"          # an admin disabled it (no row of his own)
+    c, j, t = tog("active")
+    if ok(j) or PU[rem]["status"] != "disabled" or tl() is not None:
+        problems.append(f"an admin-disabled service was switched on by the customer (ok={ok(j)}, status {PU[rem]['status']}, offers {tl()!r})")
+    for st in ("expired", "limited"):
+        PU[rem]["status"] = st
+        for want in ("disabled", "active"):
+            c, j, t = tog(want)
+            if ok(j) or PU[rem]["status"] != st:
+                problems.append(f"a {st} service was switched ({want}): ok={ok(j)}, status {PU[rem]['status']}")
+        if tl() is not None:
+            problems.append(f"a {st} service still offers {tl()!r}")
+    PU[rem]["status"] = "active"
+    for bad in ("on", "", None, "disable", ["x"]):
+        c, j, t = tog(bad)
+        if ok(j):
+            problems.append(f"want={bad!r} accepted")
+    c, j, t = tog("disabled", uid=V)
+    if ok(j) or c != 404 or PU[rem]["status"] != "active":
+        problems.append(f"another customer's service: answered {c}, ok={ok(j)}, status {PU[rem]['status']}")
+    PANEL["fail_modify"] = 500
+    c, j, t = tog("disabled")
+    PANEL["fail_modify"] = None
+    if ok(j) or state() != ("active", "0"):
+        problems.append(f"a refusing panel: ok={ok(j)}, state {state()} (want active, no row)")
+    done, last = 0, None
+    for i in range(25):
+        c, j, t = tog("disabled" if i % 2 == 0 else "active")
+        if ok(j):
+            done += 1
+        else:
+            last = c
+            break
+    if last != 429 or not 14 <= done <= 20:
+        problems.append(f"the hourly limit: {done} switches went through, then {last} (want a 429 after at most 20 in all)")
+    return bool(problems), "; ".join(problems[:6]) if problems else "off / on works, admin-disabled and expired are never switched on, the panel's refusal and a late page change nothing, the limit holds"
+
+
+@scn("SV3", "HIGH", "change the subscription link: the panel is asked to revoke, the order keeps the new token and configs, the customer is told the new link once, the page shows it; another customer's service, a refusing panel, a dead service change nothing; at most 6 an hour")
+def sv3():
+    problems = []
+    tools_state("on"); mk_user(U); mk_user(V); su, sv = mk_service(U), mk_service(V); rem = f"svc{U}"
+    old = PU[rem]["subscription_url"]
+    c, j, t = call("service_link", {"id": su})
+    if not ok(j) or PANEL["revokes"] != 1 or PU[rem]["subscription_url"] == old:
+        problems.append(f"change link: answered {t[:80]}, revokes {PANEL['revokes']}")
+    else:
+        tok = PU[rem]["subscription_url"].split("/sub/")[1]
+        row = sql(f"SELECT token, link FROM orders_list WHERE id={su}")[0]
+        if row[0] != tok or "new1" not in row[1]:
+            problems.append(f"the order was not updated: {row}")
+        told = [m for m in tg_msgs("sendMessage", U) if tok in m["text"]]
+        if len(told) != 1:
+            problems.append(f"the customer was told the new link {len(told)} times")
+        s = (call("service", {"id": su})[1] or {}).get("service") or {}
+        if tok not in (s.get("sub") or "") or old.split("/sub/")[1] in (s.get("sub") or ""):
+            problems.append(f"the page shows {s.get('sub')!r}")
+    c, j, t = call("service_link", {"id": sv}, uid=U)
+    if ok(j) or c != 404 or PANEL["revokes"] != 1:
+        problems.append(f"another customer's service: answered {c}, revokes {PANEL['revokes']}")
+    tokb, linkb, n = q1(f"SELECT token FROM orders_list WHERE id={su}"), q1(f"SELECT link FROM orders_list WHERE id={su}"), len(tg_msgs("sendMessage", U))
+    PANEL["fail_revoke"] = 500
+    c, j, t = call("service_link", {"id": su})
+    PANEL["fail_revoke"] = None
+    if ok(j) or q1(f"SELECT token FROM orders_list WHERE id={su}") != tokb or q1(f"SELECT link FROM orders_list WHERE id={su}") != linkb or len(tg_msgs("sendMessage", U)) != n:
+        problems.append("a refusing panel still changed the order or told the customer")
+    for st in ("expired", "limited"):
+        PU[rem]["status"] = st
+        r0 = PANEL["revokes"]
+        c, j, t = call("service_link", {"id": su})
+        if ok(j) or PANEL["revokes"] != r0:
+            problems.append(f"a {st} service got a new link")
+    PU[rem]["status"] = "active"
+    PANEL["down"] = True
+    c, j, t = call("service_link", {"id": su})
+    PANEL["down"] = False
+    if ok(j) or PANEL["revokes"] != 1:
+        problems.append("a panel that is down still answered ok")
+    done, last = 0, None
+    for i in range(10):
+        c, j, t = call("service_link", {"id": su})
+        if ok(j):
+            done += 1
+        else:
+            last = c
+            break
+    if last != 429 or not 3 <= done <= 6:
+        problems.append(f"the hourly limit: {done} more changes went through, then {last} (want 429 after at most 6 in all)")
+    return bool(problems), "; ".join(problems[:6]) if problems else "revoke + new token and configs saved, told once, page shows it, refusals change nothing, the limit holds"
+
+
+@scn("SV4", "HIGH", "delete his own service: the account leaves the panel, the order row goes, the slot comes back once (two taps at once too), the admins are told; another customer's service, a refusing or dead panel change nothing; an account already gone from the panel is deleted too; at most 10 an hour")
+def sv4():
+    problems = []
+    tools_state("on"); mk_user(U); mk_user(V)
+    s1, sv = mk_service(U, "del1"), mk_service(V)
+
+    def slots():
+        return int(q1("SELECT ucount FROM server_info WHERE id=1"))
+
+    def rowc(i):
+        return q1(f"SELECT COUNT(*) FROM orders_list WHERE id={i}")
+    base = slots()
+    c, j, t = call("service_delete", {"id": sv})
+    if ok(j) or c != 404 or f"svc{V}" not in PU or rowc(sv) != "1":
+        problems.append(f"another customer's service: answered {c}, ok={ok(j)}")
+    for what in ("fail_delete", "down"):
+        PANEL[what] = 500 if what == "fail_delete" else True
+        c, j, t = call("service_delete", {"id": s1})
+        PANEL[what] = None if what == "fail_delete" else False
+        if ok(j) or "del1" not in PU or rowc(s1) != "1" or slots() != base:
+            problems.append(f"{what}: ok={ok(j)}, account kept {'del1' in PU}, order rows {rowc(s1)}, slots {slots()} (base {base})")
+    c, j, t = call("service_delete", {"id": s1})
+    if not ok(j) or "del1" in PU or rowc(s1) != "0" or slots() != base + 1:
+        problems.append(f"delete: {t[:80]}, account left {'del1' in PU}, order rows {rowc(s1)}, slots {slots()} (want {base + 1})")
+    if not [m for m in tg_msgs("sendMessage", ADMIN) if "del1" in m["text"]]:
+        problems.append("the admins were not told")
+    c, j, t = call("service_delete", {"id": s1})
+    if ok(j) or slots() != base + 1:
+        problems.append(f"deleting again: ok={ok(j)}, slots {slots()}")
+    s2 = mk_service(U, "del2"); b2 = slots()
+    par(2, lambda i: call("service_delete", {"id": s2}))
+    if slots() != b2 + 1 or "del2" in PU or rowc(s2) != "0":
+        problems.append(f"two taps at once: slots {slots()} (want {b2 + 1}), account left {'del2' in PU}, order rows {rowc(s2)}")
+    s3 = mk_service(U, "del3"); del PU["del3"]
+    c, j, t = call("service_delete", {"id": s3})
+    if not ok(j) or rowc(s3) != "0":
+        problems.append(f"an account already gone from the panel: {t[:80]}, order rows {rowc(s3)}")
+    s4 = mk_service(U, "del4"); sql(f"UPDATE orders_list SET status=0 WHERE id={s4}"); b4 = slots()
+    c, j, t = call("service_delete", {"id": s4})
+    if not ok(j) or rowc(s4) != "0" or slots() != b4:
+        problems.append(f"an inactive order: {t[:80]}, order rows {rowc(s4)}, slots {slots()} (want {b4})")
+    done, last = 0, None
+    for i in range(14):
+        sid = mk_service(U, f"dl{i}")
+        c, j, t = call("service_delete", {"id": sid})
+        if ok(j):
+            done += 1
+        else:
+            last = c
+            if f"dl{i}" not in PU or rowc(sid) != "1":
+                problems.append("a refused (limited) delete still removed the account or the order")
+            break
+    if last != 429 or not 1 <= done <= 10:
+        problems.append(f"the hourly limit: {done} more deletes went through, then {last} (want 429 after at most 10 in all)")
+    return bool(problems), "; ".join(problems[:6]) if problems else "account + order removed, the slot back once, admins told, foreign / refused / dead-panel cases change nothing, the limit holds"
+
 
 # ===== discount codes of the bot (table discounts) in the buy sheet
 def mk_code(code, **kw):

@@ -10,7 +10,7 @@
    Nothing of the bot's webhook flow runs here.
 
    Actions (POST JSON {a, initData, ...} or ?a=):
-     me · services · live · service · quote · plans · buy · renew · addvolume · adddays
+     me · services · live · service · service_toggle · service_link · service_delete · quote · plans · buy · renew · addvolume · adddays
      topup · receipt (multipart) · cancel_topup · history · gift · wheel · referral · apps
      tickets · ticket_messages · ticket_new · ticket_reply · report
    ===================================================================== */
@@ -97,6 +97,15 @@ function buyGroups(): bool {
     $m = (string) ($botState['miniBuyGroups'] ?? 'admin');
     return $m === 'on' || ($m === 'admin' && in_array((int) $uid, (array) $admins, true));
 }
+/** the tools of the service page (show configs, QR, change subscription link, enable / disable, delete; the support button leaves that page) are staged the same way: BOT_STATES miniServiceTools = 'admin' (the default while they are tried), 'on' (everybody), 'off' (nobody: the old page) */
+function serviceTools(): bool {
+    global $botState, $admins, $uid;
+    $m = (string) ($botState['miniServiceTools'] ?? 'admin');
+    return $m === 'on' || ($m === 'admin' && in_array((int) $uid, (array) $admins, true));
+}
+/** the services a customer switched off HIMSELF from the Mini App: only those he may switch on again (an account an admin disabled stays disabled) */
+function selfOffTable(): void { static $made = false; if (!$made) { db()->query("CREATE TABLE IF NOT EXISTS miniapp_selfoff (order_id INT NOT NULL PRIMARY KEY, userid BIGINT NOT NULL, at BIGINT NOT NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"); $made = true; } }
+function selfOff(int $oid): bool { selfOffTable(); return row("SELECT order_id FROM miniapp_selfoff WHERE order_id = ?", [$oid]) !== null; }
 /**
  * The bot's server merge (settings/server_merge.json {"<child>": <parent>}, read the way the bot's own server_merge.php reads it): a merged server is
  * shown INSIDE its parent on the buy menu. The Buy page does the same - one card for the parent, its categories hold the plans of both servers -
@@ -510,6 +519,41 @@ function panelResetUser(array $srv, string $remark): bool {
     [$code] = panelHttp('POST', rtrim((string) $srv['panel_url'], '/') . panelUserPath($srv, $remark) . '/reset', $tok, [], 15);
     return $code < 300;
 }
+/** the account's status set on the panel and read back: the panel's own status field first (Marzban, PasarGuard), then the bot's /disabled route for PasarGuard; Marzneshin has enable / disable routes */
+function panelSetStatus(array $srv, string $remark, string $status): bool {
+    $tok = panelToken($srv);
+    if ($tok === null) return false;
+    $base = rtrim((string) $srv['panel_url'], '/'); $kind = panelKind($srv);
+    if ($kind === 'marzneshin') { [$code] = panelHttp('POST', $base . panelUserPath($srv, $remark) . ($status === 'active' ? '/enable' : '/disable'), $tok, [], 15); return $code < 300; }
+    if (panelModifyUser($srv, $remark, ['status' => $status]) && (panelGetUser($srv, $remark)['status'] ?? '') === $status) return true;
+    if ($kind !== 'pasarguard') return false;
+    [$code] = panelHttp('PUT', $base . panelUserPath($srv, $remark) . '/disabled', $tok, ['disabled' => $status !== 'active'], 15);
+    return $code < 300 && (panelGetUser($srv, $remark)['status'] ?? '') === $status;
+}
+/** a new subscription link (and new configs) for the account: the panel's revoke_sub, the way the bot's "change link" does it */
+function panelRevokeSub(array $srv, string $remark): ?array {
+    $tok = panelToken($srv);
+    if ($tok === null) return null;
+    [$code, $u] = panelHttp('POST', rtrim((string) $srv['panel_url'], '/') . panelUserPath($srv, $remark) . '/revoke_sub', $tok, [], 20);
+    if ($code >= 300 || !is_array($u) || !isset($u['username'])) return null;
+    $n = normalizeUser($srv, $u);
+    if (!$n['links']) { usleep(600000); $n['links'] = linksFromSub($n['sub']); }
+    return $n;
+}
+/** the account is not on the panel any more: deleted now, or already gone (404). A panel that did not answer, or refused, counts as "still there" */
+function panelRemoveUser(array $srv, string $remark): bool {
+    $tok = panelToken($srv);
+    if ($tok === null) return false;
+    [$code] = panelHttp('DELETE', rtrim((string) $srv['panel_url'], '/') . panelUserPath($srv, $remark), $tok, null, 15);
+    return ($code >= 200 && $code < 300) || $code === 404;
+}
+/** the order of a service-page tool: the tools must be switched on for this customer, the order must be his and live on a panel */
+function toolOrder(array $body, int $uid): array {
+    if (!serviceTools()) fail('این امکان فعلاً فعال نیست.', 403);
+    $o = orderOf((int) ($body['id'] ?? 0), $uid);
+    if (!$o || empty($o['panel_url'])) fail('سرویس پیدا نشد.', 404);
+    return $o;
+}
 /** takes back an account this request made when the order could not be saved (no orphan account on the panel, no account the customer never got) */
 function panelDeleteUser(array $srv, string $remark): bool {
     $tok = panelToken($srv);
@@ -605,7 +649,7 @@ case 'me': {
         'user' => ['id' => $uid, 'name' => trim((string) $me['name']), 'username' => trim((string) ($me['username'] ?? '')), 'wallet' => (int) $me['wallet'], 'agent' => $isAgent, 'services' => $cnt, 'pending_topups' => $pending, 'since' => (int) ($me['date'] ?? 0)],
         'features' => ['sell' => on('sellState', 'on'), 'buy_groups' => buyGroups(), 'support_chat' => on('supportChat', 'on'), 'ticket_new' => on('miniTicketNew', 'on'), 'discount_code' => on('miniDiscountCode', 'on') && !$isAgent, 'wallet' => on('walletState', 'on'), 'card' => on('cartToCartState'), 'currency' => ctcCurrencyOn(), 'gift' => on('giftState'), 'wheel' => on('wheelState'), 'report' => on('reportState'),
             'renew' => on('renewAccountState', 'on'), 'addvolume' => on('increaseVolumeState', 'on'), 'adddays' => on('increaseTimeState', 'on'), 'apps' => $apps > 0, 'hold' => on('onHoldState'),
-            'cashback' => (float) ($botState['cashbackPercent'] ?? 0), 'referral' => (int) settingValue('INVITE_BANNER_AMOUNT') > 0, 'sub' => on('subLinkState', 'on'), 'configs' => on('configLinkState', 'on')],
+            'cashback' => (float) ($botState['cashbackPercent'] ?? 0), 'referral' => (int) settingValue('INVITE_BANNER_AMOUNT') > 0, 'sub' => on('subLinkState', 'on'), 'configs' => on('configLinkState', 'on'), 'svc_tools' => serviceTools()],
         'amounts' => $amounts, 'min_topup' => MIN_TOPUP, 'max_topup' => MAX_TOPUP, 'topup_step' => TOPUP_STEP, 'support' => ltrim($support, '@'), 'bot' => (string) ($botUsername ?? ''), 'start' => (string) ($user['start_param'] ?? '')]);
 }
 
@@ -634,7 +678,58 @@ case 'service': {
     $plan = orderPlan($o);
     out(['ok' => true, 'service' => ['id' => (int) $o['id'], 'remark' => $o['remark'], 'server' => $o['label'], 'server_id' => (int) $o['server_id'], 'expire' => (int) $o['expire_date'], 'bought' => (int) $o['date'], 'active' => (int) $o['status'] === 1,
         'plan' => $plan ? ['id' => (int) $plan['id'], 'title' => $plan['title'], 'volume' => (float) $plan['volume'], 'days' => (int) $plan['days']] : null,
-        'live' => $live ? array_diff_key($live, ['links' => 1]) : null, 'status_fa' => $live ? statusFa($live['status']) : null, 'sub' => on('subLinkState', 'on') ? ($live['sub'] ?? '') : '', 'sub_alt' => subAlt($o['sub_links'] ?? '', (string) ($live['sub'] ?? ''), (string) ($o['token'] ?? '')), 'links' => on('configLinkState', 'on') ? $links : []]]);
+        'live' => $live ? array_diff_key($live, ['links' => 1]) : null, 'status_fa' => $live ? statusFa($live['status']) : null, 'sub' => on('subLinkState', 'on') ? ($live['sub'] ?? '') : '', 'sub_alt' => subAlt($o['sub_links'] ?? '', (string) ($live['sub'] ?? ''), (string) ($o['token'] ?? '')), 'links' => on('configLinkState', 'on') ? $links : [],
+        'tools' => serviceTools() ? ['toggle' => !$live ? null : ($live['status'] === 'active' ? 'disable' : ($live['status'] === 'disabled' && selfOff((int) $o['id']) ? 'enable' : null))] : null]]);      // (tools.toggle: what the enable / disable button does now - none when the panel did not answer, the status is expired / limited / on hold, or an admin disabled it)
+}
+
+case 'service_toggle': {   // the customer switches his own service off, and on again (never one an admin disabled)
+    $o = toolOrder($body, $uid);
+    $want = is_string($body['want'] ?? null) ? $body['want'] : '';
+    if (!in_array($want, ['active', 'disabled'], true)) fail('درخواست نامعتبر است.');
+    $live = panelGetUser($o, (string) $o['remark']);
+    if (!$live) fail('ارتباط با سرور برقرار نشد؛ چند دقیقه دیگر دوباره تلاش کنید.');
+    if ($live['status'] === $want) out(['ok' => true, 'status' => $want, 'status_fa' => statusFa($want)]);      // (the page was late: it is so already)
+    if (!in_array($live['status'], ['active', 'disabled'], true)) fail('وضعیت این سرویس «' . statusFa($live['status']) . '» است؛ فعال/غیرفعال کردن ممکن نیست.');
+    if ($want === 'active' && !selfOff((int) $o['id'])) fail('این سرویس توسط مدیریت غیرفعال شده است؛ با پشتیبانی تماس بگیرید.');
+    if (throttled($uid, 'toggle', 20, 3600)) fail('تعداد دفعات زیاد است؛ کمی بعد دوباره تلاش کنید.', 429);
+    throttleHit($uid, 'toggle');
+    if ($want === 'disabled') {      // (the row first, the panel last: a panel that refuses leaves nothing behind)
+        selfOffTable(); run("INSERT IGNORE INTO miniapp_selfoff (order_id, userid, at) VALUES (?, ?, ?)", [(int) $o['id'], $uid, time()]);
+        if (!panelSetStatus($o, (string) $o['remark'], 'disabled')) { run("DELETE FROM miniapp_selfoff WHERE order_id = ?", [(int) $o['id']]); fail('پنل تغییر را نپذیرفت؛ سرویس همان‌طور که بود ماند.'); }
+    } else {
+        if (!panelSetStatus($o, (string) $o['remark'], 'active')) fail('پنل تغییر را نپذیرفت؛ سرویس همان‌طور که بود ماند.');
+        run("DELETE FROM miniapp_selfoff WHERE order_id = ?", [(int) $o['id']]);
+    }
+    out(['ok' => true, 'status' => $want, 'status_fa' => statusFa($want)]);
+}
+
+case 'service_link': {   // a new subscription link: the old link and the old configs stop working
+    $o = toolOrder($body, $uid);
+    if (throttled($uid, 'sublink', 6, 3600)) fail('در یک ساعت گذشته چند بار لینک را عوض کرده‌ای؛ کمی بعد دوباره تلاش کنید.', 429);
+    $live = panelGetUser($o, (string) $o['remark']);
+    if (!$live) fail('ارتباط با سرور برقرار نشد؛ لینک عوض نشد.');
+    if (!in_array($live['status'], ['active', 'disabled', 'on_hold'], true)) fail('وضعیت این سرویس «' . statusFa($live['status']) . '» است؛ ابتدا آن را تمدید کنید.');
+    throttleHit($uid, 'sublink');
+    $n = panelRevokeSub($o, (string) $o['remark']);
+    if (!$n || $n['sub'] === '') fail('پاسخی از سرور نیامد؛ صفحه‌ی سرویس را دوباره باز کن و لینک را از همان‌جا بردار.');
+    $token = strpos($n['sub'], '/sub/') !== false ? explode('?', explode('/sub/', $n['sub'], 2)[1], 2)[0] : (string) $o['token'];
+    run("UPDATE orders_list SET token = ?" . ($n['links'] ? ", link = ?" : "") . " WHERE id = ?", array_merge([$token], $n['links'] ? [json_encode($n['links'], JSON_UNESCAPED_SLASHES)] : [], [(int) $o['id']]));      // (what the bot's "change link" saves: the new token and the new configs)
+    if (on('subLinkState', 'on')) tgText($uid, "✅ <b>لینک اشتراک شما تغییر کرد</b>\n\n🔖 <code>" . h($o['remark']) . "</code>\n\n🔗 لینک اشتراک جدید:\n<code>" . h($n['sub']) . "</code>\n\n♻️ لینک و کانفیگ‌های قبلی دیگر کار نمی‌کنند؛ لینک اشتراک قبلی را از برنامه پاک کن و این لینک را وارد کن.");
+    out(['ok' => true]);
+}
+
+case 'service_delete': {   // the customer deletes his own service for good: no refund (as in the bot)
+    $o = toolOrder($body, $uid);
+    if (throttled($uid, 'svcdel', 10, 3600)) fail('تعداد دفعات زیاد است؛ کمی بعد دوباره تلاش کنید.', 429);
+    throttleHit($uid, 'svcdel');
+    if (!panelRemoveUser($o, (string) $o['remark'])) fail('سرور پاسخ نداد؛ سرویس حذف نشد. چند دقیقه دیگر دوباره تلاش کنید.');
+    if (run("DELETE FROM orders_list WHERE id = ? AND userid = ?", [(int) $o['id'], $uid]) > 0 && (int) $o['status'] === 1) {      // (the slot goes back once: two taps at once delete the row once)
+        $plan = orderPlan($o);
+        if ($plan) giveSlotBack($plan, ['id' => (int) $o['server_id']]); else run("UPDATE server_info SET ucount = ucount + 1 WHERE id = ?", [(int) $o['server_id']]);
+    }
+    selfOffTable(); run("DELETE FROM miniapp_selfoff WHERE order_id = ?", [(int) $o['id']]);
+    tellAdmins("🗑 <b>حذف سرویس توسط کاربر (مینی‌اپ)</b>\n\n👤 " . userLink($uid, (string) $me['name']) . " · <code>$uid</code>\n🔖 <code>" . h($o['remark']) . "</code> · " . h($o['label']));
+    out(['ok' => true]);
 }
 
 case 'quote': {   // what renew / more volume / more days cost for one service
