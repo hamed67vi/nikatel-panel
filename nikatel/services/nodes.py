@@ -554,11 +554,26 @@ def lookup(host: str, want_provider: bool = True) -> dict:
     return {"country_code": code, "country": next((x["country"] for x in group if x["country"]), ""), "city": next((x["city"] for x in group if x["city"]), ""), "sources": len(group), "total": len(src), **provider}
 
 
+GEO_RETRY = 3600      # a server whose provider could not be read is asked again after this long (the geo services answer nothing or "too many requests" when many servers are asked together; the job runs once an hour)
+
+
+def _geo_due(s, now: int) -> bool:
+    """Pure-ish: is this server's provider still to be found - never asked, or asked and nothing came back more than GEO_RETRY ago (a server that has a provider is not asked again by the hourly job)."""
+    g = (s.extra or {}).get("geo") or {}
+
+    if not g.get("provider_at"):
+        return True
+
+    return not g.get("provider") and not g.get("domain") and now - int(g.get("provider_at") or 0) >= GEO_RETRY
+
+
 def geo_refresh(only_missing: bool = False) -> list[dict]:
     """Country of the foreign servers and the hosting provider of every server (`only_missing`: just the ones not known yet)."""
+    now = int(time.time())
+
     with session() as db:
         targets = [(s.id, s.host, s.country, s.role) for s in db.scalars(select(Server))
-                   if not only_missing or (s.role == "foreign" and not s.country) or not ((s.extra or {}).get("geo") or {}).get("provider_at")]
+                   if not only_missing or (s.role == "foreign" and not s.country) or _geo_due(s, now)]
 
     changes = []
 

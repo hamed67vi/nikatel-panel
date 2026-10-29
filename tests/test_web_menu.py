@@ -534,7 +534,7 @@ def test_the_server_list_puts_the_servers_with_a_problem_first_then_every_locati
 def test_the_lab_row_is_the_owners_drawing_lamp_flag_name_provider_address_cpu_chart_traffic_and_two_buttons():
     """The owner, 2026-10-15: "make the design like this" (a lamp, the flag and the icon, the name with its PROVIDER under it - not the country, the address with a globe, the CPU number with a thin bar and RAM / Disk - the small CPU chart was taken out again, the traffic in two lines, the menu and a chevron)."""
     lab, css = _web("lab.js"), _web("lab.css")
-    assert lab.count('<i class="lab-lamp"') == 3 and "lab-lp" not in lab and "const labSub = s =>" in lab and "s.provider ?" in lab
+    assert lab.count('<i class="lab-lamp"') == 3 and "lab-lp" not in lab and "const labSub = s =>" in lab and "const pv = labProv(s);" in lab
     assert lab.count('<i class="lab-glb">${LAB_GLB}</i>') == 2 and "labSparkSvg" not in lab and "/api/profiles/spark" not in lab
     assert lab.count('<span class="tv"><b>') == 1 and ">Mb/s</small>" in lab      # (1.69.23: the used column is ONE total, the speed column ONE number - what the server gives out) and "const labGo = id =>" not in lab and "${labGo(" not in lab and "lab-go" not in lab
     assert ":is(td.lab-pb, td.lab-ip, td.lab-ld, td.lab-trf, td.lab-act)::before" in css and ".lab-ldx .lab-cpu b { order: -1;" in css and ".lab-spk" not in css and ".lab-go" not in css
