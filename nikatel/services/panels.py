@@ -336,6 +336,22 @@ def _cred(p: Panel) -> dict:
             "api_key_trimmed": f"{tok[:10]}***{tok[-3:]}" if is_api_key(tok) else ""}      # the form the panel lists its keys in: the API keys tab marks (and protects) the key this panel is connected with
 
 
+_CERT_WHY = re.compile(r"certificate verify failed:\s*([^(\n]+?)\s*(?:\(|$)")
+
+
+def no_answer(e: BaseException) -> str:
+    """The words for a panel that could not be asked. A certificate that is not accepted is named: a panel whose certificate had run out (2026-10-27) was reported as "ConnectError", the same words as a panel that is off,
+    and the owner could not delete a server over it without knowing why. The start stays "no answer from the panel", the cause is in the brackets."""
+    text = " ".join(str(x) for x in (e, e.__cause__, e.__context__) if x)
+    m = _CERT_WHY.search(text)
+
+    if m:
+        why = m.group(1).strip().rstrip(".")
+        return "no answer from the panel (its HTTPS certificate has expired - renew it on the panel's own server)" if "expired" in why else f"no answer from the panel (its HTTPS certificate is not accepted: {why})"
+
+    return f"no answer from the panel ({type(e).__name__})"
+
+
 def _send(c: dict, method: str, path: str, token: str | None = None, form: dict | None = None, body=None, timeout: float = 20, accept: str = "application/json"):
     """One request to a panel; the answer when it is a success. An error answer is a PanelError with the panel's own words (and its status as the code), a redirect is an error too."""
     headers = {"Accept": accept, "User-Agent": "nikatel-panel"}
@@ -347,7 +363,7 @@ def _send(c: dict, method: str, path: str, token: str | None = None, form: dict 
         r = httpx.request(method, c["url"] + path, headers=headers, data=form, json=body if form is None else None,
                           timeout=timeout, verify=bool(c.get("verify_tls", True)))
     except httpx.HTTPError as e:
-        raise PanelError(f"no answer from the panel ({type(e).__name__})")
+        raise PanelError(no_answer(e))
 
     if r.status_code >= 400:
         detail = ""

@@ -830,7 +830,7 @@ def _sse_lines(c: dict, path: str, quiet: float = 0.8, limit: float = 4.0) -> It
         except httpx.ReadTimeout:
             return
         except httpx.HTTPError as e:
-            raise panels.PanelError(f"no answer from the panel ({type(e).__name__})")
+            raise panels.PanelError(panels.no_answer(e))
 
 
 def node_logs(c: dict, node_id: int, lines: int = 150) -> dict:

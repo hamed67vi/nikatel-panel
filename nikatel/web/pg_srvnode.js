@@ -214,7 +214,7 @@ window.pgSrvWin = (sid, pid) => {      // the plan of "make a node", for the pan
 window.pgSrvAfterDelete = async (sname, nodes, alsoNode) => {
   for (const x of nodes) {
     if (x.type === "pasarguard" && x.node_id != null) {
-      if (alsoNode) { try { await api(`/api/panels/${x.panel_id}/pg/nodes/${x.node_id}?confirm=true`, {method: "DELETE"}); toast(`✓ Node ${x.name} deleted from ${x.panel}`, "ok"); pgNodesLoad(x.panel_id, true).catch(() => {}); } catch (e) { toast("✕ " + e.message, "bad"); } }
+      if (alsoNode) { try { await api(`/api/panels/${x.panel_id}/pg/nodes/${x.node_id}?confirm=true`, {method: "DELETE"}); toast(`✓ Node ${x.name} deleted from ${x.panel}`, "ok"); pgNodesLoad(x.panel_id, true).catch(() => {}); } catch (e) { toast(`✕ ${sname} is removed from the panel, but the node ${x.name} is still in ${x.panel}: ${e.message}`, "bad"); } }
       else toast(`The node ${x.name} stays in the PasarGuard panel ${x.panel}`);
     } else toast(`The node ${x.name} is still in the ${x.type === "marzban" ? "Marzban" : ""} panel ${x.panel}: remove it there if the server is gone for good.`);
   }

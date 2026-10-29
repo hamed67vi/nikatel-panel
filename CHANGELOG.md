@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.69.157 - A panel whose HTTPS certificate has run out says so (it said "ConnectError", the words of a panel that is off)
+
+> **In short:** the owner (2026-10-29, deleting a server on the PasarGuard tab) got "no answer from the panel (ConnectError)". The server was fine: the Let's Encrypt certificate of the PasarGuard panel had ended on 2026-10-27 and was not renewed, so every call of the panel failed the certificate check - which httpx reports as a `ConnectError`, the same word as a panel that is switched off. Now the words name it: "no answer from the panel (its HTTPS certificate has expired - renew it on the panel's own server)", or the reason when another certificate fault (self-signed, wrong name, unknown issuer).
+
+- **The words** (`services/panels.py` `no_answer`, used by `_send` and by the node log stream in `services/pg_nodes.py`): reads the reason from the error and its cause; the start "no answer from the panel" is kept for the screens that test for it.
+- **Delete server** (`web/pg_srvnode.js` `pgSrvAfterDelete`): when the box was ticked "also delete the node from the PasarGuard panel" and the panel cannot be asked, the toast says the server is removed from the panel but the node is still in the PasarGuard panel, and why - it said only "no answer", as if the delete itself had failed.
+- Tests: `tests/test_panel_cert_words.py`.
+
 ## 1.69.156 - The Mini App: search on "my services", QR buttons on the link cards, new plan cards, update / agent-only tools
 
 > **In short:** a day of small requests of the owner (2026-10-27, translated from Persian, most of them with a screenshot), all in the Mini App:
