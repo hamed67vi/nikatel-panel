@@ -26,16 +26,24 @@ TAG = "no answer on the SSH port"
 MISSES = 2
 TIMEOUT = 2.0
 RETRY_SECONDS = 15
+REFUSED = "refused"          # what tcp_open answers when the machine itself replied with a refusal: it is ON (the owner, 2026-10-29: BOT answered ping, 80 and 443 and showed Offline - its firewall refuses new connections to port 22 that come too fast, and the pulse connects every 3 s)
+REFUSAL = "SSH port refuses the panel's connections - the server is on (its firewall may limit new connections from the panel's address)"
+SLOW_SECONDS = 20          # a server that refuses is looked at every 20 s, not every 3 s: a limit of a few connections per half minute is not kept tripped by the pulse itself
+_slow_until: dict[int, float] = {}
+_refusing: dict[int, float] = {}          # server id -> when it last answered with a refusal
 _miss: dict[int, int] = {}
 _seen: dict[int, float] = {}          # server id -> when its SSH port last answered
 _asked: dict[int, float] = {}
 _ASKING: set[int] = set()
 
 
-def tcp_open(host: str, port: int, timeout: float = TIMEOUT) -> bool:
+def tcp_open(host: str, port: int, timeout: float = TIMEOUT):
+    """True: connected. REFUSED: the machine answered with a refusal (nothing listens, or its firewall rejects the connection) - a switched-off machine never does that. False: no answer."""
     try:
         with socket.create_connection((host, port), timeout=timeout):
             return True
+    except ConnectionRefusedError:
+        return REFUSED
     except OSError:
         return False
 
@@ -43,6 +51,11 @@ def tcp_open(host: str, port: int, timeout: float = TIMEOUT) -> bool:
 def tcp_ok_recently(sid: int, seconds: float = 30.0) -> bool:
     """Did the SSH port of this server answer in the last `seconds`? (A server whose port answers is ON, whatever its SSH session does.)"""
     return time.time() - _seen.get(sid, 0.0) <= seconds
+
+
+def refusing(sid: int, seconds: float = 60.0) -> bool:
+    """Did this server answer the pulse with a refusal lately? (It is on; its SSH port turns the panel's connections away.)"""
+    return time.time() - _refusing.get(sid, 0.0) <= seconds
 
 
 def _wake_tunnels(server_ids: list[int] | None = None) -> None:
@@ -89,6 +102,12 @@ def run() -> None:
     if not rows:
         return
 
+    t_now = time.time()
+    rows = [r for r in rows if _slow_until.get(r[0], 0.0) <= t_now]          # (a server that refuses is looked at only every SLOW_SECONDS)
+
+    if not rows:
+        return
+
     with ThreadPoolExecutor(min(32, max(4, len(rows)))) as ex:
         res = list(ex.map(lambda r: (r[0], tcp_open(r[1], r[2])), rows))
 
@@ -105,22 +124,37 @@ def run() -> None:
                 continue
 
             if ok:
+                refused = ok == REFUSED
                 _miss[sid] = 0
                 _seen[sid] = time.time()
 
+                if refused:
+                    _refusing[sid] = time.time()
+                    _slow_until[sid] = time.time() + SLOW_SECONDS
+                else:
+                    _refusing.pop(sid, None)
+                    _slow_until.pop(sid, None)
+
+                    if s.online is not False and (s.last_error or "").startswith(REFUSAL):
+                        s.last_error = ""          # (it takes connections again)
+
                 if s.online is False:
                     if (s.last_error or "").startswith(TAG):
-                        s.online, s.last_error, s.last_seen_at = True, "", now
-                        emit(db, "ok", "servers", f"Server {s.name} answers again.", s.name)
-                        log.info("pulse: %s answers again", s.name)
+                        s.online, s.last_error, s.last_seen_at = True, REFUSAL if refused else "", now
+                        emit(db, "warn" if refused else "ok", "servers", f"Server {s.name} is on: {REFUSAL}." if refused else f"Server {s.name} answers again.", s.name)
+                        log.info("pulse: %s %s", s.name, "refuses SSH but is on" if refused else "answers again")
                         changed = True
                         moved.append(sid)
                     elif sid not in _ASKING and time.time() - _asked.get(sid, 0) >= RETRY_SECONDS:
                         ask.append(sid)
+                elif refused and not s.last_error:
+                    s.last_error = REFUSAL          # (it is on, and its SSH port turns the connections away: the row says why)
 
                 continue
 
             _miss[sid] = _miss.get(sid, 0) + 1
+            _slow_until.pop(sid, None)
+            _refusing.pop(sid, None)
 
             if _miss[sid] >= MISSES and s.online is not False:
                 s.online = False

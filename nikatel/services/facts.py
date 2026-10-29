@@ -216,7 +216,7 @@ def sample_server(server_id: int) -> None:
 
             if pulse.tcp_ok_recently(srv.id) and "key is not accepted" not in str(e) and "host key" not in str(e):
                 # the SSH port answers: the server is ON. Only the SSH session fails (a stalled path, a busy sshd) - it is not "offline"; the reason stays visible
-                srv.last_error = ("SSH does not answer, the server is up (its SSH port answers): " + str(e))[:300]
+                srv.last_error = ((pulse.REFUSAL + ": " if pulse.refusing(srv.id) else "SSH does not answer, the server is up (its SSH port answers): ") + str(e))[:300]
 
                 if was_online is not True:
                     srv.online = True

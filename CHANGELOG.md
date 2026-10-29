@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.69.158 - A server that is on no longer shows Offline because its firewall refuses the pulse; the folder's name shows only under All
+
+> **In short:** the owner (2026-10-29): the server BOT answered ping and ports 80/443 but the Servers page said Offline. Its firewall turns away new connections to port 22 that come too fast, and the pulse connected every 3 s - every connection was *refused*, which the pulse counted as "no answer". A refusal is the machine itself replying, so the server is ON. Now a refusal counts as an answer (the server is shown on, with the reason in its Problems), and such a server is looked at every 20 s instead of every 3 s so the pulse does not keep the limit tripped. Also: inside a profile (folder) the rows no longer repeat the folder's name - the chip shows only under All.
+
+- **Pulse** (`services/pulse.py`): `tcp_open` answers `REFUSED` for a refused connection (a switched-off machine never refuses); a refusal resets the misses, marks the server on, writes `REFUSAL` as its note (cleared when it takes connections again) and puts it on a 20 s look (`SLOW_SECONDS`); `refusing(sid)` tells the full sample (`services/facts.py`), whose note then says the refusal instead of "its SSH port answers".
+- **The page** (`web/lab.js` `labTagChip`): the tag chip of a row is drawn only when the page is on All.
+- Tests: `tests/test_refused_is_on.py`.
+
 ## 1.69.157 - A panel whose HTTPS certificate has run out says so (it said "ConnectError", the words of a panel that is off)
 
 > **In short:** the owner (2026-10-29, deleting a server on the PasarGuard tab) got "no answer from the panel (ConnectError)". The server was fine: the Let's Encrypt certificate of the PasarGuard panel had ended on 2026-10-27 and was not renewed, so every call of the panel failed the certificate check - which httpx reports as a `ConnectError`, the same word as a panel that is switched off. Now the words name it: "no answer from the panel (its HTTPS certificate has expired - renew it on the panel's own server)", or the reason when another certificate fault (self-signed, wrong name, unknown issuer).
