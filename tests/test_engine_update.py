@@ -59,7 +59,7 @@ def _swap(tmp_path, units_running: list[str], stays_down: list[str]):
     core.write_bytes(b"old")
     (tmp_path / "xray.nikatel.new").write_bytes(b"new core")
     sha = hashlib.sha256(b"new core").hexdigest()
-    text = ssh.render_action("engine_swap", {"BIN": "/usr/local/bin/xray", "SHA": sha, "UNITS": "nikatel-xgw.service"}).replace("/usr/local/bin/xray", str(core))
+    text = ssh.render_action("engine_swap", {"BIN": "/usr/local/bin/xray", "SHA": sha, "UNITS": "nikatel-xgw.service", "WATCH": "0"}).replace("/usr/local/bin/xray", str(core))
     out = subprocess.run(["bash", "-c", text], capture_output=True, text=True, timeout=30, check=False, env={**os.environ, "PATH": f"{bindir}:{os.environ['PATH']}"})
     return out.stdout, log.read_text().splitlines(), core.read_bytes()
 
@@ -133,7 +133,9 @@ def test_the_first_unit_that_does_not_come_back_stops_the_update_there(client, m
     swaps = []
 
     def action(node, name, params=None, timeout=0):
-        swaps.append(node.host)
+        if name == "engine_swap":
+            swaps.append(node.host)
+
         return "SWAPPED units=nikatel-xgw.service \nNOT_ACTIVE: nikatel-xgw.service\n"
 
     monkeypatch.setattr(engines, "_copy_to_node", lambda node, engine, f: None)

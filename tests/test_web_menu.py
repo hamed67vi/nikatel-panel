@@ -1121,7 +1121,7 @@ def test_the_cores_box_has_no_install_button_the_update_button_takes_the_place_o
     app, lab, css = _web("app.js"), _web("lab.js"), _web("lab.css")
     row = app.split("const row = (k, e) => {", 1)[1].split("box.innerHTML", 1)[0]
     assert "⬇ Install" not in app and "?missing=true" not in app and "engineUpdate('${k}', true)" not in app and "window.engineUpdate = async k =>" in app and "enginesLoad.last" not in app
-    assert 'class="pri sm eng-upd"' in row and "outdated ? upd :" in row and "✓ Up to date" in row and '<span class="eng-act">' not in row            # (one cell for the state: "Up to date", or the Update button in its place)
+    assert 'class="pri sm eng-upd"' in row and "outdated ? upd + held(e) :" in row and "✓ Up to date" in row and '<span class="eng-act">' not in row            # (one cell for the state: "Up to date", or the Update button in its place)
     assert "<span>Core</span><span>Newest</span><span>Status${d.checking" in app and "grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr) auto; gap: 6px;" in css
     assert "html body #page .abt-card .eng-row > .eng-st { display: flex; align-items: center; gap: 8px; overflow: visible; justify-content: flex-end; }" in css and "html body #page .abt-card .eng-head > span:last-child { text-align: right; }" in css      # (Status at the right edge, the empty space filled by Newest)
     assert "html body #page .abt-card .eng-row .eng-st button:not(.eye):not(.mini), html body #page .abt-pg .pgu-a button:not(.eye):not(.mini)" in css and "height: 22px !important; min-height: 22px !important;" in css       # (the Settings rule gives every button 32 px with !important: the small buttons of this card must say !important too)

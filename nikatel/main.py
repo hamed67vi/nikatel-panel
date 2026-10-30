@@ -205,6 +205,7 @@ def _register_jobs() -> None:
     jobs.register("temp-purge", 600, tunnel_test.purge_stale)
     jobs.register("housekeeping", 6 * 3600, housekeeping.run)   # old events and finished repair stories go; the write-ahead log is folded back
     jobs.register("engine-cache", 6 * 3600, _engine_cache)      # the tunnel cores the panel's cache lacks are downloaded (verified), so a server added later gets them at once (the owner, 2026-10-16: "they must install by themselves"); nothing is changed on any server
+    jobs.register("engines-auto", 600, engines.auto_run)         # the Doctor keeps the tunnel cores up to date, once a night, when the owner switched it on (services/engines.py auto_run): one server at a time, the quietest first, the old build put back when a new one does not hold
     jobs.register("outbound", 180, outbound.check)              # what the outbound pool looks like from each Iran server that carries it (read-only: curl through every exit); nothing runs while no Iran server is chosen
     jobs.register("outbound-users", 60, outbound.auto_users)    # the automatic switch of CDN records: OFF for now (AUTO_USERS in services/outbound.py), the job returns at once; when it is on, the records of a tunnel that stays down are pointed at the pool, and back when it is healthy
     jobs.register("doctor", 60, doctor.run)                    # the Doctor's moves (mode "move"): dead Iran servers, exhausted ones, the returns; nothing in mode off / fix

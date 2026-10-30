@@ -748,6 +748,9 @@ html body #page .aim.open .aim-ch svg { transform: rotate(180deg); }
 html body #page .aim.open .aim-f { animation: aim-in .16s ease-out; }
 @keyframes aim-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { html body #page .aim.open .aim-f { animation: none; } html body #page .aim-ch svg { transition: none; } }
+/* 1.69.164 - the switch under the Tunnel cores: the Doctor keeps them up to date (the owner, 2026-10-31) */
+html body #page .eng-auto { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--uk-line); }
+html body #page .eng-auto-t { display: grid; gap: 2px; min-width: 0; line-height: 1.35; } html body #page .eng-auto-t b { font-size: 13.5px; font-weight: 650; color: var(--uk-text); } html body #page .eng-auto-t small { font-size: 12px; }
 @media (max-width: 640px) { html body #page .aim { grid-template-columns: 38px minmax(0, 1fr); } html body #page .aim-a { grid-column: 1 / -1; justify-content: flex-start; } html body #page .aim-f { grid-column: 1 / -1; } html body #page .ab-h { flex-wrap: wrap; } html body #page .ab-ctl { flex: 1 1 100%; justify-content: flex-start; } }
 html[data-mode="light"] body #page .ab-h > .ss-ic { background: #f3f6fc; border-color: rgba(30, 50, 100, .14); color: #4a5b86; } html[data-mode="light"] body #page .aim-use { color: #1456c8; }
 /* 1.57.51 (4) - the cores and the PasarGuard panels / nodes each sit in ONE box of a fixed size, the list scrolls inside it (the owner, 2026-10-16) */

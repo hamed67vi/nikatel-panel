@@ -22,6 +22,9 @@ DEFAULTS: dict[str, dict[str, Any]] = {
     "accounts": {"links": [], "sub_secret": ""},                                                                         # hand-made links between users with different names on different panels (services/accounts.py)
     "capacity": {"tunnels": {}, "acted": {}},                    # the tunnels whose capacity is filling and when the Doctor last looked for more (services/capacity.py)
     "doctor": {"moves": [], "suggestions": [], "back": {}, "tried": {}, "res_at": {}, "retyped": {}, "retype_done": {}},                    # the Doctor's ledger of moves, its suggestions, who came back when
+    # the tunnel cores (services/engines.py): `auto` = the Doctor keeps them up to date by itself (off until the owner switches it on), `hour` = the local hour it starts (panel clock), `bad` = {core: version} that did
+    # not hold on a server and was put back (never tried again by itself), `last` = what the last automatic run did
+    "engines": {"auto": False, "hour": 5, "bad": {}, "last": {}},
     # the probe(s): primary + standby list [{name, api_url, api_token}]
     "probe": {"api_url": "", "api_token": "", "standby": [], "server_id": 0},
     # the shop bot: where it runs (reached over SSH with the panel's key) and its public webhook URL

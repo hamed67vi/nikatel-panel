@@ -1386,12 +1386,31 @@ if [ $ok = 1 ]; then echo "LISTENING"; else echo "NOTLISTEN"; fi
     # swap a core binary that put_file left next to it (checksum verified there), restart its tunnel units
     "engine_swap": (r"""set -e; NEW='@BIN@.nikatel.new'; [ -f "$NEW" ] || { echo NO_FILE; exit 2; }
 S=$(sha256sum "$NEW" | awk '{print $1}'); [ "$S" = '@SHA@' ] || { rm -f "$NEW"; echo BAD_SHA; exit 3; }
-chmod 755 "$NEW"; mv -f "$NEW" '@BIN@'
-# only the units that RUN (or crashed) are restarted: a unit that is stopped on purpose is never started by an update, and a server that runs no unit of this core restarts nothing. After the restart every one of them must be active again ("NOT_ACTIVE: ..." otherwise: the caller stops the update there).
+chmod 755 "$NEW"
+# the build that runs now stays beside the new one as '<bin>.nikatel.prev' (one step back: engine_rollback puts it back when the new build does not hold)
+if [ -f '@BIN@' ]; then cp -p '@BIN@' '@BIN@.nikatel.prev'; echo "PREV kept"; else echo "PREV none"; fi
+mv -f "$NEW" '@BIN@'
+# only the units that RUN (or crashed) are restarted: a unit that is stopped on purpose is never started by an update, and a server that runs no unit of this core restarts nothing. After the restart every one of them must be active again ("NOT_ACTIVE: ..." otherwise: the caller puts the old build back).
 U=$(systemctl list-units --state=active,activating,failed --no-legend --plain '@UNITS@' 2>/dev/null | awk '{print $1}' | tr '\n' ' ')
 for u in $U; do systemctl restart "$u" || true; done; echo "SWAPPED units=$U"
+if [ -n "$U" ]; then
+  sleep 3; B=""; for u in $U; do systemctl is-active --quiet "$u" || B="$B $u"; done; [ -n "$B" ] && echo "NOT_ACTIVE:$B"
+  # then the units are WATCHED for @WATCH@ seconds: one that is active but restarts again by itself (a build that starts and crashes, over and over) is "UNSTABLE"
+  base=""; for u in $U; do base="$base $(systemctl show -p NRestarts --value "$u" 2>/dev/null || echo 0)"; done
+  i=0; W=@WATCH@; while [ "$i" -lt "$W" ]; do sleep 2; i=$((i+2)); done
+  V=""; set -- $base; for u in $U; do n=$(systemctl show -p NRestarts --value "$u" 2>/dev/null || echo 0); b=${1:-0}; shift || true; if [ "${n:-0}" -gt "${b:-0}" ] 2>/dev/null; then V="$V $u"; elif ! systemctl is-active --quiet "$u"; then V="$V $u"; fi; done
+  [ -n "$V" ] && [ -z "$B" ] && echo "UNSTABLE:$V"
+fi; true
+""", {"BIN": r"^/(usr/local/bin|opt/nikatel-xgw)/[A-Za-z0-9._-]{1,40}$", "SHA": r"^[0-9a-f]{64}$", "UNITS": r"^[A-Za-z0-9*._-]{1,40}$", "WATCH": r"^\d{1,3}$"}),
+
+    # put the build back that engine_swap kept ('<bin>.nikatel.prev'): the new one is kept beside it as '<bin>.nikatel.bad' for a look, the units that run are restarted and must come back
+    "engine_rollback": (r"""set -e; P='@BIN@.nikatel.prev'; [ -f "$P" ] || { echo NO_PREV; exit 2; }
+if [ -f '@BIN@' ]; then cp -p '@BIN@' '@BIN@.nikatel.bad'; fi
+chmod 755 "$P"; mv -f "$P" '@BIN@'
+U=$(systemctl list-units --state=active,activating,failed --no-legend --plain '@UNITS@' 2>/dev/null | awk '{print $1}' | tr '\n' ' ')
+for u in $U; do systemctl restart "$u" || true; done; echo "ROLLED_BACK units=$U"
 if [ -n "$U" ]; then sleep 3; B=""; for u in $U; do systemctl is-active --quiet "$u" || B="$B $u"; done; [ -n "$B" ] && echo "NOT_ACTIVE:$B"; fi; true
-""", {"BIN": r"^/(usr/local/bin|opt/nikatel-xgw)/[A-Za-z0-9._-]{1,40}$", "SHA": r"^[0-9a-f]{64}$", "UNITS": r"^[A-Za-z0-9*._-]{1,40}$"}),
+""", {"BIN": r"^/(usr/local/bin|opt/nikatel-xgw)/[A-Za-z0-9._-]{1,40}$", "UNITS": r"^[A-Za-z0-9*._-]{1,40}$"}),
 
     # reboot the server (the tunnel units come back with systemd)
     "reboot": (r"""echo REBOOTING; (sleep 1; systemctl reboot) >/dev/null 2>&1 &

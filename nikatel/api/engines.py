@@ -1,7 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, Field
 
 from ..auth import current_user
-from ..services import engines
+from ..services import engines, settings
 
 router = APIRouter(tags=["engines"], dependencies=[Depends(current_user)])
 
@@ -16,6 +17,24 @@ def last():
 def check():
     """Start the version check of every server in the background; follow it with GET /engines (`checking`, then `checked_at`)."""
     return {"ok": True, "started": engines.check_start(), **engines.last()}
+
+
+class AutoIn(BaseModel):
+    enabled: bool
+    hour: int | None = Field(None, ge=0, le=23)
+
+
+@router.post("/engines/auto")
+def auto(body: AutoIn):
+    """The switch of the Doctor that keeps the tunnel cores up to date by itself (once a night at `hour`, panel clock = Tehran by default): one server at a time, the quietest first, the old build put back when a
+    new one does not hold. Off until it is switched on."""
+    changes = {"auto": body.enabled}
+
+    if body.hour is not None:
+        changes["hour"] = body.hour
+
+    settings.put("engines", changes)
+    return {"ok": True, **engines.last()}
 
 
 @router.post("/engines/{engine}/update")

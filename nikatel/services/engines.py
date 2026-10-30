@@ -20,9 +20,10 @@ from sqlalchemy import select
 from ..config import get_settings
 from ..db import session
 from ..log import get_logger
-from ..models import Server
+from ..models import Server, ServerSample, Tunnel
 from ..ssh import Node, SSHError, run_action, run_script
 from ..ssh import target as ssh_target
+from . import settings as cfg
 from .events import emit
 
 log = get_logger("engines")
@@ -33,6 +34,8 @@ ENGINES = {
     "chisel": {"title": "Chisel", "repo": "jpillora/chisel", "asset": r"^chisel_.*_linux_amd64\.gz$", "member": "chisel", "bin": "/usr/local/bin/nikatel-chisel", "units": "chisel-*.service"},
     "xray": {"title": "Xray", "repo": "XTLS/Xray-core", "asset": r"^Xray-linux-64\.zip$", "member": "xray", "bin": "/opt/nikatel-xgw/xray", "units": "nikatel-xgw.service"},
 }
+WATCH = 24                            # seconds the units of a swapped core are watched after their restart (engine_swap): a build that starts and crashes again shows within it
+TUNNEL_WAIT = 45.0                    # seconds the tunnels that carried traffic before a swap get to be "up" again
 _STATE: dict = {"checked_at": 0, "result": None, "job": None, "checking": False, "wireguard": None, "wg_job": None}
 _CHECK_LOCK = threading.Lock()
 
@@ -124,6 +127,7 @@ def check() -> dict:
             info["nodes"].append({"name": name, "role": role, "version": v, "state": state})
 
         info["outdated"] = sum(1 for n in info["nodes"] if n["state"] == "outdated")
+        info["held_back"] = bool(info.get("latest")) and bad_versions().get(eng) == info.get("latest")      # (this release did not hold on a server and was put back: the automatic update leaves it)
         info["current"] = sum(1 for n in info["nodes"] if n["state"] == "current")
         info["missing"] = sum(1 for n in info["nodes"] if n["state"] == "not installed")      # (the servers that have not got it: About -> Install puts it on them)
 
@@ -164,7 +168,7 @@ def check_start() -> bool:
 
 
 def last() -> dict:
-    return {"engines": _STATE["result"] or {}, "checked_at": _STATE["checked_at"], "job": _STATE["job"], "checking": bool(_STATE.get("checking")), "wireguard": _STATE.get("wireguard"), "wg_job": _STATE.get("wg_job")}
+    return {"engines": _STATE["result"] or {}, "checked_at": _STATE["checked_at"], "job": _STATE["job"], "checking": bool(_STATE.get("checking")), "wireguard": _STATE.get("wireguard"), "wg_job": _STATE.get("wg_job"), "auto": auto_state()}
 
 
 def _download(engine: str) -> tuple[str, bytes]:
@@ -271,7 +275,7 @@ def ensure_on_node(node: Node, engine: str, say=None, only_missing: bool = False
         return False
 
     _copy_to_node(node, engine, f)
-    out = run_action(node, "engine_swap", {"BIN": e["bin"], "SHA": sha, "UNITS": "nikatel-none.service"}, timeout=120)
+    out = run_action(node, "engine_swap", {"BIN": e["bin"], "SHA": sha, "UNITS": "nikatel-none.service", "WATCH": "0"}, timeout=120)
 
     if "SWAPPED" not in out:
         raise RuntimeError(f"{e['title']} did not install on {node.host}: {out.strip()[-120:]}")
@@ -315,13 +319,141 @@ def install_on(server_id: int, names=None, step=None) -> dict:
 _SWAP_LOCK = threading.Lock()
 
 
-def swap_unhealthy(out: str) -> list[str]:
-    """Pure: the units that did NOT come back after the restart of a swap (the line `NOT_ACTIVE: unit unit` of the `engine_swap` action), [] when all did or nothing was restarted."""
-    for line in str(out).splitlines():
-        if line.startswith("NOT_ACTIVE:"):
-            return line.split(":", 1)[1].split()
+def least_used_first(rows: list) -> list:
+    """rows = [(server id, name, Node)] -> the same, the quietest first: the traffic each server carries now (its newest sample, rx + tx in Mbit/s); a server with no sample goes after those that have one."""
+    use: dict[int, float] = {}
 
-    return []
+    with session() as db:
+        for sid, _name, _node in rows:
+            r = db.execute(select(ServerSample.rx_mbps, ServerSample.tx_mbps).where(ServerSample.server_id == sid).order_by(ServerSample.ts.desc()).limit(1)).first()
+
+            if r is not None:
+                use[sid] = float(r[0] or 0) + float(r[1] or 0)
+
+    return sorted(rows, key=lambda r: (r[0] not in use, use.get(r[0], 0.0), r[1]))
+
+
+def swap_one(job: dict, engine: str, sid: int, name: str, node: Node, sha: str, version: str) -> dict:
+    """Swap the core on ONE server, then look at what it did: its units must be active and stay so (WATCH seconds), and the tunnels of this core on the server that were up must be up again. When anything is
+    wrong the build that was there is put back at once, the release is remembered as bad (the automatic update does not try it again), the update stops there (`job["halt"]`) and the other servers are not touched."""
+    e = ENGINES[engine]
+    before = tunnel_states(engine, sid)
+
+    try:
+        out = run_action(node, "engine_swap", {"BIN": e["bin"], "SHA": sha, "UNITS": e["units"], "WATCH": str(WATCH)}, timeout=120 + WATCH)
+    except (SSHError, ValueError, RuntimeError, OSError, subprocess.SubprocessError) as err:
+        return {"name": name, "state": "failed", "detail": str(err)[:140]}
+
+    if "SWAPPED" not in out:
+        return {"name": name, "state": "failed", "detail": out.strip()[-120:]}
+
+    bad = swap_unhealthy(out)
+    why = ""
+
+    if bad:
+        why = f"{', '.join(bad)} on {name} " + ("kept restarting" if "UNSTABLE:" in out else "did not come back after its restart")
+    else:
+        lost = tunnels_after(engine, sid, before)
+
+        if lost:
+            why = f"{len(lost)} tunnel{'s' if len(lost) != 1 else ''} on {name} that {'were' if len(lost) != 1 else 'was'} up {'are' if len(lost) != 1 else 'is'} not up after the update"
+
+    if not why:
+        return {"name": name, "state": "ok", "detail": out.strip()[-120:]}
+
+    _ok, said = rollback(node, engine)
+    job["halt"] = f"{why}: {said}. The update stopped there, the other servers were not touched"
+
+    if version:
+        mark_bad(engine, version)
+
+    with session() as db:
+        emit(db, "warn", "engines", f"{e['title']} {version or ''}: {why} - {said}. It will not be tried again by itself.".replace("  ", " "), engine)
+
+    return {"name": name, "state": "failed", "detail": job["halt"][:200]}
+
+
+def swap_unhealthy(out: str) -> list[str]:
+    """Pure: the units that did NOT come back after the restart of a swap (the line `NOT_ACTIVE: unit unit` of the `engine_swap` action), or came back and then restarted again by themselves while they were
+    watched (`UNSTABLE: unit unit`); [] when all held or nothing was restarted."""
+    bad: list[str] = []
+
+    for line in str(out).splitlines():
+        if line.startswith(("NOT_ACTIVE:", "UNSTABLE:")):
+            bad += [u for u in line.split(":", 1)[1].split() if u not in bad]
+
+    return bad
+
+
+# ------------------------------------------------------------------ what a swap did to the tunnels, and the way back
+def tunnel_states(engine: str, server_id: int) -> dict[int, str]:
+    """{tunnel id: state} of the tunnels that run this core and end on this server (read from the panel's own record)."""
+    with session() as db:
+        return {t.id: t.state for t in db.scalars(select(Tunnel).where(Tunnel.type == engine, (Tunnel.iran_server_id == server_id) | (Tunnel.foreign_server_id == server_id)))}
+
+
+def tunnels_not_back(before: dict[int, str], after: dict[int, str]) -> list[int]:
+    """Pure: the tunnels that were up before the swap and are not up now."""
+    return sorted(t for t, st in before.items() if st == "up" and after.get(t) != "up")
+
+
+def tunnels_after(engine: str, server_id: int, before: dict[int, str], wait: float = TUNNEL_WAIT) -> list[int]:
+    """Look at the tunnels of this core on this server again (the panel's own check of each) until every one that was up is up, or `wait` seconds are over: the ones that are not."""
+    if not any(st == "up" for st in before.values()):
+        return []
+
+    from . import tunnels  # (late: tunnels imports a great deal)
+
+    end, bad = time.time() + wait, list(before)
+
+    while True:
+        for tid in [t for t in before if before[t] == "up"]:
+            try:
+                tunnels.check_tunnel(tid, quick=True)
+            except Exception:                                  # a check that fails is a tunnel that is not shown up
+                log.exception("check of tunnel %s after a core swap", tid)
+
+        bad = tunnels_not_back(before, tunnel_states(engine, server_id))
+
+        if not bad or time.time() >= end:
+            return bad
+
+        time.sleep(5)
+
+
+def bad_versions() -> dict:
+    return dict(cfg.get("engines").get("bad") or {})
+
+
+def mark_bad(engine: str, version: str) -> None:
+    """A version that did not hold on a server is remembered: the automatic update does not try it again (a newer release is tried; the Update button still can)."""
+    bad = bad_versions()
+    bad[engine] = version
+    cfg.put("engines", {"bad": bad})
+
+
+def rollback(node: Node, engine: str, say=None) -> tuple[bool, str]:
+    """Put the build back that the swap kept, restart its units and see them active: (it worked, the sentence)."""
+    e = ENGINES[engine]
+
+    try:
+        out = run_action(node, "engine_rollback", {"BIN": e["bin"], "UNITS": e["units"]}, timeout=120)
+    except (SSHError, ValueError) as err:
+        return False, f"the old build could not be put back: {str(err)[:100]}"
+
+    if "NO_PREV" in out:
+        return False, "no old build was kept on this server"
+
+    if "ROLLED_BACK" not in out:
+        return False, "the old build could not be put back: " + out.strip()[-100:]
+
+    if swap_unhealthy(out):
+        return False, f"the old build is back but {', '.join(swap_unhealthy(out))} is not active"
+
+    if say:
+        say(f"{e['title']}: the old build is back on {node.host}")
+
+    return True, "the old build is back and its units are active"
 
 
 def update(engine: str, only_missing: bool = False) -> dict:
@@ -360,35 +492,39 @@ def update(engine: str, only_missing: bool = False) -> dict:
         targets = [n["name"] for n in info["nodes"] if n["state"] == ("not installed" if only_missing else "outdated")]
 
         with session() as db:
-            nodes = [(s.name, Node(s.host, s.ssh_user, s.ssh_port)) for s in db.scalars(select(Server).where(Server.name.in_(targets)))]
+            nodes = [(s.id, s.name, Node(s.host, s.ssh_user, s.ssh_port)) for s in db.scalars(select(Server).where(Server.name.in_(targets)))]
 
-        def one(item):
-            name, node = item
+        nodes = least_used_first(nodes)                                  # (the quietest server first: the first swap is the one that costs the fewest users a restart, and it is the trial of the new build)
+
+        def copy_one(item):
+            _sid, name, node = item
 
             try:
                 if only_missing:
                     ensure_on_node(node, engine, only_missing=True)
-                    return {"name": name, "state": "ok", "detail": "installed"}
+                else:
+                    _copy_to_node(node, engine, newest)                  # (the slow part, four servers at a time: only a file next to the binary - nothing runs from it yet)
 
-                _copy_to_node(node, engine, newest)                      # (the slow part, four servers at a time: only a file next to the binary - nothing runs from it yet)
-
-                with _SWAP_LOCK:                                         # (the swap restarts the units that run the core: ONE server at a time, so that what stands behind them is never all down at once)
-                    if job.get("halt"):
-                        return {"name": name, "state": "failed", "detail": "not tried: " + job["halt"]}
-
-                    out = run_action(node, "engine_swap", {"BIN": ENGINES[engine]["bin"], "SHA": sha, "UNITS": ENGINES[engine]["units"]}, timeout=120)
-                    bad = swap_unhealthy(out)
-
-                    if bad:
-                        job["halt"] = f"{', '.join(bad)} on {name} did not come back after its restart: the update stopped there, the other servers were not touched"
-                        return {"name": name, "state": "failed", "detail": job["halt"][:140]}
-
-                return {"name": name, "state": "ok" if "SWAPPED" in out else "failed", "detail": out.strip()[-120:]}
+                return name, ""
             except (SSHError, ValueError, RuntimeError, OSError, subprocess.SubprocessError) as e:
-                return {"name": name, "state": "failed", "detail": str(e)[:140]}
+                return name, str(e)[:140]
 
         with ThreadPoolExecutor(4) as ex:
-            job["items"] = list(ex.map(one, nodes))
+            copied = dict(ex.map(copy_one, nodes))
+
+        items: list[dict] = []
+        job["items"] = items                                             # (filled as the servers are done: the card shows it while it runs)
+
+        for sid, name, node in nodes:
+            if copied.get(name):
+                items.append({"name": name, "state": "failed", "detail": copied[name]})
+            elif only_missing:
+                items.append({"name": name, "state": "ok", "detail": "installed"})
+            elif job.get("halt"):
+                items.append({"name": name, "state": "failed", "detail": "not tried: " + job["halt"]})
+            else:
+                with _SWAP_LOCK:                                         # (the swap restarts the units that run the core: ONE server at a time, so that what stands behind them is never all down at once)
+                    items.append(swap_one(job, engine, sid, name, node, sha, version))
 
         done = sum(1 for i in job["items"] if i["state"] == "ok")
 
@@ -401,6 +537,76 @@ def update(engine: str, only_missing: bool = False) -> dict:
         job["finished"] = int(time.time())
 
     return job
+
+# ------------------------------------------------------------------ the Doctor keeps the cores up to date (the owner, 2026-10-31: "the Tunnel Doctor must always keep these up to date - and when it sees a problem after an update, it
+# must have the old version backed up and go back to it")
+def auto_state() -> dict:
+    s = cfg.get("engines")
+    return {"auto": bool(s.get("auto")), "hour": int(s.get("hour") or 0), "bad": s.get("bad") or {}, "last": s.get("last") or {}}
+
+
+def _local(now: float | None = None) -> time.struct_time:
+    """The panel's local time for the daily hour: UTC plus the offset of the daily report (Tehran by default)."""
+    off = int(cfg.get("report").get("tz_offset_minutes") or 0)
+    return time.gmtime((now if now is not None else time.time()) + off * 60)
+
+
+def auto_due(now: float | None = None) -> bool:
+    """Pure-ish: is it time? The switch is on, it is the hour, and today's run has not been made."""
+    s = cfg.get("engines")
+
+    if not s.get("auto"):
+        return False
+
+    t = _local(now)
+    return t.tm_hour == int(s.get("hour") or 0) and (s.get("last") or {}).get("day") != time.strftime("%Y-%m-%d", t)
+
+
+def auto_run(now: float | None = None) -> dict | None:
+    """Once a day at the chosen hour, when the switch is on: look at every server, and for each core that is behind (and whose newest release has not already been put back) run the same update as the button -
+    one server at a time, the quietest first, the old build put back when a new one does not hold. It stops at the first core that fails. Returns what it did (None when it was not the time)."""
+    if get_settings().read_only or not auto_due(now):
+        return None
+
+    if _STATE["job"] and not _STATE["job"].get("done"):
+        return None
+
+    day = time.strftime("%Y-%m-%d", _local(now))
+    cfg.put("engines", {"last": {"day": day, "at": int(time.time()), "text": "looking at the servers", "ran": []}})          # (marked first: a run cut short by a restart is not started over the same night)
+    ran: list[dict] = []
+
+    try:
+        info = check()["engines"]
+
+        for eng in ENGINES:
+            e = info.get(eng) or {}
+
+            if not e.get("outdated") or e.get("held_back") or "latest" not in e:
+                continue
+
+            try:
+                job = update(eng)
+            except (RuntimeError, ValueError) as err:
+                ran.append({"engine": eng, "version": e["latest"], "ok": False, "text": str(err)[:140]})
+                break
+
+            ok_n = sum(1 for i in job.get("items", []) if i["state"] == "ok")
+            ran.append({"engine": eng, "version": e["latest"], "ok": not job.get("halt") and not job.get("error") and ok_n == len(job.get("items", [])), "n": ok_n, "of": len(job.get("items", [])), "text": str(job.get("halt") or job.get("error") or "")[:200]})
+
+            if job.get("halt") or job.get("error"):
+                break
+    except (httpx.HTTPError, RuntimeError, ValueError, OSError) as err:
+        ran.append({"engine": "", "version": "", "ok": False, "text": str(err)[:140]})
+
+    text = ", ".join(f"{ENGINES[r['engine']]['title']} {r['version']}: " + (f"{r['n']} of {r['of']} servers" if r.get("n") is not None and r["ok"] else "stopped - " + r["text"]) for r in ran if r["engine"]) or "nothing was behind"
+    result = {"day": day, "at": int(time.time()), "text": text[:400], "ran": ran}
+    cfg.put("engines", {"last": result})
+
+    with session() as db:
+        emit(db, "warn" if any(not r["ok"] for r in ran) else "info", "engines", "Automatic update of the tunnel cores: " + text[:300], "auto")
+
+    return result
+
 
 # ------------------------------------------------------------------ WireGuard tools (the owner presses the button: the only way the panel puts a package on a server, apt only)
 def wg_install_result(out: str) -> tuple[bool, str]:
