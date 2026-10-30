@@ -1087,6 +1087,7 @@ html body #page .abt-foot > button.abt-diag { flex: none; margin: 0 0 0 12px; }
 
 /* 1.69.7 - the PasarGuard box: two buttons under its headline - the panel, and the nodes only (the owner, 2026-10-18: "put an option here for the update of the panel and one for only the nodes") */
 html body #page .abt-pg .pgu-go { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; flex: none; }
+html body #page .abt-pg .pgu-go .pgu-safe { grid-column: 1 / -1; height: 34px !important; min-height: 34px !important; font-size: 13px !important; }
 html body #page .abt-pg .pgu-go button { box-sizing: border-box; min-width: 0; height: 28px !important; min-height: 28px !important; padding: 0 10px !important; border-radius: 9px !important; font-size: 12px !important; line-height: 1 !important; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 

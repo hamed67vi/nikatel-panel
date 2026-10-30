@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from ..auth import current_user
-from ..services import pg_update
+from ..services import pg_safe, pg_update
 from ..services.panels import PanelError
 from ..ssh import SSHError
 
@@ -54,6 +54,23 @@ def pg_update_panel(panel_id: int, body: PanelIn):
     """Update a PasarGuard panel on its own server with the official command, as an action (the story is read with /api/actions/{id}): look at the server, a backup, `pasarguard update`, wait until the panel
     answers with the new version. The name of the panel must be typed back; refused while the panel is read-only and when the server that runs the panel is not one of ours."""
     return {"ok": True, "action_id": _wrap(pg_update.panel_start, panel_id, body.backup, body.typed)}
+
+
+class SafeIn(BaseModel):
+    typed: str = Field("", max_length=80)            # the name of the panel, typed back (only when the panel is part of it)
+
+
+@router.get("/pg-updates/safe/plan")
+def pg_safe_plan():
+    """What a Safe update would do now, in order (the quietest node first), what it would skip and why, and what stands in the way; nothing is changed (the traffic of the nodes is read for a few seconds)."""
+    return {"ok": True, **_wrap(pg_safe.plan)}
+
+
+@router.post("/pg-updates/safe", status_code=202)
+def pg_safe_start(body: SafeIn):
+    """The Safe update as an action (the story is read with /api/actions/{id}): the nodes one at a time, the quietest first, each looked at before and after with its old version kept to go back to, then the panel
+    (a backup first). Refused when there is nothing to update, while another PasarGuard update runs, and unless the name of the panel is typed back when the panel is part of it."""
+    return {"ok": True, "action_id": _wrap(pg_safe.start, body.typed)}
 
 
 @router.post("/pg-updates/nodes", status_code=202)

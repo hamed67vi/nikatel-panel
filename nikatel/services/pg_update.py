@@ -135,7 +135,7 @@ def overview(force: bool = False, resolver=None) -> dict:
         for n, j in zip(rows, joined):
             s = j.get("server")
             out_nodes.append({"panel_id": p["id"], "panel": p["name"], "node_id": n["id"], "name": n["name"], "address": n["address"], "status": n["status"], "version": n["version"], "xray": n["xray"],
-                              "behind": newer(tag("node"), n["version"]), "xray_behind": newer(tag("xray"), n["xray"]), "server": {"id": s["id"], "name": s["name"]} if s else None})
+                              "keep_alive": n["keep_alive"], "behind": newer(tag("node"), n["version"]), "xray_behind": newer(tag("xray"), n["xray"]), "server": {"id": s["id"], "name": s["name"]} if s else None})
 
     return {"latest": tags, "panels": out_panels, "nodes": out_nodes, "read_only": get_settings().read_only, "checked_at": int(time.time())}
 

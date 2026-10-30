@@ -32,7 +32,8 @@ function pgUpdHtml(d) {
   const nodesHtml = nodes.length ? `<div class="pgu-tbl"><div class="pgu-row pgu-hd"><span>Node</span><span>Server</span><span>Software</span><span>Xray</span><span></span></div>${nodes.map(nrow).join("")}</div>` : '<div class="pgu-none mut">No node is registered in a PasarGuard panel.</div>';
   const acts = (swN.length ? `<button class="sm pri" onclick="pgUpdAll('node')" title="Update the software of every connected node that is behind, one at a time">Update ${swN.length} node${swN.length === 1 ? "" : "s"}…</button>` : "") + (xrN.length ? `<button class="sm" onclick="pgUpdAll('core')" title="Update Xray on every connected node that is behind, one at a time">Xray on ${xrN.length} node${xrN.length === 1 ? "" : "s"}…</button>` : "");      // (the buttons are there only when there is something to update)
   const ro = !!d.read_only, roWhy = "The panel is read-only (NIKATEL_READ_ONLY)";
-  const go = `<div class="pgu-go"><button class="sm ${panels.some(p => p.behind === true) ? "pri" : ""}" ${ro ? "disabled" : ""} onclick="pgUpdPanelTop()" title="${esc(ro ? roWhy : "Update the PasarGuard panel itself, on its own server: a backup first, and the name of the panel typed back. The nodes are not touched.")}">Update panel…</button><button class="sm ${swN.length || xrN.length ? "pri" : ""}" ${ro ? "disabled" : ""} onclick="pgUpdNodesOnly()" title="${esc(ro ? roWhy : "Update only the nodes: the software and Xray of every connected node that is behind, one at a time. The panel is not touched.")}">Update nodes only…</button></div>`;      // (the owner, 2026-10-18: one option for the panel and one for only the nodes - always there; what stands in the way is said when one is clicked)
+  const safeBtn = `<button class="sm pri pgu-safe" ${ro ? "disabled" : ""} onclick="pgUpdSafe()" title="${esc(ro ? roWhy : "One button for everything that is behind: the nodes one at a time, the least used first, each looked at before and after with its old version kept to go back to - then the panel. You see the whole plan first and nothing is changed before you confirm.")}">Safe update…</button>`;      // (the owner, 2026-10-31: one button for the panel and the nodes, least used node first)
+  const go = `<div class="pgu-go">${safeBtn}<button class="sm ${panels.some(p => p.behind === true) ? "pri" : ""}" ${ro ? "disabled" : ""} onclick="pgUpdPanelTop()" title="${esc(ro ? roWhy : "Update the PasarGuard panel itself, on its own server: a backup first, and the name of the panel typed back. The nodes are not touched.")}">Update panel…</button><button class="sm ${swN.length || xrN.length ? "pri" : ""}" ${ro ? "disabled" : ""} onclick="pgUpdNodesOnly()" title="${esc(ro ? roWhy : "Update only the nodes: the software and Xray of every connected node that is behind, one at a time. The panel is not touched.")}">Update nodes only…</button></div>`;      // (the owner, 2026-10-18: one option for the panel and one for only the nodes - always there; what stands in the way is said when one is clicked)
   return hero + go + `<div class="pgu-list"><div class="pgu-cap">Panels</div>${panels.map(prow).join("") || '<div class="pgu-none mut">No PasarGuard panel yet: add one on the Panel page.</div>'}<div class="pgu-cap">Nodes (${nodes.length})<span class="sp"></span>${acts}</div>${nodesHtml}</div>`;      // (the owner, 2026-10-16: the panels and the nodes sit in ONE box of a fixed size that scrolls inside)
 }
 window.pgUpdLoad = async force => {
@@ -89,6 +90,38 @@ window.pgUpdPanelTop = () => {
   if (noHost) { toast(`The server that runs ${noHost.name} is not in the Servers list: add it first`, "bad"); return pgUpdAddHost(noHost.id); }
   if (panels.length && panels.every(p => p.behind === false)) return toast("The panel is the newest already", "ok");
   toast(!panels.length ? "No PasarGuard panel yet: add one on the Panel page" : (panels.find(p => p.error) || {}).error || "No panel can be updated now", "bad");
+};
+
+/* ---- Safe update (the owner, 2026-10-31): the plan first - the nodes in the order they will go (the quietest first), the panel last, what is skipped and why - then one confirmation */
+window.pgUpdSafe = async () => {
+  showModal("<b>Safe update</b>", '<div class="loading"><i class="spin"></i><span>Looking at the nodes and how busy each one is (a few seconds)…</span></div>', "wide");
+  try {
+    const r = await api("/api/pg-updates/safe/plan");
+    const nodes = r.nodes.map((n, i) => `<li><b>${i + 1}. ${esc(n.name)}</b> <small class="mut">on ${esc(n.server.name)} · ${esc(n.usage_text)} now</small> - ${n.do.map(esc).join(" + ")}</li>`).join("");
+    const pans = r.panels.map(p => `<li><b>Panel ${esc(p.name)}</b> <small class="mut">${esc(pguShort(p.version))} → ${esc(pguShort(p.latest))}</small> - ${p.skip ? `<span class="err">will NOT be updated: ${esc(p.skip)}</span>` : "last, after the nodes (a backup first)"}</li>`).join("");
+    const skipped = r.skipped.map(s => `<li><b>${esc(s.name)}</b> - ${esc(s.why)}</li>`).join("");
+    const need = (r.panels.find(p => !p.skip) || {}).name;
+    showModal("<b>Safe update</b>", `
+      <div class="sbox pg-nodes-plan"><h5><i>🛡</i>What this does</h5>
+        ${r.steps.length ? `<ol class="pg-nodes-steps">${r.steps.map(x => `<li>${esc(x)}</li>`).join("")}</ol>` : ""}
+        ${nodes ? `<h5>Order - the quietest first</h5><ol class="pg-nodes-steps">${nodes}</ol>` : ""}
+        ${pans ? `<h5>The panel</h5><ul class="pg-nodes-steps">${pans}</ul>` : ""}
+        ${skipped ? `<h5>Not touched</h5><ul class="pg-nodes-steps">${skipped}</ul>` : ""}
+        ${r.nothing && !r.problems.length ? '<div class="pg-nodes-note">There is nothing to update now: everything that can be updated is up to date.</div>' : ""}
+        <div class="pg-nodes-note">${esc(r.note)}</div>
+        ${r.problems.map(x => `<div class="err pg-nodes-note">✕ ${esc(x)}</div>`).join("")}</div>
+      <form class="frm pg-nodes-form" onsubmit="return pgUpdSafeGo(event)">
+        ${need ? `<label style="grid-column: 1 / -1">Type the name of the panel to confirm <small>(${esc(need)})</small><input name="typed" required autocomplete="off" spellcheck="false" placeholder="${esc(need)}"></label>` : ""}
+        <div class="frm-act"><button class="danger" type="submit" ${r.can_start ? "" : "disabled"}>Start Safe update</button><button type="button" onclick="closeModal()">Cancel</button></div></form>`, "wide");
+  } catch (e) { showModal("<b>Safe update</b>", `<div class="err">${esc(e.message)}</div>`, "wide"); }
+};
+window.pgUpdSafeGo = async e => {
+  e.preventDefault(); const f = e.target;
+  try {
+    const r = await api("/api/pg-updates/safe", {method: "POST", body: JSON.stringify({typed: f.elements.typed ? f.elements.typed.value.trim() : ""})});
+    pgUpdFollow("Safe update", r.action_id, 3000);
+  } catch (err) { toast("✕ " + err.message, "bad"); }
+  return false;
 };
 
 /* ---- the panel itself: the plan first (what it will do, what stands in the way), then the name typed back */

@@ -334,6 +334,18 @@ echo "DF $(df -P /var/lib 2>/dev/null | awk 'NR==2{print $4}')"
 exit 0
 """, {}),
 
+    # the machine that runs a PasarGuard NODE, before it is updated (services/pg_safe.py): is the official command there, is docker, does the node container run, its image, where its compose file is, free space. Read-only.
+    "pgnode_info": (r"""if command -v pg-node >/dev/null 2>&1; then echo "CLI yes"; else echo "CLI no"; fi
+if command -v docker >/dev/null 2>&1; then echo "DOCKER yes"; else echo "DOCKER no"; fi
+N=$(docker ps --format '{{.Names}} {{.Image}}' 2>/dev/null | awk '$2 ~ /pasarguard\/node/ {print $1; exit}'); N=${N:-node}
+echo "RUNNING $(docker ps --format '{{.Names}}' 2>/dev/null | grep -cx "$N")"
+echo "REF $(docker inspect --format '{{.Config.Image}}' "$N" 2>/dev/null | head -1)"
+echo "ID $(docker inspect --format '{{.Image}}' "$N" 2>/dev/null | head -1)"
+echo "DIR $(docker inspect --format '{{ index .Config.Labels "com.docker.compose.project.working_dir" }}' "$N" 2>/dev/null | head -1)"
+echo "DF $(df -P /var/lib 2>/dev/null | awk 'NR==2{print $4}')"
+exit 0
+""", {}),
+
     # the PUBLIC certificate of a PasarGuard node (never a key): the operator pastes it into the PasarGuard panel. Read-only.
     "pgnode_cert": (r"""for f in $(find / -xdev -maxdepth 6 -type f \( -path '*pg-node*' -o -path '*pasarguard*' \) \( -name '*cert*' -o -name '*.crt' -o -name '*.pem' \) ! -iname '*key*' 2>/dev/null | head -20); do
   if grep -q 'BEGIN CERTIFICATE' "$f" 2>/dev/null && ! grep -q 'PRIVATE KEY' "$f" 2>/dev/null; then cat "$f"; exit 0; fi
@@ -1411,6 +1423,46 @@ U=$(systemctl list-units --state=active,activating,failed --no-legend --plain '@
 for u in $U; do systemctl restart "$u" || true; done; echo "ROLLED_BACK units=$U"
 if [ -n "$U" ]; then sleep 3; B=""; for u in $U; do systemctl is-active --quiet "$u" || B="$B $u"; done; [ -n "$B" ] && echo "NOT_ACTIVE:$B"; fi; true
 """, {"BIN": r"^/(usr/local/bin|opt/nikatel-xgw)/[A-Za-z0-9._-]{1,40}$", "UNITS": r"^[A-Za-z0-9*._-]{1,40}$"}),
+
+    # update a PasarGuard NODE (services/pg_safe.py): the image that runs is kept first (a local tag + a note), then the official `pg-node update -y` (pull the new image, recreate the container)
+    "pgnode_update": (r"""rm -f /var/lib/pg-node/nikatel-prev.txt
+command -v pg-node >/dev/null 2>&1 || { echo NO_CLI; exit 2; }
+N=$(docker ps --format '{{.Names}} {{.Image}}' 2>/dev/null | awk '$2 ~ /pasarguard\/node/ {print $1; exit}'); N=${N:-node}
+ID=$(docker inspect --format '{{.Image}}' "$N" 2>/dev/null | head -1); REF=$(docker inspect --format '{{.Config.Image}}' "$N" 2>/dev/null | head -1)
+[ -n "$ID" ] && [ -n "$REF" ] || { echo NO_CONTAINER; exit 3; }
+mkdir -p /var/lib/pg-node
+docker tag "$ID" nikatel/pg-node-prev:keep || { echo TAG_FAILED; exit 4; }
+printf 'REF=%s\nID=%s\nNAME=%s\n' "$REF" "$ID" "$N" > /var/lib/pg-node/nikatel-prev.txt
+echo "PREV kept"
+TERM=dumb pg-node update -y > /tmp/nikatel-pgnode-update.log 2>&1; rc=$?
+tail -n 12 /tmp/nikatel-pgnode-update.log
+if [ "$rc" -eq 0 ]; then echo NODE_UPDATED; else echo "NODE_UPDATE_FAILED $rc"; fi
+exit 0
+""", {}),
+
+    # put the image back that pgnode_update kept (only when the note is fresh: it is never used to go back to an older update), and recreate the container from it
+    "pgnode_rollback": (r"""F=/var/lib/pg-node/nikatel-prev.txt
+[ -n "$(find "$F" -mmin -90 2>/dev/null)" ] || { echo NO_PREV; exit 2; }
+REF=$(sed -n 's/^REF=//p' "$F" | head -1); ID=$(sed -n 's/^ID=//p' "$F" | head -1); N=$(sed -n 's/^NAME=//p' "$F" | head -1)
+[ -n "$REF" ] && [ -n "$ID" ] || { echo NO_PREV; exit 2; }
+docker image inspect "$ID" >/dev/null 2>&1 || { echo NO_IMAGE; exit 3; }
+docker tag "$ID" "$REF" || { echo TAG_FAILED; exit 4; }
+D=$(docker inspect --format '{{ index .Config.Labels "com.docker.compose.project.working_dir" }}' "${N:-node}" 2>/dev/null | head -1); [ -d "$D" ] || D=/opt/pg-node
+cd "$D" || { echo NO_DIR; exit 5; }
+if docker compose version >/dev/null 2>&1; then docker compose up -d --force-recreate > /tmp/nikatel-pgnode-rollback.log 2>&1; rc=$?; else docker-compose up -d --force-recreate > /tmp/nikatel-pgnode-rollback.log 2>&1; rc=$?; fi
+tail -n 8 /tmp/nikatel-pgnode-rollback.log
+if [ "$rc" -eq 0 ]; then echo ROLLED_BACK; else echo "ROLLBACK_FAILED $rc"; fi
+exit 0
+""", {}),
+
+    # the Xray of a PasarGuard node to one version: the official `pg-node core-update` (the same command puts an old version back)
+    "pgnode_core": (r"""command -v pg-node >/dev/null 2>&1 || { echo NO_CLI; exit 2; }
+V=@VERSION@; V=v${V#v}
+TERM=dumb pg-node core-update --version "$V" -y > /tmp/nikatel-pgnode-core.log 2>&1; rc=$?
+tail -n 10 /tmp/nikatel-pgnode-core.log
+if [ "$rc" -eq 0 ]; then echo CORE_UPDATED; else echo "CORE_UPDATE_FAILED $rc"; fi
+exit 0
+""", {"VERSION": r"^v?\d{1,3}\.\d{1,3}\.\d{1,3}$"}),
 
     # reboot the server (the tunnel units come back with systemd)
     "reboot": (r"""echo REBOOTING; (sleep 1; systemctl reboot) >/dev/null 2>&1 &
