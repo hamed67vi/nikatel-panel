@@ -110,8 +110,14 @@ function run(i) {
       const els = [...pg.querySelectorAll("*")].filter(e => !e.closest("[data-wrap]") || e.hasAttribute("data-wrap") === false);
       if (els.length) { const e = pick(els); const how = Math.floor(rnd() * 4); if (how === 3) { e.appendChild(document.createElement("i")); } else if (how === 0) e.replaceWith(e.cloneNode(true)); else if (how === 1) { e.innerHTML = e.innerHTML; tampered = e.childNodes.length > 0; if (!tampered) tampered = false; } else { if (e.tagName !== "TBODY" && e.tagName !== "THEAD") { e.remove(); } } tampered = tampered || how !== 1; }
     }
+    let swapped = false;
+    if (!tampered && rnd() < 0.2) {      // the page replaces a node by another one ON PURPOSE and tells the draw (NKPatch.swap): nothing is given up, nothing is rebuilt
+      const els = [...pg.querySelectorAll("span, b, i, div, p, h2, section")].filter(e => !e.closest("textarea, select"));
+      if (els.length) { const e = pick(els), c = e.cloneNode(true); c.setAttribute("data-swap", "1"); e.replaceWith(c); swapped = NKPatch.swap(e, c); }
+    }
     const res = draw(nh, true);
-    if (tampered) { out.tamper = (out.tamper || 0) + 1; if (res !== "full") out.tamperMiss = (out.tamperMiss || 0) + 1; }
+    if (swapped) { out.swap = (out.swap || 0) + 1; if (res !== "patched" || draw.note.length) out.swapGaveUp = (out.swapGaveUp || 0) + 1; }
+    if (tampered) { out.tamper = (out.tamper || 0) + 1; if (res === "full") out.tamperFull = (out.tamperFull || 0) + 1; else if (draw.note.length) out.tamperLocal = (out.tamperLocal || 0) + 1; }
     post(pg);
     out[res]++;
     // the control: the same page drawn from scratch with the same layers

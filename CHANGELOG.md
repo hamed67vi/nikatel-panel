@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.69.162 - The tunnel list no longer redraws itself every half minute (it blanked and jumped back to the top), and the status bar says when a restarted tunnel is up
+
+> **In short:** the owner (2026-10-31, with a screen recording of the Network page): "the tunnel cards still jump". Frame by frame the recording shows the whole list going blank for about 0.2 s and coming back scrolled to the top, twice in 31 s with the pointer still. In a real Chrome on a private demo of HEAD the same thing is measured: `NK_DRAWS.why = {"gone span.bwm": n}` - the live meters of the list (`tunLivePaint`) replace a `.bwm` node, the next quiet round of the page does not know the new node and gives up the in-place draw for a full one, which replaces the whole list box (scrollTop 0). This was found and fixed on 2026-10-23 (1.69.116) but that build was never shipped. Also: a restart that answered "down" left the status bar saying "<tunnel>: down - ..." for good; now it says "works again" when the tunnel is up.
+
+- **Draw in place** (`web/patch.js` `swap`, `resync`; `web/app.js` `tunLivePaint`, the draw statistics): a replaced meter is told to the patcher (`NKPatch.swap(old, new)`), and a difference below a node the page changed is mended locally (only the children of that node are rebuilt, never the page and never below a `data-own` node), so a round is "patched", not "full". Measured on the demo: before, 2 list-box replacements in 100 s; after, 0, same box element, scrollTop kept, `why = {}` even after a forced meter swap.
+- **Restart** (`web/app.js` `restartTunnel`, `tunUpWatch`): when the answer of the restart is not "up", the tunnel is looked at every 4 s for up to two minutes and the status bar says "✓ <name> works again" at the first `up`.
+- Tests: `tests/test_page_patch.py`, `tests/js/patch_fuzz.html` (the fuzz now swaps nodes too), `tests/test_bw_bar_for_every_tunnel.py`, `tests/test_tunnel_up_watch.py`.
+
 ## 1.69.161 - Api & Key: the arrows of an AI box are small and flat
 
 The owner (2026-10-31, with a picture of the opened OpenAI box - the key field, the model field and the arrow of the model list): "see, a bar opens for each one when we click it, and in those boxes we choose the model and enter the API; the boxes must stay fixed; and fix the size of the down arrow too."

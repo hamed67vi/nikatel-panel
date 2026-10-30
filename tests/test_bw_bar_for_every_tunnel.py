@@ -26,7 +26,7 @@ def test_the_list_is_live_while_it_is_open():
     js = (WEB / "app.js").read_text(encoding="utf-8")
     assert "document.querySelector('[id^=\"tun-use-\"], .tun-tbl')" in js.split("const tunLiveTick = async () => {", 1)[1].split("};", 1)[0]
     paint = js.split("const tunLivePaint = () => {", 1)[1].split("const tunLiveStop", 1)[0]
-    assert '.tun-tbl td.bwc[data-tid]' in paint and "bwMeterFor(t)" in paint and "nm.dataset.k !== m.dataset.k) m.replaceWith(nm)" in paint            # (only a meter whose numbers changed is replaced)
+    assert '.tun-tbl td.bwc[data-tid]' in paint and "bwMeterFor(t)" in paint and "nm.dataset.k !== m.dataset.k) { m.replaceWith(nm);" in paint            # (only a meter whose numbers changed is replaced)
     assert 'setInterval(() => { if (state.page === "tunnels" && !document.hidden && !tunLiveT && document.querySelector(".tun-tbl")) tunLiveStart(); }, 2000);' in js
 
 

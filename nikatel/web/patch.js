@@ -11,6 +11,7 @@
   "use strict";
 
   var KEY = "__nkl";        // on a raw node: the live node it stands for
+  var instances = [];       // every drawer made (the page has one)
   var WRAP = "data-wrap";   // a box that a layer put around a node of the page (the list box around a table): the raw node is inside it, the raw parent is not
 
   var keyOf = function (n) { return n.nodeType === 1 ? (n.getAttribute("data-id") || n.id || "") : ""; };
@@ -145,6 +146,29 @@
       return "full";
     }
 
+    /* a node the PAGE replaced by another one on purpose, in place, between two draws (the meters of the tunnel list when the live numbers change their kind): the raw tree is told, so the next draw
+       finds the node it stands for and patches it - it does not have to give up and draw the page from scratch (which is what made the list of a tunnel being repaired jump on every 4 s round) */
+    function find(r, live) {
+      if (r[KEY] === live) return r;
+
+      for (var c = r.firstChild, f; c; c = c.nextSibling) if ((f = find(c, live))) return f;
+
+      return null;
+    }
+
+    function swap(oldLive, newLive) {
+      if (!raw || !newLive || newLive.nodeType !== 1 || /^(TABLE|THEAD|TBODY|TFOOT|TR|TD|TH|COL|COLGROUP|OPTION|OPTGROUP|SELECT|TEXTAREA)$/.test(newLive.tagName)) return false;
+
+      var hit = find(raw, oldLive), fresh;
+
+      if (!hit || !hit.parentNode) return false;
+
+      try { fresh = parse(newLive.outerHTML).firstChild; link(fresh, newLive); } catch (e) { return false; }      // (what is on the screen now, as a raw node)
+
+      hit.parentNode.replaceChild(fresh, hit);
+      return true;
+    }
+
     var desc = function (r) { return !r ? "?" : r.nodeType === 3 ? "#text" : r.nodeType !== 1 ? "#" + r.nodeName : r.nodeName.toLowerCase() + (r.id ? "#" + r.id : r.getAttribute("class") ? "." + r.getAttribute("class").split(/\s+/)[0] : ""); };
 
     function alive(live, r) { if (!live || !live.isConnected) throw new Error("gone " + desc(r)); }      // (a node the page took out or replaced by itself: what it stands for is not on the screen any more)
@@ -166,10 +190,30 @@
       liveParent.insertBefore(c, ref);
     }
 
-    function kids(o, n) {
-      var live = o[KEY], oc = Array.prototype.slice.call(o.childNodes), nc = Array.prototype.slice.call(n.childNodes), i = 0, j = 0, m, hit;
+    /* The children of one node are made again from what the page says now (the same as a draw from scratch does for them, but ONLY for them): used when the page changed the children of that node by itself since the last
+       draw - took one out, replaced one, added one (a meter of the tunnel list, a row, a pill) - so the rest of the page is still patched in place and does not jump. Never for the page itself and never for a node
+       that holds something the page fills in by itself (data-own): those are drawn from scratch as a whole. */
+    function resync(n, live) {
+      while (live.firstChild) live.removeChild(live.firstChild);
 
-      alive(live, o);
+      for (var c = n.firstChild, k; c; c = c.nextSibling) { k = c.cloneNode(true); link(c, k); live.appendChild(k); }
+    }
+
+    function kids(o, n) {
+      var live = o[KEY];
+
+      alive(live, o);      // this node itself is gone: its parent makes it again
+
+      try { patchKids(o, n); } catch (e) {
+        if (live === el || !live.isConnected || live.querySelector("[data-own]")) throw e;
+
+        resync(n, live);
+        draw.note.push(String(e && e.message));
+      }
+    }
+
+    function patchKids(o, n) {
+      var live = o[KEY], oc = Array.prototype.slice.call(o.childNodes), nc = Array.prototype.slice.call(n.childNodes), i = 0, j = 0, m, hit;
 
       // the children of the live node are exactly the ones the raw tree knows (a box around a table counts as the table): the page added or took out nothing by itself in this node since the last draw; else it is not patched
       if (live.childNodes.length !== oc.length) throw new Error("shape " + desc(o));
@@ -239,8 +283,9 @@
     }
 
     /* html: what the page says now; patch: this draw may be done in place (a refresh nobody asked for); else the page is drawn from scratch */
-    return function draw(html, patch) {
+    var draw = function draw(html, patch) {
       draw.why = "";
+      draw.note = [];
 
       if (!patch || !raw || raw[KEY] !== el) return full(html);
 
@@ -259,8 +304,13 @@
       draw.why = "";
       return "patched";
     };
+
+    draw.swap = swap;
+    draw.note = [];
+    instances.push(draw);
+    return draw;
   }
 
-  window.NKPatch = {make: make, decls: decls};
+  window.NKPatch = {make: make, decls: decls, swap: function (oldLive, newLive) { return instances.some(function (d) { return d.swap(oldLive, newLive); }); }};
 })();
 

@@ -24,7 +24,7 @@ PGCOMMON = (WEB / "pg_common.js").read_text(encoding="utf-8")
 
 def test_patch_js_is_loaded_before_app_js_and_gives_the_one_name_the_setter_needs():
     assert INDEX.index('<script src="/static/patch.js"></script>') < INDEX.index('<script src="/static/app.js"></script>')
-    assert "window.NKPatch = {make: make, decls: decls};" in PATCH
+    assert "window.NKPatch = {make: make, decls: decls, swap: function (oldLive, newLive)" in PATCH
 
 
 def test_only_a_refresh_nobody_asked_for_is_drawn_in_place_a_click_is_drawn_from_scratch():
@@ -59,6 +59,15 @@ def test_what_a_page_fills_in_later_by_itself_is_not_looked_into_by_the_draw_of_
     assert 'a.hasAttribute("data-own") !== b.hasAttribute("data-own")' in PATCH
     assert "box._qs = nkQuietDraw() ? refresh.qStart : 0;" in APP
     assert "const same = box._qs && !nkInputAfter(box._qs) && box.dataset.tab === pn.tab && box._ph === html && !box.querySelector(\":scope > .loading\");" in PGCOMMON and "  if (same) return;\n  box._ph = html;" in PGCOMMON
+
+
+def test_a_node_the_page_replaces_by_itself_costs_a_local_rebuild_not_the_whole_page():
+    """1.69.116, the owner (2026-10-23, a picture of the tunnel list): "the list of cards keeps jumping, I think while a tunnel is repaired". While a tunnel is worked on the page is drawn every 4 s, and the live reading of
+    the list replaces the meter of a row (`m.replaceWith(nm)`) when its kind changes: the raw tree then stood for a node that was gone and the whole page was drawn from scratch - on every round."""
+    assert "if (nm && nm.dataset.k !== m.dataset.k) { m.replaceWith(nm); if (window.NKPatch) NKPatch.swap(m, nm); }" in APP        # (told: the next draw finds the new meter)
+    assert "function swap(oldLive, newLive) {" in PATCH and "swap: function (oldLive, newLive)" in PATCH
+    assert "function resync(n, live) {" in PATCH and 'if (live === el || !live.isConnected || live.querySelector("[data-own]")) throw e;' in PATCH     # (only below the page, never around something the page fills in by itself)
+    assert 'draw.note.forEach(x => { stat.resync = (stat.resync || 0) + 1;' in APP
 
 
 def test_the_patch_never_trusts_a_tree_the_page_changed_by_itself():
@@ -112,4 +121,5 @@ def test_the_engine_gives_the_same_page_as_a_draw_from_scratch_for_two_thousand_
     assert res["fail"] == 0, res["examples"]                                      # (every in-place draw equals the draw from scratch, the layers aside)
     assert res["patched"] > 1500                                                  # (and it really patched: it did not just fall back every time)
     assert res["kept"] > 0.9 * res["keptTotal"]                                   # (a row whose HTML did not change is the very same node afterwards)
-    assert res["tamper"] > 300                                                    # (and when the page had changed its own nodes in between, the draw was from scratch and still right)
+    assert res["tamper"] > 300 and res["tamperLocal"] > 300                       # (and when the page had changed its own nodes in between, only those nodes were made again and the page is still right)
+    assert res["swap"] > 200 and not res.get("swapGaveUp")                        # (a node the page replaced and told the draw about is patched, nothing is rebuilt)

@@ -451,7 +451,7 @@ const focusBack = s => {
     // the same HTML again is skipped (no flicker) - but only while the page has not changed its own DOM since (Settings, Tools, lazy boxes do)
     if (!quiet && v === last && lastDom !== null && d.get.call(pg) === lastDom && !busy) return;
     last = v; lastSig = sig;
-    if (draw) { const r = draw(v, quiet); stat[r]++; if (draw.why) stat.why[draw.why] = (stat.why[draw.why] || 0) + 1; if (window.NK_DRAW_DEBUG) { stat.html = v; stat.last = r; } } else d.set.call(pg, v);
+    if (draw) { const r = draw(v, quiet); stat[r]++; if (draw.why) stat.why[draw.why] = (stat.why[draw.why] || 0) + 1; draw.note.forEach(x => { stat.resync = (stat.resync || 0) + 1; stat.why["local: " + x] = (stat.why["local: " + x] || 0) + 1; }); if (window.NK_DRAW_DEBUG) { stat.html = v; stat.last = r; } } else d.set.call(pg, v);
     lastDom = quiet ? null : d.get.call(pg);
   }});
 })();
@@ -972,7 +972,7 @@ const tunUseHtml = t => useOf(t) ? `↓ ${bwFmt(useOf(t).down)} ↑ ${bwFmt(useO
 const tunLivePaint = () => {
   document.querySelectorAll(".tun-tbl td.bwc[data-tid]").forEach(td => {      // (the meters of the list: only the ones whose numbers changed are replaced)
     const t = (state.tunnelsCache || []).find(x => x.id === +td.dataset.tid), m = td.querySelector(".bwm"); if (!t || !m || !["up", "degraded"].includes(t.state)) return;
-    const tp = document.createElement("template"); tp.innerHTML = bwMeterFor(t); const nm = tp.content.firstElementChild; if (nm && nm.dataset.k !== m.dataset.k) m.replaceWith(nm);
+    const tp = document.createElement("template"); tp.innerHTML = bwMeterFor(t); const nm = tp.content.firstElementChild; if (nm && nm.dataset.k !== m.dataset.k) { m.replaceWith(nm); if (window.NKPatch) NKPatch.swap(m, nm); }      // (the next draw in place finds the new meter: it does not draw the page from scratch)
   });
   const u = document.querySelector('[id^="tun-use-"]'); if (!u) return; const t = (state.tunnelsCache || []).find(x => x.id === +u.id.slice(8)); if (!t) return; u.innerHTML = tunUseHtml(t); const bx = document.getElementById("tun-bwbox-" + t.id); if (bx) { const h = tunBwBoxInner(t), w = bx.querySelector(":scope > .bwbig, :scope > .mut"); if (w) w.outerHTML = h; } };      // (the window of a tunnel: its numbers change in place while it is open)
 const tunLiveStop = () => { clearInterval(tunLiveT); tunLiveT = null; };
@@ -1610,7 +1610,15 @@ async function followAction(id, every = 2000, limitSeconds = 900) {
 }
 const lastLine = s => (s.story || []).slice(-1)[0] || "";
 window.healthAll = async () => { toast("Checking every tunnel… (up to a minute)"); try { const r = await api("/api/tunnels/health-all", {method: "POST"}); const s = await followAction(r.action_id); toast(lastLine(s), s.ok ? "ok" : "bad"); } catch (e) { toast("✕ " + e.message, "bad"); } refresh(); };
-window.restartTunnel = async (id, name) => { if (!await gconfirm(`Restart the tunnel ${name} on both servers? It is down for a few seconds.`)) return; toast(`Restarting ${name}…`); try { const r = await api(`/api/tunnels/${id}/restart`, {method: "POST"}); toast(`${name}: ${r.state}` + (r.why ? " - " + r.why : ""), r.state === "up" ? "ok" : "bad"); } catch (e) { toast("✕ " + e.message, "bad"); } refresh(); };
+const tunUpWatch = (id, name) => {      // a restart answered "down" (its units need a few seconds to join again): the status bar says when the tunnel is up - it kept the "down" of the restart for good (the owner, 2026-10-31: "it came up and it did not log it")
+  clearTimeout(tunUpWatch.t); const t0 = Date.now();
+  const look = async () => {
+    try { const t = await api(`/api/tunnels/${id}`); if (t.state === "up") { toast(`✓ ${name} works again`, "ok"); return; } } catch (e) { /* the panel is busy: look again */ }
+    if (Date.now() - t0 < 120000) tunUpWatch.t = setTimeout(look, 4000);
+  };
+  tunUpWatch.t = setTimeout(look, 4000);
+};
+window.restartTunnel = async (id, name) => { if (!await gconfirm(`Restart the tunnel ${name} on both servers? It is down for a few seconds.`)) return; toast(`Restarting ${name}…`); try { const r = await api(`/api/tunnels/${id}/restart`, {method: "POST"}); toast(`${name}: ${r.state}` + (r.why ? " - " + r.why : ""), r.state === "up" ? "ok" : "bad"); if (r.state !== "up") tunUpWatch(id, name); } catch (e) { toast("✕ " + e.message, "bad"); } refresh(); };
 window.restartAll = async () => { if (!await gconfirm("Restart every tunnel on both servers? Each is down for a few seconds.")) return; toast("Restarting every tunnel… (about two minutes)"); try { const r = await api("/api/tunnels/restart-all", {method: "POST"}); const s = await followAction(r.action_id); toast(lastLine(s), s.ok ? "ok" : "bad"); } catch (e) { toast("✕ " + e.message, "bad"); } refresh(); };
 window.bwMeasure = async id => { toast("Measuring the bandwidth… (a few seconds)"); try { const r = await api(`/api/tunnels/${id}/bandwidth`, {method: "POST"}); const s = await followAction(r.action_id, 1500, 120); toast(lastLine(s), s.ok ? "ok" : "bad"); } catch (e) { toast("✕ " + e.message, "bad"); } refresh(); };
 window.qualityAll = async () => { toast("Measuring every tunnel… (10 s each)"); try { const r = await api("/api/tunnels/quality-all", {method: "POST"}); const s = await followAction(r.action_id); toast(lastLine(s), s.ok ? "ok" : "bad"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
