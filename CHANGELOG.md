@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.69.161 - Api & Key: the arrows of an AI box are small and flat
+
+The owner (2026-10-31, with a picture of the opened OpenAI box - the key field, the model field and the arrow of the model list): "see, a bar opens for each one when we click it, and in those boxes we choose the model and enter the API; the boxes must stay fixed; and fix the size of the down arrow too."
+
+- **Cause** (`web/lab.css`): the Settings page gives EVERY button inside its frame a 32 px box with a border and a fill, with `!important` (`app.css` `.sf button:not(.eye):not(.mini)`). The arrow of the model list and the new fold arrow of an AI came out as raised squares - the model arrow taller than the field's inner line and with its own border.
+- **Fix:** both arrows are written with a rule that outweighs the generic one: the fold arrow is 28 px, flat, at the right end of the head; the model arrow is flat, 3 px inside the box on every side, its picture 15 px. The key and model boxes keep their size and place (nothing else was changed in them).
+- **Proved:** `tests/test_web_menu.py` (the two rules); measured in the browser on a private panel: the arrows' boxes, borders and fills, and that opening a box moves nothing outside it. **Not proved:** in the owner's own browser (the same page, only the CSS changed).
+
 ## 1.69.160 - Api & Key: every AI is a box that folds
 
 > **In short:** the owner (2026-10-31, with a picture of Settings → Api & Key, the AI models list, translated from Persian): "put all the AI items here in collapsible boxes." Each AI (Anthropic, OpenAI, Gemini, Grok, DeepSeek and the others) is now a box that folds: its head - the tile, the name, its state, Use / Test / Remove - always shows, its key, its model and Save open under it.

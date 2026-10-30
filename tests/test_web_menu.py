@@ -1150,6 +1150,7 @@ def test_the_ai_models_have_a_row_each_and_the_page_knows_every_ai_of_the_server
 
     assert '${aiExp.has(c.id) ? " open" : ""}' in app and 'class="aim-ch" aria-expanded="${aiExp.has(c.id)}"' in app and "(state.aiExp || (state.aiExp = new Set())).add(c.id)" in app      # every AI is a box that folds: the head shows, the key and the model open under it
     assert "html body #page .aim:not(.open) .aim-f { display: none; }" in css and "html body #page .aim.open .aim-ch svg { transform: rotate(180deg); }" in css
+    assert "html body #page .sf button.aim-ch:not(.eye):not(.mini) {" in css and "html body #page .sf .aim-f .nk-combo .nk-combo-b:not(.eye):not(.mini) {" in css      # both arrows are flat and small: the generic button rule of the Settings page does not make them raised squares
 
     assert 'api("/api/settings/ai/use", {method: "POST", body: JSON.stringify({provider: pid})})' in app and 'aiPath(pid) + "/test"' in app and "const aiPath = pid => `/api/settings/ai/providers/${encodeURIComponent(pid)}`;" in app
     assert 'AI_MAIN.map(k => `<option value="${k}">${esc(AIM_N[k])}</option>`)' in app and "/api/settings/ai/providers/${encodeURIComponent(f.provider ? f.provider.value : \"anthropic\")}" in app      # the first-run card asks which AI the key is for
