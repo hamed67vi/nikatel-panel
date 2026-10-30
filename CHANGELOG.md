@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.69.163 - A page that is opened never stays as the OLD page under the new header: a read has a time limit and a page not drawn in 0.9 s is a loading box
+
+> **In short:** the owner (2026-10-31, two pictures): "I came from Servers to Network but I am still in the Servers page" and "the header says Settings, the body is the Tunnel Doctor error". Reproduced on a private demo: when the panel takes a call and never answers (the box was thrashing before it rebooted), `go()` kept the OLD page on the screen, dimmed, under the new title, with no word and no end - a read (GET) had no time limit at all.
+
+- **A read has a time limit** (`web/app.js` `api`, `READ_MS` = 60 s): a read with no answer ends as "The panel did not answer in time - while loading ..." (a transient error: the page says so and asks again by itself with the usual back-off). Leaving the page still ends its reads quietly; `opts.slow` skips the limit for a call that is meant to be long.
+- **The old page never stays** (`staleGuard`): after a page or tab was opened, when nothing of the new one is drawn in 0.9 s the old page is replaced by "Loading ..." (a quick answer is still drawn over the dimmed old page as before, no flash). Used by `go()` (a page, and now a tab of the open page opened from the menu, which also drops what the old tab waited for, as `setSub` does) and by `setSub`.
+- Tests: `tests/test_stuck_page.py` (new), the `setSub` pin in `tests/test_web_menu.py`. Proved on a private demo of this tree in a real browser: with every read left unanswered, Servers -> Network shows "Loading Network..." at 1.2 s and, after the limit, the error and the retry that draws the page; normal switching between Servers / Network / Settings / Dashboard is unchanged.
+
 ## 1.69.162 - The tunnel list no longer redraws itself every half minute (it blanked and jumped back to the top), and the status bar says when a restarted tunnel is up
 
 > **In short:** the owner (2026-10-31, with a screen recording of the Network page): "the tunnel cards still jump". Frame by frame the recording shows the whole list going blank for about 0.2 s and coming back scrolled to the top, twice in 31 s with the pointer still. In a real Chrome on a private demo of HEAD the same thing is measured: `NK_DRAWS.why = {"gone span.bwm": n}` - the live meters of the list (`tunLivePaint`) replace a `.bwm` node, the next quiet round of the page does not know the new node and gives up the in-place draw for a full one, which replaces the whole list box (scrollTop 0). This was found and fixed on 2026-10-23 (1.69.116) but that build was never shipped. Also: a restart that answered "down" left the status bar saying "<tunnel>: down - ..." for good; now it says "works again" when the tunnel is up.

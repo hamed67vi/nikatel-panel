@@ -11,6 +11,7 @@ const pct = (v, warn = 80, bad = 92) => v == null ? "—" : `<span class="bar"><
 /* Reading a page's data (GET) is tied to the page: leaving the page cancels what it is still waiting for, and a cancelled read never answers,
    so a slow page can no longer finish later and paint itself over the page the user moved to. Actions (POST/PUT/DELETE) and the progress polls are never cancelled. */
 let navCtl = new AbortController();
+const READ_MS = 60000;      // a read (GET) that is not answered in this time is a failed read (api())
 const KEEP_ALIVE = /^\/api\/(actions\/\d+|tunnel-test\/)/;
 /* "while loading tunnels" / "while saving settings": what a failed request was doing, from its address */
 const API_NAMES = {tunnels: "tunnels", servers: "servers", configs: "configs", panels: "panels", shopbot: "the shop bot", settings: "settings", actions: "repairs", autopilot: "smart repair", events: "events", overview: "the dashboard", logs: "the logs", jobs: "the jobs", gateway: "the gateway", nodes: "the server tools", subscriptions: "subscriptions", engines: "the core versions", system: "the update", auth: "sign-in", alerts: "alerts", report: "the report", backup: "the backup", datacentres: "the data centres", radar: "the radar", maintenance: "maintenance windows", ai: "the AI"};
@@ -21,11 +22,20 @@ function apiWhat(path, opts) {
 async function api(path, opts = {}) {
   const ctl = (!opts.method || String(opts.method).toUpperCase() === "GET") && !KEEP_ALIVE.test(path) ? navCtl : null;
   if (opts.method && String(opts.method).toUpperCase() !== "GET") state.setCache = null;      // something changed: the settings page reads again
-  let r, body = null;
+  let r, body = null, own = null, tm = null, timedOut = false, gone = null;
+  if (ctl) {      // a read has a time limit (a server that takes the call and never answers left the OLD page under the new header for ever - the owner, 2026-10-31): its own signal ends with the page's signal or with the limit
+    own = new AbortController(); gone = () => own.abort();
+    if (ctl.signal.aborted) gone(); else ctl.signal.addEventListener("abort", gone, {once: true});
+    if (!opts.slow) tm = setTimeout(() => { timedOut = true; own.abort(); }, READ_MS);
+  }
   try {
-    r = await fetch(path, Object.assign({headers: {"Content-Type": "application/json"}}, opts, ctl ? {signal: ctl.signal} : {}));
+    r = await fetch(path, Object.assign({headers: {"Content-Type": "application/json"}}, opts, own ? {signal: own.signal} : {}));
     try { body = await r.json(); } catch (e) { if (e.name === "AbortError") throw e; /* no json body */ }
-  } catch (e) { if (e.name === "AbortError") return new Promise(() => {}); e.message = e.message + " — " + apiWhat(path, opts); throw e; }
+  } catch (e) {
+    if (e.name === "AbortError" && !timedOut) return new Promise(() => {});
+    if (timedOut) e = new Error("The panel did not answer in time");
+    e.message = e.message + " — " + apiWhat(path, opts); throw e;
+  } finally { clearTimeout(tm); if (gone) ctl.signal.removeEventListener("abort", gone); }
   if (r.status === 401 && !/^\/api\/auth\/(login|recover)/.test(path)) { showLogin(); throw new Error("not logged in"); }      // (a 401 of the sign-in itself is the answer to the form - "wrong user or password", "wrong code" - not a lost session: it is shown as the server says it)
   if (!r.ok) {
     const rid = r.headers.get("X-Request-Id");
@@ -236,7 +246,7 @@ function subSet(page, k) {      // what changes when a tab of a page is chosen (
   if (page === "nodes") state.fastRender = true; if (state.sub[page] !== k) { state.stab = "account"; state.sstab = null; if (typeof pn !== "undefined") { pn.tab = "users"; pn.uoff = 0; } state.mtab = "all"; } state.sub[page] = k; localStorage.setItem("nk.sub", JSON.stringify(state.sub)); state.open = null; state.edit = null; state.build = null; state.q = "";
 }
 window.setSub = (page, k) => {      // a tab of the page (the owner, 2026-10-16: "the page jumps when I switch"): what the old tab still waited for is dropped - a late answer must never paint the old tab over the new one - and the new tab starts at the top
-  if (state.sub[page] !== k || state.page !== page) { navCtl.abort(); navCtl = new AbortController(); navSeq++; state.resetScroll = true; const m = $(".main"); if (m) m.scrollTop = 0; }
+  if (state.sub[page] !== k || state.page !== page) { navCtl.abort(); navCtl = new AbortController(); navSeq++; state.resetScroll = true; const m = $(".main"); if (m) m.scrollTop = 0; staleGuard(); }
   subSet(page, k); refresh();
 };
 const TOP_TABS = () => { Object.assign(sb, {tab: "overview", tool: "miniapp", payState: "confirm", payPage: 0}); localStorage.setItem("nk.sb.tab", "overview"); state.stab = "account"; state.sstab = null; localStorage.setItem("nk.stab", "account"); if (typeof pn !== "undefined") { pn.tab = "users"; pn.uoff = 0; } state.mtab = "all"; state.wtab = "overview"; };
@@ -264,8 +274,9 @@ function go(page, tab) {      // `tab`: a section of the left menu - the page op
     navCtl.abort(); navCtl = new AbortController(); navSeq++; retries = 0; clearTimeout(retryT); state.resetScroll = true;
     const m = $(".main"); if (m) m.scrollTop = 0;
     const pg = $("#page"); if (pg) { if (pg.childElementCount && !pg.querySelector(".loading")) { pg.style.minHeight = pg.offsetHeight + "px"; pg.classList.add("busy"); } else pg.innerHTML = loadingBox(page); pg.classList.remove("enter"); }      // the old page stays (dimmed, still) until the new one has its data: nothing collapses, nothing jumps
-    hideModal();
+    hideModal(); staleGuard();
   }   // what the page we leave still waits for is dropped; the new page starts at the top
+  if (tab && state.page === page && SUB[page] && sub(page) !== tab) { navCtl.abort(); navCtl = new AbortController(); navSeq++; state.resetScroll = true; const m = $(".main"); if (m) m.scrollTop = 0; staleGuard(); }      // (another tab of the page that is open: what the old tab still waits for is dropped, as setSub does)
   if (tab) { if (page === "settings") tabSet(tab); else if (SUB[page]) subSet(page, tab); }      // (after the reset above: the tab asked for is the one that stays)
   state.page = page; state.open = null; state.edit = null; state.q = ""; localStorage.setItem("nk.page", page);
   navMark(true);
@@ -457,6 +468,11 @@ const focusBack = s => {
 })();
 let navSeq = 0, retryT = null, retries = 0;
 const loadingBox = page => `<div class="loading"><i class="spin"></i><span>Loading ${esc((INFO[page] || ["…"])[0])}…</span></div>`;
+let staleT = null;
+const staleGuard = () => {      // a page or tab was opened: the old one stays (dimmed, still) while the answer is quick; when nothing of the new one is drawn after 0.9 s it is a loading box instead - a slow or silent panel never leaves the old page under the new header (the owner, 2026-10-31: "I opened Network and I am still in Servers")
+  clearTimeout(staleT); const seq = navSeq, pg0 = $("#page"), first = pg0 && pg0.firstElementChild;
+  staleT = setTimeout(() => { const pg = $("#page"); if (seq !== navSeq || !pg || !first || pg.firstElementChild !== first || pg.querySelector(".loading")) return; pg.classList.remove("busy"); pg.style.minHeight = ""; pg.innerHTML = loadingBox(state.page); }, 900);
+};
 const errorBox = (msg, transient) => `<div class="page-err"><b>${transient ? "The panel does not answer right now" : "This page could not be loaded"}</b><span>${esc(msg)}</span><small class="mut">${transient ? "It is probably restarting after an update; trying again by itself…" : ""}</small><button class="sm" onclick="retries=0;refresh()">Try again</button></div>`;
 /* every tab, sub-tab and range switch of the panel: the content that follows comes in softly (see .soft-in, and the animation of a tab panel in app.css) instead of jumping */
 document.addEventListener("click", e => { if (e.target.closest && e.target.closest(".tabs button, #subnav button, .set-tabs button, .tf-tabs button, .srv-tabs button, .act-cats button, .ap-ttabs button")) state.softSwap = true; }, true);
@@ -499,7 +515,7 @@ async function refreshNow() {
     release();
     if (e.message === "not logged in" || seq !== navSeq) return;
     if (pg0) pg0.classList.remove("busy");
-    const transient = /HTTP 50\d|Failed to fetch|NetworkError|Load failed|network/i.test(e.message);
+    const transient = /HTTP 50\d|Failed to fetch|NetworkError|Load failed|network|did not answer/i.test(e.message);
     const pg = $("#page");
     if (pg && (!pg.childElementCount || pg.querySelector(".loading, .page-err") || wasBusy)) pg.innerHTML = errorBox(e.message, transient);   // nothing of this page is on screen yet: say so instead of leaving the old page
     toast("✕ " + e.message, "bad");
