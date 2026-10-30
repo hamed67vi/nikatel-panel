@@ -1145,8 +1145,11 @@ def test_the_ai_models_have_a_row_each_and_the_page_knows_every_ai_of_the_server
     assert re.findall(r'"(\w+)"', main) == ids[:5] and keys("AIM_N") == ids[:5] and all(f'{k}: "{ai.PROVIDERS[k]["name"]}"' in app for k in ids[:5])
     assert 'const aiShown = aiCat.filter(c => c.has_key || AI_MAIN.includes(c.id) || aiOpen.has(c.id))' in app and '<div class="aim-list">${aiShown.map(aiRow).join("")}</div>' in app and 'onsubmit="return aiSave(event, \'${c.id}\')"' in app
     assert '<div class="aim-f">${fIc(SI.key,' in app and "c.custom ? fIc(SI.link," in app and 'data-pid="${c.id}"' in app and 'onclick="aiUse(\'${c.id}\')"' in app and 'onclick="aiTest(\'${c.id}\')"' in app and "onclick=\"aiForget('${c.id}', '${esc(c.name)}')\"" in app
-    for fn in ("aiSave", "aiTest", "aiUse", "aiForget", "aiAddMenu"):
+    for fn in ("aiSave", "aiTest", "aiUse", "aiForget", "aiAddMenu", "aiFold"):
         assert f"window.{fn} = " in app, fn
+
+    assert '${aiExp.has(c.id) ? " open" : ""}' in app and 'class="aim-ch" aria-expanded="${aiExp.has(c.id)}"' in app and "(state.aiExp || (state.aiExp = new Set())).add(c.id)" in app      # every AI is a box that folds: the head shows, the key and the model open under it
+    assert "html body #page .aim:not(.open) .aim-f { display: none; }" in css and "html body #page .aim.open .aim-ch svg { transform: rotate(180deg); }" in css
 
     assert 'api("/api/settings/ai/use", {method: "POST", body: JSON.stringify({provider: pid})})' in app and 'aiPath(pid) + "/test"' in app and "const aiPath = pid => `/api/settings/ai/providers/${encodeURIComponent(pid)}`;" in app
     assert 'AI_MAIN.map(k => `<option value="${k}">${esc(AIM_N[k])}</option>`)' in app and "/api/settings/ai/providers/${encodeURIComponent(f.provider ? f.provider.value : \"anthropic\")}" in app      # the first-run card asks which AI the key is for

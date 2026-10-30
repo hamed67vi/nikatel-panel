@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.69.160 - Api & Key: every AI is a box that folds
+
+> **In short:** the owner (2026-10-31, with a picture of Settings → Api & Key, the AI models list, translated from Persian): "put all the AI items here in collapsible boxes." Each AI (Anthropic, OpenAI, Gemini, Grok, DeepSeek and the others) is now a box that folds: its head - the tile, the name, its state, Use / Test / Remove - always shows, its key, its model and Save open under it.
+
+- **Fold** (`web/app.js` `aiRow`, `aiFold`; `web/lab.css`): every AI starts folded; a click on its tile, its name or its arrow opens it in place and folds it again (the page is not drawn again, so a half-typed key is not lost). The open ones are remembered while the page is on (`state.aiExp`), the AI that "Add another AI" adds opens by itself with its key box ready. The arrow turns, the box slides in (not when the system asks for less motion).
+- **Proved:** `tests/test_web_menu.py` (the folding markup, the handler, the CSS); a real walk in the browser on a private panel at 1280 px and at 375 px: five boxes folded, two opened (key, model, Save show; the arrows turn), no sideways scroll on the phone, the arrow at the right end of the head.
+- **Not proved:** with a real key saved (Save / Test / Use were not pressed against a real AI), in Persian.
 ## 1.69.159 - The provider under the name of a server: the row falls back to the one the panel found, and an empty look is repeated
 
 The owner (2026-10-30, with a picture of the Servers list - CA, CZ, FI, DE1, IT with a provider line, FR, DE2, DE3, NL without): "why do some servers not show their provider?"
