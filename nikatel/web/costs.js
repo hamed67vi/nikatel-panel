@@ -5,9 +5,9 @@
    one GB costs. The internal name of the page stays "costs" (its routes, its menu key).
    Routes used: GET /api/costs, GET /api/costs/summary?month=&recompute=, PUT /api/costs/settings, POST /api/costs/rates/fetch, POST|PUT|DELETE /api/costs/items[/id]. Nothing here changes a server or a panel.
    Uses the helpers of app.js: $, api, esc, toast, gconfirm, showModal, hideModal, refresh, PAGES. */
-const cs = {d: null, s: null, month: "", top: "overview", sub: "all", isub: "bot"};
+const cs = {d: null, s: null, month: "", top: "overview", sub: "foreign", isub: "bot"};
 const CS_TOPS = [["overview", "Overview"], ["income", "Income"], ["expenses", "Expenses"]];
-const CS_SECTIONS = [["all", "All expenses", null], ["foreign", "Foreign servers", ["foreign"]], ["iran", "Iran servers", ["iran"]], ["cdn", "CDN and traffic", ["cdn"]], ["domain", "Domains", ["domain"]], ["other", "Other", ["software", "other"]]];
+const CS_SECTIONS = [["foreign", "Foreign servers", ["foreign"]], ["iran", "Iran servers", ["iran"]], ["cdn", "CDN and traffic", ["cdn"]], ["domain", "Domains", ["domain"]], ["other", "Other", ["software", "other"]]];
 const CS_ISECTIONS = [["bot", "Shop bot"], ["partners", "Partners"]];
 const CS_KINDS = [["monthly", "Price per month"], ["yearly", "Price per year"], ["once", "One payment (an invoice, a fee)"], ["per_tb", "Price per TB of traffic"], ["per_gb", "Price per GB of traffic"]];
 const CS_CUR = {IRT: "toman", USD: "USD", EUR: "EUR", TRY: "lira"};
@@ -23,20 +23,24 @@ const csAgo = t => { const m = Math.round((Date.now() / 1000 - t) / 60); return 
 const csErr = e => toast("✕ " + e.message, "bad");
 const csTaxed = it => it.amount * (1 + (it.tax || 0) / 100);                                  // (the tax is in every price the page shows: it is not written, it is just counted)
 const csAmt = (v, cur) => `${csN(v, v < 100 ? 2 : 0)} ${CS_CUR[cur] || cur}`;
-const csPrice = it => {
+const csParts = it => {                                                                       // [the amount as it is paid, the rest of the price line]
   const unit = {monthly: "/month", yearly: "/year", once: it.months > 1 ? ` over ${it.months} months` : "", per_tb: "/TB", per_gb: "/GB"}[it.kind] || "";
   const free = it.included ? ` · first ${csN(it.included, 2)} ${it.kind === "per_tb" ? "TB" : "GB"} free` : "";
   const dirs = it.kind === "per_tb" || it.kind === "per_gb" ? (it.dirs === "both" ? " · both ways" : " · sent only") : "";
   const quota = it.quota ? ` · ${csN(it.quota, 2)} TB in the plan` : "";
-  return `${csAmt(csTaxed(it), it.cur)}${unit}${free}${dirs}${quota}`;
+  return [csAmt(csTaxed(it), it.cur), `${unit}${free}${dirs}${quota}`];
 };
+const csPrice = it => csParts(it).join("");
+const csEd = (it, inner, per = 1) => `<span class="cs-ed" onclick="csInline(this, ${it.id}, ${per})" title="Click the number to change it here">${inner}</span>`;      // (a number that is changed where it stands)
+const csMore = r => `<button class="cs-pen" onclick="csEdit(${r.id})" title="More: the tax, the server, the dates, remove" aria-label="More about this price">⋯</button>`;
 const csGroupSum = (s, keys) => keys.reduce((a, k) => { const g = s.by_group[k] || {so_far: 0, month: 0}; return {so_far: a.so_far + g.so_far, month: a.month + g.month}; }, {so_far: 0, month: 0});
 const csSectionOf = group => (CS_SECTIONS.find(t => t[2] && t[2].includes(group)) || CS_SECTIONS[0])[0];
 const csTile = (label, value, sub, cls = "", vcls = "") => `<div class="cs-tile ${cls}"><small>${label}</small><b class="${vcls}">${value}</b><span>${sub}</span></div>`;      // (vcls: a class of the figure itself - a loss is red)
 
 PAGES.costs = async () => {
   const [d, s] = await Promise.all([api("/api/costs"), api("/api/costs/summary" + (cs.month ? "?month=" + encodeURIComponent(cs.month) : ""))]);
-  cs.d = d; cs.s = s; csDraw();
+  cs.d = d; cs.s = s;
+  if (!document.querySelector(".cs-in")) csDraw();                      // (a number being typed is not redrawn away by the page's own round)
 };
 
 /* ---- the bar: the month, the calendar, the rates of the day (read from chand.online by themselves) */
@@ -135,7 +139,7 @@ function csItemsTable(d, s, keys, pick) {
     const where = [(d.groups.find(g => g.key === r.group) || {}).name || r.group, r.server, r.node && r.node !== r.server ? (r.node === "*" ? "all nodes" : r.node) : ""].filter(Boolean).join(" · ");          // (the group and the server are no columns: the tooltip of the name says them)
     const q = r.quota ? `<small class="cs-note ${r.quota.pct >= 100 ? "cs-over" : r.quota.pct >= 90 ? "cs-near" : ""}" title="The traffic the node carries this month at this pace, against the traffic in its plan">uses ${r.quota.pct}% of ${csN(r.quota.tb, 2)} TB</small>` : "";
     return `<tr class="${r.state === "idle" ? "cs-idle" : ""}"><td title="${esc(where)}"><b>${esc(r.name)}</b>${it.note ? `<small class="cs-note">${esc(it.note)}</small>` : ""}${q}</td>`
-      + `<td>${esc(csPrice(it))}</td>`
+      + `<td>${csEd(it, esc(csParts(it)[0]))}${esc(csParts(it)[1])}</td>`
       + `<td class="r">${r.state === "no_rate" ? '<span class="pill err" title="The rate of this currency is not there yet">no rate</span>' : r.state === "needs_node" ? '<span class="pill warn" title="Choose the node whose traffic is priced">choose a node</span>' : r.state === "idle" ? '<span class="mut">not active</span>' : csMoney(r.so_far, false, true)}</td>`
       + `<td class="r">${r.state === "ok" ? csMoney(r.month, false, true) : ""}</td><td class="r"><span class="cs-act"><button class="sm" onclick="csEdit(${r.id})" title="Change this price">Edit</button><button class="sm danger" onclick="csDel(${r.id})" title="Remove this price">✕</button></span></td></tr>`;
   }).join("");
@@ -162,20 +166,20 @@ function csServerTable(d, s, cards) {                                // one smal
   const perMonth = it => csTaxed(it) * rateOf(it) / (it.kind === "yearly" ? 12 : it.kind === "once" ? it.months || 1 : 1);
   const itOf = r => d.items.find(x => x.id === r.id) || r;
   const tip = it => `${csAmt(it.amount, it.cur)}${it.tax ? ` + ${csN(it.tax, 2)}% tax` : ""}${it.note ? " · " + it.note : ""}`;                  // (what was typed, only as a tooltip)
-  const pen = r => `<button class="cs-pen" onclick="csEdit(${r.id})" title="Change this price" aria-label="Change this price">✎</button>`;
   const mark = r => r.state === "no_rate" ? ' <span class="pill err" title="The rate of this currency is not there yet">no rate</span>' : r.state === "needs_node" ? ' <span class="pill warn" title="Choose the node whose traffic is priced">choose a node</span>' : r.state === "idle" ? ' <span class="mut">not active</span>' : "";
   const none = '<span class="mut">—</span>', T = {rent: 0, gb: 0, tcost: 0, rsf: 0, sf: 0, mo: 0};
   const body = cards.map(([name, rows]) => {
     const rent = rows.filter(r => !csIsTraffic(r)), tr = rows.filter(csIsTraffic);
+    const add = kind => `<span class="cs-ed cs-add" onclick="csInlineNew(this, ${rows[0].id}, '${kind}')" title="${kind === "per_tb" ? "No price per TB yet: click to type it" : "No rent yet: click to type it"}">—</span>`;           // (a price that is not there: the dash is the place to type it)
     const names = [name, ...rows.map(r => r.node)].map(x => String(x || "").toLowerCase());
     const nr = (s.by_node || []).find(x => names.includes(x.name.toLowerCase()));
     const gb = tr.length ? Math.max(0, ...tr.map(r => r.gb || 0)) : nr ? nr.gb : null;                    // (a server nobody prices by traffic still shows what its node carried)
     const t = {sf: csSum(tr, "so_far"), mo: csSum(tr, "month")}, r0 = {sf: csSum(rent, "so_far"), mo: csSum(rent, "month")}, all = {sf: t.sf + r0.sf, mo: t.mo + r0.mo};
     const rentM = rent.reduce((a, r) => a + (r.state === "ok" ? perMonth(itOf(r)) : 0), 0);
     T.rent += rentM; T.gb += gb || 0; T.tcost += t.sf; T.rsf += r0.sf; T.sf += all.sf; T.mo += all.mo;
-    const rentCell = rent.length ? rent.map(r => { const it = itOf(r); return `<div title="${esc(tip(it))}">${csN(perMonth(it))}${it.cur !== "IRT" ? ` <small>${esc(csAmt(csTaxed(it), it.cur))}${it.kind === "yearly" ? "/yr" : ""}</small>` : ""}${pen(r)}</div>`; }).join("") : none;
+    const rentCell = rent.length ? rent.map(r => { const it = itOf(r); return `<div title="${esc(tip(it))}">${csEd(it, `${csN(perMonth(it))}${it.cur !== "IRT" ? ` <small>${esc(csAmt(csTaxed(it), it.cur))}${it.kind === "yearly" ? "/yr" : ""}</small>` : ""}`)}${csMore(r)}</div>`; }).join("") : add("monthly");
     const tbCell = tr.length ? tr.map(r => { const it = itOf(r), k = it.kind === "per_gb" ? 1000 : 1;
-      return `<div title="${esc(tip(it))}${it.included ? ` · first ${csN(it.included, 2)} ${it.kind === "per_tb" ? "TB" : "GB"} free` : ""}">${csN(csTaxed(it) * k * rateOf(it))}${it.cur !== "IRT" ? ` <small>${esc(csAmt(csTaxed(it) * k, it.cur))}</small>` : ""} <small>${it.dirs === "both" ? "both" : "sent"}</small>${pen(r)}</div>`; }).join("") : none;
+      return `<div title="${esc(tip(it))}${it.included ? ` · first ${csN(it.included, 2)} ${it.kind === "per_tb" ? "TB" : "GB"} free` : ""}">${csEd(it, `${csN(csTaxed(it) * k * rateOf(it))}${it.cur !== "IRT" ? ` <small>${esc(csAmt(csTaxed(it) * k, it.cur))}</small>` : ""}`, k)} <small>${it.dirs === "both" ? "both" : "sent"}</small>${csMore(r)}</div>`; }).join("") : add("per_tb");
     const quota = rent.concat(tr).map(r => r.quota ? `<small class="cs-note ${r.quota.pct >= 100 ? "cs-over" : r.quota.pct >= 90 ? "cs-near" : ""}" title="The traffic this node carries this month at this pace, against the traffic in its plan">${r.quota.pct}% of ${csN(r.quota.tb, 2)} TB</small>` : "").join("");
     return `<tr class="${rows.every(r => r.state === "idle") ? "cs-idle" : ""}"><td><b>${esc(name)}</b>${rows.map(mark).join("")}</td><td class="r">${rentCell}</td><td class="r">${tbCell}</td>`
       + `<td class="r">${gb == null ? none : csGb(gb)}${quota}</td><td class="r">${tr.length ? csN(t.sf) : none}</td><td class="r">${rent.length ? csN(r0.sf) : none}</td><td class="r cs-tot">${csN(all.sf)}</td><td class="r cs-tot cs-mo">${csN(all.mo)}</td></tr>`;
@@ -208,12 +212,7 @@ function csSection(d, s, sec) {
 }
 function csExpenses(d, s) {
   const sec = CS_SECTIONS.find(t => t[0] === cs.sub) || CS_SECTIONS[0];
-  const head = csSubTabs(CS_SECTIONS, sec[0], "csSub", s);
-  if (sec[0] !== "all") return head + csSection(d, s, sec);
-  const all = d.groups.map(g => g.key), {cards, rest} = csCardRows(s, all);                  // a server is ONE row (its rent and its traffic together); what has no server is a row of its own
-  return head + csExpTiles(s) + csWarn(s) + `<div class="card"><h3>Where the money goes<span class="sp"></span><small class="mut">the whole month · click a line for its tab</small></h3>${csExpRows(d, s, true)}</div>`
-    + `<div class="card cs-addbar"><h3>All your prices<span class="sp"></span><button class="pri sm" onclick="csEdit(0, 'foreign')">＋ Add a price</button></h3>${cards.length ? csServerTable(d, s, cards) : rest.length ? "" : '<div class="mut">No prices here yet. Press “＋ Add a price”.</div>'}</div>`
-    + (rest.length ? `<div class="card"><h3>Other prices</h3>${csItemsTable(d, s, all, r => rest.includes(r))}</div>` : "");
+  return csSubTabs(CS_SECTIONS, sec[0], "csSub", s) + csSection(d, s, sec);                   // (no "All expenses" tab: the Overview is the total of everything)
 }
 
 /* ---- Income: the shop bot and the partners */
@@ -321,7 +320,40 @@ window.csSave = async (e, id) => {
   try { await api(id ? "/api/costs/items/" + id : "/api/costs/items", {method: id ? "PUT" : "POST", body: JSON.stringify(o)}); hideModal(); toast("✓ Saved", "ok"); refresh(); } catch (err) { csErr(err); }
   return false;
 };
-window.csDel = async id => {
+const csDigits = v => String(v).replace(/[۰-۹]/g, c => "۰۱۲۳۴۵۶۷۸۹".indexOf(c)).replace(/[٠-٩]/g, c => "٠١٢٣٤٥٦٧٨٩".indexOf(c)).replace(/٫/g, ".").replace(/[,،٬\s]/g, "");
+const csBox = (el, shown, unit, fresh, save) => {                           // a box in place of the number: Enter or leaving the box saves it (save(v)), Esc leaves it as it was
+  el.innerHTML = `<input class="cs-in" inputmode="decimal" autocomplete="off" value="${shown}" placeholder="price" aria-label="The price"><small>${esc(unit)}</small>`;
+  const inp = el.querySelector("input"); inp.focus(); inp.select();
+  let done = false;
+  const end = async ok => {
+    if (done) return; done = true;
+    const v = parseFloat(csDigits(inp.value));
+    inp.classList.remove("cs-in");                                      // (the box is no longer being typed in: the page may draw itself again, with the new number)
+    if (!ok || !(fresh ? v > 0 : v >= 0) || v === shown) { csDraw(); return; }
+    try { await save(v); toast("✓ Saved", "ok"); } catch (err) { csErr(err); }
+    refresh();
+  };
+  inp.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); end(true); } else if (e.key === "Escape") { e.preventDefault(); end(false); } });
+  inp.addEventListener("blur", () => end(true));
+};
+const csUnit = (it, kind) => (CS_CUR[it.cur] || it.cur) + (kind === "yearly" ? "/yr" : kind === "monthly" ? "/mo" : kind === "per_gb" ? "/GB" : "/TB");
+window.csInline = (el, id, per = 1) => {                                    // a price that is there: its number is changed where it stands
+  const it = cs.d.items.find(x => x.id === id); if (!it || el.querySelector("input")) return;
+  csBox(el, Math.round(csTaxed(it) * per * 100) / 100, csUnit(it, it.kind), false, v => {
+    const o = {name: it.name, group: it.group, kind: it.kind, amount: v / per / (1 + (it.tax || 0) / 100), cur: it.cur, tax: it.tax || 0, server_id: it.server_id || 0, node: it.node || "", included: it.included || 0,
+               dirs: it.dirs || "out", quota: it.quota || 0, months: it.months || 1, starts: it.starts || "", ends: it.ends || "", note: it.note || ""};          // (the price typed has its tax in it: the tax stays, the amount under it moves)
+    return api("/api/costs/items/" + id, {method: "PUT", body: JSON.stringify(o)});
+  });
+};
+window.csInlineNew = (el, siblingId, kind) => {                             // a price that is not there yet (the dash): typed here, it becomes a new price of the same server, in the same currency, with the same tax
+  const sib = cs.d.items.find(x => x.id === siblingId); if (!sib || el.querySelector("input")) return;
+  const srv = (cs.d.servers.find(x => x.id === sib.server_id) || {}).name || sib.node || sib.name.replace(/\s+(rent|traffic|server)$/i, "");
+  csBox(el, "", csUnit(sib, kind), true, v => {
+    const o = {name: `${srv} ${kind === "per_tb" ? "traffic" : "rent"}`, group: sib.group, kind, amount: v / (1 + (sib.tax || 0) / 100), cur: sib.cur, tax: sib.tax || 0, server_id: sib.server_id || 0, node: sib.node || "", included: 0,
+               dirs: sib.dirs || "out", quota: 0, months: 1, starts: "", ends: "", note: ""};
+    return api("/api/costs/items", {method: "POST", body: JSON.stringify(o)});
+  });
+};window.csDel = async id => {
   const it = cs.d.items.find(x => x.id === id); if (!it) return;
   if (!await gconfirm(`Remove “${it.name}”? The months already saved keep their numbers.`)) return;
   try { await api("/api/costs/items/" + id, {method: "DELETE"}); toast("✓ Removed", "ok"); refresh(); } catch (err) { csErr(err); }

@@ -235,6 +235,7 @@ def save_settings(rates: dict | None = None, calendar: str | None = None, bot_se
 
         if changes:
             settings.put("costs", changes)
+            invalidate()
 
     return get_state()
 
@@ -250,6 +251,7 @@ def add_item(raw: dict) -> dict:
 
         item["id"] = int(doc["seq"]) + 1
         settings.put("costs", {"items": doc["items"] + [item], "seq": item["id"]})
+        invalidate()
 
     return item
 
@@ -265,6 +267,7 @@ def update_item(item_id: int, raw: dict) -> dict:
 
         item["id"] = item_id
         settings.put("costs", {"items": [item if i["id"] == item_id else i for i in doc["items"]]})
+        invalidate()
 
     return item
 
@@ -277,6 +280,7 @@ def delete_item(item_id: int) -> None:
             raise ValueError("no such item")
 
         settings.put("costs", {"items": [i for i in doc["items"] if i["id"] != item_id]})
+        invalidate()
 
 
 # ------------------------------------------------------------------ months (Jalali or Gregorian, "1405-08" or "2026-10")
@@ -794,7 +798,86 @@ def day_info(today: dt.date, first: dt.date, last: dt.date) -> dict:
             "span_g": _span((first.year, first.month, first.day), (last.year, last.month, last.day), GREG_MONTHS)}
 
 
+SUM_FRESH = 45                                       # seconds an answer of the page is handed out as it is
+SUM_STALE = 1800                                     # up to this old it is still handed out AT ONCE (old) while a new one is made in the background: the page does not wait for the panel and the bot host
+_SUM: dict[str, tuple[float, dict]] = {}
+_SUM_BUSY: set[str] = set()
+_SUM_LOCK = threading.Lock()
+_SUM_GEN = [0]                                       # moves when a price or a setting changes: an answer that was being made across the change is not kept
+
+
+def invalidate() -> None:
+    """A price, a rate or a setting changed: the kept answers are no longer true."""
+    with _SUM_LOCK:
+        _SUM.clear()
+        _SUM_GEN[0] += 1
+
+
+def _spawn(fn) -> None:
+    threading.Thread(target=fn, name="costs-summary", daemon=True).start()
+
+
+def _make(ck: str, month: str) -> dict:
+    with _SUM_LOCK:
+        gen = _SUM_GEN[0]
+
+    s = _summary(month, False, None)
+
+    with _SUM_LOCK:
+        if gen == _SUM_GEN[0]:
+            _SUM[ck] = (_clock(), s)
+
+    return s
+
+
+def _refresh(ck: str, month: str) -> None:
+    try:
+        _make(ck, month)
+    except (ValueError, RuntimeError, OSError) as e:
+        log.info("costs: the summary was not made again: %s", str(e)[:120])
+    finally:
+        with _SUM_LOCK:
+            _SUM_BUSY.discard(ck)
+
+
 def summary(month: str = "", recompute: bool = False, now: dt.datetime | None = None) -> dict:
+    """The page's answer for a month (the current one by default). Kept SUM_FRESH seconds; an older one (up to SUM_STALE) is handed out at once while a new one is made in the background, so the page
+    never waits for the panel and the bot host (the owner, 2026-10-31: "it takes very long to load"); the job `cost-warm` keeps the current month ready. `recompute` and a given `now` are made at once."""
+    if recompute or now is not None:
+        return _summary(month, recompute, now)
+
+    doc = settings.get("costs")
+    key = month or key_of(pg_usage.tehran_date(dt.datetime.now(dt.timezone.utc)), doc["calendar"])
+    ck = f"{doc['calendar']}|{key}"
+
+    with _SUM_LOCK:
+        hit = _SUM.get(ck)
+
+    age = _clock() - hit[0] if hit else None
+
+    if hit and age is not None and age < SUM_FRESH:
+        return dict(hit[1])
+
+    if hit and age is not None and age < SUM_STALE:
+        with _SUM_LOCK:
+            go = ck not in _SUM_BUSY
+            _SUM_BUSY.add(ck)
+
+        if go:
+            _spawn(lambda: _refresh(ck, month))
+
+        return {**hit[1], "cached_s": int(age)}
+
+    return dict(_make(ck, month))
+
+
+def run_warm() -> None:
+    """The job (every 2 minutes): the current month is made ahead of the page, so the page opens at once; nothing is made for a panel with no prices."""
+    if settings.get("costs")["items"]:
+        summary()
+
+
+def _summary(month: str = "", recompute: bool = False, now: dt.datetime | None = None) -> dict:
     """The month asked for (the current one by default). A finished month comes from the history when it was frozen; the first time it is seen with its traffic it is frozen."""
     doc = settings.get("costs")
     today = pg_usage.tehran_date(now or dt.datetime.now(dt.timezone.utc))

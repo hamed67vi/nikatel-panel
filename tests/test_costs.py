@@ -208,6 +208,7 @@ def test_the_rates_by_themselves_are_a_setting_a_job_and_part_of_the_state(clien
     assert client.put("/api/costs/settings", json={"rates_auto": True}).json()["rates_auto"] is True
     main = (Path(__file__).resolve().parent.parent / "nikatel" / "main.py").read_text(encoding="utf-8")
     assert 'jobs.register("cost-rates", 600, costs.run_rates)' in main and "    costs,\n" in main
+    assert 'jobs.register("cost-warm", 120, costs.run_warm)' in main                                           # the current month is made ahead of the page
 
 
 def test_the_route_for_todays_rates_answers_with_the_rates_or_502(client, monkeypatch):
@@ -353,6 +354,79 @@ def test_a_finished_month_is_frozen_the_first_time_it_is_seen_and_a_new_price_do
     assert old["frozen"] and old["total"] == 31000 and old["current"] == "2026-10"
     new = costs.summary("2026-09", recompute=True, now=now)
     assert new["total"] == 62000 and costs.history()[0]["total"] == 62000
+
+
+@pytest.fixture(autouse=True)
+def _no_kept_answers():
+    costs.invalidate()
+    yield
+    costs.invalidate()
+
+
+def test_the_pages_answer_is_kept_and_an_old_one_is_handed_out_at_once_while_a_new_one_is_made(monkeypatch):
+    seen = _stub_traffic(monkeypatch, gb=10)
+    costs.save_settings(None, "gregorian")
+    costs.add_item({"name": "TR1", "kind": "monthly", "amount": 31000})
+    clock = {"t": costs._clock()}
+    monkeypatch.setattr(costs, "_clock", lambda: clock["t"])
+    monkeypatch.setattr(costs, "_spawn", lambda fn: fn())                                                       # (the background turn runs on the spot)
+    a = costs.summary()
+    n = len(seen)
+    assert a["gb"] == 10 and costs.summary()["gb"] == 10 and len(seen) == n                                       # kept: nothing is asked of the panel again
+    _stub_traffic(monkeypatch, gb=20)
+    clock["t"] += costs.SUM_FRESH + 1
+    b = costs.summary()
+    assert b["gb"] == 10 and b["cached_s"] >= costs.SUM_FRESH                                                     # the old answer at once ...
+    c = costs.summary()
+    assert c["gb"] == 20 and "cached_s" not in c                                                                  # ... and the new one is there for the next look
+    _stub_traffic(monkeypatch, gb=30)
+    clock["t"] += costs.SUM_STALE + 1
+    assert costs.summary()["gb"] == 30 and "cached_s" not in costs.summary()                                      # too old to hand out: made at once
+
+
+def test_a_price_a_rate_or_a_setting_drops_the_kept_answers_and_recompute_or_a_given_day_never_keeps_one(monkeypatch):
+    _stub_traffic(monkeypatch)
+    costs.save_settings(None, "gregorian")
+    costs.add_item({"name": "TR1", "kind": "monthly", "amount": 31000})
+    assert costs.summary()["total"] == 31000
+    costs.update_item(1, {"name": "TR1", "kind": "monthly", "amount": 62000})
+    assert costs.summary()["total"] == 62000
+    costs.add_item({"name": "B", "kind": "monthly", "amount": 1000})
+    assert costs.summary()["total"] == 63000
+    costs.delete_item(2)
+    assert costs.summary()["total"] == 62000
+    costs.save_settings({"USD": "160000"})
+    assert costs._SUM == {}
+    costs.summary(recompute=True)
+    costs.summary(now=dt.datetime(2026, 10, 15, 12, tzinfo=UTC))
+    assert costs._SUM == {}
+
+
+def test_an_answer_made_across_a_change_is_not_kept_and_a_failed_turn_in_the_background_is_only_logged(monkeypatch):
+    def across(month="", recompute=False, now=None):
+        costs.invalidate()                                                                                       # a price changes while the answer is being made
+        return {"month": "x"}
+
+    monkeypatch.setattr(costs, "_summary", across)
+    assert costs._make("k", "")["month"] == "x" and costs._SUM == {}
+
+    def boom(month="", recompute=False, now=None):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(costs, "_summary", boom)
+    costs._SUM_BUSY.add("k")
+    costs._refresh("k", "")
+    assert "k" not in costs._SUM_BUSY
+
+
+def test_the_warm_job_makes_the_current_month_only_for_a_panel_with_prices(monkeypatch):
+    seen = _stub_traffic(monkeypatch)
+    costs.save_settings(None, "gregorian")
+    costs.run_warm()
+    assert seen == [] and costs._SUM == {}
+    costs.add_item({"name": "TR1", "kind": "monthly", "amount": 31000})
+    costs.run_warm()
+    assert seen and len(costs._SUM) == 1
 
 
 def test_a_month_is_not_frozen_on_its_last_day_and_one_saved_that_way_is_made_again(monkeypatch):
@@ -780,9 +854,12 @@ def test_the_bar_shows_today_and_the_dollar_against_the_lira_and_the_servers_are
 
     items = js[js.index("function csItemsTable"):js.index("const csNodesTable")]
     assert "<th>Group</th>" not in items and "<th>Server</th>" not in items and "<th>What</th><th>Price</th>" in items         # the list of prices has no Group and no Server column (the tooltip of the name says them)
-    assert js.count("csServerTable(d, s, cards)") == 3                                                                      # the function and its two uses: a server is ONE row in its tab and in "All expenses" (its rent and its traffic together)
+    assert js.count("csServerTable(d, s, cards)") == 2                                                                      # the function and its use: a server is ONE row in its tab (its rent and its traffic together)
+    assert '["all", "All expenses"' not in js and 'sub: "foreign"' in js                                                    # no "All expenses" tab: the Overview is the total of everything
+    assert "window.csInline = " in js and 'onclick="csInline(this, ${it.id}, ${per})"' in js and 'document.querySelector(".cs-in")' in js                # a number is changed where it stands, and the page's round does not redraw it away
+    assert "window.csInlineNew = " in js and 'onclick="csInlineNew(this, ${rows[0].id}' in js                                   # a dash (a price that is not there) is the place to type it
     assert 'onclick="hideModal(); csDel(${id})"' in js                                                                      # a price is removed in its window: the table has only a pencil
-    price = js[js.index("const csPrice"):js.index("const csGroupSum")]
+    price = js[js.index("const csParts"):js.index("const csEd")]
     assert "tax" not in price.replace("csTaxed", "")                                                              # the price line is the price with its tax in it: the tax is not written
     assert js.count("% tax") == 1                                                                                 # (only the tooltip says what was typed)
 

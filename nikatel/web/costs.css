@@ -71,8 +71,13 @@ html body #page .cs-tbl tbody tr:hover { background: var(--panel); }
 html body #page .cs-tbl td small { color: var(--mut); font-size: 10.5px; } html body #page .cs-tbl td .cs-note { display: block; }
 html body #page .cs-tbl td.cs-tot { font-weight: 600; } html body #page .cs-tbl .cs-mo { color: var(--acc-2); font-weight: 700; }
 html body #page .cs-tbl tfoot td { border-top: 1px solid var(--line-hi); border-bottom: 0; padding-top: 8px; font-weight: 700; }
-html body #page .cs-pen { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; min-height: 0; padding: 0; margin-left: 4px; border: 0; border-radius: 6px; background: transparent; box-shadow: none; color: var(--mut); font-size: 12px; cursor: pointer; vertical-align: middle; }      /* (no button shadow: a pencil, not a pill) */
-html body #page .cs-pen:hover { background: var(--panel-2); color: var(--text); box-shadow: none; }
+html body #page .cs-pen { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; min-height: 0; padding: 0; margin-left: 4px; border: 0; border-radius: 6px; background: transparent; box-shadow: none; color: var(--mut); font-size: 14px; line-height: 1; cursor: pointer; vertical-align: middle; opacity: .45; }      /* (no button shadow: a quiet "more", not a pill) */
+html body #page .cs-pen:hover, html body #page .cs-tbl tr:hover .cs-pen { opacity: 1; } html body #page .cs-pen:hover { background: var(--panel-2); color: var(--text); box-shadow: none; }
+/* a number changed where it stands: the number itself is the button; a click turns it into a small box */
+html body #page .cs-ed { cursor: text; border-radius: 5px; padding: 1px 4px; margin: 0 -4px; border-bottom: 1px dashed transparent; } html body #page .cs-ed:hover { background: var(--panel-2); border-bottom-color: var(--acc-2); }
+html body #page .cs-in { width: 118px; height: 24px; min-height: 0; padding: 0 6px; box-sizing: border-box; text-align: right; font: inherit; font-variant-numeric: tabular-nums; color: var(--text); background: var(--panel-2); border: 1px solid var(--acc-2); border-radius: 6px; outline: none; box-shadow: 0 0 0 3px rgba(120,160,255,.18); }
+html body #page .cs-add { color: var(--mut); } html body #page .cs-add:hover { color: var(--text); }
+html body #page .cs-ed:has(.cs-in) { background: transparent; border-bottom-color: transparent; cursor: default; } html body #page .cs-ed .cs-in + small { margin-left: 4px; }
 html body #page .cs-hist { display: flex; flex-direction: column; }
 html body #page .cs-h { display: grid; grid-template-columns: minmax(110px, 1.2fr) 2fr 1fr 1.4fr; gap: 10px; align-items: baseline; padding: 8px 4px; border-bottom: 1px solid var(--line); cursor: pointer; font-size: 13px; }
 html body #page .cs-h:hover { background: var(--panel); } html body #page .cs-h em { font-style: normal; color: var(--acc-2); text-align: right; } html body #page .cs-h small { color: var(--mut); }
