@@ -17,13 +17,17 @@ from __future__ import annotations
 
 import datetime as dt
 import itertools
+import json
 import math
 import re
+import subprocess
 import threading
+import time
 from typing import Any
 
 import httpx
 
+from ..config import get_settings
 from ..db import session
 from ..log import get_logger
 from ..models import Panel, Server, ServerSample
@@ -41,6 +45,8 @@ TB = 1000.0                                         # GB in a TB for the prices 
 SAMPLE_DAYS = 8                                     # the panel keeps about a week of 2-minute samples of every server: the traffic of an Iran server is an estimate from them
 SAMPLE_GAP = 600                                    # seconds: a longer hole between two samples is counted as this long (the server was not asked)
 GIB = 1024 ** 3
+INCOME_TTL = 120                                    # seconds a read of the bot's income is kept (the page redraws every ~15 s and the bot host rate-limits new SSH connections)
+INCOME_KINDS = ("buy", "renew", "wallet", "other")
 RATES_URL = "https://chand.online/api/market"       # the site the owner named for the day's rates (2026-10-31): {"prices": {"usd": {"priceToman": ...}, "eur": ..., "try": ...}, "updatedAt": ms}
 MAX_ITEMS = 300
 MAX_MONEY = 1e12
@@ -131,7 +137,7 @@ def clean_item(raw: dict) -> dict:
 
 def get_state() -> dict:
     doc = settings.get("costs")
-    return {"items": doc["items"], "rates": doc["rates"], "rates_at": doc["rates_at"], "calendar": doc["calendar"]}
+    return {"items": doc["items"], "rates": doc["rates"], "rates_at": doc["rates_at"], "calendar": doc["calendar"], "income": doc["income"]}
 
 
 def fetch_rates() -> dict:
@@ -154,9 +160,20 @@ def fetch_rates() -> dict:
     return get_state()
 
 
-def save_settings(rates: dict | None = None, calendar: str | None = None) -> dict:
+def save_settings(rates: dict | None = None, calendar: str | None = None, bot_server_id: int | None = None) -> dict:
     with _LOCK:
         changes: dict[str, Any] = {}
+
+        if bot_server_id is not None:
+            if bot_server_id < 0:
+                raise ValueError("the bot server is an inventory server (or 0 for none)")
+
+            if bot_server_id:
+                with session() as db:
+                    if db.get(Server, bot_server_id) is None:
+                        raise ValueError("that server is not in the inventory")
+
+            changes["income"] = {**settings.get("costs")["income"], "bot_server_id": int(bot_server_id)}
 
         if rates is not None:
             cur = dict(settings.get("costs")["rates"])
@@ -497,6 +514,95 @@ def _iran_samples(first: dt.date, upto: dt.date, now: dt.datetime | None) -> dic
     return out
 
 
+# ------------------------------------------------------------------ the income of the shop bot (read only)
+_INC_CACHE: dict[tuple, tuple[float, dict]] = {}
+_INC_LOCK = threading.Lock()
+_clock = time.monotonic                              # the tests move this clock
+
+
+def _int(v) -> int:
+    try:
+        return max(0, int(v))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _income_ssh(host: str, port: int, user: str, a: int, b: int) -> str:
+    """Runs `income A B` on the bot host with the panel's OWN key for it (data dir, `income_key`): on that host the key is restricted to one script that prints the sums of the approved
+    payments between two unix times (counts and totals, no name, no id) - it cannot run anything else. A list of arguments, no shell: A and B are whole numbers."""
+    s = get_settings()
+    key = s.data_dir / "income_key"
+
+    if not key.is_file():
+        raise RuntimeError("the key the panel reads the bot with (income_key) is not in its data folder")
+
+    argv = ["ssh", "-i", str(key), "-p", str(int(port)), "-o", "BatchMode=yes", "-o", "IdentitiesOnly=yes", "-o", "StrictHostKeyChecking=accept-new", "-o", f"UserKnownHostsFile={s.known_hosts}",
+            "-o", f"ConnectTimeout={s.ssh_connect_timeout}", "-o", "LogLevel=ERROR", "--", f"{user}@{host}", f"income {int(a)} {int(b)}"]
+
+    try:
+        p = subprocess.run(argv, capture_output=True, text=True, timeout=30, check=False)
+    except (subprocess.TimeoutExpired, OSError) as e:
+        raise RuntimeError(f"the bot host did not answer: {str(e)[:80]}") from None
+
+    if p.returncode != 0 and not p.stdout.strip():
+        raise RuntimeError("the bot host refused: " + (p.stderr.strip()[-120:] or f"exit {p.returncode}"))
+
+    return p.stdout
+
+
+def bot_income(first: dt.date, upto: dt.date, now: dt.datetime | None = None) -> dict | None:
+    """The approved payments of the shop bot from the start of Tehran day `first` to the end of `upto` (cut at now): {total, count, payers, by_kind: {buy, renew, wallet, other: {n, sum}}}. None when no bot
+    server is chosen. Kept for INCOME_TTL seconds and asked one at a time: the bot host's firewall refuses a burst of new SSH connections."""
+    sid = int((settings.get("costs").get("income") or {}).get("bot_server_id") or 0)
+
+    if not sid:
+        return None
+
+    with session() as db:
+        srv = db.get(Server, sid)
+        target = (srv.host, srv.ssh_port, srv.ssh_user) if srv is not None else None
+
+    if target is None:
+        raise ValueError("the server chosen for the bot is not in the inventory any more")
+
+    now_dt = now or dt.datetime.now(dt.timezone.utc)
+    a = int(pg_usage.tehran_day_start(first).timestamp())
+    b = min(int(pg_usage.tehran_day_start(upto + dt.timedelta(days=1)).timestamp()), int(now_dt.timestamp()))
+
+    if b <= a:
+        return {"total": 0, "count": 0, "payers": 0, "by_kind": {k: {"n": 0, "sum": 0} for k in INCOME_KINDS}, "from": a, "to": a}
+
+    key = (sid, a, b // INCOME_TTL)
+
+    with _INC_LOCK:
+        hit = _INC_CACHE.get(key)
+
+        if hit and _clock() - hit[0] < INCOME_TTL:
+            return hit[1]
+
+        out = _income_ssh(*target, a, b)
+
+        try:
+            d = json.loads(out.strip().splitlines()[-1])
+        except (ValueError, IndexError):
+            raise RuntimeError("the answer of the bot host is not JSON") from None
+
+        if not isinstance(d, dict) or not d.get("ok"):
+            raise RuntimeError("the bot host said: " + str(d.get("error") if isinstance(d, dict) else d)[:100])
+
+        try:
+            res = {"total": _int(d["total"]), "count": _int(d["count"]), "payers": _int(d["payers"]), "from": a, "to": b,
+                   "by_kind": {k: {"n": _int(d[k]["n"]), "sum": _int(d[k]["sum"])} for k in INCOME_KINDS}}
+        except (KeyError, TypeError):
+            raise RuntimeError("the answer of the bot host is not what was asked for") from None
+
+        for old in [k for k, v in _INC_CACHE.items() if _clock() - v[0] >= INCOME_TTL]:
+            _INC_CACHE.pop(old)
+
+        _INC_CACHE[key] = (_clock(), res)
+        return res
+
+
 # ------------------------------------------------------------------ the page's answers
 def _servers() -> dict[int, str]:
     with session() as db:
@@ -509,6 +615,19 @@ def _one(doc: dict, key: str, now: dt.datetime | None) -> dict:
     traffic, ok, errors, names = traffic_of(first, last, now)
     out = compute(doc["items"], doc["rates"], key, today, traffic, ok, _servers(), names)
     out["errors"] = errors
+
+    if (doc.get("income") or {}).get("bot_server_id"):
+        try:
+            raw = bot_income(first, min(last, today), now)
+        except (RuntimeError, ValueError, OSError) as e:
+            out["warnings"].append(f"The shop bot's income could not be read: {str(e)[:140]}")
+        else:
+            if raw is not None:
+                f = out["days"] / out["elapsed"] if 0 < out["elapsed"] < out["days"] else 1.0
+                month = round(raw["total"] * f)
+                out["income"] = {"bot": raw, "so_far": raw["total"], "month": month, "profit_so_far": raw["total"] - out["so_far"], "profit_month": month - out["total"],
+                                 "profit_per_gb": round((raw["total"] - out["so_far"]) / out["gb"], 2) if out["gb"] > 0 and out["traffic_ok"] else None}
+
     return out
 
 

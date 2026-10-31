@@ -43,6 +43,7 @@ class ItemIn(BaseModel):
 class SettingsIn(BaseModel):
     rates: dict[str, float] | None = None
     calendar: str | None = None
+    bot_server_id: int | None = Field(None, ge=0)
 
 
 @router.get("/costs")
@@ -53,8 +54,8 @@ def costs_get():
 
 @router.put("/costs/settings")
 def costs_settings(body: SettingsIn):
-    """The rates (toman per dollar / euro) and the calendar of a month (jalali or gregorian)."""
-    return {"ok": True, **_wrap(costs.save_settings, body.rates, body.calendar)}
+    """The rates (toman per dollar / euro / lira), the calendar of a month (jalali or gregorian) and the inventory server that runs the shop bot (its income is read from there)."""
+    return {"ok": True, **_wrap(costs.save_settings, body.rates, body.calendar, body.bot_server_id)}
 
 
 @router.post("/costs/rates/fetch")

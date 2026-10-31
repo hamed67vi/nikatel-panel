@@ -1,6 +1,7 @@
 """The Costs page (services/costs.py, api/costs.py, web/costs.js): what the typed prices add up to in a month, what one GB costs, the history, and the wiring of the page. No panel and no server is asked:
 the traffic is a stub, the arithmetic is pure."""
 import datetime as dt
+import json
 from pathlib import Path
 
 import httpx
@@ -386,6 +387,145 @@ def test_a_panel_that_does_not_answer_is_said_and_a_month_that_has_not_begun_ask
 def test_without_a_panel_the_traffic_is_missing_and_it_is_said():
     out, ok, errors, _names = costs.traffic_of(D(2026, 10, 1), D(2026, 10, 31), dt.datetime(2026, 10, 15, tzinfo=UTC))
     assert out == {} and not ok and errors == ["no PasarGuard panel is connected"]
+
+
+# ------------------------------------------------------------------ the income of the shop bot
+BOT_ANSWER = {"ok": True, "from": 1, "to": 2, "count": 730, "payers": 525, "total": 271091500, "buy": {"n": 349, "sum": 99740000}, "renew": {"n": 133, "sum": 38806500},
+              "wallet": {"n": 152, "sum": 103567000}, "other": {"n": 96, "sum": 28978000}}
+
+
+def _bot(monkeypatch, answer=None, fail=None):
+    """A bot server in the inventory, chosen for the income; the SSH call is a stub that remembers what it was asked."""
+    from nikatel.models import Server
+
+    with session() as db:
+        srv = Server(name="BOT", host="192.0.2.20", role="foreign")
+        db.add(srv)
+        db.flush()
+        sid = srv.id
+
+    costs.save_settings(None, None, sid)
+    costs._INC_CACHE.clear()
+    calls = []
+
+    def fake(host, port, user, a, b):
+        calls.append((host, port, user, a, b))
+
+        if fail:
+            raise RuntimeError(fail)
+
+        return answer if answer is not None else json.dumps(BOT_ANSWER)
+
+    monkeypatch.setattr(costs, "_income_ssh", fake)
+    return calls
+
+
+def test_the_bots_income_is_asked_for_whole_tehran_days_cut_at_now_and_kept_for_a_while(monkeypatch):
+    calls = _bot(monkeypatch)
+    now = dt.datetime(2026, 10, 10, 12, tzinfo=UTC)
+    r = costs.bot_income(D(2026, 10, 1), D(2026, 10, 10), now)
+    a, b = int(costs.pg_usage.tehran_day_start(D(2026, 10, 1)).timestamp()), int(now.timestamp())
+    assert calls == [("192.0.2.20", 22, "root", a, b)] and r["total"] == 271091500 and r["count"] == 730 and r["by_kind"]["wallet"] == {"n": 152, "sum": 103567000}
+    costs.bot_income(D(2026, 10, 1), D(2026, 10, 10), now)
+    assert len(calls) == 1                                                                                    # asked again at once: the kept answer
+    t0 = costs._clock()
+    monkeypatch.setattr(costs, "_clock", lambda: t0 + costs.INCOME_TTL + 1)
+    costs.bot_income(D(2026, 10, 1), D(2026, 10, 10), now)
+    assert len(calls) == 2
+    costs.bot_income(D(2026, 10, 1), D(2026, 10, 5), now)                                                     # a finished range ends at the end of its last Tehran day
+    assert calls[-1][4] == int(costs.pg_usage.tehran_day_start(D(2026, 10, 6)).timestamp())
+    assert costs.bot_income(D(2026, 11, 1), D(2026, 11, 3), now)["total"] == 0 and len(calls) == 3           # a month that has not begun: nothing to ask
+
+
+def test_no_bot_server_chosen_means_no_income_and_a_missing_one_is_said():
+    assert costs.bot_income(D(2026, 10, 1), D(2026, 10, 10)) is None
+    costs.save_settings(None, None, 0)
+
+    with pytest.raises(ValueError):
+        costs.save_settings(None, None, 999)
+
+    with pytest.raises(ValueError):
+        costs.save_settings(None, None, -1)
+
+
+@pytest.mark.parametrize("answer, fail, said", [(None, "the bot host refused: x", "refused"), ("not json", None, "not JSON"), (json.dumps({"ok": False, "error": "boom"}), None, "boom"),
+                                                 (json.dumps({"ok": True, "total": 1}), None, "not what was asked"), ("", None, "not JSON")])
+def test_a_refusal_or_a_wrong_answer_of_the_bot_host_is_said_and_the_page_goes_on(monkeypatch, answer, fail, said):
+    _bot(monkeypatch, answer=answer, fail=fail)
+    now = dt.datetime(2026, 10, 10, 12, tzinfo=UTC)
+
+    with pytest.raises(RuntimeError, match=said):
+        costs.bot_income(D(2026, 10, 1), D(2026, 10, 10), now)
+
+    _stub_traffic(monkeypatch)
+    costs.save_settings(None, "gregorian")
+    s = costs.summary(now=now)
+    assert "income" not in s and any("The shop bot's income could not be read" in w and said in w for w in s["warnings"])
+
+
+def test_the_income_and_the_profit_are_in_the_summary(monkeypatch):
+    _bot(monkeypatch)
+    _stub_traffic(monkeypatch, gb=100)
+    costs.save_settings(None, "gregorian")
+    costs.add_item({"name": "TR1", "kind": "monthly", "amount": 31000})
+    s = costs.summary(now=dt.datetime(2026, 10, 10, 12, tzinfo=UTC))                                          # 10 of 31 days
+    inc = s["income"]
+    assert inc["so_far"] == 271091500 and inc["month"] == round(271091500 * 31 / 10) and inc["bot"]["payers"] == 525
+    assert inc["profit_so_far"] == 271091500 - s["so_far"] and inc["profit_month"] == inc["month"] - s["total"]
+    assert inc["profit_per_gb"] == round(inc["profit_so_far"] / 100, 2)
+    assert not any("could not be read" in w for w in s["warnings"])
+
+
+def test_the_ssh_call_is_a_list_of_arguments_with_only_numbers_and_needs_the_panels_key(monkeypatch):
+    import subprocess
+
+    from nikatel.config import get_settings
+
+    with pytest.raises(RuntimeError, match="income_key"):
+        costs._income_ssh("192.0.2.20", 22, "root", 1790109000, 1792701000)
+
+    d = get_settings().data_dir
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "income_key").write_text("not a real key", encoding="utf-8")
+    seen = []
+
+    def run(argv, **kw):
+        seen.append((argv, kw))
+        return subprocess.CompletedProcess(argv, 0, stdout='{"ok": true}\n', stderr="")
+
+    monkeypatch.setattr(costs.subprocess, "run", run)
+    assert costs._income_ssh("192.0.2.20", 2222, "root", 1790109000, 1792701000) == '{"ok": true}\n'
+    argv, kw = seen[0]
+    assert isinstance(argv, list) and argv[0] == "ssh" and argv[-1] == "income 1790109000 1792701000" and argv[-2] == "root@192.0.2.20" and argv[-3] == "--"
+    assert "IdentitiesOnly=yes" in argv and "BatchMode=yes" in argv and str(d / "income_key") in argv and "2222" in argv and not kw.get("shell") and kw["timeout"] == 30
+    monkeypatch.setattr(costs.subprocess, "run", lambda argv, **kw: subprocess.CompletedProcess(argv, 255, stdout="", stderr="ssh: connect to host x port 22: Connection refused\n"))
+
+    with pytest.raises(RuntimeError, match="refused"):
+        costs._income_ssh("192.0.2.20", 22, "root", 1, 2)
+
+    def slow(argv, **kw):
+        raise subprocess.TimeoutExpired(argv, 30)
+
+    monkeypatch.setattr(costs.subprocess, "run", slow)
+
+    with pytest.raises(RuntimeError, match="did not answer"):
+        costs._income_ssh("192.0.2.20", 22, "root", 1, 2)
+
+
+def test_the_bot_server_is_chosen_through_the_settings_route(client):
+    from nikatel.models import Server
+
+    assert client.get("/api/costs").json()["income"] == {"bot_server_id": 0}
+    assert client.put("/api/costs/settings", json={"bot_server_id": 999}).status_code == 400
+
+    with session() as db:
+        srv = Server(name="BOT", host="192.0.2.20", role="foreign")
+        db.add(srv)
+        db.flush()
+        sid = srv.id
+
+    assert client.put("/api/costs/settings", json={"bot_server_id": sid}).json()["income"]["bot_server_id"] == sid
+    assert client.put("/api/costs/settings", json={"bot_server_id": 0}).json()["income"]["bot_server_id"] == 0
 
 
 # ------------------------------------------------------------------ the page is wired in

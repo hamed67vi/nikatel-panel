@@ -33,6 +33,13 @@ function csDraw() {
     + `<div class="cs-tile"><small>${s.open ? "The whole month" : "The month"}</small><b>${csMoney(s.total)}</b><span>${s.open ? "if the traffic goes on like this" : "final"}</span></div>`
     + `<div class="cs-tile"><small>Traffic of the customers</small><b>${s.traffic_ok ? csGb(s.gb) : "—"}</b><span>${s.traffic_ok && s.open && s.gb ? `about ${csGb(s.gb_month)} in the month` : "counted by the panel"}</span></div>`
     + `<div class="cs-tile cs-big"><small>One GB costs you</small><b>${csMoney(s.per_gb, true)}</b><span>${s.per_gb_month != null && s.open ? `${csN(s.per_gb_month, s.per_gb_month < 100 ? 1 : 0)} toman at the end of the month` : "so far this month"}</span></div></div>`;
+  const inc = s.income, IK = [["buy", "New services"], ["renew", "Renewals"], ["wallet", "Wallet top-ups"], ["other", "Extra volume and days"]];
+  const incTiles = inc ? `<div class="cs-tiles">`
+    + `<div class="cs-tile"><small>Income so far (shop bot)</small><b>${csMoney(inc.so_far)}</b><span>${csN(inc.bot.count)} payments · ${csN(inc.bot.payers)} payers</span></div>`
+    + `<div class="cs-tile"><small>${s.open ? "Income, the whole month" : "Income of the month"}</small><b>${csMoney(inc.month)}</b><span>${s.open ? "at this pace" : "final"}</span></div>`
+    + `<div class="cs-tile"><small>Profit so far</small><b class="${inc.profit_so_far < 0 ? "cs-neg" : ""}">${csMoney(inc.profit_so_far)}</b><span>the bot's income less the cost - the partners' income is not in yet</span></div>`
+    + `<div class="cs-tile cs-big"><small>Profit of one GB</small><b class="${inc.profit_per_gb != null && inc.profit_per_gb < 0 ? "cs-neg" : ""}">${csMoney(inc.profit_per_gb, true)}</b><span>so far, before the partners' income</span></div></div>`
+    + `<div class="card"><h3>Income of the shop bot<span class="sp"></span><small class="mut">payments the bot approved, by the day of the month</small></h3>${IK.map(([k, name]) => `<div class="cs-gr"><span>${name} <small class="mut">${csN(inc.bot.by_kind[k].n)}</small></span><i style="--w:${inc.bot.count && inc.so_far ? Math.round(inc.bot.by_kind[k].sum * 100 / inc.so_far) : 0}%"></i><b>${csMoney(inc.bot.by_kind[k].sum, false, true)}</b></div>`).join("")}</div>` : (d.income && d.income.bot_server_id ? "" : '<div class="cs-hint">Income: choose the server of the shop bot in the bar above (Shop bot) and the page adds its sales and the profit.</div>');
   const warn = s.warnings.concat((s.errors || []).map(x => "Panel: " + x)).map(w => `<div class="cs-warn">${esc(w)}</div>`).join("");
   const maxG = Math.max(1, ...Object.values(s.by_group).map(g => g.month));
   const groups = Object.values(s.by_group).filter(g => g.month || g.so_far).map(g => `<div class="cs-gr"><span>${esc(g.name)}</span><i style="--w:${Math.round(g.month * 100 / maxG)}%"></i><b>${csMoney(g.month)}</b></div>`).join("") || '<div class="mut">Nothing is counted in this month yet.</div>';
@@ -53,9 +60,10 @@ function csDraw() {
   page.innerHTML = `<div class="costs">`
     + `<div class="card cs-bar"><div class="cs-month"><button class="sm" onclick="csMonth(-1)" aria-label="The month before">◀</button><b>${esc(s.label)}</b><button class="sm" onclick="csMonth(1)" aria-label="The month after" ${isNow ? "disabled" : ""}>▶</button>${isNow ? "" : '<button class="sm" onclick="csOpen(\'\')">This month</button>'}${!s.open && s.frozen ? '<button class="sm" onclick="csRecompute()" title="Make this month again from the prices as they are now">Recalculate</button>' : ""}</div>`
     + `<form class="cs-set" onsubmit="return csSaveSettings(event)"><label>1 USD = <input name="USD" type="number" min="0" step="any" value="${esc(d.rates.USD || "")}" placeholder="toman"></label><label>1 EUR = <input name="EUR" type="number" min="0" step="any" value="${esc(d.rates.EUR || "")}" placeholder="toman"></label><label>1 lira = <input name="TRY" type="number" min="0" step="any" value="${esc(d.rates.TRY || "")}" placeholder="toman"></label>`
+    + `<label>Shop bot <select name="bot_server_id" title="The server that runs the shop bot: the panel reads its sales from there (a restricted key, counts and sums only)"><option value="0">— not set —</option>${d.servers.map(x => `<option value="${x.id}" ${(d.income && d.income.bot_server_id) === x.id ? "selected" : ""}>${esc(x.name)}</option>`).join("")}</select></label>`
     + `<label>Month <select name="calendar"><option value="jalali" ${d.calendar === "jalali" ? "selected" : ""}>Jalali</option><option value="gregorian" ${d.calendar === "gregorian" ? "selected" : ""}>Gregorian</option></select></label><button class="sm" type="submit">Save</button>`
     + `<button class="sm" type="button" onclick="csFetchRates()" title="Read today's dollar, euro and lira from chand.online and save them as the rates">Today's rates</button>${d.rates_at ? `<small class="cs-usd" title="The time the site gave with its prices">from chand.online · ${esc(d.rates_at)}</small>` : ""}</form></div>`
-    + tiles + warn
+    + tiles + warn + incTiles
     + `<div class="cs-two"><div class="card"><h3>Where it goes</h3>${groups}</div><div class="card"><h3>Each node</h3>${nodes}</div></div>`
     + (servers ? `<div class="card"><h3>Each Iran server<span class="sp"></span><small class="mut">the traffic is an estimate from the panel's samples of the last days</small></h3>${servers}</div>` : "")
     + `<div class="card"><h3>Your prices<span class="sp"></span><button class="pri sm" onclick="csEdit(0)">＋ Add a price</button></h3>${prices}</div>`
@@ -69,7 +77,7 @@ window.csRecompute = async () => {
 };
 window.csSaveSettings = async e => {
   e.preventDefault(); const f = new FormData(e.target), cal = f.get("calendar");
-  try { await api("/api/costs/settings", {method: "PUT", body: JSON.stringify({rates: {USD: +f.get("USD") || 0, EUR: +f.get("EUR") || 0, TRY: +f.get("TRY") || 0}, calendar: cal})}); if (cal !== cs.d.calendar) cs.month = ""; toast("✓ Saved", "ok"); refresh(); } catch (err) { csErr(err); }
+  try { await api("/api/costs/settings", {method: "PUT", body: JSON.stringify({rates: {USD: +f.get("USD") || 0, EUR: +f.get("EUR") || 0, TRY: +f.get("TRY") || 0}, calendar: cal, bot_server_id: +f.get("bot_server_id") || 0})}); if (cal !== cs.d.calendar) cs.month = ""; toast("✓ Saved", "ok"); refresh(); } catch (err) { csErr(err); }
   return false;
 };
 

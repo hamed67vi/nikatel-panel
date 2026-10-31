@@ -12,6 +12,8 @@ html body #page .cs-tile small { color: var(--mut); font-size: 12px; } html body
 html body #page .cs-tile span { color: var(--mut); font-size: 12px; }
 html body #page .cs-tile.cs-big { border-color: var(--line-hi); } html body #page .cs-tile.cs-big b { color: var(--acc-2); }
 html body #page .cs-usd { color: var(--mut); font-weight: 400; white-space: nowrap; }
+html body #page .cs-neg { color: var(--bad); }
+html body #page .cs-hint { padding: 9px 13px; border-radius: var(--r-s); border: 1px dashed var(--line); color: var(--mut); font-size: 13px; }
 html body #page .cs-warn { padding: 9px 13px; border-radius: var(--r-s); border: 1px solid rgba(255,200,70,.45); color: var(--warn); font-size: 13px; }
 html body #page .cs-two { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 12px; align-items: start; }
 html body #page .cs-gr { display: grid; grid-template-columns: minmax(90px, 140px) 1fr auto; align-items: center; gap: 10px; padding: 6px 0; font-size: 13px; }
