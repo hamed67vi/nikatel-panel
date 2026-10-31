@@ -59,17 +59,20 @@ html body #page .cs-act { display: inline-flex; gap: 6px; justify-content: flex-
 html body #page .cs-scroll { max-height: 560px; overflow-y: auto; padding-right: 2px; }
 html body #page .cs-items { width: 100%; }
 html body #page .cs-items td:nth-child(1), html body #page .cs-items td:nth-child(3) { white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere; }      /* (a name and a price are read whole: the cell grows taller, it is not cut) */
-/* a card for each server: its rent | its price per TB | the month (traffic used, its cost, the rent, the total) */
-html body #page .cs-cards { display: flex; flex-direction: column; gap: 12px; }
-html body #page .cs-addbar h3 { margin: 0; } html body #page .cs-addbar h3 button { flex: none; white-space: nowrap; } html body #page .cs-addbar h3 small { flex: 1 1 0; min-width: 0; text-align: right; }
-html body #page .cs-srv-h { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 10px; } html body #page .cs-srv-h h3 { margin: 0; font-size: 16px; }
-html body #page .cs-srv-t { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.2; } html body #page .cs-srv-t b { font-size: 18px; color: var(--acc-2); } html body #page .cs-srv-t small { color: var(--mut); font-size: 11px; }
-html body #page .cs-srv-g { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.25fr); gap: 12px; }
-html body #page .cs-blk { display: flex; flex-direction: column; gap: 8px; min-width: 0; padding: 10px 12px; border-radius: var(--r-s); background: var(--panel-2); border: 1px solid var(--line); }
-html body #page .cs-blk > small { color: var(--mut); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
-html body #page .cs-ln { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; } html body #page .cs-ln > span:first-child { display: flex; flex-direction: column; min-width: 0; line-height: 1.35; } html body #page .cs-ln .cs-act { flex: none; flex-direction: row; } html body #page .cs-ln b { font-size: 14px; overflow-wrap: anywhere; }
-html body #page .cs-mini { width: 100%; border-collapse: collapse; font-size: 13px; } html body #page .cs-mini th { color: var(--mut); font-weight: 500; font-size: 11px; text-align: left; padding: 0 0 4px; } html body #page .cs-mini td { padding: 3px 0; } html body #page .cs-mini .r { text-align: right; white-space: nowrap; }
-html body #page .cs-mini .cs-sum td { border-top: 1px solid var(--line); padding-top: 6px; font-weight: 700; color: var(--acc-2); }
+/* the servers: one small table, a row for each server (its prices | what it carried and cost so far | the whole month), the total at the foot */
+html body #page .cs-addbar h3 { margin: 0 0 10px; } html body #page .cs-addbar h3 button { flex: none; white-space: nowrap; } html body #page .cs-addbar h3 small { flex: 1 1 0; min-width: 0; text-align: right; }
+html body #page .cs-xs { overflow-x: auto; scrollbar-width: thin; scrollbar-color: rgba(255,255,255,.22) transparent; }
+html body #page .cs-tbl { width: 100%; min-width: 860px; border-collapse: collapse; font-size: 12.5px; font-variant-numeric: tabular-nums; }
+html body #page .cs-tbl th { color: var(--mut); font-weight: 500; font-size: 11px; text-align: left; padding: 4px 10px; white-space: nowrap; border-bottom: 1px solid var(--line); }
+html body #page .cs-tbl th.cs-grp { text-transform: uppercase; letter-spacing: .04em; border-bottom: 1px solid var(--line-hi); text-align: center; }
+html body #page .cs-tbl td { padding: 6px 10px; border-bottom: 1px solid var(--line); vertical-align: top; white-space: nowrap; }
+html body #page .cs-tbl .r { text-align: right; }
+html body #page .cs-tbl tbody tr:hover { background: var(--panel); }
+html body #page .cs-tbl td small { color: var(--mut); font-size: 10.5px; } html body #page .cs-tbl td .cs-note { display: block; }
+html body #page .cs-tbl td.cs-tot { font-weight: 600; } html body #page .cs-tbl .cs-mo { color: var(--acc-2); font-weight: 700; }
+html body #page .cs-tbl tfoot td { border-top: 1px solid var(--line-hi); border-bottom: 0; padding-top: 8px; font-weight: 700; }
+html body #page .cs-pen { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; min-height: 0; padding: 0; margin-left: 4px; border: 0; border-radius: 6px; background: transparent; box-shadow: none; color: var(--mut); font-size: 12px; cursor: pointer; vertical-align: middle; }      /* (no button shadow: a pencil, not a pill) */
+html body #page .cs-pen:hover { background: var(--panel-2); color: var(--text); box-shadow: none; }
 html body #page .cs-hist { display: flex; flex-direction: column; }
 html body #page .cs-h { display: grid; grid-template-columns: minmax(110px, 1.2fr) 2fr 1fr 1.4fr; gap: 10px; align-items: baseline; padding: 8px 4px; border-bottom: 1px solid var(--line); cursor: pointer; font-size: 13px; }
 html body #page .cs-h:hover { background: var(--panel); } html body #page .cs-h em { font-style: normal; color: var(--acc-2); text-align: right; } html body #page .cs-h small { color: var(--mut); }
@@ -82,7 +85,7 @@ html body .cs-form .cs-wide { grid-column: 1 / -1; } html body .cs-form .cs-chec
 html body .cs-form .cs-help { grid-column: 1 / -1; color: var(--mut); font-size: 12.5px; min-height: 18px; }
 html body .cs-form .cs-btns { grid-column: 1 / -1; display: flex; gap: 10px; justify-content: flex-end; }
 @media (max-width: 900px) {
-  html body #page .cs-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } html body #page .cs-two { grid-template-columns: minmax(0, 1fr); } html body #page .cs-fill { display: none; } html body #page .cs-srv-g { grid-template-columns: minmax(0, 1fr); }
+  html body #page .cs-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } html body #page .cs-two { grid-template-columns: minmax(0, 1fr); } html body #page .cs-fill { display: none; }
   html body #page .costs .cs-items { display: block; overflow-x: auto; }
 }
 @media (max-width: 560px) {

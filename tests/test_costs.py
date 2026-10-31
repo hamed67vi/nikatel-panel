@@ -771,10 +771,12 @@ def test_the_page_is_in_the_menu_loaded_titled_and_asks_only_routes_that_exist(c
         assert path.replace("/{item_id}", "") in js
 
 
-def test_the_bar_shows_today_and_the_dollar_against_the_lira_and_each_server_has_a_card_without_the_tax_written():
+def test_the_bar_shows_today_and_the_dollar_against_the_lira_and_the_servers_are_one_table_without_the_tax_written():
     js = (WEB / "costs.js").read_text(encoding="utf-8")
     assert "USD/TRY" in js and "d.rates.USD / d.rates.TRY" in js and "s.today_j" in js and "s.today_g" in js and "s.span_g" in js and "s.span_j" in js
-    assert "function csCard(" in js and "csCardRows(" in js and "Price per TB of traffic" in js and '"Traffic used"' in js and '"Traffic cost"' in js and '"Rent"' in js
+    assert "function csServerTable(" in js and "csCardRows(" in js and "function csCard(" not in js                                      # (a table, a row for each server: no cards)
+    for head in ("Rent / month", "Per TB", "Traffic cost", "Whole month", "Total · "):
+        assert head in js
     price = js[js.index("const csPrice"):js.index("const csGroupSum")]
     assert "tax" not in price.replace("csTaxed", "")                                                              # the price line is the price with its tax in it: the tax is not written
     assert js.count("% tax") == 1                                                                                 # (only the tooltip says what was typed)

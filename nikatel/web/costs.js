@@ -156,27 +156,32 @@ function csCardRows(s, keys) {                                      // -> {cards
   });
   return {cards: [...by.values()].sort((a, b) => csSum(b[1], "month") - csSum(a[1], "month")), rest};
 }
-function csCard(d, s, name, rows) {
-  const rent = rows.filter(r => !csIsTraffic(r)), tr = rows.filter(csIsTraffic), f = s.open && s.elapsed ? s.days / s.elapsed : 1;
+function csServerTable(d, s, cards) {                                // one small table: a row for each server, its prices, what it carried and what it cost; the total at the bottom
+  const rateOf = it => it.cur === "IRT" ? 1 : d.rates[it.cur] || 0;
+  const perMonth = it => csTaxed(it) * rateOf(it) / (it.kind === "yearly" ? 12 : it.kind === "once" ? it.months || 1 : 1);
   const itOf = r => d.items.find(x => x.id === r.id) || r;
-  const acts = r => `<span class="cs-act"><button class="sm" onclick="csEdit(${r.id})" title="Change this price">Edit</button><button class="sm danger" onclick="csDel(${r.id})" title="Remove this price">✕</button></span>`;
-  const toman = (it, k = 1) => it.cur === "IRT" || !d.rates[it.cur] ? "" : ` <small class="cs-usd">≈ ${csN(csTaxed(it) * k * d.rates[it.cur])} toman</small>`;
-  const tip = it => `${csAmt(it.amount, it.cur)}${it.tax ? ` + ${csN(it.tax, 2)}% tax` : ""}`;                  // (what was typed, only as a tooltip)
+  const tip = it => `${csAmt(it.amount, it.cur)}${it.tax ? ` + ${csN(it.tax, 2)}% tax` : ""}${it.note ? " · " + it.note : ""}`;                  // (what was typed, only as a tooltip)
+  const pen = r => `<button class="cs-pen" onclick="csEdit(${r.id})" title="Change this price" aria-label="Change this price">✎</button>`;
   const mark = r => r.state === "no_rate" ? ' <span class="pill err" title="The rate of this currency is not there yet">no rate</span>' : r.state === "needs_node" ? ' <span class="pill warn" title="Choose the node whose traffic is priced">choose a node</span>' : r.state === "idle" ? ' <span class="mut">not active</span>' : "";
-  const rentHtml = rent.length ? rent.map(r => { const it = itOf(r);
-    return `<div class="cs-ln"><span><b title="${esc(tip(it))}">${esc(csPrice(it))}</b>${toman(it)}${rent.length > 1 ? `<small class="cs-note">${esc(r.name)}</small>` : ""}${it.note ? `<small class="cs-note">${esc(it.note)}</small>` : ""}${r.quota ? `<small class="cs-note ${r.quota.pct >= 100 ? "cs-over" : r.quota.pct >= 90 ? "cs-near" : ""}">uses ${r.quota.pct}% of ${csN(r.quota.tb, 2)} TB</small>` : ""}${mark(r)}</span>${acts(r)}</div>`; }).join("") : '<div class="mut">No rent price yet</div>';
-  const trHtml = tr.length ? tr.map(r => { const it = itOf(r), k = it.kind === "per_gb" ? 1000 : 1;
-    return `<div class="cs-ln"><span><b title="${esc(tip(it))}">${esc(csAmt(csTaxed(it) * k, it.cur))} / TB</b>${toman(it, k)}<small class="cs-note">${it.dirs === "both" ? "sent and received" : "sent only"}${it.included ? ` · first ${csN(it.included, 2)} ${it.kind === "per_tb" ? "TB" : "GB"} free` : ""}</small>${mark(r)}</span>${acts(r)}</div>`; }).join("") : '<div class="mut">Not priced by traffic</div>';
-  const names = [name, ...rows.map(r => r.node)].map(x => String(x || "").toLowerCase()), sr = (s.by_server || []).find(x => names.includes(x.name.toLowerCase())), nr = (s.by_node || []).find(x => names.includes(x.name.toLowerCase()));
-  const gb = tr.length ? Math.max(0, ...tr.map(r => r.gb || 0)) : nr ? nr.gb : null;                  // (a server nobody prices by traffic still shows what its node carried)
-  const t = {sf: csSum(tr, "so_far"), mo: csSum(tr, "month")}, r0 = {sf: csSum(rent, "so_far"), mo: csSum(rent, "month")}, all = {sf: t.sf + r0.sf, mo: t.mo + r0.mo};
-  const line = (label, a, b, cls = "") => `<tr class="${cls}"><td>${label}</td><td class="r">${a}</td><td class="r">${b}</td></tr>`;
-  const month = `<table class="cs-mini"><thead><tr><th></th><th class="r">So far</th><th class="r">${s.open ? "Whole month" : "Month"}</th></tr></thead><tbody>`
-    + line("Traffic used", gb == null ? "—" : csGb(gb), gb == null ? "—" : csGb(gb * f))
-    + line("Traffic cost", csN(t.sf), csN(t.mo)) + line("Rent", csN(r0.sf), csN(r0.mo)) + line("Total · toman", csN(all.sf), csN(all.mo), "cs-sum") + `</tbody></table>`
-    + (sr ? `<small class="cs-note">sent ${csGb(sr.out_gb)} · received ${csGb(sr.in_gb)} (estimated)</small>` : "");
-  return `<div class="card cs-srv"><div class="cs-srv-h"><h3>${esc(name)}</h3><span class="cs-srv-t"><b>${csMoney(all.mo)}</b><small>${s.open ? "the whole month" : "the month"}</small></span></div>`
-    + `<div class="cs-srv-g"><div class="cs-blk"><small>Server</small>${rentHtml}</div><div class="cs-blk"><small>Price per TB of traffic</small>${trHtml}</div><div class="cs-blk"><small>Traffic and cost</small>${month}</div></div></div>`;
+  const none = '<span class="mut">—</span>', T = {rent: 0, gb: 0, tcost: 0, rsf: 0, sf: 0, mo: 0};
+  const body = cards.map(([name, rows]) => {
+    const rent = rows.filter(r => !csIsTraffic(r)), tr = rows.filter(csIsTraffic);
+    const names = [name, ...rows.map(r => r.node)].map(x => String(x || "").toLowerCase());
+    const nr = (s.by_node || []).find(x => names.includes(x.name.toLowerCase()));
+    const gb = tr.length ? Math.max(0, ...tr.map(r => r.gb || 0)) : nr ? nr.gb : null;                    // (a server nobody prices by traffic still shows what its node carried)
+    const t = {sf: csSum(tr, "so_far"), mo: csSum(tr, "month")}, r0 = {sf: csSum(rent, "so_far"), mo: csSum(rent, "month")}, all = {sf: t.sf + r0.sf, mo: t.mo + r0.mo};
+    const rentM = rent.reduce((a, r) => a + (r.state === "ok" ? perMonth(itOf(r)) : 0), 0);
+    T.rent += rentM; T.gb += gb || 0; T.tcost += t.sf; T.rsf += r0.sf; T.sf += all.sf; T.mo += all.mo;
+    const rentCell = rent.length ? rent.map(r => { const it = itOf(r); return `<div title="${esc(tip(it))}">${csN(perMonth(it))}${it.cur !== "IRT" ? ` <small>${esc(csAmt(csTaxed(it), it.cur))}${it.kind === "yearly" ? "/yr" : ""}</small>` : ""}${pen(r)}</div>`; }).join("") : none;
+    const tbCell = tr.length ? tr.map(r => { const it = itOf(r), k = it.kind === "per_gb" ? 1000 : 1;
+      return `<div title="${esc(tip(it))}${it.included ? ` · first ${csN(it.included, 2)} ${it.kind === "per_tb" ? "TB" : "GB"} free` : ""}">${csN(csTaxed(it) * k * rateOf(it))}${it.cur !== "IRT" ? ` <small>${esc(csAmt(csTaxed(it) * k, it.cur))}</small>` : ""} <small>${it.dirs === "both" ? "both" : "sent"}</small>${pen(r)}</div>`; }).join("") : none;
+    const quota = rent.concat(tr).map(r => r.quota ? `<small class="cs-note ${r.quota.pct >= 100 ? "cs-over" : r.quota.pct >= 90 ? "cs-near" : ""}" title="The traffic this node carries this month at this pace, against the traffic in its plan">${r.quota.pct}% of ${csN(r.quota.tb, 2)} TB</small>` : "").join("");
+    return `<tr class="${rows.every(r => r.state === "idle") ? "cs-idle" : ""}"><td><b>${esc(name)}</b>${rows.map(mark).join("")}</td><td class="r">${rentCell}</td><td class="r">${tbCell}</td>`
+      + `<td class="r">${gb == null ? none : csGb(gb)}${quota}</td><td class="r">${tr.length ? csN(t.sf) : none}</td><td class="r">${rent.length ? csN(r0.sf) : none}</td><td class="r cs-tot">${csN(all.sf)}</td><td class="r cs-tot cs-mo">${csN(all.mo)}</td></tr>`;
+  }).join("");
+  const foot = `<tr><td>Total · ${cards.length} ${cards.length === 1 ? "server" : "servers"}</td><td class="r">${csN(T.rent)}</td><td></td><td class="r">${csGb(T.gb)}</td><td class="r">${csN(T.tcost)}</td><td class="r">${csN(T.rsf)}</td><td class="r">${csN(T.sf)}</td><td class="r cs-mo">${csN(T.mo)}</td></tr>`;
+  return `<div class="cs-xs"><table class="cs-tbl"><thead><tr><th rowspan="2">Server</th><th colspan="2" class="r cs-grp">Price · toman</th><th colspan="4" class="r cs-grp">So far · toman</th><th class="r cs-grp">${s.open ? "Whole month" : "Month"}</th></tr>`
+    + `<tr><th class="r">Rent / month</th><th class="r">Per TB</th><th class="r">Traffic</th><th class="r">Traffic cost</th><th class="r">Rent</th><th class="r">Total</th><th class="r">Total</th></tr></thead><tbody>${body}</tbody><tfoot>${foot}</tfoot></table></div>`;
 }
 const CS_HINT = {cdn: "Type each invoice or monthly price of your CDN here (a plan per domain, the traffic it bills).", domain: "A domain is a price per year: the page counts a twelfth of it every month.", other: "Services, salaries, the unexpected: anything that is paid every month or once."};
 function csSection(d, s, sec) {
@@ -189,11 +194,11 @@ function csSection(d, s, sec) {
     + csTile("Of the price of one GB", csMoney(gbPrice, true), "what this section adds to one GB so far", "cs-big") + `</div>`;
   const add = `<button class="pri sm" onclick="csEdit(0, '${keys[0]}')">＋ Add a price</button>`;
 
-  if (k === "foreign" || k === "iran") {                                       // a card for each server; what has no server (and the traffic nobody prices) under them
+  if (k === "foreign" || k === "iran") {                                       // one table, a row for each server; what has no server (and the traffic nobody prices) under it
     const {cards, rest} = csCardRows(s, keys);
     const none = k === "foreign" ? s.by_node.filter(n => !n.priced) : (s.by_server || []).filter(n => !n.priced);
-    const head = `<div class="card cs-addbar"><h3>${esc(name)}<span class="sp"></span><small class="mut">${k === "iran" ? "the traffic is an estimate from the panel's samples of the last days" : "a card for each server"}</small>${add}</h3></div>`;
-    return tiles + csWarn(s) + head + (cards.length ? `<div class="cs-cards">${cards.map(([n, rows]) => csCard(d, s, n, rows)).join("")}</div>` : '<div class="card mut">No prices here yet. Press “＋ Add a price”: the rent of a server, then its price per TB.</div>')
+    const head = `<h3>${esc(name)}<span class="sp"></span><small class="mut">${k === "iran" ? "the traffic is an estimate from the panel's samples of the last days" : "prices with their tax"}</small>${add}</h3>`;
+    return tiles + csWarn(s) + `<div class="card cs-addbar">${head}${cards.length ? csServerTable(d, s, cards) : '<div class="mut">No prices here yet. Press “＋ Add a price”: the rent of a server, then its price per TB.</div>'}</div>`
       + (rest.length ? `<div class="card"><h3>Other prices · ${esc(name)}</h3>${csItemsTable(d, s, keys, r => rest.includes(r))}</div>` : "")
       + (none.length ? `<div class="card"><h3>Traffic with no price yet<span class="sp"></span><small class="mut">add the rent or the price per TB of these servers</small></h3>${k === "foreign" ? csNodesTable({by_node: none}) : csServersTable({by_server: none})}</div>` : "");
   }
