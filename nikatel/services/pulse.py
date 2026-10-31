@@ -31,6 +31,9 @@ REFUSAL = "SSH port refuses the panel's connections - the server is on (its fire
 SLOW_SECONDS = 20          # a server that refuses is looked at every 20 s, not every 3 s: a limit of a few connections per half minute is not kept tripped by the pulse itself
 _slow_until: dict[int, float] = {}
 _refusing: dict[int, float] = {}          # server id -> when it last answered with a refusal
+VIA_GRACE = 150          # a server the panel reaches over SSH only THROUGH another Iran server (its address is cut from the panel's host, not from Iran) is on while its last full look is younger than this (the full look is every two minutes)
+VIA_MEMORY = 900          # ...and it counts as such for this long after the panel was last seen going that way
+_via_seen: dict[int, float] = {}          # server id -> when the panel last reached it through a jump server
 _miss: dict[int, int] = {}
 _seen: dict[int, float] = {}          # server id -> when its SSH port last answered
 _asked: dict[int, float] = {}
@@ -51,6 +54,14 @@ def tcp_open(host: str, port: int, timeout: float = TIMEOUT):
 def tcp_ok_recently(sid: int, seconds: float = 30.0) -> bool:
     """Did the SSH port of this server answer in the last `seconds`? (A server whose port answers is ON, whatever its SSH session does.)"""
     return time.time() - _seen.get(sid, 0.0) <= seconds
+
+
+def carried(sid: int, last_seen: float | None) -> bool:
+    """True: the panel's own connection to this server fails (the pulse missed) but the server is reached through another Iran server and was looked at over SSH lately - it is ON. The owner, 2026-10-31: the tunnels of two
+    Iran servers "show down but their configs are connected": the panel's host (abroad) cannot reach them, the full look went through a jump server every two minutes and put them on, and the pulse took them off again
+    three seconds later - a new "answers again" / "does not answer" pair every two minutes, a tunnel that flapped down and up, and the Doctor repairing a tunnel that carried the users."""
+    now = time.time()
+    return now - _via_seen.get(sid, 0.0) < VIA_MEMORY and now - float(last_seen or 0) <= VIA_GRACE
 
 
 def refusing(sid: int, seconds: float = 60.0) -> bool:
@@ -102,7 +113,14 @@ def run() -> None:
     if not rows:
         return
 
+    from .. import ssh as _ssh
+
     t_now = time.time()
+
+    for r in rows:
+        if _ssh.via_of(r[1]):
+            _via_seen[r[0]] = t_now
+
     rows = [r for r in rows if _slow_until.get(r[0], 0.0) <= t_now]          # (a server that refuses is looked at only every SLOW_SECONDS)
 
     if not rows:
@@ -150,6 +168,11 @@ def run() -> None:
                 elif refused and not s.last_error:
                     s.last_error = REFUSAL          # (it is on, and its SSH port turns the connections away: the row says why)
 
+                continue
+
+            if carried(sid, s.last_seen_at):          # (the panel's own way in is cut, the way through another server works: not off - and not asked again every 3 s)
+                _miss[sid] = 0
+                _slow_until[sid] = time.time() + SLOW_SECONDS
                 continue
 
             _miss[sid] = _miss.get(sid, 0) + 1

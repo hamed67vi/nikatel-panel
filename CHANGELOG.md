@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.69.167 - An Iran server that the panel reaches only through another Iran server is no longer shown off (and its tunnel no longer flaps down / is not "repaired")
+
+> **In short:** the owner (2026-10-31): the tunnels of two Iran servers show down but their configs are connected. One of them is cut from the panel's host (abroad) - every port times out, ping 100 % lost - yet users inside Iran and the foreign end reach it, and the panel already reaches it over SSH through another Iran server (the jump of `ssh.py`; "sample ok" every two minutes, a request through the tunnel from another Iran server gets an answer). The pulse only knows the panel's own TCP connection, so every two minutes the full look put the server on ("answers again") and three seconds later the pulse took it off again; the tunnel judged "down: the Iran server is off" and "works again" in turns (a new pair of events every ~4 min) and the Doctor started "auto repair" of a tunnel that carried the users. Now a server that was reached through a jump server in the last 15 minutes and was looked at over SSH in the last 150 s stays on when the pulse misses; it is asked every 20 s, not every 3. A server that is really off (the full look fails too) is still marked off, within about two and a half minutes of the last good look.
+
+- **Pulse** (`services/pulse.py` `carried`, `VIA_GRACE`, `VIA_MEMORY`, `_via_seen`): remembers when `ssh.via_of(host)` was set for a server; a miss of a carried server resets its misses and puts it on the 20 s look.
+- Tests: `tests/test_via_is_on.py`.
+- Docs: `ARCHITECTURE.md` names `services/pg_safe.py` (1.69.165 added the module without it, so `tests/test_alignment.py` was red on HEAD).
+
 ## 1.69.166 - PasarGuard card: the Panels / Nodes box is removed; two Safe update buttons (the panel, the nodes), off when there is nothing to update
 
 The owner (2026-10-31, with a picture of the scrolling box that lists "PANELS - Nikatel-Panel 5.5.1 add its server - Update..." and "NODES (17)"): "this box should be removed entirely."
