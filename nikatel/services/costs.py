@@ -358,8 +358,15 @@ def _rate_of(cur: str, rates: dict) -> float | None:
 
 
 def _gb(rec: dict, dirs: str) -> float:
-    """The GB of a traffic record that a price counts: what was SENT, or both ways (a record without the split counts its whole `node_gb`)."""
-    return float(rec["out_gb"]) if dirs == "out" and "out_gb" in rec else float(rec.get("node_gb") or 0)
+    """The GB of a traffic record that a price counts: what was SENT, or both ways (a record without the split counts its whole `node_gb`).
+    A node of a PasarGuard panel is a relay: what its customers download comes IN from the internet and goes OUT to them, what they upload comes in from them and goes out to the internet, so the server's
+    own card takes in as much as it sends (the samples of the panel's servers show it: in and out within a few percent). A provider that bills both ways therefore bills TWICE the customers'
+    traffic (download + upload, in and out); an Iran server's record already holds what its own card took in and sent, so it is counted as it stands."""
+    if dirs == "out" and "out_gb" in rec:
+        return float(rec["out_gb"])
+
+    gb = float(rec.get("node_gb") or 0)
+    return gb * 2 if dirs == "both" and rec.get("kind", "node") == "node" else gb
 
 
 def compute(items: list[dict], rates: dict, key: str, today: dt.date, traffic: dict[str, dict], traffic_ok: bool = True, servers: dict[int, str] | None = None,

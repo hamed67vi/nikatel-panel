@@ -236,7 +236,9 @@ def test_a_price_per_tb_counts_the_traffic_of_its_node_after_the_free_tb_and_goe
 def test_a_price_counts_what_the_node_sends_or_both_ways_as_the_provider_does():
     t = tr("TR2", 900, 1000, out=920)
     assert run([item(kind="per_tb", amount=1000, node="TR2")], traffic=t)["items"][0]["so_far"] == 920                    # the default: what it SENDS (the download), the upload is free
-    assert run([item(kind="per_tb", amount=1000, node="TR2", dirs="both")], traffic=t)["items"][0]["so_far"] == 1000      # a provider that bills both ways
+    assert run([item(kind="per_tb", amount=1000, node="TR2", dirs="both")], traffic=t)["items"][0]["so_far"] == 2000      # a provider that bills both ways: a relay's card takes in as much as it sends, so 1000 GB of customers' traffic is 2000 GB (in + out)
+    assert run([item(kind="per_tb", amount=1000, node="*", dirs="both")], traffic=t)["items"][0]["so_far"] == 2000       # all the nodes together are counted the same way
+    assert run([item(kind="per_tb", amount=1000, node="TR2", dirs="both")], traffic=t)["items"][0]["gb"] == 2000.0       # (and the table shows the GB that is billed)
     assert costs.clean_item({"name": "a", "kind": "per_tb", "amount": 1})["dirs"] == "out"
 
     with pytest.raises(ValueError):
@@ -249,7 +251,7 @@ def test_a_flat_price_with_traffic_in_its_plan_says_how_much_of_it_the_node_uses
     assert r["items"][0]["quota"] == {"tb": 12.0, "gb_month": 11676.0, "pct": 97} and any("close to the 12 TB" in w for w in r["warnings"])
     over = run([plan], traffic=tr("TR3", 11000, 13000, out=12600))
     assert over["items"][0]["quota"]["pct"] == 105 and any("would pass the 12 TB" in w for w in over["warnings"])
-    assert run([item(amount=1, node="TR3", quota=12, dirs="both")], traffic=tr("TR3", 11000, 12700, out=11676))["items"][0]["quota"]["pct"] == 106        # both ways: 12.7 TB
+    assert run([item(amount=1, node="TR3", quota=12, dirs="both")], traffic=tr("TR3", 11000, 12700, out=11676))["items"][0]["quota"]["pct"] == 212        # both ways: in + out = 25.4 TB of 12
     mid = run([plan], today=D(2026, 10, 10), traffic=tr("TR3", 3000, 3100, out=3000))                                                         # 10 days gone: the pace carries on
     assert mid["items"][0]["quota"]["gb_month"] == 9300.0 and mid["items"][0]["quota"]["pct"] == 78 and not mid["warnings"]
     assert run([item(amount=1, node="TR3")], traffic=tr("TR3", 1))["items"][0]["quota"] is None                                              # no limit typed: nothing to compare
