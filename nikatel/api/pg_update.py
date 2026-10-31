@@ -58,19 +58,20 @@ def pg_update_panel(panel_id: int, body: PanelIn):
 
 class SafeIn(BaseModel):
     typed: str = Field("", max_length=80)            # the name of the panel, typed back (only when the panel is part of it)
+    scope: Literal["all", "panel", "nodes"] = "all"   # the nodes and then the panel, only the panel, only the nodes
 
 
 @router.get("/pg-updates/safe/plan")
-def pg_safe_plan():
+def pg_safe_plan(scope: Literal["all", "panel", "nodes"] = "all"):
     """What a Safe update would do now, in order (the quietest node first), what it would skip and why, and what stands in the way; nothing is changed (the traffic of the nodes is read for a few seconds)."""
-    return {"ok": True, **_wrap(pg_safe.plan)}
+    return {"ok": True, **_wrap(pg_safe.plan, None, False, scope)}
 
 
 @router.post("/pg-updates/safe", status_code=202)
 def pg_safe_start(body: SafeIn):
     """The Safe update as an action (the story is read with /api/actions/{id}): the nodes one at a time, the quietest first, each looked at before and after with its old version kept to go back to, then the panel
     (a backup first). Refused when there is nothing to update, while another PasarGuard update runs, and unless the name of the panel is typed back when the panel is part of it."""
-    return {"ok": True, "action_id": _wrap(pg_safe.start, body.typed)}
+    return {"ok": True, "action_id": _wrap(pg_safe.start, body.typed, None, body.scope)}
 
 
 @router.post("/pg-updates/nodes", status_code=202)

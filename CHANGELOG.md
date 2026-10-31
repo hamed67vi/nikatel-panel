@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.69.166 - PasarGuard card: the Panels / Nodes box is removed; two Safe update buttons (the panel, the nodes), off when there is nothing to update
+
+The owner (2026-10-31, with a picture of the scrolling box that lists "PANELS - Nikatel-Panel 5.5.1 add its server - Update..." and "NODES (17)"): "this box should be removed entirely."
+
+- **What is gone** (`web/pg_update.js` `pgUpdHtml`): the box under the buttons - the list of panels (version, the server that runs each, its Update... button) and the table of the nodes (server, software, Xray, a button each) - with the buttons that were above it in its header ("Update N nodes...", "Xray on N nodes...") and `pgUpdAll`. The card is now the headline (everything up to date / N updates available, the newest versions) and two buttons.
+- **Where the information went:** what each node would get, in which order and with how much traffic is in the window of **Safe update...**; a panel whose server is not in the Servers list is said by **Update panel...** (it opens the form that adds it).
+- **Two Safe buttons** (the owner, 2026-10-31, the same card with three buttons - Safe update..., Update panel..., Update nodes only...: "instead of 3 buttons, the two buttons that are Safe update - and when there is no update, their buttons must be off"): **Safe update panel...** and **Safe update nodes...**. Each opens the plan of `services/pg_safe.py` for its scope (`scope=panel` / `scope=nodes`; `all` stays for the API) and starts it after one confirmation - the panel's with a backup first, the check that no node would stop its core while the panel is away and the name typed back; the nodes' quietest first, one at a time, with the old version kept and put back. The old windows behind "Update panel..." and "Update nodes only..." (their routes still exist) are gone from the page.
+- **Off when there is nothing to update:** a button is disabled (and says so in its tooltip) when the panel is not behind / no connected node is behind, and when the panel is read-only; the blue colour shows only on a button that can be used. A panel whose server is not in the Servers list is said in the plan of its button, with a link that opens the form that adds the server.
+- **Proved:** `tests/test_web_menu.py` (no list, two buttons, off logic), `tests/test_pg_safe.py` (the scopes in the plan, the story of a panel-only update, the scope through the routes - 422 for a wrong one); looked at in the browser with a stubbed answer. **Not proved:** with the owner's real panel and nodes.
+
 ## 1.69.165 - PasarGuard: ONE "Safe update" button for the panel and the nodes - the quietest node first, the old version kept, put back when a node does not hold
 
 > **In short:** the owner (2026-10-31, with a picture of the PasarGuard card - "Everything is up to date", Update panel..., Update nodes only..., translated from Persian): "put ONE button for the panel and the nodes altogether, named Safe update - it must update everything in a way that the customers are not cut at all - and before updating, it must start from the node with the LEAST usage."

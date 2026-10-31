@@ -952,7 +952,7 @@ def test_the_settings_frame_is_one_taller_height_and_about_has_room_for_its_boxe
     """The owner, 2026-10-16: the sizes of About & update got mixed up (cut texts, a table running into itself) and the frame must be longer; every tab's frame is one height."""
     app, css = _web("app.js"), _web("lab.css")
     assert '<div class="abt-wrap">' in app and 'fx-box' not in app.split('const about = sFrame')[1].split('/* security: filled by secLoad */')[0]
-    assert "grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: 156px 316px; gap: 12px; }" in css and "html body #page .set-wrap > .card.sf { min-height: 760px !important; }" in css and '<small class="abt-ds">' not in app and "html body #page .abt-ds, html body #page .abt-note { display: none; }" in css and '<small class="mut abt-note">' not in app and 'disabled title="Looking for a newer version…"' in app and 'aboutBtn(!!u.up_to_date, ' in app and'class="pgu-prow"' in _web("pg_update.js") and "Manage the panels and their nodes" not in _web("pg_update.js")
+    assert "grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: 156px 316px; gap: 12px; }" in css and "html body #page .set-wrap > .card.sf { min-height: 760px !important; }" in css and '<small class="abt-ds">' not in app and "html body #page .abt-ds, html body #page .abt-note { display: none; }" in css and '<small class="mut abt-note">' not in app and 'disabled title="Looking for a newer version…"' in app and 'aboutBtn(!!u.up_to_date, ' in app and "Manage the panels and their nodes" not in _web("pg_update.js")
     assert "grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr) auto; gap: 6px; padding: 5px 10px; }" in css and '<span>Installed</span>' not in app and "!have.length ? '<span class=\"mut\">not installed</span>'" in app and ".abt-card .eng-row > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }" in css
 
 
@@ -965,7 +965,7 @@ def test_the_add_form_starts_the_plain_websocket_at_80():
 def test_the_cores_and_the_pasarguard_lists_sit_in_one_fixed_box_that_scrolls():
     """The owner, 2026-10-16: the panels and nodes of PasarGuard (and the cores) in ONE box of a fixed size that scrolls inside."""
     app, upd, css = _web("app.js"), _web("pg_update.js"), _web("lab.css")
-    assert '<div class="eng-list"><div class="eng-head" title=' in app and 'onclick="engineCheck()"' not in app and 'Date.now() / 1000 - d.checked_at > 600' in app and '<div class="pgu-list"><div class="pgu-cap">Panels</div>' in upd and "${nodesHtml}</div>`;" in upd
+    assert '<div class="eng-list"><div class="eng-head" title=' in app and 'onclick="engineCheck()"' not in app and 'Date.now() / 1000 - d.checked_at > 600' in app and 'class="pgu-list"' not in upd and "nodesHtml" not in upd
     assert "html body #page :is(.eng-list, .pgu-list) { flex: 1 1 auto; min-height: 0;" in css and "overflow-y: auto;" in css
 
 
@@ -1623,18 +1623,15 @@ def test_the_doctor_page_has_a_knowledge_tab_for_what_it_knows_and_remembers():
     assert all(f'"{k}"' in app.split("const AP_LABEL = {", 1)[1].split("};", 1)[0] or f'{k}:' in app.split("const AP_LABEL = {", 1)[1].split("};", 1)[0] for k in ("bp:wss", "bp:ws", "bp:wsmux", "bp:kcp", "bp:quic", "bp:pck", "bp:xdi", "bpd:quic", "bpd:pck", "bpd:xdi", "tcpmux", "paqet", "chisel:fwd"))
 
 
-def test_the_pasarguard_box_has_an_option_for_the_panel_and_one_for_only_the_nodes():
-    """The owner, 2026-10-18: "put an option here for the update of the panel and one for only the nodes"."""
+def test_the_pasarguard_card_has_two_safe_buttons_and_no_list():
+    """The owner, 2026-10-18: "an option for the update of the panel and one for only the nodes"; 2026-10-31: the Panels / Nodes box "removed entirely", and "instead of 3 buttons the two buttons that are Safe update - and
+    when there is no update their buttons are off"."""
     upd, css = _web("pg_update.js"), _web("lab.css")
-    assert 'const go = `<div class="pgu-go">' in upd and 'onclick="pgUpdPanelTop()"' in upd and 'onclick="pgUpdNodesOnly()"' in upd and ">Update panel…</button>" in upd and ">Update nodes only…</button>" in upd
-    assert "return hero + go + `<div class=\"pgu-list\"><div class=\"pgu-cap\">Panels</div>" in upd       # (always there, under the headline - not only when something is behind)
-    assert "window.pgUpdPanelTop = () =>" in upd and "window.pgUpdNodesOnly = () =>" in upd
-    nodes = upd.split("window.pgUpdNodesOnly = () =>", 1)[1].split("window.pgUpdPanelTop", 1)[0]
-    assert 'n.status === "connected"' in nodes and '[n.panel_id, n.node_id, "node"]' in nodes and '[n.panel_id, n.node_id, "core"]' in nodes and "return pgUpdNodes(items)" in nodes      # (the connected nodes that are behind, software then Xray, through the same question and the same one-at-a-time run)
-    assert "pgUpdPanel(" not in nodes                                                                                  # ... and never the panel
-    panel = upd.split("window.pgUpdPanelTop = () =>", 1)[1].split("/* ---- the panel itself", 1)[0]
-    assert "return pgUpdPanel(can[0].id)" in panel and "pgUpdAddHost(noHost.id)" in panel and "The panel is the newest already" in panel      # (one panel: its plan and the name typed back; none can update: the form that adds its server, or the reason)
-    assert "[...new Set(items.map(it => find(it).name))]" in upd and "names.length === 1 ?" in upd                         # (a node twice in one run - its software, then its Xray - is one node in the question and the title)
+    assert 'const go = `<div class="pgu-go">${btn("panel", "Safe update panel…", panelLeft,' in upd and '${btn("nodes", "Safe update nodes…", nodesLeft,' in upd and "return hero + go;" in upd
+    assert 'class="pgu-list"' not in upd and "window.pgUpdAll" not in upd and "const prow = " not in upd and "const nrow = " not in upd and "pgUpdPanelTop" not in upd and "pgUpdNodesOnly" not in upd and "pgu-safe" not in upd
+    assert "const panelLeft = panels.some(p => p.behind === true), nodesLeft = swN.length > 0 || xrN.length > 0;" in upd and '${left && !ro ? "" : "disabled"}' in upd and '"Nothing to update: "' in upd      # (off when there is nothing to update, and when the panel is read-only)
+    assert "window.pgUpdSafe = async scope =>" in upd and "api(`/api/pg-updates/safe/plan?scope=${scope}`)" in upd and 'JSON.stringify({scope, typed:' in upd and "window.pgUpdAddHost = pid =>" in upd and "pgUpdAddHost(${p.id})" in upd
+    assert "html body #page .abt-pg .pgu-go { display: grid; grid-template-columns: 1fr 1fr;" in css
     assert "html body #page .abt-pg .pgu-go { display: grid; grid-template-columns: 1fr 1fr;" in css and "html body #page .abt-pg .pgu-go button {" in css and "height: 28px !important;" in css
 
 

@@ -186,11 +186,11 @@ def _panel(behind=True, host=True, online=True, error=""):
             "host": {"id": 99, "name": "boxB", "online": online, "enabled": True} if host else None, "host_name": "x"}
 
 
-def _plan(monkeypatch, data, usage=None):
+def _plan(monkeypatch, data, usage=None, scope="all"):
     monkeypatch.setattr(pg_update, "overview", lambda force=False, resolver=None: data)
     monkeypatch.setattr(pg_safe, "sample_usage", lambda c, **k: dict(usage or {}))
     monkeypatch.setattr(panels, "cred_for", lambda pid: {})
-    return pg_safe.plan()
+    return pg_safe.plan(scope=scope)
 
 
 def test_the_plan_orders_the_nodes_the_quietest_first_and_says_what_each_gets(monkeypatch):
@@ -329,11 +329,11 @@ def world(monkeypatch):
     return types.SimpleNamespace(net=net, clock=clock)
 
 
-def _run(monkeypatch, nodes, panels_=None, skipped=None):
+def _run(monkeypatch, nodes, panels_=None, skipped=None, scope="all"):
     pl = {"can_start": True, "nothing": False, "problems": [], "nodes": nodes, "skipped": skipped or [], "panels": panels_ or [], "steps": [], "note": "", "latest": {"node": "v0.5.7", "xray": "v26.11.1", "panel": "v5.6.0"}}
-    monkeypatch.setattr(pg_safe, "plan", lambda resolver=None, force=False: pl)
+    monkeypatch.setattr(pg_safe, "plan", lambda resolver=None, force=False, scope="all": pl)
     aid = new_action()
-    pg_safe._safe_story(aid)
+    pg_safe._safe_story(aid, scope)
     return aid
 
 
@@ -436,7 +436,7 @@ def test_a_panel_that_is_skipped_says_why_and_the_run_is_not_called_complete(wor
 def _stub_plan(monkeypatch, **over):
     pl = {"can_start": True, "nothing": False, "problems": [], "nodes": [_row_of(1, "a")], "skipped": [], "panels": [], "steps": ["s"], "note": "n", "latest": {}}
     pl.update(over)
-    monkeypatch.setattr(pg_safe, "plan", lambda resolver=None, force=False: pl)
+    monkeypatch.setattr(pg_safe, "plan", lambda resolver=None, force=False, scope="all": pl)
     return pl
 
 
@@ -487,10 +487,58 @@ def test_the_overview_carries_the_keep_alive_of_each_node():
     assert '"keep_alive": n["keep_alive"], "behind": newer(tag("node"), n["version"])' in src
 
 
-def test_the_button_and_its_window():
+def test_the_buttons_and_their_window():
     js = (WEB / "pg_update.js").read_text(encoding="utf-8")
-    css = (WEB / "lab.css").read_text(encoding="utf-8")
-    assert 'class="sm pri pgu-safe"' in js and 'onclick="pgUpdSafe()"' in js and '>Safe update…</button>' in js and 'class="pgu-go">${safeBtn}<button' in js
-    assert "window.pgUpdSafe = async () =>" in js and 'api("/api/pg-updates/safe/plan")' in js and 'api("/api/pg-updates/safe", {method: "POST"' in js and "Start Safe update" in js
-    assert "Type the name of the panel to confirm" in js and "Order - the quietest first" in js
-    assert "html body #page .abt-pg .pgu-go .pgu-safe { grid-column: 1 / -1;" in css
+    assert 'onclick="pgUpdSafe(\'${scope}\')"' in js and '"Safe update panel…"' in js and '"Safe update nodes…"' in js
+    assert "window.pgUpdSafe = async scope =>" in js and "api(`/api/pg-updates/safe/plan?scope=${scope}`)" in js and 'api("/api/pg-updates/safe", {method: "POST"' in js and "Start Safe update" in js
+    assert "Type the name of the panel to confirm" in js and "Order - the quietest first" in js and "add its server</a>" in js
+
+
+# ------------------------------------------------------------------ the two buttons: the panel, the nodes
+def test_a_nodes_update_leaves_the_panel_out_and_a_panel_update_leaves_the_nodes_out(monkeypatch):
+    data = _data([_node(1, "a"), _node(2, "b")], [_panel()])
+    nodes = _plan(monkeypatch, data, scope="nodes")
+    assert nodes["scope"] == "nodes" and [n["name"] for n in nodes["nodes"]] == ["a", "b"] and nodes["panels"] == [] and nodes["can_start"] is True
+    panel = _plan(monkeypatch, data, scope="panel")
+    assert "The panel is away for a minute or two" in panel["note"] and "restarts: the connections" not in panel["note"] and "restarts: the connections" in nodes["note"]
+    assert panel["scope"] == "panel" and panel["nodes"] == [] and panel["skipped"] == [] and [p["name"] for p in panel["panels"]] == ["main"] and panel["can_start"] is True
+    assert [n["name"] for n in _plan(monkeypatch, data)["nodes"]] == ["a", "b"] and len(_plan(monkeypatch, data)["panels"]) == 1                  # (all: both, as before)
+
+    with pytest.raises(ValueError, match="scope is all, panel or nodes"):
+        pg_safe.plan(scope="everything")
+
+
+def test_a_panel_update_that_cannot_run_is_not_startable_and_says_why(monkeypatch):
+    no_host = _plan(monkeypatch, _data([_node(1, "a")], [_panel(host=False)]), scope="panel")
+    assert no_host["can_start"] is False and no_host["nothing"] is True and "not in the Servers list" in no_host["panels"][0]["skip"]
+    ka = _plan(monkeypatch, _data([_node(1, "a", keep=60)], [_panel()]), scope="panel")
+    assert ka["can_start"] is False and "a (60 s)" in ka["panels"][0]["skip"]                                          # (the nodes are not part of it, but their keep-alive is still looked at)
+    none = _plan(monkeypatch, _data([_node(1, "a")], [_panel(behind=False)]), scope="panel")
+    assert none["can_start"] is False and none["nothing"] is True and none["panels"] == []
+
+
+def test_the_story_of_a_panel_only_update_has_no_nodes_in_it(world, monkeypatch):
+    seen = []
+
+    def panel_story(aid, pid, sid, backup):
+        seen.append((pid, sid, backup, list(world.net.actions)))
+        autopilot._say(aid, "the panel was updated (fake)", done=True, ok=True)
+
+    monkeypatch.setattr(pg_update, "_panel_story", panel_story)
+    pan = [{"id": 1, "name": "main", "version": "5.5.1", "latest": "v5.6.0", "host": {"id": 99, "name": "boxB"}, "skip": ""}]
+    lines, ok, done = story(_run(monkeypatch, [], pan, scope="panel"))
+    text = "\n".join(lines)
+    assert done and ok is True and seen == [(1, 99, True, [])] and "Safe update: the panel main." in text and "Now the panel main (5.5.1 → 5.6.0)" in text and "Nodes done" not in text
+
+
+def test_the_scope_goes_from_the_route_to_the_plan_and_the_start(client, monkeypatch):
+    seen = []
+    pl = {"scope": "x", "can_start": True, "nothing": False, "problems": [], "nodes": [], "skipped": [], "panels": [], "steps": [], "note": "n", "latest": {}}
+    monkeypatch.setattr(pg_safe, "plan", lambda resolver=None, force=False, scope="all": seen.append(("plan", scope)) or {**pl, "scope": scope})
+    assert client.get("/api/pg-updates/safe/plan?scope=panel").json()["scope"] == "panel" and client.get("/api/pg-updates/safe/plan").json()["scope"] == "all"
+    assert client.get("/api/pg-updates/safe/plan?scope=everything").status_code == 422
+    monkeypatch.setattr(autopilot, "_start", lambda label, fn, *a, **k: seen.append(("start", a)) or 5)
+    pl["nothing"] = False
+    monkeypatch.setattr(pg_safe, "plan", lambda resolver=None, force=False, scope="all": seen.append(("plan2", scope)) or {**pl, "nodes": [_row_of(1, "a")], "panels": []})
+    assert client.post("/api/pg-updates/safe", json={"scope": "nodes"}).json() == {"ok": True, "action_id": 5}
+    assert ("plan2", "nodes") in seen and ("start", ("nodes",)) in seen and client.post("/api/pg-updates/safe", json={"scope": "x"}).status_code == 422

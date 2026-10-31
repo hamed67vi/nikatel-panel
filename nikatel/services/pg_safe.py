@@ -34,6 +34,8 @@ RUN_TIMEOUT = 420                     # seconds an update command may run on a n
 USAGE_ROUNDS = 3
 USAGE_GAP = 2.0
 LABEL = "pg safe update"
+PANEL_NOTE = ("The panel is away for a minute or two while it restarts. Its nodes keep serving the users that are connected - a node keeps its core when the panel connects again, and no node here would stop its core "
+              "while the panel is away (checked above). A backup is made first.")
 
 NOTE = ("A node that is updated restarts: the connections through it drop for about 10-20 seconds, once for its software and once more for Xray. The quietest node goes first, one at a time, each is looked at "
         "before and after, and its old version is kept: a node that does not come back or does not stay connected gets the old version back and the run stops there. It cannot be made zero - it is made as small as it can be.")
@@ -136,8 +138,15 @@ def sample_usage(c: dict, rounds: int = USAGE_ROUNDS, gap: float = USAGE_GAP) ->
 
 
 # ------------------------------------------------------------------ the plan (nothing is changed, no server is asked)
-def plan(resolver=None, force: bool = False) -> dict:
-    """What a Safe update would do now, in order, and what stands in the way: {can_start, nothing, problems, nodes [the order], skipped, panels, steps, note}."""
+SCOPES = ("all", "panel", "nodes")
+
+
+def plan(resolver=None, force: bool = False, scope: str = "all") -> dict:
+    """What a Safe update would do now, in order, and what stands in the way: {scope, can_start, nothing, problems, nodes [the order], skipped, panels, steps, note}. `scope`: nodes = only the nodes, panel = only the panel,
+    all = the nodes and then the panel."""
+    if scope not in SCOPES:
+        raise ValueError("scope is all, panel or nodes")
+
     data = pg_update.overview(force=force, resolver=resolver)
     problems: list[str] = []
 
@@ -146,7 +155,7 @@ def plan(resolver=None, force: bool = False) -> dict:
 
     todo, skipped = [], []
 
-    for n in data["nodes"]:
+    for n in (data["nodes"] if scope != "panel" else []):
         sw, xr = n["behind"] is True, n["xray_behind"] is True
 
         if not sw and not xr:
@@ -179,7 +188,7 @@ def plan(resolver=None, force: bool = False) -> dict:
 
     panel_rows = []
 
-    for p in data["panels"]:
+    for p in (data["panels"] if scope != "nodes" else []):
         if p["behind"] is not True:
             continue
 
@@ -209,7 +218,7 @@ def plan(resolver=None, force: bool = False) -> dict:
     if any(not p["skip"] for p in panel_rows):
         steps.append("Then the panel, on its own server: a backup first, `pasarguard update`, and a look at the panel and its nodes after.")
 
-    return {"can_start": not problems and not nothing, "nothing": nothing, "problems": problems, "nodes": rows, "skipped": skipped, "panels": panel_rows, "steps": steps, "note": NOTE,
+    return {"scope": scope, "can_start": not problems and not nothing, "nothing": nothing, "problems": problems, "nodes": rows, "skipped": skipped, "panels": panel_rows, "steps": steps, "note": PANEL_NOTE if scope == "panel" else NOTE,
             "latest": {k: (v or {}).get("version", "") for k, v in (data.get("latest") or {}).items()}}
 
 
@@ -402,9 +411,9 @@ def _update_node(aid: int, i: int, total: int, row: dict, node_tag: str, xray_ta
 
 
 # ------------------------------------------------------------------ the run
-def _safe_story(aid: int) -> None:
+def _safe_story(aid: int, scope: str = "all") -> None:
     say = autopilot._say
-    pl = plan(force=True)
+    pl = plan(force=True, scope=scope)
 
     if pl["problems"]:
         say(aid, "Stopped: " + pl["problems"][0], done=True, ok=False)
@@ -413,7 +422,9 @@ def _safe_story(aid: int) -> None:
     nodes = pl["nodes"]
     node_tag, xray_tag = (pl["latest"].get("node") or ""), (pl["latest"].get("xray") or "")
     todo_panels = [p for p in pl["panels"] if not p["skip"]]
-    say(aid, f"Safe update: {len(nodes)} node{'s' if len(nodes) != 1 else ''}, the quietest first, one at a time" + (f", then the panel {todo_panels[0]['name']}" if todo_panels else "") + ". Each node is looked at before and after and its old version is kept; one that does not hold gets it back and the run stops.")
+    node_part = f"{len(nodes)} node{'s' if len(nodes) != 1 else ''}, the quietest first, one at a time" if nodes else ""
+    panel_part = f"the panel {todo_panels[0]['name']}" if todo_panels else ""
+    say(aid, "Safe update: " + ((node_part + (", then " if node_part and panel_part else "") + panel_part) or "nothing to do") + ". Each node is looked at before and after and its old version is kept; one that does not hold gets it back and the run stops.")
 
     if nodes:
         say(aid, "Order: " + ", ".join(f"{n['name']} ({n['usage_text']})" for n in nodes[:12]) + (", …" if len(nodes) > 12 else ""))
@@ -435,7 +446,7 @@ def _safe_story(aid: int) -> None:
 
     if todo_panels:
         p = todo_panels[0]
-        say(aid, f"Nodes done. Now the panel {p['name']} ({short(p['version'])} → {short(p['latest'])}): a backup, then the official update; the nodes keep serving the users that are connected.")
+        say(aid, ("Nodes done. Now" if nodes else "Now") + f" the panel {p['name']} ({short(p['version'])} → {short(p['latest'])}): a backup, then the official update; the nodes keep serving the users that are connected.")
         pg_update._panel_story(aid, p["id"], p["host"]["id"], True)         # (it ends the action with its own last line)
         return
 
@@ -443,10 +454,10 @@ def _safe_story(aid: int) -> None:
     say(aid, f"Done: {len(nodes)} node{'s' if len(nodes) != 1 else ''} updated." + (" The panel was not updated (the lines above say why)." if skipped else ""), done=True, ok=not skipped)
 
 
-def start(typed: str = "", resolver=None) -> int:
+def start(typed: str = "", resolver=None, scope: str = "all") -> int:
     """Start a Safe update as an action (returns its id; the story is read with /api/actions/{id}). Refused with the first problem the plan finds, when there is nothing to update, and - when the panel is part
     of it - unless the name of the panel is typed back."""
-    pl = plan(resolver, force=True)
+    pl = plan(resolver, force=True, scope=scope)
 
     if pl["problems"]:
         raise ValueError(pl["problems"][0])
@@ -463,4 +474,4 @@ def start(typed: str = "", resolver=None) -> int:
     if LABEL in autopilot._BUSY or "pg node updates" in autopilot._BUSY or any(k.startswith("pgpanel ") for k in autopilot._BUSY):
         raise ValueError("a PasarGuard update is running right now: follow it in the history of the Tunnel Doctor")
 
-    return autopilot._start(LABEL, _safe_story, action="pgupdate", source="manual")
+    return autopilot._start(LABEL, _safe_story, scope, action="pgupdate", source="manual")
