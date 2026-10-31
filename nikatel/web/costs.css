@@ -58,7 +58,7 @@ html body #page .cs-note.cs-near { color: var(--warn); } html body #page .cs-not
 html body #page .cs-act { display: inline-flex; gap: 6px; justify-content: flex-end; }
 html body #page .cs-scroll { max-height: 560px; overflow-y: auto; padding-right: 2px; }
 html body #page .cs-items { width: 100%; }
-html body #page .cs-items td:nth-child(1), html body #page .cs-items td:nth-child(3) { white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere; }      /* (a name and a price are read whole: the cell grows taller, it is not cut) */
+html body #page .cs-items td:nth-child(1), html body #page .cs-items td:nth-child(2) { white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere; }      /* (a name and a price are read whole: the cell grows taller, it is not cut) */
 /* the servers: one small table, a row for each server (its prices | what it carried and cost so far | the whole month), the total at the foot */
 html body #page .cs-addbar h3 { margin: 0 0 10px; } html body #page .cs-addbar h3 button { flex: none; white-space: nowrap; } html body #page .cs-addbar h3 small { flex: 1 1 0; min-width: 0; text-align: right; }
 html body #page .cs-xs { overflow-x: auto; scrollbar-width: thin; scrollbar-color: rgba(255,255,255,.22) transparent; }

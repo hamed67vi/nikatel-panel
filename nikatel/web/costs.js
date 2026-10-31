@@ -128,17 +128,18 @@ function csOverview(d, s) {
 
 /* ---- Expenses: all of them, and a tab for each section of the cost */
 function csItemsTable(d, s, keys, pick) {
-  const list = s.items.filter(r => keys.includes(r.group) && (!pick || pick(r))), many = keys.length > 1;
+  const list = s.items.filter(r => keys.includes(r.group) && (!pick || pick(r)));
   if (!list.length) return '<div class="mut">No prices here yet. Press “＋ Add a price”.</div>';
   const rows = list.map(r => {
     const it = d.items.find(x => x.id === r.id) || r;
+    const where = [(d.groups.find(g => g.key === r.group) || {}).name || r.group, r.server, r.node && r.node !== r.server ? (r.node === "*" ? "all nodes" : r.node) : ""].filter(Boolean).join(" · ");          // (the group and the server are no columns: the tooltip of the name says them)
     const q = r.quota ? `<small class="cs-note ${r.quota.pct >= 100 ? "cs-over" : r.quota.pct >= 90 ? "cs-near" : ""}" title="The traffic the node carries this month at this pace, against the traffic in its plan">uses ${r.quota.pct}% of ${csN(r.quota.tb, 2)} TB</small>` : "";
-    return `<tr class="${r.state === "idle" ? "cs-idle" : ""}"><td><b>${esc(r.name)}</b>${it.note ? `<small class="cs-note">${esc(it.note)}</small>` : ""}${q}</td>${many ? `<td>${esc((d.groups.find(g => g.key === r.group) || {}).name || r.group)}</td>` : ""}`
-      + `<td>${esc(csPrice(it))}</td><td>${r.server || r.node ? `${esc(r.server)}${r.node && r.node !== r.server ? `${r.server ? " <small>→</small> " : ""}<small>${esc(r.node === "*" ? "all nodes" : r.node)}</small>` : ""}` : "—"}</td>`
+    return `<tr class="${r.state === "idle" ? "cs-idle" : ""}"><td title="${esc(where)}"><b>${esc(r.name)}</b>${it.note ? `<small class="cs-note">${esc(it.note)}</small>` : ""}${q}</td>`
+      + `<td>${esc(csPrice(it))}</td>`
       + `<td class="r">${r.state === "no_rate" ? '<span class="pill err" title="The rate of this currency is not there yet">no rate</span>' : r.state === "needs_node" ? '<span class="pill warn" title="Choose the node whose traffic is priced">choose a node</span>' : r.state === "idle" ? '<span class="mut">not active</span>' : csMoney(r.so_far, false, true)}</td>`
       + `<td class="r">${r.state === "ok" ? csMoney(r.month, false, true) : ""}</td><td class="r"><span class="cs-act"><button class="sm" onclick="csEdit(${r.id})" title="Change this price">Edit</button><button class="sm danger" onclick="csDel(${r.id})" title="Remove this price">✕</button></span></td></tr>`;
   }).join("");
-  return `<table class="tbl cs-items"><thead><tr><th>What</th>${many ? "<th>Group</th>" : ""}<th>Price</th><th>Server</th><th class="r">So far</th><th class="r">Month</th><th></th></tr></thead><tbody>${rows}</tbody></table>`;
+  return `<table class="tbl cs-items"><thead><tr><th>What</th><th>Price</th><th class="r">So far</th><th class="r">Month</th><th></th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 const csNodesTable = s => s.by_node.length ? `<div class="cs-scroll"><table class="tbl"><thead><tr><th>Node</th><th class="r">Traffic</th><th class="r">Cost so far</th><th class="r">1 GB</th></tr></thead><tbody>${s.by_node.map(n => `<tr><td><b>${esc(n.name)}</b></td><td class="r">${csGb(n.gb)}</td><td class="r">${n.priced ? csMoney(n.so_far, false, true) : '<span class="cs-none" title="No price is tied to this node yet: add one and choose this server or node">no price yet</span>'}</td><td class="r">${n.per_gb != null && n.priced ? csMoney(n.per_gb, true, true) : "—"}</td></tr>`).join("")}</tbody></table></div>` : '<div class="mut">No traffic was recorded in this month.</div>';
 const csServersTable = s => (s.by_server || []).length ? `<div class="cs-scroll"><table class="tbl"><thead><tr><th>Server</th><th class="r">Sent</th><th class="r">Received</th><th class="r">Cost so far</th><th class="r">1 GB sent</th></tr></thead><tbody>${s.by_server.map(n => `<tr><td><b>${esc(n.name)}</b></td><td class="r">${csGb(n.out_gb)}</td><td class="r">${csGb(n.in_gb)}</td><td class="r">${n.priced ? csMoney(n.so_far, false, true) : '<span class="cs-none" title="No price is tied to this server yet">no price yet</span>'}</td><td class="r">${n.per_gb != null ? csMoney(n.per_gb, true, true) : "—"}</td></tr>`).join("")}</tbody></table></div>` : '<div class="mut">No Iran server has samples yet.</div>';
@@ -209,9 +210,10 @@ function csExpenses(d, s) {
   const sec = CS_SECTIONS.find(t => t[0] === cs.sub) || CS_SECTIONS[0];
   const head = csSubTabs(CS_SECTIONS, sec[0], "csSub", s);
   if (sec[0] !== "all") return head + csSection(d, s, sec);
-  const all = d.groups.map(g => g.key);
+  const all = d.groups.map(g => g.key), {cards, rest} = csCardRows(s, all);                  // a server is ONE row (its rent and its traffic together); what has no server is a row of its own
   return head + csExpTiles(s) + csWarn(s) + `<div class="card"><h3>Where the money goes<span class="sp"></span><small class="mut">the whole month · click a line for its tab</small></h3>${csExpRows(d, s, true)}</div>`
-    + `<div class="card"><h3>All your prices<span class="sp"></span><button class="pri sm" onclick="csEdit(0, 'foreign')">＋ Add a price</button></h3>${csItemsTable(d, s, all)}</div>`;
+    + `<div class="card cs-addbar"><h3>All your prices<span class="sp"></span><button class="pri sm" onclick="csEdit(0, 'foreign')">＋ Add a price</button></h3>${cards.length ? csServerTable(d, s, cards) : rest.length ? "" : '<div class="mut">No prices here yet. Press “＋ Add a price”.</div>'}</div>`
+    + (rest.length ? `<div class="card"><h3>Other prices</h3>${csItemsTable(d, s, all, r => rest.includes(r))}</div>` : "");
 }
 
 /* ---- Income: the shop bot and the partners */
@@ -296,7 +298,7 @@ window.csEdit = (id, group) => {
     + field('<span id="cs-from">From</span> <small>(optional)</small>', `<input name="starts" maxlength="10" value="${esc(it.starts || "")}" placeholder="2026-10-23 or 1405/08/01">`)
     + field("Until <small>(optional)</small>", `<input name="ends" maxlength="10" value="${esc(it.ends || "")}" placeholder="when you stop paying">`, "monthly yearly per_tb per_gb")
     + field("Note", `<input name="note" maxlength="200" value="${esc(it.note || "")}" placeholder="plan, provider, renewal day ...">`)
-    + `<div class="cs-help" id="cs-help"></div><div class="cs-btns"><button class="pri" type="submit">Save</button><button type="button" onclick="hideModal()">Cancel</button></div></form>`;
+    + `<div class="cs-help" id="cs-help"></div><div class="cs-btns">${id ? `<button type="button" class="danger" onclick="hideModal(); csDel(${id})" title="Remove this price">Remove</button><span class="cs-fill"></span>` : ""}<button class="pri" type="submit">Save</button><button type="button" onclick="hideModal()">Cancel</button></div></form>`;      // (a price is removed here: the server table has only a pencil)
   showModal(`<b>${id ? "Change a price" : "＋ Add a price"}</b>`, body);
   csKind();
 };

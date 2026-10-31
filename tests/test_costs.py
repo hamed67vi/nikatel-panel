@@ -777,6 +777,11 @@ def test_the_bar_shows_today_and_the_dollar_against_the_lira_and_the_servers_are
     assert "function csServerTable(" in js and "csCardRows(" in js and "function csCard(" not in js                                      # (a table, a row for each server: no cards)
     for head in ("Rent / month", "Per TB", "Traffic cost", "Whole month", "Total · "):
         assert head in js
+
+    items = js[js.index("function csItemsTable"):js.index("const csNodesTable")]
+    assert "<th>Group</th>" not in items and "<th>Server</th>" not in items and "<th>What</th><th>Price</th>" in items         # the list of prices has no Group and no Server column (the tooltip of the name says them)
+    assert js.count("csServerTable(d, s, cards)") == 3                                                                      # the function and its two uses: a server is ONE row in its tab and in "All expenses" (its rent and its traffic together)
+    assert 'onclick="hideModal(); csDel(${id})"' in js                                                                      # a price is removed in its window: the table has only a pencil
     price = js[js.index("const csPrice"):js.index("const csGroupSum")]
     assert "tax" not in price.replace("csTaxed", "")                                                              # the price line is the price with its tax in it: the tax is not written
     assert js.count("% tax") == 1                                                                                 # (only the tooltip says what was typed)

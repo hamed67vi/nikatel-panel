@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.69.176 - Finance: a server is ONE row in the list of prices; no Group and no Server column
+
+> **In short:** the owner (2026-10-31, with pictures of the two column heads and of two rows "server1 rent" / "server1 traffic"): "these columns - remove them", and "these too: server1, one - let it be one - put all the information in one row". **All expenses** no longer lists a server's rent and its traffic as two rows ("server1 rent", "server1 traffic"): it shows the same small table as the server tabs - ONE row for each server (rent per month, price per TB, traffic, what it cost so far, the whole month), the total at the foot - and under it the prices that belong to no server (CDN, domains, the helper, ...) in a list with the columns What | Price | So far | Month: the **Group** and **Server** columns are gone (the tooltip of a name says them).
+
+- **Where** (`web/costs.js` `csExpenses`, `csItemsTable`, `csEdit`; `web/costs.css`): the server table is drawn in "All expenses" too; a price is **removed in its own window** (a red Remove button in "Change a price") because the server table has only the pencil beside each price; the first two columns of the list still wrap a long name and a long price instead of cutting them.
+- **Proved:** `tests/test_costs.py` (the heads of the list, the server table in both places, the Remove button), the menu / handlers / OpenAPI / deploy tests; looked at in a private panel.
+
 ## 1.69.175 - Finance: the servers are one small table instead of cards
 
 > **In short:** the owner (2026-10-31, with a picture of one server card): "instead of these cards make a table, with everything small and professionally recorded". In **Foreign servers** and **Iran servers** the cards of 1.69.174 are gone: ONE table with a row for each server - the rent per month, the price per TB (both in toman with the tax in them, the price in its own currency small beside it when it is not toman), then what it carried and cost so far (traffic, the cost of the traffic, the rent, the total) and the whole month - and the total of all the servers at the foot. A small ✎ beside a price changes it; the old Edit / ✕ buttons of every price stay in **All expenses**. A node's plan use ("145% of 12 TB") sits small under its traffic.
