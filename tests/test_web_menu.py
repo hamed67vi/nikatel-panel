@@ -26,7 +26,7 @@ def _tabs(page: str) -> list[tuple[str, str]]:
 
 def test_every_item_of_the_menu_opens_a_page_that_has_a_title():
     items = LINK.findall(NAV)
-    assert [p for p, _ in items] == ["dashboard", "nodes", "tunnels", "pgpanel", "bot", "settings"]
+    assert [p for p, _ in items] == ["dashboard", "nodes", "tunnels", "pgpanel", "costs", "bot", "settings"]
     lacking = [p for p, _ in items if p not in _titled_pages()]
     assert not lacking, f"items of the menu whose page has no title in app.js: {lacking}"
 

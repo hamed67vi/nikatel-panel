@@ -35,6 +35,8 @@ DEFAULTS: dict[str, dict[str, Any]] = {
     # the AI assistant (Anthropic): advises inside Fix; `actions` lets its suggested steps be added to the plan
     "ai": {"enabled": False, "api_key": "", "model": "claude-sonnet-5-5", "actions": True, "status": {},   # api_key / model / status: the Anthropic record (status = the result of the last key test)
            "provider": "anthropic", "providers": {}},                                                                       # provider: the AI every call uses; providers: {id: {api_key, model, base_url, status}} of the other AIs (services/ai.py)
+    # the Costs page (services/costs.py): the prices the owner typed (items), the rates of the dollar, the euro and the lira in toman (and when the site gave them), the calendar of a month, the finished months kept as they were (frozen), the last item number (seq)
+    "costs": {"items": [], "rates": {"USD": 0, "EUR": 0, "TRY": 0}, "rates_at": "", "calendar": "jalali", "frozen": {}, "seq": 0},
     # ArvanCloud DNS: the failover of an Iran server points the records that used its address at the replacement (mode: off | approve | auto)
     "arvan": {"api_key": "", "mode": "off", "confirm_minutes": 5, "domains": [], "status": {}},
     # CPU balance: the Tunnel Doctor turns RPS on for a busy multi-core server whose network work sits on one core (auto), what was found per server

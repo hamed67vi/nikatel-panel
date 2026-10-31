@@ -1,0 +1,44 @@
+/* The Costs page: every class starts with .cs- (or is under .costs). Colours come from the theme variables so day / night and the themes just work. */
+html body nav#nav a[data-page="costs"] { --ic: #e8b04a; }
+html body #page .costs { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+html body #page .costs h3 { display: flex; align-items: center; gap: 8px; }
+html body #page .cs-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 18px; padding: 10px 14px; }
+html body #page .cs-month { display: flex; align-items: center; gap: 8px; } html body #page .cs-month b { min-width: 130px; text-align: center; font-size: 15px; }
+html body #page .cs-set { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; } html body #page .cs-set label { display: inline-flex; align-items: center; gap: 6px; color: var(--mut); font-size: 12.5px; white-space: nowrap; }
+html body #page .cs-set input { width: 112px; } html body #page .cs-set select { width: 108px; }
+html body #page .cs-tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+html body #page .cs-tile { display: flex; flex-direction: column; gap: 4px; padding: 14px 16px; border-radius: var(--r); background: var(--panel); border: 1px solid var(--line); min-width: 0; }
+html body #page .cs-tile small { color: var(--mut); font-size: 12px; } html body #page .cs-tile b { font-size: 22px; line-height: 1.15; overflow-wrap: anywhere; } html body #page .cs-tile b small { font-size: 12px; font-weight: 500; }
+html body #page .cs-tile span { color: var(--mut); font-size: 12px; }
+html body #page .cs-tile.cs-big { border-color: var(--line-hi); } html body #page .cs-tile.cs-big b { color: var(--acc-2); }
+html body #page .cs-usd { color: var(--mut); font-weight: 400; white-space: nowrap; }
+html body #page .cs-warn { padding: 9px 13px; border-radius: var(--r-s); border: 1px solid rgba(255,200,70,.45); color: var(--warn); font-size: 13px; }
+html body #page .cs-two { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 12px; align-items: start; }
+html body #page .cs-gr { display: grid; grid-template-columns: minmax(90px, 140px) 1fr auto; align-items: center; gap: 10px; padding: 6px 0; font-size: 13px; }
+html body #page .cs-gr i { height: 8px; border-radius: 6px; background: var(--panel-2); position: relative; overflow: hidden; } html body #page .cs-gr i::after { content: ""; position: absolute; inset: 0 auto 0 0; width: var(--w); background: var(--grad); border-radius: 6px; }
+html body #page .costs .tbl .r { text-align: right; white-space: nowrap; } html body #page .costs .tbl td small { color: var(--mut); }
+html body #page .cs-none { color: var(--warn); font-size: 12px; }
+html body #page .cs-idle td { opacity: .55; }
+html body #page .cs-note { display: block; }
+html body #page .cs-note.cs-near { color: var(--warn); } html body #page .cs-note.cs-over { color: var(--bad); }
+html body #page .cs-act { display: inline-flex; gap: 6px; justify-content: flex-end; }
+html body #page .cs-scroll { max-height: 560px; overflow-y: auto; padding-right: 2px; }
+html body #page .cs-items { width: 100%; }
+html body #page .cs-items td:nth-child(1), html body #page .cs-items td:nth-child(3) { white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere; }      /* (a name and a price are read whole: the cell grows taller, it is not cut) */
+html body #page .cs-hist { display: flex; flex-direction: column; }
+html body #page .cs-h { display: grid; grid-template-columns: minmax(110px, 1.2fr) 2fr 1fr 1.4fr; gap: 10px; align-items: baseline; padding: 8px 4px; border-bottom: 1px solid var(--line); cursor: pointer; font-size: 13px; }
+html body #page .cs-h:hover { background: var(--panel); } html body #page .cs-h em { font-style: normal; color: var(--acc-2); text-align: right; } html body #page .cs-h small { color: var(--mut); }
+/* the window that adds / changes a price */
+html body .cs-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 14px; }
+html body .cs-form .cs-f { display: flex; flex-direction: column; gap: 5px; font-size: 12.5px; color: var(--mut); min-width: 0; } html body .cs-form .cs-f[hidden] { display: none; }
+html body .cs-form .cs-f input, html body .cs-form .cs-f select { width: 100%; box-sizing: border-box; }
+html body .cs-form .cs-help { grid-column: 1 / -1; color: var(--mut); font-size: 12.5px; min-height: 18px; }
+html body .cs-form .cs-btns { grid-column: 1 / -1; display: flex; gap: 10px; justify-content: flex-end; }
+@media (max-width: 900px) {
+  html body #page .cs-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } html body #page .cs-two { grid-template-columns: minmax(0, 1fr); }
+  html body #page .costs .cs-items { display: block; overflow-x: auto; }
+}
+@media (max-width: 560px) {
+  html body .cs-form { grid-template-columns: minmax(0, 1fr); } html body #page .cs-tile b { font-size: 19px; } html body #page .cs-h { grid-template-columns: 1fr 1fr; }
+  html body #page .cs-set input { width: 96px; }
+}
