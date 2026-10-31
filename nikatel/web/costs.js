@@ -1,16 +1,26 @@
-/* The Costs page (the owner, 2026-10-31: "a system where I tell it the price of each server and each TB, and it tells me how much I spent this month" - "what each 1 GB costs me").
-   You type the prices once (a server's rent, a price per TB, a domain per year, one invoice); the page adds them up for a month, divides by the traffic the nodes really carried and shows what one GB costs.
-   Routes used: GET /api/costs, GET /api/costs/summary?month=&recompute=, PUT /api/costs/settings, POST|PUT|DELETE /api/costs/items[/id]. Nothing here changes a server or a panel.
+/* The Finance page (the owner, 2026-10-31: "a system where I tell it the price of each server and each TB, and it tells me how much I spent this month" - "what each 1 GB costs me"; then "the price of each section in its own tab,
+   ONE main page that writes the total of everything", "all the rates updated by themselves from chand" and "the whole section is called Finance, with two general subcategories: income, expenses").
+   Finance has an Overview (the total of everything: income, expenses, profit, the price of one GB), Income (the shop bot, the partners) and Expenses (all of them, and a tab for each section: foreign servers, Iran servers,
+   CDN, domains, the rest). You type the prices once (a server's rent, a price per TB, a domain per year, one invoice); the page adds them up for a month, divides by the traffic the nodes really carried and shows what
+   one GB costs. The internal name of the page stays "costs" (its routes, its menu key).
+   Routes used: GET /api/costs, GET /api/costs/summary?month=&recompute=, PUT /api/costs/settings, POST /api/costs/rates/fetch, POST|PUT|DELETE /api/costs/items[/id]. Nothing here changes a server or a panel.
    Uses the helpers of app.js: $, api, esc, toast, gconfirm, showModal, hideModal, refresh, PAGES. */
-const cs = {d: null, s: null, month: ""};
+const cs = {d: null, s: null, month: "", top: "overview", sub: "all", isub: "bot"};
+const CS_TOPS = [["overview", "Overview"], ["income", "Income"], ["expenses", "Expenses"]];
+const CS_SECTIONS = [["all", "All expenses", null], ["foreign", "Foreign servers", ["foreign"]], ["iran", "Iran servers", ["iran"]], ["cdn", "CDN and traffic", ["cdn"]], ["domain", "Domains", ["domain"]], ["other", "Other", ["software", "other"]]];
+const CS_ISECTIONS = [["bot", "Shop bot"], ["partners", "Partners"]];
 const CS_KINDS = [["monthly", "Price per month"], ["yearly", "Price per year"], ["once", "One payment (an invoice, a fee)"], ["per_tb", "Price per TB of traffic"], ["per_gb", "Price per GB of traffic"]];
 const CS_CUR = {IRT: "toman", USD: "USD", EUR: "EUR", TRY: "lira"};
+const CS_SYM = {USD: "$", EUR: "€", TRY: "₺"};
 
 const csN = (v, d = 0) => Number(v).toLocaleString("en-US", {maximumFractionDigits: d});
 const csUsd = v => cs.s && cs.s.usd_rate && v != null ? ` <small class="cs-usd">≈ $${csN(v / cs.s.usd_rate, v / cs.s.usd_rate < 1 ? 4 : 2)}</small>` : "";
-const csMoney = (v, per, plain) => v == null ? "—" : `${csN(v, per && v < 100 ? 1 : 0)} <small>toman</small>${plain ? "" : csUsd(v)}`;      // (plain: no dollars beside it - the tables are narrow)
+const csMoney = (v, per, plain) => v == null ? "—" : `${csN(v, per && Math.abs(v) < 100 ? 1 : 0)} <small>toman</small>${plain ? "" : csUsd(v)}`;      // (plain: no dollars beside it - the tables are narrow)
+const csShort = v => Math.abs(v) >= 1e9 ? csN(v / 1e9, 2) + " B" : Math.abs(v) >= 1e6 ? csN(v / 1e6, 1) + " M" : Math.abs(v) >= 1e3 ? csN(v / 1e3, 0) + " K" : csN(v);      // 56.6 M: the amount on a tab
 const csGb = gb => gb >= 1024 ? `${csN(gb / 1024, 2)} TB` : `${csN(gb, 1)} GB`;
 const csShift = (key, n) => { const [y, m] = key.split("-").map(Number), i = y * 12 + (m - 1) + n; return String(Math.floor(i / 12)).padStart(4, "0") + "-" + String(i % 12 + 1).padStart(2, "0"); };
+const csAgo = t => { const m = Math.round((Date.now() / 1000 - t) / 60); return m < 1 ? "just now" : m < 90 ? `${m} min ago` : `${Math.round(m / 60)} h ago`; };
+const csErr = e => toast("✕ " + e.message, "bad");
 const csPrice = it => {
   const unit = {monthly: "/month", yearly: "/year", once: it.months > 1 ? ` over ${it.months} months` : "", per_tb: "/TB", per_gb: "/GB"}[it.kind] || "";
   const free = it.included ? ` · first ${csN(it.included, 2)} ${it.kind === "per_tb" ? "TB" : "GB"} free` : "";
@@ -19,74 +29,188 @@ const csPrice = it => {
   const quota = it.quota ? ` · ${csN(it.quota, 2)} TB in the plan` : "";
   return `${csN(it.amount, it.amount < 100 ? 2 : 0)} ${CS_CUR[it.cur] || it.cur}${tax}${unit}${free}${dirs}${quota}`;
 };
-const csErr = e => toast("✕ " + e.message, "bad");
+const csGroupSum = (s, keys) => keys.reduce((a, k) => { const g = s.by_group[k] || {so_far: 0, month: 0}; return {so_far: a.so_far + g.so_far, month: a.month + g.month}; }, {so_far: 0, month: 0});
+const csSectionOf = group => (CS_SECTIONS.find(t => t[2] && t[2].includes(group)) || CS_SECTIONS[0])[0];
+const csTile = (label, value, sub, cls = "", vcls = "") => `<div class="cs-tile ${cls}"><small>${label}</small><b class="${vcls}">${value}</b><span>${sub}</span></div>`;      // (vcls: a class of the figure itself - a loss is red)
 
 PAGES.costs = async () => {
   const [d, s] = await Promise.all([api("/api/costs"), api("/api/costs/summary" + (cs.month ? "?month=" + encodeURIComponent(cs.month) : ""))]);
   cs.d = d; cs.s = s; csDraw();
 };
 
-function csDraw() {
-  const d = cs.d, s = cs.s, page = $("#page"); if (!page || state.page !== "costs") return;
-  const tiles = `<div class="cs-tiles">`
-    + `<div class="cs-tile"><small>Spent so far</small><b>${csMoney(s.so_far)}</b><span>${s.elapsed} of ${s.days} days${s.frozen ? " · saved" : ""}</span></div>`
-    + `<div class="cs-tile"><small>${s.open ? "The whole month" : "The month"}</small><b>${csMoney(s.total)}</b><span>${s.open ? "if the traffic goes on like this" : "final"}</span></div>`
-    + `<div class="cs-tile"><small>Traffic of the customers</small><b>${s.traffic_ok ? csGb(s.gb_est != null ? s.gb_est : s.gb) : "—"}</b><span>${s.traffic_ok && s.coverage != null && s.coverage < 1 ? `${csGb(s.gb)} recorded, the first days of the month counted at the average` : s.traffic_ok && s.open && s.gb ? `about ${csGb(s.gb_month)} in the month` : "counted by the panel"}</span></div>`
-    + `<div class="cs-tile cs-big"><small>One GB costs you</small><b>${csMoney(s.per_gb, true)}</b><span>${s.per_gb_month != null && s.open ? `${csN(s.per_gb_month, s.per_gb_month < 100 ? 1 : 0)} toman at the end of the month` : "so far this month"}</span></div></div>`;
-  const inc = s.income, IK = [["buy", "New services"], ["renew", "Renewals"], ["wallet", "Wallet top-ups"], ["other", "Extra volume and days"]];
-  const incTiles = inc ? `<div class="cs-tiles">`
-    + `<div class="cs-tile"><small>Income so far (shop bot)</small><b>${csMoney(inc.so_far)}</b><span>${csN(inc.bot.count)} payments · ${csN(inc.bot.payers)} payers</span></div>`
-    + `<div class="cs-tile"><small>${s.open ? "Income, the whole month" : "Income of the month"}</small><b>${csMoney(inc.month)}</b><span>${s.open ? "at this pace" : "final"}</span></div>`
-    + `<div class="cs-tile"><small>Profit so far</small><b class="${inc.profit_so_far < 0 ? "cs-neg" : ""}">${csMoney(inc.profit_so_far)}</b><span>the bot's income less the cost - the partners' income is not in yet</span></div>`
-    + `<div class="cs-tile cs-big"><small>Profit of one GB</small><b class="${inc.profit_per_gb != null && inc.profit_per_gb < 0 ? "cs-neg" : ""}">${csMoney(inc.profit_per_gb, true)}</b><span>so far, before the partners' income</span></div></div>`
-    + `<div class="card"><h3>Income of the shop bot<span class="sp"></span><small class="mut">payments the bot approved, by the day of the month</small></h3>${IK.map(([k, name]) => `<div class="cs-gr"><span>${name} <small class="mut">${csN(inc.bot.by_kind[k].n)}</small></span><i style="--w:${inc.bot.count && inc.so_far ? Math.round(inc.bot.by_kind[k].sum * 100 / inc.so_far) : 0}%"></i><b>${csMoney(inc.bot.by_kind[k].sum, false, true)}</b></div>`).join("")}</div>` : (d.income && d.income.bot_server_id ? "" : '<div class="cs-hint">Income: choose the server of the shop bot in the bar above (Shop bot) and the page adds its sales and the profit.</div>');
-  const warn = s.warnings.concat((s.errors || []).map(x => "Panel: " + x)).map(w => `<div class="cs-warn">${esc(w)}</div>`).join("");
-  const maxG = Math.max(1, ...Object.values(s.by_group).map(g => g.month));
-  const groups = Object.values(s.by_group).filter(g => g.month || g.so_far).map(g => `<div class="cs-gr"><span>${esc(g.name)}</span><i style="--w:${Math.round(g.month * 100 / maxG)}%"></i><b>${csMoney(g.month)}</b></div>`).join("") || '<div class="mut">Nothing is counted in this month yet.</div>';
-  const nodes = s.by_node.length ? `<div class="cs-scroll"><table class="tbl"><thead><tr><th>Node</th><th class="r">Traffic</th><th class="r">Cost so far</th><th class="r">1 GB</th></tr></thead><tbody>${s.by_node.map(n => `<tr><td><b>${esc(n.name)}</b></td><td class="r">${csGb(n.gb)}</td><td class="r">${n.priced ? csMoney(n.so_far, false, true) : '<span class="cs-none" title="No price is tied to this node yet: add one and choose this server or node">no price yet</span>'}</td><td class="r">${n.per_gb != null && n.priced ? csMoney(n.per_gb, true, true) : "—"}</td></tr>`).join("")}</tbody></table></div>` : '<div class="mut">No traffic was recorded in this month.</div>';
-  const servers = (s.by_server || []).length ? `<div class="cs-scroll"><table class="tbl"><thead><tr><th>Server</th><th class="r">Sent</th><th class="r">Received</th><th class="r">Cost so far</th><th class="r">1 GB sent</th></tr></thead><tbody>${s.by_server.map(n => `<tr><td><b>${esc(n.name)}</b></td><td class="r">${csGb(n.out_gb)}</td><td class="r">${csGb(n.in_gb)}</td><td class="r">${n.priced ? csMoney(n.so_far, false, true) : '<span class="cs-none" title="No price is tied to this server yet">no price yet</span>'}</td><td class="r">${n.per_gb != null ? csMoney(n.per_gb, true, true) : "—"}</td></tr>`).join("")}</tbody></table></div>` : "";
-  const rows = s.items.length ? s.items.map(r => {
-    const it = d.items.find(x => x.id === r.id) || r;
-    const q = r.quota ? `<small class="cs-note ${r.quota.pct >= 100 ? "cs-over" : r.quota.pct >= 90 ? "cs-near" : ""}" title="The traffic the node carries this month at this pace, against the traffic in its plan">uses ${r.quota.pct}% of ${csN(r.quota.tb, 2)} TB</small>` : "";
-    return `<tr class="${r.state === "idle" ? "cs-idle" : ""}"><td><b>${esc(r.name)}</b>${it.note ? `<small class="cs-note">${esc(it.note)}</small>` : ""}${q}</td><td>${esc((d.groups.find(g => g.key === r.group) || {}).name || r.group)}</td>`
-      + `<td>${esc(csPrice(it))}</td><td>${r.server || r.node ? `${esc(r.server)}${r.node && r.node !== r.server ? `${r.server ? " <small>→</small> " : ""}<small>${esc(r.node === "*" ? "all nodes" : r.node)}</small>` : ""}` : "—"}</td>`
-      + `<td class="r">${r.state === "no_rate" ? '<span class="pill err" title="Type the rate of this currency above">no rate</span>' : r.state === "needs_node" ? '<span class="pill warn" title="Choose the node whose traffic is priced">choose a node</span>' : r.state === "idle" ? '<span class="mut">not active</span>' : csMoney(r.so_far, false, true)}</td>`
-      + `<td class="r">${r.state === "ok" ? csMoney(r.month, false, true) : ""}</td><td class="r"><span class="cs-act"><button class="sm" onclick="csEdit(${r.id})" title="Change this price">Edit</button><button class="sm danger" onclick="csDel(${r.id})" title="Remove this price">✕</button></span></td></tr>`;
-  }).join("") : "";
-  const prices = rows ? `<table class="tbl cs-items"><thead><tr><th>What</th><th>Group</th><th>Price</th><th>Server</th><th class="r">So far</th><th class="r">Month</th><th></th></tr></thead><tbody>${rows}</tbody></table>`
-    : '<div class="mut">No prices yet. Press “＋ Add a price” and type the rent of a server, a price per TB, a domain or an invoice - the page adds them up and divides by the traffic.</div>';
-  const hist = d.history.length ? d.history.map(h => `<a class="cs-h" onclick="csOpen('${h.month}')"><span>${esc(h.label)}</span><b>${csMoney(h.total)}</b><small>${csGb(h.gb)}</small><em>${h.per_gb != null ? csMoney(h.per_gb, true) + " / GB" : ""}</em></a>`).join("") : '<div class="mut">A finished month is saved here the first time you look at it.</div>';
-  const isNow = s.month === s.current;
-  page.innerHTML = `<div class="costs">`
-    + `<div class="card cs-bar"><div class="cs-month"><button class="sm" onclick="csMonth(-1)" aria-label="The month before">◀</button><b>${esc(s.label)}</b><button class="sm" onclick="csMonth(1)" aria-label="The month after" ${isNow ? "disabled" : ""}>▶</button>${isNow ? "" : '<button class="sm" onclick="csOpen(\'\')">This month</button>'}${!s.open && s.frozen ? '<button class="sm" onclick="csRecompute()" title="Make this month again from the prices as they are now">Recalculate</button>' : ""}</div>`
-    + `<form class="cs-set" onsubmit="return csSaveSettings(event)"><label>1 USD = <input name="USD" type="number" min="0" step="any" value="${esc(d.rates.USD || "")}" placeholder="toman"></label><label>1 EUR = <input name="EUR" type="number" min="0" step="any" value="${esc(d.rates.EUR || "")}" placeholder="toman"></label><label>1 lira = <input name="TRY" type="number" min="0" step="any" value="${esc(d.rates.TRY || "")}" placeholder="toman"></label>`
-    + `<label>Shop bot <select name="bot_server_id" title="The server that runs the shop bot: the panel reads its sales from there (a restricted key, counts and sums only)"><option value="0">— not set —</option>${d.servers.map(x => `<option value="${x.id}" ${(d.income && d.income.bot_server_id) === x.id ? "selected" : ""}>${esc(x.name)}</option>`).join("")}</select></label>`
-    + `<label>Month <select name="calendar"><option value="jalali" ${d.calendar === "jalali" ? "selected" : ""}>Jalali</option><option value="gregorian" ${d.calendar === "gregorian" ? "selected" : ""}>Gregorian</option></select></label><button class="sm" type="submit">Save</button>`
-    + `<button class="sm" type="button" onclick="csFetchRates()" title="Read today's dollar, euro and lira from chand.online and save them as the rates">Today's rates</button>${d.rates_at ? `<small class="cs-usd" title="The time the site gave with its prices">from chand.online · ${esc(d.rates_at)}</small>` : ""}</form></div>`
-    + tiles + warn + incTiles
-    + `<div class="cs-two"><div class="card"><h3>Where it goes</h3>${groups}</div><div class="card"><h3>Each node</h3>${nodes}</div></div>`
-    + (servers ? `<div class="card"><h3>Each Iran server<span class="sp"></span><small class="mut">the traffic is an estimate from the panel's samples of the last days</small></h3>${servers}</div>` : "")
-    + `<div class="card"><h3>Your prices<span class="sp"></span><button class="pri sm" onclick="csEdit(0)">＋ Add a price</button></h3>${prices}</div>`
-    + `<div class="card"><h3>Earlier months</h3><div class="cs-hist">${hist}</div></div></div>`;
+/* ---- the bar: the month, the calendar, the rates of the day (read from chand.online by themselves) */
+function csRatesStatus(d) {
+  const age = d.rates_checked ? Date.now() / 1000 - d.rates_checked : null;
+  if (!d.rates_auto) return {cls: "off", text: "Typed by you", sub: "automatic reading is off"};
+  if (d.rates_error) return {cls: "warn", text: "chand.online did not answer", sub: `the rates of ${d.rates_at || "before"} stay`};
+  if (age == null) return {cls: "warn", text: "Waiting for the first read", sub: "a few minutes"};
+  if (d.rates_stale || age > 5400) return {cls: "warn", text: "Live · the prices are old", sub: `checked ${csAgo(d.rates_checked)}`};
+  return {cls: "ok", text: "Live from chand.online", sub: `checked ${csAgo(d.rates_checked)}${d.rates_at ? ` · price of ${d.rates_at}` : ""}`};
+}
+function csBar(d, s) {
+  const isNow = s.month === s.current, st = csRatesStatus(d);
+  const chip = code => { const v = d.rates[code], i = (d.rates_info || {})[code], pct = i && i.pct;
+    return `<div class="cs-chip" title="1 ${code} in toman${i && i.at ? " · the price of " + esc(i.at) : ""}. A higher rate makes what you pay in ${code} cost more toman."><span class="cs-sym">${CS_SYM[code]}</span><b>${v ? csN(v) : "—"}</b><small>${code}</small>${pct ? `<em class="${pct > 0 ? "up" : "dn"}">${pct > 0 ? "▲" : "▼"} ${csN(Math.abs(pct), 2)}%</em>` : ""}</div>`; };
+  return `<div class="card cs-bar"><div class="cs-nav"><button class="sm" onclick="csMonth(-1)" aria-label="The month before">◀</button><b>${esc(s.label)}</b><button class="sm" onclick="csMonth(1)" aria-label="The month after" ${isNow ? "disabled" : ""}>▶</button>`
+    + `${isNow ? "" : '<button class="sm" onclick="csOpen(\'\')">This month</button>'}${!s.open && s.frozen ? '<button class="sm" onclick="csRecompute()" title="Make this month again from the prices as they are now">Recalculate</button>' : ""}</div>`
+    + `<div class="cs-seg" role="group" aria-label="The calendar of a month"><button class="${d.calendar === "jalali" ? "on" : ""}" onclick="csSetCal('jalali')">Jalali</button><button class="${d.calendar === "gregorian" ? "on" : ""}" onclick="csSetCal('gregorian')">Gregorian</button></div>`
+    + `<span class="cs-fill"></span><div class="cs-rates">${chip("USD")}${chip("EUR")}${chip("TRY")}<div class="cs-live"><i class="cs-dot ${st.cls}"></i><span><b>${esc(st.text)}</b><small>${esc(st.sub)}</small></span></div>`
+    + `<button class="sm cs-ic" onclick="csFetchRates()" title="Read today's rates from chand.online now" aria-label="Read the rates now">↻</button><button class="sm cs-ic" onclick="csSettings()" title="Rates, the shop bot" aria-label="Settings">⚙</button></div></div>`;
 }
 
+/* ---- the three parts of Finance, and the tabs inside Income and Expenses */
+function csTopTabs(s) {
+  const badge = k => k === "income" ? (s.income ? csShort(s.income.month) : "") : k === "expenses" ? csShort(s.total) : "";
+  return `<div class="cs-top" role="tablist">${CS_TOPS.map(([k, name]) => `<button role="tab" class="${cs.top === k ? "on" : ""}" onclick="csTop('${k}')">${esc(name)}${badge(k) ? `<small>${badge(k)}</small>` : ""}</button>`).join("")}</div>`;
+}
+function csSubTabs(list, cur, fn, s) {
+  return `<div class="cs-tabs" role="tablist">${list.map(([k, name, keys]) => {
+    const g = keys && s ? csGroupSum(s, keys) : null;
+    return `<button role="tab" class="${cur === k ? "on" : ""}" onclick="${fn}('${k}')">${esc(name)}${g && g.month ? `<small>${csShort(g.month)}</small>` : ""}</button>`;
+  }).join("")}</div>`;
+}
+
+/* ---- the tiles */
+function csExpTiles(s) {
+  return `<div class="cs-tiles">`
+    + csTile("Expenses so far", csMoney(s.so_far), `${s.elapsed} of ${s.days} days${s.frozen ? " · saved" : ""}`)
+    + csTile(s.open ? "Expenses, the whole month" : "Expenses of the month", csMoney(s.total), s.open ? "if the traffic goes on like this" : "final")
+    + csTile("Traffic of the customers", s.traffic_ok ? csGb(s.gb_est != null ? s.gb_est : s.gb) : "—", s.traffic_ok && s.coverage != null && s.coverage < 1 ? `${csGb(s.gb)} recorded, the first days of the month counted at the average` : s.traffic_ok && s.open && s.gb ? `about ${csGb(s.gb_month)} in the month` : "counted by the panel")
+    + csTile("One GB costs you", csMoney(s.per_gb, true), s.per_gb_month != null && s.open ? `${csN(s.per_gb_month, s.per_gb_month < 100 ? 1 : 0)} toman at the end of the month` : "so far this month", "cs-big") + `</div>`;
+}
+function csFinTiles(s) {
+  const inc = s.income; if (!inc) return csExpTiles(s);
+  const neg = v => v < 0 ? "cs-neg" : "", gbT = s.traffic_ok ? csGb(s.gb_est != null ? s.gb_est : s.gb) : "—";
+  return `<div class="cs-tiles">`
+    + csTile("Income so far", csMoney(inc.so_far), `shop bot · ${csN(inc.bot.count)} payments · ${csN(inc.bot.payers)} payers`)
+    + csTile("Expenses so far", csMoney(s.so_far), `${s.elapsed} of ${s.days} days${s.frozen ? " · saved" : ""}`)
+    + csTile("Profit so far", csMoney(inc.profit_so_far), "before the partners' income", "", neg(inc.profit_so_far))
+    + csTile("Traffic of the customers", gbT, s.traffic_ok && s.coverage != null && s.coverage < 1 ? `${csGb(s.gb)} recorded, the first days counted at the average` : s.open && s.gb ? `about ${csGb(s.gb_month)} in the month` : "counted by the panel") + `</div>`
+    + `<div class="cs-tiles">`
+    + csTile(s.open ? "Income, the whole month" : "Income of the month", csMoney(inc.month), s.open ? "at this pace" : "final")
+    + csTile(s.open ? "Expenses, the whole month" : "Expenses of the month", csMoney(s.total), s.open ? "if the traffic goes on like this" : "final")
+    + csTile(s.open ? "Profit, the whole month" : "Profit of the month", csMoney(inc.profit_month), s.open ? "at this pace" : "final", "", neg(inc.profit_month))
+    + csTile("Profit of one GB", csMoney(inc.profit_per_gb, true), `it costs you ${csN(s.per_gb || 0, (s.per_gb || 0) < 100 ? 1 : 0)} toman, before the partners' income`, "cs-big", inc.profit_per_gb != null && inc.profit_per_gb < 0 ? "cs-neg" : "") + `</div>`;
+}
+const csWarn = s => s.warnings.concat((s.errors || []).map(x => "Panel: " + x)).map(w => `<div class="cs-warn">${esc(w)}</div>`).join("");
+const IK = [["buy", "New services"], ["renew", "Renewals"], ["wallet", "Wallet top-ups"], ["other", "Extra volume and days"]];
+const csIncRows = inc => IK.map(([k, nm]) => `<div class="cs-gr"><span>${nm} <small class="mut">${csN(inc.bot.by_kind[k].n)}</small></span><i style="--w:${inc.bot.count && inc.so_far ? Math.round(inc.bot.by_kind[k].sum * 100 / inc.so_far) : 0}%"></i><b>${csMoney(inc.bot.by_kind[k].sum, false, true)}</b></div>`).join("");
+
+/* ---- Overview: the page that writes the total of everything */
+function csExpRows(d, s, click) {
+  const groups = d.groups.map(g => ({key: g.key, name: g.name, v: s.by_group[g.key] || {so_far: 0, month: 0}})).filter(g => g.v.month || g.v.so_far);
+  const maxG = Math.max(1, ...groups.map(g => g.v.month));
+  if (!groups.length) return '<div class="mut">Nothing is counted in this month yet. Open Expenses and press “＋ Add a price”: the rent of a server, a price per TB, a domain or an invoice.</div>';
+  return groups.map(g => `<${click ? `a class="cs-gr cs-link" onclick="csGo('expenses', '${csSectionOf(g.key)}')" title="Open its tab · so far ${csN(g.v.so_far)} toman"` : 'div class="cs-gr"'}><span>${esc(g.name)} <small class="mut">${s.total ? csN(g.v.month * 100 / s.total, 1) : 0}%</small></span><i style="--w:${Math.round(g.v.month * 100 / maxG)}%"></i><b>${csMoney(g.v.month)}</b></${click ? "a" : "div"}>`).join("")
+    + `<div class="cs-gr cs-total"><span>All expenses</span><i></i><b>${csMoney(s.total)}</b></div><div class="cs-gr cs-sub"><span>so far in the month</span><i></i><b>${csMoney(s.so_far)}</b></div>`;
+}
+function csOverview(d, s) {
+  const inc = s.income;
+  const left = `<div class="card"><h3>Where the money goes<span class="sp"></span><small class="mut">expenses of the whole month · click a line</small></h3>${csExpRows(d, s, true)}</div>`;
+  const right = inc ? `<div class="card"><h3>Where the money comes from<span class="sp"></span><small class="mut">the shop bot · so far</small></h3>${csIncRows(inc)}<div class="cs-gr cs-total"><span>Income so far</span><i></i><b>${csMoney(inc.so_far)}</b></div></div>`
+    : `<div class="card"><h3>Income</h3><div class="mut">${d.income && d.income.bot_server_id ? "The shop bot did not answer just now." : "Choose the server of the shop bot in the settings (⚙) and the page adds its sales and the profit."}</div></div>`;
+  const hist = d.history.length ? d.history.map(h => `<a class="cs-h" onclick="csOpen('${h.month}')"><span>${esc(h.label)}</span><b>${csMoney(h.total)}</b><small>${csGb(h.gb)}</small><em>${h.per_gb != null ? csMoney(h.per_gb, true) + " / GB" : ""}</em></a>`).join("") : '<div class="mut">A finished month is saved here the first time you look at it.</div>';
+  return csFinTiles(s) + csWarn(s) + `<div class="cs-two">${left}${right}</div>` + `<div class="card"><h3>Earlier months<span class="sp"></span><small class="mut">click a month to open it</small></h3><div class="cs-hist">${hist}</div></div>`;
+}
+
+/* ---- Expenses: all of them, and a tab for each section of the cost */
+function csItemsTable(d, s, keys) {
+  const list = s.items.filter(r => keys.includes(r.group)), many = keys.length > 1;
+  if (!list.length) return '<div class="mut">No prices here yet. Press “＋ Add a price”.</div>';
+  const rows = list.map(r => {
+    const it = d.items.find(x => x.id === r.id) || r;
+    const q = r.quota ? `<small class="cs-note ${r.quota.pct >= 100 ? "cs-over" : r.quota.pct >= 90 ? "cs-near" : ""}" title="The traffic the node carries this month at this pace, against the traffic in its plan">uses ${r.quota.pct}% of ${csN(r.quota.tb, 2)} TB</small>` : "";
+    return `<tr class="${r.state === "idle" ? "cs-idle" : ""}"><td><b>${esc(r.name)}</b>${it.note ? `<small class="cs-note">${esc(it.note)}</small>` : ""}${q}</td>${many ? `<td>${esc((d.groups.find(g => g.key === r.group) || {}).name || r.group)}</td>` : ""}`
+      + `<td>${esc(csPrice(it))}</td><td>${r.server || r.node ? `${esc(r.server)}${r.node && r.node !== r.server ? `${r.server ? " <small>→</small> " : ""}<small>${esc(r.node === "*" ? "all nodes" : r.node)}</small>` : ""}` : "—"}</td>`
+      + `<td class="r">${r.state === "no_rate" ? '<span class="pill err" title="The rate of this currency is not there yet">no rate</span>' : r.state === "needs_node" ? '<span class="pill warn" title="Choose the node whose traffic is priced">choose a node</span>' : r.state === "idle" ? '<span class="mut">not active</span>' : csMoney(r.so_far, false, true)}</td>`
+      + `<td class="r">${r.state === "ok" ? csMoney(r.month, false, true) : ""}</td><td class="r"><span class="cs-act"><button class="sm" onclick="csEdit(${r.id})" title="Change this price">Edit</button><button class="sm danger" onclick="csDel(${r.id})" title="Remove this price">✕</button></span></td></tr>`;
+  }).join("");
+  return `<table class="tbl cs-items"><thead><tr><th>What</th>${many ? "<th>Group</th>" : ""}<th>Price</th><th>Server</th><th class="r">So far</th><th class="r">Month</th><th></th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+const csNodesTable = s => s.by_node.length ? `<div class="cs-scroll"><table class="tbl"><thead><tr><th>Node</th><th class="r">Traffic</th><th class="r">Cost so far</th><th class="r">1 GB</th></tr></thead><tbody>${s.by_node.map(n => `<tr><td><b>${esc(n.name)}</b></td><td class="r">${csGb(n.gb)}</td><td class="r">${n.priced ? csMoney(n.so_far, false, true) : '<span class="cs-none" title="No price is tied to this node yet: add one and choose this server or node">no price yet</span>'}</td><td class="r">${n.per_gb != null && n.priced ? csMoney(n.per_gb, true, true) : "—"}</td></tr>`).join("")}</tbody></table></div>` : '<div class="mut">No traffic was recorded in this month.</div>';
+const csServersTable = s => (s.by_server || []).length ? `<div class="cs-scroll"><table class="tbl"><thead><tr><th>Server</th><th class="r">Sent</th><th class="r">Received</th><th class="r">Cost so far</th><th class="r">1 GB sent</th></tr></thead><tbody>${s.by_server.map(n => `<tr><td><b>${esc(n.name)}</b></td><td class="r">${csGb(n.out_gb)}</td><td class="r">${csGb(n.in_gb)}</td><td class="r">${n.priced ? csMoney(n.so_far, false, true) : '<span class="cs-none" title="No price is tied to this server yet">no price yet</span>'}</td><td class="r">${n.per_gb != null ? csMoney(n.per_gb, true, true) : "—"}</td></tr>`).join("")}</tbody></table></div>` : '<div class="mut">No Iran server has samples yet.</div>';
+const CS_HINT = {cdn: "Type each invoice or monthly price of your CDN here (a plan per domain, the traffic it bills).", domain: "A domain is a price per year: the page counts a twelfth of it every month.", other: "Services, salaries, the unexpected: anything that is paid every month or once."};
+function csSection(d, s, sec) {
+  const [k, name, keys] = sec, g = csGroupSum(s, keys), share = s.total ? g.month * 100 / s.total : 0;
+  const gbPrice = s.traffic_ok && s.gb_est > 0 ? g.so_far / s.gb_est : null;
+  const tiles = `<div class="cs-tiles">`
+    + csTile(`${esc(name)} · so far`, csMoney(g.so_far), `${s.elapsed} of ${s.days} days`)
+    + csTile(`${esc(name)} · ${s.open ? "the whole month" : "the month"}`, csMoney(g.month), s.open ? "if the traffic goes on like this" : "final")
+    + csTile("Share of all expenses", `${csN(share, 1)}%`, `of ${csShort(s.total)} toman`)
+    + csTile("Of the price of one GB", csMoney(gbPrice, true), "what this section adds to one GB so far", "cs-big") + `</div>`;
+  const extra = k === "foreign" ? `<div class="card"><h3>Each node</h3>${csNodesTable(s)}</div>` : k === "iran" ? `<div class="card"><h3>Each Iran server<span class="sp"></span><small class="mut">the traffic is an estimate from the panel's samples of the last days</small></h3>${csServersTable(s)}</div>` : "";
+  return tiles + csWarn(s) + extra + `<div class="card"><h3>Your prices · ${esc(name)}<span class="sp"></span><button class="pri sm" onclick="csEdit(0, '${keys[0]}')">＋ Add a price</button></h3>${CS_HINT[k] ? `<div class="mut cs-sec-hint">${CS_HINT[k]}</div>` : ""}${csItemsTable(d, s, keys)}</div>`;
+}
+function csExpenses(d, s) {
+  const sec = CS_SECTIONS.find(t => t[0] === cs.sub) || CS_SECTIONS[0];
+  const head = csSubTabs(CS_SECTIONS, sec[0], "csSub", s);
+  if (sec[0] !== "all") return head + csSection(d, s, sec);
+  const all = d.groups.map(g => g.key);
+  return head + csExpTiles(s) + csWarn(s) + `<div class="card"><h3>Where the money goes<span class="sp"></span><small class="mut">the whole month · click a line for its tab</small></h3>${csExpRows(d, s, true)}</div>`
+    + `<div class="card"><h3>All your prices<span class="sp"></span><button class="pri sm" onclick="csEdit(0, 'foreign')">＋ Add a price</button></h3>${csItemsTable(d, s, all)}</div>`;
+}
+
+/* ---- Income: the shop bot and the partners */
+function csIncome(d, s) {
+  const head = csSubTabs(CS_ISECTIONS, cs.isub, "csISub", null);
+  if (cs.isub === "partners") return head + `<div class="card"><h3>Partners</h3><div class="mut">The income from your partners' panel is not in yet. Tell the panel how they pay you - a price for each GB they use, or a fixed amount a month - and it will be here and in the profit.</div></div>`;
+  const inc = s.income;
+  if (!inc) return head + `<div class="card"><h3>Shop bot</h3><div class="mut">${d.income && d.income.bot_server_id ? "The shop bot did not answer just now (see the warning below)." : "Choose the server of the shop bot in the settings (⚙) and the page adds its sales and the profit."}</div>${d.income && d.income.bot_server_id ? "" : '<div class="cs-btns"><button class="pri sm" onclick="csSettings()">Open the settings</button></div>'}</div>` + csWarn(s);
+  return head + `<div class="cs-tiles">`
+    + csTile("Income so far", csMoney(inc.so_far), `${csN(inc.bot.count)} payments · ${csN(inc.bot.payers)} payers`)
+    + csTile(s.open ? "Income, the whole month" : "Income of the month", csMoney(inc.month), s.open ? "at this pace" : "final")
+    + csTile("Per payment", csMoney(inc.bot.count ? inc.so_far / inc.bot.count : null), "the average of the payments so far")
+    + csTile("Per payer", csMoney(inc.bot.payers ? inc.so_far / inc.bot.payers : null), "what one customer paid so far", "cs-big") + `</div>`
+    + csWarn(s) + `<div class="card"><h3>Income of the shop bot<span class="sp"></span><small class="mut">payments the bot approved in the days of the month</small></h3>${csIncRows(inc)}<div class="cs-gr cs-total"><span>Income so far</span><i></i><b>${csMoney(inc.so_far)}</b></div></div>`;
+}
+
+function csDraw() {
+  const d = cs.d, s = cs.s, page = $("#page"); if (!page || state.page !== "costs") return;
+  const body = cs.top === "income" ? csIncome(d, s) : cs.top === "expenses" ? csExpenses(d, s) : csOverview(d, s);
+  page.innerHTML = `<div class="costs">${csBar(d, s)}${csTopTabs(s)}${body}</div>`;
+}
+
+const csTop0 = () => { const m = $(".main"); if (m) m.scrollTop = 0; };
+window.csTop = k => { cs.top = k; csDraw(); csTop0(); };
+window.csSub = k => { cs.sub = k; csDraw(); };
+window.csISub = k => { cs.isub = k; csDraw(); };
+window.csGo = (top, sub) => { cs.top = top; if (sub) cs.sub = sub; csDraw(); csTop0(); };
 window.csMonth = n => { cs.month = csShift(cs.s.month, n); refresh(); };
-window.csOpen = key => { cs.month = key; refresh(); };
+window.csOpen = key => { cs.month = key; cs.top = "overview"; refresh(); };
 window.csRecompute = async () => {
   try { cs.s = await api("/api/costs/summary?month=" + encodeURIComponent(cs.s.month) + "&recompute=true"); toast("✓ Calculated again", "ok"); csDraw(); } catch (e) { csErr(e); }
 };
-window.csSaveSettings = async e => {
-  e.preventDefault(); const f = new FormData(e.target), cal = f.get("calendar");
-  try { await api("/api/costs/settings", {method: "PUT", body: JSON.stringify({rates: {USD: +f.get("USD") || 0, EUR: +f.get("EUR") || 0, TRY: +f.get("TRY") || 0}, calendar: cal, bot_server_id: +f.get("bot_server_id") || 0})}); if (cal !== cs.d.calendar) cs.month = ""; toast("✓ Saved", "ok"); refresh(); } catch (err) { csErr(err); }
-  return false;
+window.csSetCal = async cal => {
+  if (cs.d.calendar === cal) return;
+  try { await api("/api/costs/settings", {method: "PUT", body: JSON.stringify({calendar: cal})}); cs.month = ""; refresh(); } catch (e) { csErr(e); }
 };
-
 window.csFetchRates = async () => {
   try { const r = await api("/api/costs/rates/fetch", {method: "POST"}); toast(`✓ 1 USD = ${csN(r.rates.USD)} · 1 EUR = ${csN(r.rates.EUR)} · 1 lira = ${csN(r.rates.TRY)} toman`, "ok"); refresh(); } catch (e) { csErr(e); }
 };
 
-window.csEdit = id => {
-  const d = cs.d, it = id ? d.items.find(x => x.id === id) : {kind: "monthly", cur: "IRT", group: "foreign", months: 1, included: 0};
+/* ---- the settings: the rates (by themselves, or typed) and the server of the shop bot */
+window.csSettings = () => {
+  const d = cs.d, auto = d.rates_auto;
+  const num = (name, label) => `<label class="cs-f"><span>${label}</span><input name="${name}" type="number" min="0" step="any" value="${esc(d.rates[name] || "")}" placeholder="toman" ${auto ? "disabled" : ""}></label>`;
+  const body = `<form id="cs-set" class="cs-form" onsubmit="return csSaveSettings(event)">`
+    + `<label class="cs-f cs-wide cs-check"><span>Read the rates by themselves</span><input type="checkbox" name="rates_auto" ${auto ? "checked" : ""} onchange="csAuto()"></label>`
+    + `<div class="cs-help cs-wide">The panel reads the dollar, the euro and the lira from chand.online every 30 minutes and keeps the day's change. Switch it off to type the rates yourself.</div>`
+    + num("USD", "1 USD = (toman)") + num("EUR", "1 EUR = (toman)") + num("TRY", "1 lira = (toman)")
+    + `<label class="cs-f"><span>Shop bot server</span><select name="bot_server_id" title="The panel reads its sales from there through a restricted key (counts and sums only)"><option value="0">— not set —</option>${d.servers.map(x => `<option value="${x.id}" ${(d.income && d.income.bot_server_id) === x.id ? "selected" : ""}>${esc(x.name)}</option>`).join("")}</select></label>`
+    + `<div class="cs-btns"><button class="pri" type="submit">Save</button><button type="button" onclick="hideModal()">Cancel</button></div></form>`;
+  showModal("<b>Rates and shop bot</b>", body);
+};
+window.csAuto = () => { const f = $("#cs-set"); if (f) ["USD", "EUR", "TRY"].forEach(k => { f[k].disabled = f.rates_auto.checked; }); };
+window.csSaveSettings = async e => {
+  e.preventDefault(); const f = e.target, auto = f.rates_auto.checked, o = {rates_auto: auto, bot_server_id: +f.bot_server_id.value || 0};
+  if (!auto) o.rates = {USD: +f.USD.value || 0, EUR: +f.EUR.value || 0, TRY: +f.TRY.value || 0};
+  try { await api("/api/costs/settings", {method: "PUT", body: JSON.stringify(o)}); hideModal(); toast("✓ Saved", "ok"); refresh(); } catch (err) { csErr(err); }
+  return false;
+};
+
+/* ---- one price */
+window.csEdit = (id, group) => {
+  const d = cs.d, it = id ? d.items.find(x => x.id === id) : {kind: "monthly", cur: "IRT", group: group || "foreign", months: 1, included: 0};
   if (!it) return;
   const opt = (list, cur) => list.map(([v, l]) => `<option value="${esc(v)}" ${String(cur) === String(v) ? "selected" : ""}>${esc(l)}</option>`).join("");
   const field = (label, inner, show = "") => `<label class="cs-f" ${show ? `data-for="${show}"` : ""}><span>${label}</span>${inner}</label>`;

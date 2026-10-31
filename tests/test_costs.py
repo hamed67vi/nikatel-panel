@@ -132,7 +132,8 @@ class _Resp:
         return self.data
 
 
-MARKET = {"updatedAt": 1793467681789, "prices": {"usd": {"priceToman": 270500}, "eur": {"priceToman": 302950}, "try": {"priceToman": 5420}, "gbp": {"priceToman": 362880}}}
+MARKET = {"updatedAt": 1793467681789, "stale": True, "prices": {"usd": {"priceToman": 270500, "changePct": -0.2065963255367815, "ts": 1793464195000}, "eur": {"priceToman": 302950, "changePct": 0.34779728386883074, "ts": 1793464186000},
+                                                                  "try": {"priceToman": 5420, "changePct": -0.7326007326007326, "ts": 1793462958000}, "gbp": {"priceToman": 362880}}}
 
 
 def test_todays_rates_are_read_from_the_site_and_saved_and_a_bad_answer_saves_nothing(monkeypatch):
@@ -156,6 +157,55 @@ def test_todays_rates_are_read_from_the_site_and_saved_and_a_bad_answer_saves_no
         costs.fetch_rates()
 
     assert costs.get_state()["rates"]["USD"] == 270500.0                                         # the last good rates stay
+
+
+def test_the_rates_come_with_the_days_change_the_time_of_each_price_and_when_they_were_read(monkeypatch):
+    monkeypatch.setattr(costs.httpx, "get", lambda url, **kw: _Resp(MARKET))
+    st = costs.fetch_rates(1_800_000_000)
+    at = lambda ts: dt.datetime.fromtimestamp(ts, UTC).strftime("%Y-%m-%d %H:%M UTC")
+    assert st["rates_info"] == {"USD": {"pct": -0.21, "at": at(1793464195)}, "EUR": {"pct": 0.35, "at": at(1793464186)}, "TRY": {"pct": -0.73, "at": at(1793462958)}}
+    assert st["rates_stale"] is True and st["rates_error"] == "" and st["rates_checked"] == 1_800_000_000 and st["rates_auto"] is True
+    assert costs.fetch_rates()["rates_checked"] > 1_700_000_000                                              # without a time: now
+
+
+def test_the_job_reads_the_site_when_it_is_due_and_keeps_the_rates_when_the_site_fails(monkeypatch):
+    calls = []
+
+    def get(url, **kw):
+        calls.append(url)
+        return _Resp(MARKET)
+
+    monkeypatch.setattr(costs.httpx, "get", get)
+    t0 = 1_800_000_000.0
+    assert costs.run_rates(t0) is True and len(calls) == 1 and costs.get_state()["rates"]["USD"] == 270500.0
+    assert costs.run_rates(t0 + 10) is False and len(calls) == 1                                              # read a moment ago
+    assert costs.run_rates(t0 + costs.RATES_EVERY + 1) is True and len(calls) == 2
+    costs.save_settings(rates_auto=False)
+    assert costs.run_rates(t0 + 100_000) is False and len(calls) == 2 and costs.get_state()["rates_auto"] is False          # switched off: the site is not asked
+    assert costs.save_settings(rates_auto=True)["rates_checked"] == 0                                         # switched on: due at once
+    assert costs.run_rates(t0 + 100_001) is True and len(calls) == 3
+
+    def down(url, **kw):
+        raise httpx.ConnectTimeout("no route")
+
+    monkeypatch.setattr(costs.httpx, "get", down)
+    t1 = t0 + 200_000
+    assert costs.run_rates(t1) is True
+    st = costs.get_state()
+    assert st["rates"]["USD"] == 270500.0 and st["rates_error"].startswith("the site did not give the rates") and st["rates_checked"] == int(t1)       # the rates stay, the failure is said
+    assert costs.run_rates(t1 + 100) is False                                                                  # a failed read is tried again after RATES_RETRY, not at once
+    assert costs.run_rates(t1 + costs.RATES_RETRY + 1) is True
+    monkeypatch.setattr(costs.httpx, "get", get)
+    assert costs.run_rates(t1 + 2 * costs.RATES_RETRY + 2) is True and costs.get_state()["rates_error"] == ""   # a good read clears it
+
+
+def test_the_rates_by_themselves_are_a_setting_a_job_and_part_of_the_state(client):
+    d = client.get("/api/costs").json()
+    assert d["rates_auto"] is True and d["rates_info"] == {} and d["rates_checked"] == 0 and d["rates_error"] == "" and d["rates_stale"] is False
+    assert client.put("/api/costs/settings", json={"rates_auto": False}).json()["rates_auto"] is False
+    assert client.put("/api/costs/settings", json={"rates_auto": True}).json()["rates_auto"] is True
+    main = (Path(__file__).resolve().parent.parent / "nikatel" / "main.py").read_text(encoding="utf-8")
+    assert 'jobs.register("cost-rates", 600, costs.run_rates)' in main and "    costs,\n" in main
 
 
 def test_the_route_for_todays_rates_answers_with_the_rates_or_502(client, monkeypatch):
@@ -446,6 +496,7 @@ def _bot(monkeypatch, answer=None, fail=None):
 
     costs.save_settings(None, None, sid)
     costs._INC_CACHE.clear()
+    costs._INC_FAIL.clear()
     calls = []
 
     def fake(host, port, user, a, b):
@@ -521,6 +572,8 @@ def test_the_ssh_call_is_a_list_of_arguments_with_only_numbers_and_needs_the_pan
 
     from nikatel.config import get_settings
 
+    monkeypatch.setattr(costs.time, "sleep", lambda s: None)
+
     with pytest.raises(RuntimeError, match="income_key"):
         costs._income_ssh("192.0.2.20", 22, "root", 1790109000, 1792701000)
 
@@ -552,6 +605,88 @@ def test_the_ssh_call_is_a_list_of_arguments_with_only_numbers_and_needs_the_pan
         costs._income_ssh("192.0.2.20", 22, "root", 1, 2)
 
 
+def test_a_refused_connection_is_tried_again_and_the_connection_is_kept_ten_minutes(monkeypatch):
+    import subprocess
+
+    from nikatel.config import get_settings
+
+    d = get_settings().data_dir
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "income_key").write_text("not a real key", encoding="utf-8")
+    refused = subprocess.CompletedProcess([], 255, "", "ssh: connect to host x port 22: Connection refused\n")
+    good = subprocess.CompletedProcess([], 0, '{"ok": true}\n', "")
+    seq, seen, slept = [refused, refused, good], [], []
+
+    def run(argv, **kw):
+        seen.append(argv)
+        return seq[len(seen) - 1]
+
+    monkeypatch.setattr(costs.subprocess, "run", run)
+    monkeypatch.setattr(costs.time, "sleep", lambda s: slept.append(s))
+    assert costs._income_ssh("192.0.2.20", 22, "root", 1, 2) == '{"ok": true}\n' and len(seen) == 3 and slept == [costs.INCOME_WAIT] * 2
+    assert "ControlMaster=auto" in seen[0] and "ControlPersist=600" in seen[0] and any(x.startswith("ControlPath=") and x.endswith("income-%C") for x in seen[0])
+    seen.clear()
+    slept.clear()
+    seq[:] = [refused, refused, refused]
+
+    with pytest.raises(RuntimeError, match="refused"):
+        costs._income_ssh("192.0.2.20", 22, "root", 1, 2)
+
+    assert len(seen) == costs.INCOME_TRIES and len(slept) == costs.INCOME_TRIES - 1
+    seen.clear()
+    seq[:] = [subprocess.CompletedProcess([], 255, "", "Permission denied (publickey).\n")]
+
+    with pytest.raises(RuntimeError, match="Permission denied"):
+        costs._income_ssh("192.0.2.20", 22, "root", 1, 2)
+
+    assert len(seen) == 1                                                                                     # only a refused connection is tried again, a wrong key is not
+
+
+def test_when_the_bot_host_cannot_be_reached_the_last_good_read_is_shown_old_and_the_host_is_not_hammered(monkeypatch):
+    _bot(monkeypatch)
+    now = dt.datetime(2026, 10, 10, 12, tzinfo=UTC)
+    first = costs.bot_income(D(2026, 10, 1), D(2026, 10, 10), now)
+    clock = {"t": costs._clock() + costs.INCOME_TTL + 5}
+    fails = []
+
+    def refuse(*a):
+        fails.append(a)
+        raise RuntimeError("the bot host refused: Connection refused")
+
+    monkeypatch.setattr(costs, "_clock", lambda: clock["t"])
+    monkeypatch.setattr(costs, "_income_ssh", refuse)
+    r = costs.bot_income(D(2026, 10, 1), D(2026, 10, 10), now)
+    assert r["stale"] is True and r["total"] == first["total"] and r["age"] >= costs.INCOME_TTL and "refused" in r["error"] and len(fails) == 1
+    clock["t"] += 10
+    assert costs.bot_income(D(2026, 10, 1), D(2026, 10, 10), now)["stale"] and len(fails) == 1               # a moment later: not asked again
+    clock["t"] += costs.INCOME_RETRY + 1
+    assert costs.bot_income(D(2026, 10, 1), D(2026, 10, 10), now)["stale"] and len(fails) == 2
+    clock["t"] += costs.INCOME_STALE + 1                                                                      # a read this old is no longer shown
+
+    with pytest.raises(RuntimeError, match="refused"):
+        costs.bot_income(D(2026, 10, 1), D(2026, 10, 10), now)
+
+
+def test_the_income_of_a_finished_range_is_kept_for_good(monkeypatch):
+    calls = _bot(monkeypatch)
+    now = dt.datetime(2026, 10, 10, 12, tzinfo=UTC)
+    costs.bot_income(D(2026, 10, 1), D(2026, 10, 5), now)
+    t0 = costs._clock()
+    monkeypatch.setattr(costs, "_clock", lambda: t0 + costs.INCOME_STALE - 1)                                 # far past the short keeping time of a range still going
+    costs.bot_income(D(2026, 10, 1), D(2026, 10, 5), now)
+    assert len(calls) == 1                                                                                    # the days are over: nothing in them can change
+
+
+def test_a_stale_read_of_the_income_is_said_in_the_summary(monkeypatch):
+    _bot(monkeypatch)
+    _stub_traffic(monkeypatch, gb=100)
+    costs.save_settings(None, "gregorian")
+    stale = {**costs._parse_income(json.dumps(BOT_ANSWER), 1, 2), "stale": True, "age": 1500, "error": "the bot host refused: x"}
+    monkeypatch.setattr(costs, "bot_income", lambda first, upto, now=None: stale)
+    s = costs.summary(now=dt.datetime(2026, 10, 10, 12, tzinfo=UTC))
+    assert s["income"]["so_far"] == 271091500 and any("from 25 min ago" in w and "refused" in w for w in s["warnings"])
+
+
 def test_the_bot_server_is_chosen_through_the_settings_route(client):
     from nikatel.models import Server
 
@@ -574,7 +709,9 @@ def test_the_page_is_in_the_menu_loaded_titled_and_asks_only_routes_that_exist(c
     main = (Path(__file__).resolve().parent.parent / "nikatel" / "main.py").read_text(encoding="utf-8")
     assert 'data-page="costs"' in index and '/static/costs.js' in index and '/static/costs.css' in index and '"costs.js"' in main and '"costs.css"' in main
     assert index.index('data-page="pgpanel"') < index.index('data-page="costs"') < index.index('data-page="bot"')
-    assert '  costs: ["Costs", ' in app and "PAGES.costs = async" in js
+    assert '  costs: ["Finance", ' in app and "PAGES.costs = async" in js and "<span>Finance</span>" in index and 'data-short="Finance"' in index          # the menu calls the whole section Finance (its internal name stays costs)
+    for part in ('["overview", "Overview"]', '["income", "Income"]', '["expenses", "Expenses"]', '"Foreign servers"', '"Iran servers"', '"CDN and traffic"', '"Domains"'):
+        assert part in js                                                                                       # Overview / Income / Expenses, and a tab for each section of the expenses
     spec = client.get("/api/openapi.json").json()["paths"]
 
     for method, path in (("GET", "/api/costs"), ("GET", "/api/costs/summary"), ("PUT", "/api/costs/settings"), ("POST", "/api/costs/rates/fetch"), ("POST", "/api/costs/items"), ("PUT", "/api/costs/items/{item_id}"), ("DELETE", "/api/costs/items/{item_id}")):

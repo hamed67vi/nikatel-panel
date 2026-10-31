@@ -2,10 +2,36 @@
 html body nav#nav a[data-page="costs"] { --ic: #e8b04a; }
 html body #page .costs { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
 html body #page .costs h3 { display: flex; align-items: center; gap: 8px; }
-html body #page .cs-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 18px; padding: 10px 14px; }
-html body #page .cs-month { display: flex; align-items: center; gap: 8px; } html body #page .cs-month b { min-width: 130px; text-align: center; font-size: 15px; }
-html body #page .cs-set { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; } html body #page .cs-set label { display: inline-flex; align-items: center; gap: 6px; color: var(--mut); font-size: 12.5px; white-space: nowrap; }
-html body #page .cs-set input { width: 112px; } html body #page .cs-set select { width: 108px; }
+html body #page .costs h3 small { font-weight: 400; font-size: 12px; }
+/* the bar: the month, the calendar, the rates of the day */
+html body #page .cs-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; padding: 10px 14px; }
+html body #page .cs-nav { display: flex; align-items: center; gap: 8px; } html body #page .cs-nav b { min-width: 120px; text-align: center; font-size: 15px; }
+html body #page .cs-fill { flex: 1 1 0; min-width: 0; }
+html body #page .cs-seg { display: inline-flex; flex: none; gap: 2px; padding: 3px; border-radius: 10px; background: rgba(255,255,255,.045); border: 1px solid var(--line); }
+html body #page .cs-seg button { border: 0; background: transparent; color: var(--mut); padding: 5px 12px; border-radius: 8px; font-size: 12.5px; cursor: pointer; }
+html body #page .cs-seg button.on { background: var(--panel-2); color: var(--text); box-shadow: 0 1px 0 rgba(255,255,255,.12) inset; }
+html body #page .cs-rates { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; }
+html body #page .cs-chip { display: inline-flex; align-items: baseline; gap: 6px; padding: 6px 11px; border-radius: 999px; background: var(--panel); border: 1px solid var(--line); white-space: nowrap; }
+html body #page .cs-chip .cs-sym { color: var(--acc-2); font-weight: 700; } html body #page .cs-chip b { font-size: 14px; } html body #page .cs-chip small { color: var(--mut); font-size: 11px; }
+html body #page .cs-chip em { font-style: normal; font-size: 11px; } html body #page .cs-chip em.up { color: var(--bad); } html body #page .cs-chip em.dn { color: var(--ok); }
+html body #page .cs-live { display: inline-flex; align-items: center; gap: 8px; padding: 0 4px; }
+html body #page .cs-live span { display: flex; flex-direction: column; line-height: 1.25; } html body #page .cs-live b { font-size: 12.5px; font-weight: 600; } html body #page .cs-live small { color: var(--mut); font-size: 11px; }
+html body #page .cs-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--unk); flex: none; }
+html body #page .cs-dot.ok { background: var(--ok); box-shadow: 0 0 0 3px rgba(61,220,151,.18); } html body #page .cs-dot.warn { background: var(--warn); box-shadow: 0 0 0 3px rgba(255,196,77,.18); }
+html body #page .cs-ic { width: 32px; height: 32px; padding: 0; display: inline-flex; align-items: center; justify-content: center; font-size: 15px; }
+/* Finance: the three parts (Overview, Income, Expenses), and under Income / Expenses the tabs of their sections */
+html body #page .cs-top { display: flex; gap: 8px; }
+html body #page .cs-top button { flex: 1 1 0; display: flex; align-items: center; justify-content: center; gap: 10px; height: 46px; min-height: 46px; overflow: visible; line-height: 1.2; padding: 0 18px; border-radius: 12px; border: 1px solid var(--line); background: var(--panel); color: var(--mut); font-size: 15px; font-weight: 600; cursor: pointer; }
+html body #page .cs-top button small { font-size: 12px; font-weight: 500; opacity: .85; }
+html body #page .cs-top button:hover { color: var(--text); }
+html body #page .cs-top button.on { color: var(--text); border-color: var(--line-hi); background: var(--panel-2); box-shadow: 0 -3px 0 var(--acc-2) inset; }
+html body #page .cs-two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; align-items: start; }
+/* the tabs of the sections */
+html body #page .cs-tabs { display: flex; gap: 6px; overflow-x: auto; padding: 2px 0 4px; scrollbar-width: thin; scrollbar-color: rgba(255,255,255,.22) transparent; }
+html body #page .cs-tabs button { flex: none; display: inline-flex; align-items: baseline; gap: 7px; padding: 8px 14px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel); color: var(--mut); font-size: 13px; cursor: pointer; white-space: nowrap; }
+html body #page .cs-tabs button small { font-size: 11px; opacity: .85; }
+html body #page .cs-tabs button:hover { color: var(--text); }
+html body #page .cs-tabs button.on { color: var(--text); border-color: var(--line-hi); background: var(--panel-2); box-shadow: 0 -2px 0 var(--acc-2) inset; }
 html body #page .cs-tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
 html body #page .cs-tile { display: flex; flex-direction: column; gap: 4px; padding: 14px 16px; border-radius: var(--r); background: var(--panel); border: 1px solid var(--line); min-width: 0; }
 html body #page .cs-tile small { color: var(--mut); font-size: 12px; } html body #page .cs-tile b { font-size: 22px; line-height: 1.15; overflow-wrap: anywhere; } html body #page .cs-tile b small { font-size: 12px; font-weight: 500; }
@@ -14,10 +40,13 @@ html body #page .cs-tile.cs-big { border-color: var(--line-hi); } html body #pag
 html body #page .cs-usd { color: var(--mut); font-weight: 400; white-space: nowrap; }
 html body #page .cs-neg { color: var(--bad); }
 html body #page .cs-hint { padding: 9px 13px; border-radius: var(--r-s); border: 1px dashed var(--line); color: var(--mut); font-size: 13px; }
+html body #page .cs-sec-hint { margin: 0 0 8px; font-size: 12.5px; }
 html body #page .cs-warn { padding: 9px 13px; border-radius: var(--r-s); border: 1px solid rgba(255,200,70,.45); color: var(--warn); font-size: 13px; }
-html body #page .cs-two { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 12px; align-items: start; }
-html body #page .cs-gr { display: grid; grid-template-columns: minmax(90px, 140px) 1fr auto; align-items: center; gap: 10px; padding: 6px 0; font-size: 13px; }
+html body #page .cs-gr { display: grid; grid-template-columns: minmax(130px, 220px) 1fr auto; align-items: center; gap: 10px; padding: 7px 0; font-size: 13px; }
 html body #page .cs-gr i { height: 8px; border-radius: 6px; background: var(--panel-2); position: relative; overflow: hidden; } html body #page .cs-gr i::after { content: ""; position: absolute; inset: 0 auto 0 0; width: var(--w); background: var(--grad); border-radius: 6px; }
+html body #page .cs-link { cursor: pointer; border-radius: 8px; } html body #page .cs-link:hover { background: var(--panel); }
+html body #page .cs-total { border-top: 1px solid var(--line); margin-top: 4px; padding-top: 10px; font-size: 14px; } html body #page .cs-total i, html body #page .cs-sub i { background: transparent; } html body #page .cs-total i::after, html body #page .cs-sub i::after { display: none; }
+html body #page .cs-total b { font-size: 16px; color: var(--acc-2); } html body #page .cs-sub { color: var(--mut); }
 html body #page .costs .tbl .r { text-align: right; white-space: nowrap; } html body #page .costs .tbl td small { color: var(--mut); }
 html body #page .cs-none { color: var(--warn); font-size: 12px; }
 html body #page .cs-idle td { opacity: .55; }
@@ -30,17 +59,19 @@ html body #page .cs-items td:nth-child(1), html body #page .cs-items td:nth-chil
 html body #page .cs-hist { display: flex; flex-direction: column; }
 html body #page .cs-h { display: grid; grid-template-columns: minmax(110px, 1.2fr) 2fr 1fr 1.4fr; gap: 10px; align-items: baseline; padding: 8px 4px; border-bottom: 1px solid var(--line); cursor: pointer; font-size: 13px; }
 html body #page .cs-h:hover { background: var(--panel); } html body #page .cs-h em { font-style: normal; color: var(--acc-2); text-align: right; } html body #page .cs-h small { color: var(--mut); }
-/* the window that adds / changes a price */
+html body #page .cs-btns { display: flex; gap: 10px; margin-top: 10px; }
+/* the windows: a price, the settings */
 html body .cs-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 14px; }
 html body .cs-form .cs-f { display: flex; flex-direction: column; gap: 5px; font-size: 12.5px; color: var(--mut); min-width: 0; } html body .cs-form .cs-f[hidden] { display: none; }
 html body .cs-form .cs-f input, html body .cs-form .cs-f select { width: 100%; box-sizing: border-box; }
+html body .cs-form .cs-wide { grid-column: 1 / -1; } html body .cs-form .cs-check { flex-direction: row; align-items: center; justify-content: space-between; font-size: 14px; color: var(--text); } html body .cs-form .cs-check input { width: auto; }
 html body .cs-form .cs-help { grid-column: 1 / -1; color: var(--mut); font-size: 12.5px; min-height: 18px; }
 html body .cs-form .cs-btns { grid-column: 1 / -1; display: flex; gap: 10px; justify-content: flex-end; }
 @media (max-width: 900px) {
-  html body #page .cs-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } html body #page .cs-two { grid-template-columns: minmax(0, 1fr); }
+  html body #page .cs-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } html body #page .cs-two { grid-template-columns: minmax(0, 1fr); } html body #page .cs-fill { display: none; }
   html body #page .costs .cs-items { display: block; overflow-x: auto; }
 }
 @media (max-width: 560px) {
   html body .cs-form { grid-template-columns: minmax(0, 1fr); } html body #page .cs-tile b { font-size: 19px; } html body #page .cs-h { grid-template-columns: 1fr 1fr; }
-  html body #page .cs-set input { width: 96px; }
+  html body #page .cs-gr { grid-template-columns: minmax(90px, 1fr) 1fr auto; } html body #page .cs-live small { display: none; }
 }

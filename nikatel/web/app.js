@@ -198,7 +198,7 @@ const INFO = {
   jobs: ["Jobs", "The background jobs of the panel and whether they succeed."],
   logs: ["Logs", "The panel's own log, newest first. Secrets are masked before they are written."],
   settings: ["Settings", "Account, Telegram and backup, the probe, appearance and about, AI and automation."],
-  costs: ["Costs", "What your servers, CDN and domains cost this month - from the prices you type and the traffic of every node - and what one GB costs you."],
+  costs: ["Finance", "Income and expenses: what your customers pay, what your servers, CDN and domains cost - from the prices you type and the traffic of every node - the profit and what one GB costs you."],
   pgpanel: ["Panel", "Everything of the Marzban or PasarGuard panel you pick, in tabs: users, hosts, access, core, admins and the settings of the panel."],
 };
 

@@ -46,7 +46,13 @@ SAMPLE_DAYS = 8                                     # the panel keeps about a we
 SAMPLE_GAP = 600                                    # seconds: a longer hole between two samples is counted as this long (the server was not asked)
 GIB = 1024 ** 3
 INCOME_TTL = 120                                    # seconds a read of the bot's income is kept (the page redraws every ~15 s and the bot host rate-limits new SSH connections)
+INCOME_RETRY = 60                                   # seconds after a failed read before the bot host is tried again (the last good read is shown meanwhile)
+INCOME_STALE = 6 * 3600                             # a read this old is still shown, with a note, while the bot host cannot be reached; a finished range never changes
+INCOME_TRIES = 3                                    # "Connection refused" (the firewall's limit of new connections) is tried again after INCOME_WAIT seconds
+INCOME_WAIT = 6
 INCOME_KINDS = ("buy", "renew", "wallet", "other")
+RATES_EVERY = 1800                                  # seconds between two reads of the site by the job
+RATES_RETRY = 300                                   # ... after a read that failed
 RATES_URL = "https://chand.online/api/market"       # the site the owner named for the day's rates (2026-10-31): {"prices": {"usd": {"priceToman": ...}, "eur": ..., "try": ...}, "updatedAt": ms}
 MAX_ITEMS = 300
 MAX_MONEY = 1e12
@@ -137,17 +143,24 @@ def clean_item(raw: dict) -> dict:
 
 def get_state() -> dict:
     doc = settings.get("costs")
-    return {"items": doc["items"], "rates": doc["rates"], "rates_at": doc["rates_at"], "calendar": doc["calendar"], "income": doc["income"]}
+    return {"items": doc["items"], "rates": doc["rates"], "rates_at": doc["rates_at"], "calendar": doc["calendar"], "income": doc["income"], "rates_auto": bool(doc["rates_auto"]),
+            "rates_info": doc["rates_info"], "rates_checked": int(doc["rates_checked"] or 0), "rates_error": doc["rates_error"], "rates_stale": bool(doc["rates_stale"])}
 
 
-def fetch_rates() -> dict:
-    """Today's dollar, euro and lira in toman from RATES_URL (read only), saved as the rates. A reply that is not a plausible number is refused and nothing is saved."""
+def fetch_rates(now: float | None = None) -> dict:
+    """Today's dollar, euro and lira in toman from RATES_URL (read only), saved as the rates together with the day's change and the time of each price. A reply that is not a plausible number
+    is refused and nothing is saved."""
     try:
         r = httpx.get(RATES_URL, timeout=20, headers={"Accept": "application/json"})
         r.raise_for_status()
         j = r.json()
         got = {c: float(j["prices"][c.lower()]["priceToman"]) for c in ("USD", "EUR", "TRY")}
         at = dt.datetime.fromtimestamp(float(j.get("updatedAt") or 0) / 1000, dt.timezone.utc).strftime("%Y-%m-%d %H:%M UTC") if j.get("updatedAt") else ""
+        info = {}
+
+        for c in got:
+            p = j["prices"][c.lower()]
+            info[c] = {"pct": round(float(p.get("changePct") or 0), 2), "at": dt.datetime.fromtimestamp(float(p.get("ts") or 0) / 1000, dt.timezone.utc).strftime("%Y-%m-%d %H:%M UTC") if p.get("ts") else ""}
     except (httpx.HTTPError, ValueError, KeyError, TypeError, OverflowError, OSError) as e:
         raise RuntimeError(f"the site did not give the rates: {str(e)[:100]}") from None
 
@@ -156,13 +169,41 @@ def fetch_rates() -> dict:
             raise RuntimeError(f"the site gave a rate for {c} that cannot be right ({v})")
 
     save_settings(got)
-    settings.put("costs", {"rates_at": at})
+    settings.put("costs", {"rates_at": at, "rates_info": info, "rates_checked": int(time.time() if now is None else now), "rates_error": "", "rates_stale": bool(j.get("stale"))})
     return get_state()
 
 
-def save_settings(rates: dict | None = None, calendar: str | None = None, bot_server_id: int | None = None) -> dict:
+def run_rates(now: float | None = None) -> bool:
+    """The job (every 10 minutes): today's rates from the site, unless the owner switched "automatic" off, and only when the last read is older than RATES_EVERY - a failed read is tried again after
+    RATES_RETRY, and the rates that were there stay. Returns whether the site was asked."""
+    doc = settings.get("costs")
+
+    if not doc["rates_auto"]:
+        return False
+
+    t = time.time() if now is None else now
+
+    if t - float(doc["rates_checked"] or 0) < (RATES_RETRY if doc["rates_error"] else RATES_EVERY):
+        return False
+
+    try:
+        fetch_rates(t)
+    except RuntimeError as e:
+        log.info("costs: the rates were not read: %s", str(e)[:120])
+        settings.put("costs", {"rates_error": str(e)[:160], "rates_checked": int(t)})
+
+    return True
+
+
+def save_settings(rates: dict | None = None, calendar: str | None = None, bot_server_id: int | None = None, rates_auto: bool | None = None) -> dict:
     with _LOCK:
         changes: dict[str, Any] = {}
+
+        if rates_auto is not None:
+            changes["rates_auto"] = bool(rates_auto)
+
+            if rates_auto:
+                changes["rates_checked"] = 0                       # switched on: the job reads the site at its next turn
 
         if bot_server_id is not None:
             if bot_server_id < 0:
@@ -558,6 +599,7 @@ def _iran_samples(first: dt.date, upto: dt.date, now: dt.datetime | None) -> dic
 
 # ------------------------------------------------------------------ the income of the shop bot (read only)
 _INC_CACHE: dict[tuple, tuple[float, dict]] = {}
+_INC_FAIL: dict[tuple, tuple[float, str]] = {}
 _INC_LOCK = threading.Lock()
 _clock = time.monotonic                              # the tests move this clock
 
@@ -578,13 +620,24 @@ def _income_ssh(host: str, port: int, user: str, a: int, b: int) -> str:
     if not key.is_file():
         raise RuntimeError("the key the panel reads the bot with (income_key) is not in its data folder")
 
+    cm = s.data_dir / "cm"
+    cm.mkdir(parents=True, exist_ok=True)
     argv = ["ssh", "-i", str(key), "-p", str(int(port)), "-o", "BatchMode=yes", "-o", "IdentitiesOnly=yes", "-o", "StrictHostKeyChecking=accept-new", "-o", f"UserKnownHostsFile={s.known_hosts}",
-            "-o", f"ConnectTimeout={s.ssh_connect_timeout}", "-o", "LogLevel=ERROR", "--", f"{user}@{host}", f"income {int(a)} {int(b)}"]
+            "-o", f"ConnectTimeout={s.ssh_connect_timeout}", "-o", "LogLevel=ERROR",
+            "-o", "ControlMaster=auto", "-o", f"ControlPath={cm / 'income-%C'}", "-o", "ControlPersist=600",          # one connection kept ten minutes: the next read opens no new TCP connection
+            "--", f"{user}@{host}", f"income {int(a)} {int(b)}"]
+    p = None
 
-    try:
-        p = subprocess.run(argv, capture_output=True, text=True, timeout=30, check=False)
-    except (subprocess.TimeoutExpired, OSError) as e:
-        raise RuntimeError(f"the bot host did not answer: {str(e)[:80]}") from None
+    for attempt in range(INCOME_TRIES):
+        try:
+            p = subprocess.run(argv, capture_output=True, text=True, timeout=30, check=False)
+        except (subprocess.TimeoutExpired, OSError) as e:
+            raise RuntimeError(f"the bot host did not answer: {str(e)[:80]}") from None
+
+        if p.returncode == 0 or p.stdout.strip() or "refused" not in p.stderr.lower() or attempt == INCOME_TRIES - 1:
+            break
+
+        time.sleep(INCOME_WAIT)                                                  # "Connection refused" is the firewall's limit of new connections: a moment later it lets one through
 
     if p.returncode != 0 and not p.stdout.strip():
         raise RuntimeError("the bot host refused: " + (p.stderr.strip()[-120:] or f"exit {p.returncode}"))
@@ -614,35 +667,55 @@ def bot_income(first: dt.date, upto: dt.date, now: dt.datetime | None = None) ->
     if b <= a:
         return {"total": 0, "count": 0, "payers": 0, "by_kind": {k: {"n": 0, "sum": 0} for k in INCOME_KINDS}, "from": a, "to": a}
 
-    key = (sid, a, b // INCOME_TTL)
+    key = (sid, a, int(pg_usage.tehran_day_start(upto + dt.timedelta(days=1)).timestamp()))          # the range, not the moment: its end is cut at now and moves
+    finished = b >= key[2]                                                                              # the whole last day is over: the answer can never change
 
     with _INC_LOCK:
         hit = _INC_CACHE.get(key)
+        age = _clock() - hit[0] if hit else None
 
-        if hit and _clock() - hit[0] < INCOME_TTL:
+        if hit and (finished or age < INCOME_TTL):
             return hit[1]
 
-        out = _income_ssh(*target, a, b)
+        if _INC_FAIL.get(key) and _clock() - _INC_FAIL[key][0] < INCOME_RETRY:                           # it failed a moment ago: not at once again
+            return _stale(hit, age, _INC_FAIL[key][1])
 
         try:
-            d = json.loads(out.strip().splitlines()[-1])
-        except (ValueError, IndexError):
-            raise RuntimeError("the answer of the bot host is not JSON") from None
+            res = _parse_income(_income_ssh(*target, a, b), a, b)
+        except RuntimeError as e:
+            _INC_FAIL[key] = (_clock(), str(e))
+            return _stale(hit, age, str(e))
 
-        if not isinstance(d, dict) or not d.get("ok"):
-            raise RuntimeError("the bot host said: " + str(d.get("error") if isinstance(d, dict) else d)[:100])
+        _INC_FAIL.pop(key, None)
 
-        try:
-            res = {"total": _int(d["total"]), "count": _int(d["count"]), "payers": _int(d["payers"]), "from": a, "to": b,
-                   "by_kind": {k: {"n": _int(d[k]["n"]), "sum": _int(d[k]["sum"])} for k in INCOME_KINDS}}
-        except (KeyError, TypeError):
-            raise RuntimeError("the answer of the bot host is not what was asked for") from None
-
-        for old in [k for k, v in _INC_CACHE.items() if _clock() - v[0] >= INCOME_TTL]:
+        for old in [k for k, v in _INC_CACHE.items() if _clock() - v[0] >= INCOME_STALE]:
             _INC_CACHE.pop(old)
 
         _INC_CACHE[key] = (_clock(), res)
         return res
+
+
+def _stale(hit: tuple[float, dict] | None, age: float | None, error: str) -> dict:
+    """The last good read, marked old, when the bot host cannot be reached now; with none (or one older than INCOME_STALE) the failure is raised."""
+    if hit is None or age is None or age > INCOME_STALE:
+        raise RuntimeError(error)
+
+    return {**hit[1], "stale": True, "age": int(age), "error": error[:120]}
+
+
+def _parse_income(out: str, a: int, b: int) -> dict:
+    try:
+        d = json.loads(out.strip().splitlines()[-1])
+    except (ValueError, IndexError):
+        raise RuntimeError("the answer of the bot host is not JSON") from None
+
+    if not isinstance(d, dict) or not d.get("ok"):
+        raise RuntimeError("the bot host said: " + str(d.get("error") if isinstance(d, dict) else d)[:100])
+
+    try:
+        return {"total": _int(d["total"]), "count": _int(d["count"]), "payers": _int(d["payers"]), "from": a, "to": b, "by_kind": {k: {"n": _int(d[k]["n"]), "sum": _int(d[k]["sum"])} for k in INCOME_KINDS}}
+    except (KeyError, TypeError):
+        raise RuntimeError("the answer of the bot host is not what was asked for") from None
 
 
 # ------------------------------------------------------------------ the page's answers
@@ -674,6 +747,9 @@ def _one(doc: dict, key: str, now: dt.datetime | None) -> dict:
             out["warnings"].append(f"The shop bot's income could not be read: {str(e)[:140]}")
         else:
             if raw is not None:
+                if raw.get("stale"):
+                    out["warnings"].append(f"The shop bot's income is from {max(1, raw['age'] // 60)} min ago: the bot host could not be reached now ({raw['error']}).")
+
                 f = out["days"] / out["elapsed"] if 0 < out["elapsed"] < out["days"] else 1.0
                 month = round(raw["total"] * f)
                 out["income"] = {"bot": raw, "so_far": raw["total"], "month": month, "profit_so_far": raw["total"] - out["so_far"], "profit_month": month - out["total"],
