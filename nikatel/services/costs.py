@@ -48,8 +48,8 @@ GIB = 1024 ** 3
 INCOME_TTL = 120                                    # seconds a read of the bot's income is kept (the page redraws every ~15 s and the bot host rate-limits new SSH connections)
 INCOME_RETRY = 60                                   # seconds after a failed read before the bot host is tried again (the last good read is shown meanwhile)
 INCOME_STALE = 6 * 3600                             # a read this old is still shown, with a note, while the bot host cannot be reached; a finished range never changes
-INCOME_TRIES = 3                                    # "Connection refused" (the firewall's limit of new connections) is tried again after INCOME_WAIT seconds
-INCOME_WAIT = 6
+INCOME_TRIES = 2                                    # "Connection refused" (the firewall's limit of new connections) is tried again after INCOME_WAIT seconds (the page waits for it: a short wait)
+INCOME_WAIT = 4
 INCOME_KINDS = ("buy", "renew", "wallet", "other")
 RATES_EVERY = 1800                                  # seconds between two reads of the site by the job
 RATES_RETRY = 300                                   # ... after a read that failed
@@ -482,7 +482,7 @@ def compute(items: list[dict], rates: dict, key: str, today: dt.date, traffic: d
 
     per_gb = round(total_so_far / all_users_est, 2) if traffic_ok and all_users > 0 else None
     per_gb_month = round(total_month / (all_users_est * factor), 2) if traffic_ok and all_users > 0 else None
-    return {"month": key, "label": key_label(key), "calendar": key_parts(key)[2], "first": first.isoformat(), "last": last.isoformat(), "days": days, "elapsed": elapsed, "open": elapsed < days,
+    return {"month": key, "label": key_label(key), "calendar": key_parts(key)[2], "first": first.isoformat(), "last": last.isoformat(), "days": days, "elapsed": elapsed, "open": today <= last,
             "so_far": total_so_far, "total": total_month, "gb": round(all_users, 2), "gb_est": round(all_users_est, 2), "coverage": round(coverage, 3), "node_gb": round(all_node, 2),
             "gb_month": round(all_users_est * factor, 2), "per_gb": per_gb, "per_gb_month": per_gb_month,
             "usd_rate": float(rates.get("USD") or 0) or None, "by_group": by_group, "by_node": by_node, "by_server": by_server, "items": rows, "warnings": warnings, "traffic_ok": traffic_ok}
@@ -599,7 +599,7 @@ def _iran_samples(first: dt.date, upto: dt.date, now: dt.datetime | None) -> dic
 
 # ------------------------------------------------------------------ the income of the shop bot (read only)
 _INC_CACHE: dict[tuple, tuple[float, dict]] = {}
-_INC_FAIL: dict[tuple, tuple[float, str]] = {}
+_INC_FAIL: dict[int, tuple[float, str]] = {}          # by the bot's server: when it last could not be reached (every month asks the same host)
 _INC_LOCK = threading.Lock()
 _clock = time.monotonic                              # the tests move this clock
 
@@ -677,16 +677,16 @@ def bot_income(first: dt.date, upto: dt.date, now: dt.datetime | None = None) ->
         if hit and (finished or age < INCOME_TTL):
             return hit[1]
 
-        if _INC_FAIL.get(key) and _clock() - _INC_FAIL[key][0] < INCOME_RETRY:                           # it failed a moment ago: not at once again
-            return _stale(hit, age, _INC_FAIL[key][1])
+        if _INC_FAIL.get(sid) and _clock() - _INC_FAIL[sid][0] < INCOME_RETRY:                           # the host failed a moment ago (for this month or another): not at once again
+            return _stale(hit, age, _INC_FAIL[sid][1])
 
         try:
             res = _parse_income(_income_ssh(*target, a, b), a, b)
         except RuntimeError as e:
-            _INC_FAIL[key] = (_clock(), str(e))
+            _INC_FAIL[sid] = (_clock(), str(e))
             return _stale(hit, age, str(e))
 
-        _INC_FAIL.pop(key, None)
+        _INC_FAIL.pop(sid, None)
 
         for old in [k for k, v in _INC_CACHE.items() if _clock() - v[0] >= INCOME_STALE]:
             _INC_CACHE.pop(old)
@@ -758,10 +758,10 @@ def _one(doc: dict, key: str, now: dt.datetime | None) -> dict:
     return out
 
 
-def _freeze(key: str, s: dict) -> None:
+def _freeze(key: str, s: dict, now: dt.datetime | None = None) -> None:
     doc = settings.get("costs")
     frozen = dict(doc["frozen"])
-    frozen[key] = {**s, "frozen_at": int(dt.datetime.now(dt.timezone.utc).timestamp())}
+    frozen[key] = {**s, "frozen_at": int((now or dt.datetime.now(dt.timezone.utc)).timestamp())}
 
     for old in sorted(frozen)[:-MAX_FROZEN]:
         frozen.pop(old)
@@ -769,33 +769,62 @@ def _freeze(key: str, s: dict) -> None:
     settings.put("costs", {"frozen": frozen})
 
 
+def _final(entry: dict | None, last: dt.date) -> bool:
+    """A saved month counts only when it was saved after its last day was over (1.69.169-173 saved it ON that day, with the evening's traffic and income missing)."""
+    at = (entry or {}).get("frozen_at")
+    return bool(at) and pg_usage.tehran_date(dt.datetime.fromtimestamp(int(at), dt.timezone.utc)) > last
+
+
+GREG_MONTHS = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+WEEKDAYS = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
+
+
+def _span(a: tuple[int, int, int], b: tuple[int, int, int], names: tuple[str, ...]) -> str:
+    """(year, month, day) to (year, month, day) as "23 Oct – 21 Nov 2026": what is said twice is said once."""
+    (ay, am, ad), (by, bm, bd) = a, b
+    left = f"{ad}" if (ay, am) == (by, bm) else f"{ad} {names[am - 1]}" if ay == by else f"{ad} {names[am - 1]} {ay}"
+    return f"{left} – {bd} {names[bm - 1]} {by}"
+
+
+def day_info(today: dt.date, first: dt.date, last: dt.date) -> dict:
+    """What the bar says about today and about the days of the month, in both calendars: today_j "9 Aban 1405", today_g "31 Oct 2026", span_j / span_g (the first to the last day of the month)."""
+    jy, jm, jd = pg_usage.date_to_jalali(today)
+    return {"today": today.isoformat(), "today_j": f"{jd} {pg_usage.JALALI_MONTHS[jm - 1]} {jy}", "today_g": f"{today.day} {GREG_MONTHS[today.month - 1]} {today.year}", "weekday": WEEKDAYS[today.weekday()],
+            "span_j": _span(pg_usage.date_to_jalali(first), pg_usage.date_to_jalali(last), pg_usage.JALALI_MONTHS),
+            "span_g": _span((first.year, first.month, first.day), (last.year, last.month, last.day), GREG_MONTHS)}
+
+
 def summary(month: str = "", recompute: bool = False, now: dt.datetime | None = None) -> dict:
     """The month asked for (the current one by default). A finished month comes from the history when it was frozen; the first time it is seen with its traffic it is frozen."""
     doc = settings.get("costs")
     today = pg_usage.tehran_date(now or dt.datetime.now(dt.timezone.utc))
     key = month or key_of(today, doc["calendar"])
-    _first, last = month_bounds(key)
+    first, last = month_bounds(key)
 
     current = key_of(today, doc["calendar"])
+    info = day_info(today, first, last)
 
-    if last < today and key in doc["frozen"] and not recompute:
-        return {**doc["frozen"][key], "frozen": True, "current": current}
+    if last < today and not recompute and _final(doc["frozen"].get(key), last):
+        return {**doc["frozen"][key], "frozen": True, "current": current, **info}
 
     s = _one(doc, key, now)
     s["frozen"], s["current"] = False, current
+    s.update(info)
 
     if not s["open"] and s["traffic_ok"] and doc["items"] and s["total"] and s["gb"]:          # (a month with no traffic at all is not frozen: the panel may have been empty just then)
-        _freeze(key, s)
+        _freeze(key, s, now)
         s["frozen"] = True
     elif s["open"] and doc["items"]:
         prev = shift_key(key, -1)
 
-        if prev not in doc["frozen"]:                                              # the month that just ended is put in the history the first time the current one is looked at
+        prev_last = month_bounds(prev)[1]
+
+        if prev_last < today and not _final(doc["frozen"].get(prev), prev_last):   # the month that just ended is put in the history the first time the current one is looked at
             try:
                 p = _one(doc, prev, now)
 
                 if p["traffic_ok"] and p["total"] and p["gb"]:
-                    _freeze(prev, p)
+                    _freeze(prev, p, now)
             except (ValueError, RuntimeError, OSError) as e:
                 log.info("costs: the last month was not frozen: %s", str(e)[:100])
 

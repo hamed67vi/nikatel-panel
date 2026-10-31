@@ -21,13 +21,14 @@ const csGb = gb => gb >= 1024 ? `${csN(gb / 1024, 2)} TB` : `${csN(gb, 1)} GB`;
 const csShift = (key, n) => { const [y, m] = key.split("-").map(Number), i = y * 12 + (m - 1) + n; return String(Math.floor(i / 12)).padStart(4, "0") + "-" + String(i % 12 + 1).padStart(2, "0"); };
 const csAgo = t => { const m = Math.round((Date.now() / 1000 - t) / 60); return m < 1 ? "just now" : m < 90 ? `${m} min ago` : `${Math.round(m / 60)} h ago`; };
 const csErr = e => toast("✕ " + e.message, "bad");
+const csTaxed = it => it.amount * (1 + (it.tax || 0) / 100);                                  // (the tax is in every price the page shows: it is not written, it is just counted)
+const csAmt = (v, cur) => `${csN(v, v < 100 ? 2 : 0)} ${CS_CUR[cur] || cur}`;
 const csPrice = it => {
   const unit = {monthly: "/month", yearly: "/year", once: it.months > 1 ? ` over ${it.months} months` : "", per_tb: "/TB", per_gb: "/GB"}[it.kind] || "";
   const free = it.included ? ` · first ${csN(it.included, 2)} ${it.kind === "per_tb" ? "TB" : "GB"} free` : "";
-  const tax = it.tax ? ` + ${csN(it.tax, 2)}% tax` : "";
   const dirs = it.kind === "per_tb" || it.kind === "per_gb" ? (it.dirs === "both" ? " · both ways" : " · sent only") : "";
   const quota = it.quota ? ` · ${csN(it.quota, 2)} TB in the plan` : "";
-  return `${csN(it.amount, it.amount < 100 ? 2 : 0)} ${CS_CUR[it.cur] || it.cur}${tax}${unit}${free}${dirs}${quota}`;
+  return `${csAmt(csTaxed(it), it.cur)}${unit}${free}${dirs}${quota}`;
 };
 const csGroupSum = (s, keys) => keys.reduce((a, k) => { const g = s.by_group[k] || {so_far: 0, month: 0}; return {so_far: a.so_far + g.so_far, month: a.month + g.month}; }, {so_far: 0, month: 0});
 const csSectionOf = group => (CS_SECTIONS.find(t => t[2] && t[2].includes(group)) || CS_SECTIONS[0])[0];
@@ -47,14 +48,26 @@ function csRatesStatus(d) {
   if (d.rates_stale || age > 5400) return {cls: "warn", text: "Live · the prices are old", sub: `checked ${csAgo(d.rates_checked)}`};
   return {cls: "ok", text: "Live from chand.online", sub: `checked ${csAgo(d.rates_checked)}${d.rates_at ? ` · price of ${d.rates_at}` : ""}`};
 }
+const csPct = p => p ? `<em class="${p > 0 ? "up" : "dn"}">${p > 0 ? "▲" : "▼"} ${csN(Math.abs(p), 2)}%</em>` : "";
+function csToday(d, s) {                                                                       // today in both calendars: the one the month is counted in first
+  if (!s.today_j) return "";
+  const g = d.calendar === "gregorian", a = g ? s.today_g : s.today_j, b = g ? s.today_j : s.today_g;
+  return `<div class="cs-today" title="Today, in both calendars"><small>Today · ${esc(s.weekday || "")}</small><b>${esc(a)}</b><small>${esc(b)}</small></div>`;
+}
 function csBar(d, s) {
-  const isNow = s.month === s.current, st = csRatesStatus(d);
-  const chip = code => { const v = d.rates[code], i = (d.rates_info || {})[code], pct = i && i.pct;
-    return `<div class="cs-chip" title="1 ${code} in toman${i && i.at ? " · the price of " + esc(i.at) : ""}. A higher rate makes what you pay in ${code} cost more toman."><span class="cs-sym">${CS_SYM[code]}</span><b>${v ? csN(v) : "—"}</b><small>${code}</small>${pct ? `<em class="${pct > 0 ? "up" : "dn"}">${pct > 0 ? "▲" : "▼"} ${csN(Math.abs(pct), 2)}%</em>` : ""}</div>`; };
-  return `<div class="card cs-bar"><div class="cs-nav"><button class="sm" onclick="csMonth(-1)" aria-label="The month before">◀</button><b>${esc(s.label)}</b><button class="sm" onclick="csMonth(1)" aria-label="The month after" ${isNow ? "disabled" : ""}>▶</button>`
+  const isNow = s.month === s.current, st = csRatesStatus(d), info = d.rates_info || {};
+  const chip = code => { const v = d.rates[code], i = info[code];
+    return `<div class="cs-chip" title="1 ${code} in toman${i && i.at ? " · the price of " + esc(i.at) : ""}. A higher rate makes what you pay in ${code} cost more toman."><span class="cs-sym">${CS_SYM[code]}</span><b>${v ? csN(v) : "—"}</b><small>${code}</small>${csPct(i && i.pct)}</div>`; };
+  const cross = d.rates.USD && d.rates.TRY ? d.rates.USD / d.rates.TRY : 0;                      // lira for one dollar = (toman of a dollar) / (toman of a lira)
+  const pu = info.USD && info.USD.pct, pt = info.TRY && info.TRY.pct;
+  const crossPct = typeof pu === "number" && typeof pt === "number" ? ((1 + pu / 100) / (1 + pt / 100) - 1) * 100 : 0;
+  const crossChip = cross ? `<div class="cs-chip" title="How many lira one dollar buys: the dollar in toman divided by the lira in toman. A higher number is a weaker lira."><span class="cs-sym">$ = ₺</span><b>${csN(cross, 2)}</b><small>USD/TRY</small>${csPct(crossPct).replace(/class="(up|dn)"/, 'class="flat"')}</div>` : "";
+  const other = d.calendar === "gregorian" ? s.span_j : s.span_g;                                // the days of this month in the other calendar
+  return `<div class="card cs-bar"><div class="cs-nav"><button class="sm" onclick="csMonth(-1)" aria-label="The month before">◀</button><span class="cs-mon"><b>${esc(s.label)}</b>${other ? `<small title="The same days in the ${d.calendar === "gregorian" ? "Jalali" : "Gregorian"} calendar">${esc(other)}</small>` : ""}</span><button class="sm" onclick="csMonth(1)" aria-label="The month after" ${isNow ? "disabled" : ""}>▶</button>`
     + `${isNow ? "" : '<button class="sm" onclick="csOpen(\'\')">This month</button>'}${!s.open && s.frozen ? '<button class="sm" onclick="csRecompute()" title="Make this month again from the prices as they are now">Recalculate</button>' : ""}</div>`
     + `<div class="cs-seg" role="group" aria-label="The calendar of a month"><button class="${d.calendar === "jalali" ? "on" : ""}" onclick="csSetCal('jalali')">Jalali</button><button class="${d.calendar === "gregorian" ? "on" : ""}" onclick="csSetCal('gregorian')">Gregorian</button></div>`
-    + `<span class="cs-fill"></span><div class="cs-rates">${chip("USD")}${chip("EUR")}${chip("TRY")}<div class="cs-live"><i class="cs-dot ${st.cls}"></i><span><b>${esc(st.text)}</b><small>${esc(st.sub)}</small></span></div>`
+    + csToday(d, s)
+    + `<span class="cs-fill"></span><div class="cs-rates">${chip("USD")}${chip("EUR")}${chip("TRY")}${crossChip}<div class="cs-live"><i class="cs-dot ${st.cls}"></i><span><b>${esc(st.text)}</b><small>${esc(st.sub)}</small></span></div>`
     + `<button class="sm cs-ic" onclick="csFetchRates()" title="Read today's rates from chand.online now" aria-label="Read the rates now">↻</button><button class="sm cs-ic" onclick="csSettings()" title="Rates, the shop bot" aria-label="Settings">⚙</button></div></div>`;
 }
 
@@ -114,8 +127,8 @@ function csOverview(d, s) {
 }
 
 /* ---- Expenses: all of them, and a tab for each section of the cost */
-function csItemsTable(d, s, keys) {
-  const list = s.items.filter(r => keys.includes(r.group)), many = keys.length > 1;
+function csItemsTable(d, s, keys, pick) {
+  const list = s.items.filter(r => keys.includes(r.group) && (!pick || pick(r))), many = keys.length > 1;
   if (!list.length) return '<div class="mut">No prices here yet. Press “＋ Add a price”.</div>';
   const rows = list.map(r => {
     const it = d.items.find(x => x.id === r.id) || r;
@@ -129,6 +142,42 @@ function csItemsTable(d, s, keys) {
 }
 const csNodesTable = s => s.by_node.length ? `<div class="cs-scroll"><table class="tbl"><thead><tr><th>Node</th><th class="r">Traffic</th><th class="r">Cost so far</th><th class="r">1 GB</th></tr></thead><tbody>${s.by_node.map(n => `<tr><td><b>${esc(n.name)}</b></td><td class="r">${csGb(n.gb)}</td><td class="r">${n.priced ? csMoney(n.so_far, false, true) : '<span class="cs-none" title="No price is tied to this node yet: add one and choose this server or node">no price yet</span>'}</td><td class="r">${n.per_gb != null && n.priced ? csMoney(n.per_gb, true, true) : "—"}</td></tr>`).join("")}</tbody></table></div>` : '<div class="mut">No traffic was recorded in this month.</div>';
 const csServersTable = s => (s.by_server || []).length ? `<div class="cs-scroll"><table class="tbl"><thead><tr><th>Server</th><th class="r">Sent</th><th class="r">Received</th><th class="r">Cost so far</th><th class="r">1 GB sent</th></tr></thead><tbody>${s.by_server.map(n => `<tr><td><b>${esc(n.name)}</b></td><td class="r">${csGb(n.out_gb)}</td><td class="r">${csGb(n.in_gb)}</td><td class="r">${n.priced ? csMoney(n.so_far, false, true) : '<span class="cs-none" title="No price is tied to this server yet">no price yet</span>'}</td><td class="r">${n.per_gb != null ? csMoney(n.per_gb, true, true) : "—"}</td></tr>`).join("")}</tbody></table></div>` : '<div class="mut">No Iran server has samples yet.</div>';
+/* a card for each server: its rent, its price per TB, and what the month cost (the traffic it carried + the rent) */
+const csIsTraffic = r => r.kind === "per_tb" || r.kind === "per_gb";
+const csSum = (rows, f) => rows.reduce((a, r) => a + (r[f] || 0), 0);
+function csCardRows(s, keys) {                                      // -> {cards: [[server name, its rows]], rest: the rows that belong to no server}, the dearest server first
+  const list = s.items.filter(r => keys.includes(r.group)), alias = {}, by = new Map(), rest = [];
+  list.forEach(r => { if (r.server && r.node && r.node !== "*") alias[r.node.toLowerCase()] = r.server; });          // (a price tied to the node of a server goes on that server's card)
+  list.forEach(r => {
+    const name = r.server || (r.node && r.node !== "*" ? alias[r.node.toLowerCase()] || r.node : "");
+    if (!name) { rest.push(r); return; }
+    const k = name.toLowerCase(); if (!by.has(k)) by.set(k, [name, []]);
+    by.get(k)[1].push(r);
+  });
+  return {cards: [...by.values()].sort((a, b) => csSum(b[1], "month") - csSum(a[1], "month")), rest};
+}
+function csCard(d, s, name, rows) {
+  const rent = rows.filter(r => !csIsTraffic(r)), tr = rows.filter(csIsTraffic), f = s.open && s.elapsed ? s.days / s.elapsed : 1;
+  const itOf = r => d.items.find(x => x.id === r.id) || r;
+  const acts = r => `<span class="cs-act"><button class="sm" onclick="csEdit(${r.id})" title="Change this price">Edit</button><button class="sm danger" onclick="csDel(${r.id})" title="Remove this price">✕</button></span>`;
+  const toman = (it, k = 1) => it.cur === "IRT" || !d.rates[it.cur] ? "" : ` <small class="cs-usd">≈ ${csN(csTaxed(it) * k * d.rates[it.cur])} toman</small>`;
+  const tip = it => `${csAmt(it.amount, it.cur)}${it.tax ? ` + ${csN(it.tax, 2)}% tax` : ""}`;                  // (what was typed, only as a tooltip)
+  const mark = r => r.state === "no_rate" ? ' <span class="pill err" title="The rate of this currency is not there yet">no rate</span>' : r.state === "needs_node" ? ' <span class="pill warn" title="Choose the node whose traffic is priced">choose a node</span>' : r.state === "idle" ? ' <span class="mut">not active</span>' : "";
+  const rentHtml = rent.length ? rent.map(r => { const it = itOf(r);
+    return `<div class="cs-ln"><span><b title="${esc(tip(it))}">${esc(csPrice(it))}</b>${toman(it)}${rent.length > 1 ? `<small class="cs-note">${esc(r.name)}</small>` : ""}${it.note ? `<small class="cs-note">${esc(it.note)}</small>` : ""}${r.quota ? `<small class="cs-note ${r.quota.pct >= 100 ? "cs-over" : r.quota.pct >= 90 ? "cs-near" : ""}">uses ${r.quota.pct}% of ${csN(r.quota.tb, 2)} TB</small>` : ""}${mark(r)}</span>${acts(r)}</div>`; }).join("") : '<div class="mut">No rent price yet</div>';
+  const trHtml = tr.length ? tr.map(r => { const it = itOf(r), k = it.kind === "per_gb" ? 1000 : 1;
+    return `<div class="cs-ln"><span><b title="${esc(tip(it))}">${esc(csAmt(csTaxed(it) * k, it.cur))} / TB</b>${toman(it, k)}<small class="cs-note">${it.dirs === "both" ? "sent and received" : "sent only"}${it.included ? ` · first ${csN(it.included, 2)} ${it.kind === "per_tb" ? "TB" : "GB"} free` : ""}</small>${mark(r)}</span>${acts(r)}</div>`; }).join("") : '<div class="mut">Not priced by traffic</div>';
+  const names = [name, ...rows.map(r => r.node)].map(x => String(x || "").toLowerCase()), sr = (s.by_server || []).find(x => names.includes(x.name.toLowerCase())), nr = (s.by_node || []).find(x => names.includes(x.name.toLowerCase()));
+  const gb = tr.length ? Math.max(0, ...tr.map(r => r.gb || 0)) : nr ? nr.gb : null;                  // (a server nobody prices by traffic still shows what its node carried)
+  const t = {sf: csSum(tr, "so_far"), mo: csSum(tr, "month")}, r0 = {sf: csSum(rent, "so_far"), mo: csSum(rent, "month")}, all = {sf: t.sf + r0.sf, mo: t.mo + r0.mo};
+  const line = (label, a, b, cls = "") => `<tr class="${cls}"><td>${label}</td><td class="r">${a}</td><td class="r">${b}</td></tr>`;
+  const month = `<table class="cs-mini"><thead><tr><th></th><th class="r">So far</th><th class="r">${s.open ? "Whole month" : "Month"}</th></tr></thead><tbody>`
+    + line("Traffic used", gb == null ? "—" : csGb(gb), gb == null ? "—" : csGb(gb * f))
+    + line("Traffic cost", csN(t.sf), csN(t.mo)) + line("Rent", csN(r0.sf), csN(r0.mo)) + line("Total · toman", csN(all.sf), csN(all.mo), "cs-sum") + `</tbody></table>`
+    + (sr ? `<small class="cs-note">sent ${csGb(sr.out_gb)} · received ${csGb(sr.in_gb)} (estimated)</small>` : "");
+  return `<div class="card cs-srv"><div class="cs-srv-h"><h3>${esc(name)}</h3><span class="cs-srv-t"><b>${csMoney(all.mo)}</b><small>${s.open ? "the whole month" : "the month"}</small></span></div>`
+    + `<div class="cs-srv-g"><div class="cs-blk"><small>Server</small>${rentHtml}</div><div class="cs-blk"><small>Price per TB of traffic</small>${trHtml}</div><div class="cs-blk"><small>Traffic and cost</small>${month}</div></div></div>`;
+}
 const CS_HINT = {cdn: "Type each invoice or monthly price of your CDN here (a plan per domain, the traffic it bills).", domain: "A domain is a price per year: the page counts a twelfth of it every month.", other: "Services, salaries, the unexpected: anything that is paid every month or once."};
 function csSection(d, s, sec) {
   const [k, name, keys] = sec, g = csGroupSum(s, keys), share = s.total ? g.month * 100 / s.total : 0;
@@ -138,8 +187,18 @@ function csSection(d, s, sec) {
     + csTile(`${esc(name)} · ${s.open ? "the whole month" : "the month"}`, csMoney(g.month), s.open ? "if the traffic goes on like this" : "final")
     + csTile("Share of all expenses", `${csN(share, 1)}%`, `of ${csShort(s.total)} toman`)
     + csTile("Of the price of one GB", csMoney(gbPrice, true), "what this section adds to one GB so far", "cs-big") + `</div>`;
-  const extra = k === "foreign" ? `<div class="card"><h3>Each node</h3>${csNodesTable(s)}</div>` : k === "iran" ? `<div class="card"><h3>Each Iran server<span class="sp"></span><small class="mut">the traffic is an estimate from the panel's samples of the last days</small></h3>${csServersTable(s)}</div>` : "";
-  return tiles + csWarn(s) + extra + `<div class="card"><h3>Your prices · ${esc(name)}<span class="sp"></span><button class="pri sm" onclick="csEdit(0, '${keys[0]}')">＋ Add a price</button></h3>${CS_HINT[k] ? `<div class="mut cs-sec-hint">${CS_HINT[k]}</div>` : ""}${csItemsTable(d, s, keys)}</div>`;
+  const add = `<button class="pri sm" onclick="csEdit(0, '${keys[0]}')">＋ Add a price</button>`;
+
+  if (k === "foreign" || k === "iran") {                                       // a card for each server; what has no server (and the traffic nobody prices) under them
+    const {cards, rest} = csCardRows(s, keys);
+    const none = k === "foreign" ? s.by_node.filter(n => !n.priced) : (s.by_server || []).filter(n => !n.priced);
+    const head = `<div class="card cs-addbar"><h3>${esc(name)}<span class="sp"></span><small class="mut">${k === "iran" ? "the traffic is an estimate from the panel's samples of the last days" : "a card for each server"}</small>${add}</h3></div>`;
+    return tiles + csWarn(s) + head + (cards.length ? `<div class="cs-cards">${cards.map(([n, rows]) => csCard(d, s, n, rows)).join("")}</div>` : '<div class="card mut">No prices here yet. Press “＋ Add a price”: the rent of a server, then its price per TB.</div>')
+      + (rest.length ? `<div class="card"><h3>Other prices · ${esc(name)}</h3>${csItemsTable(d, s, keys, r => rest.includes(r))}</div>` : "")
+      + (none.length ? `<div class="card"><h3>Traffic with no price yet<span class="sp"></span><small class="mut">add the rent or the price per TB of these servers</small></h3>${k === "foreign" ? csNodesTable({by_node: none}) : csServersTable({by_server: none})}</div>` : "");
+  }
+
+  return tiles + csWarn(s) + `<div class="card"><h3>Your prices · ${esc(name)}<span class="sp"></span>${add}</h3>${CS_HINT[k] ? `<div class="mut cs-sec-hint">${CS_HINT[k]}</div>` : ""}${csItemsTable(d, s, keys)}</div>`;
 }
 function csExpenses(d, s) {
   const sec = CS_SECTIONS.find(t => t[0] === cs.sub) || CS_SECTIONS[0];
@@ -182,7 +241,9 @@ window.csRecompute = async () => {
 };
 window.csSetCal = async cal => {
   if (cs.d.calendar === cal) return;
-  try { await api("/api/costs/settings", {method: "PUT", body: JSON.stringify({calendar: cal})}); cs.month = ""; refresh(); } catch (e) { csErr(e); }
+  document.querySelectorAll(".cs-seg button").forEach(b => b.classList.toggle("on", b.textContent.trim().toLowerCase() === cal));          // (at once: the month is read again, it can take a few seconds)
+  const bar = $(".cs-bar"); if (bar) bar.classList.add("cs-wait");
+  try { await api("/api/costs/settings", {method: "PUT", body: JSON.stringify({calendar: cal})}); cs.month = ""; refresh(); } catch (e) { if (bar) bar.classList.remove("cs-wait"); csDraw(); csErr(e); }
 };
 window.csFetchRates = async () => {
   try { const r = await api("/api/costs/rates/fetch", {method: "POST"}); toast(`✓ 1 USD = ${csN(r.rates.USD)} · 1 EUR = ${csN(r.rates.EUR)} · 1 lira = ${csN(r.rates.TRY)} toman`, "ok"); refresh(); } catch (e) { csErr(e); }

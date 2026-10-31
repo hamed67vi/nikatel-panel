@@ -81,6 +81,8 @@ def test_a_month_price_is_counted_by_the_days_that_have_passed_and_the_whole_mon
     r = run([item()], today=D(2026, 10, 16))
     assert (r["days"], r["elapsed"], r["open"]) == (31, 16, True) and r["so_far"] == 1600 and r["total"] == 3100
     r = run([item()], today=D(2026, 10, 31))
+    assert (r["elapsed"], r["open"]) == (31, True) and r["so_far"] == r["total"] == 3100                # the last day is still going on: the month is not over until the next day
+    r = run([item()], today=D(2026, 11, 1))
     assert (r["elapsed"], r["open"]) == (31, False) and r["so_far"] == r["total"] == 3100
     r = run([item()], today=D(2026, 9, 20))
     assert r["elapsed"] == 0 and r["so_far"] == 0 and r["total"] == 3100                    # a month that has not begun: nothing spent yet
@@ -353,6 +355,38 @@ def test_a_finished_month_is_frozen_the_first_time_it_is_seen_and_a_new_price_do
     assert new["total"] == 62000 and costs.history()[0]["total"] == 62000
 
 
+def test_a_month_is_not_frozen_on_its_last_day_and_one_saved_that_way_is_made_again(monkeypatch):
+    _stub_traffic(monkeypatch)
+    costs.save_settings(None, "gregorian")
+    costs.add_item({"name": "TR1", "kind": "monthly", "amount": 31000})
+    last_day = dt.datetime(2026, 10, 31, 15, tzinfo=UTC)
+    s = costs.summary(now=last_day)
+    assert s["month"] == "2026-10" and s["open"] and not s["frozen"] and "2026-10" not in {h["month"] for h in costs.history()}          # (the evening's traffic is not in yet)
+    s = costs.summary("2026-11", now=last_day)                                                    # a month that has not begun must not freeze the one that is still going
+    assert s["open"] and "2026-10" not in {h["month"] for h in costs.history()}
+    early = {**costs.summary("2026-09", now=last_day), "total": 1, "frozen_at": int(last_day.timestamp())}      # what 1.69.173 saved on a last day: frozen_at is ON the day
+    costs._freeze("2026-10", early, last_day)
+    assert costs.summary("2026-10", now=last_day)["total"] == 31000                                # still going: made again
+    nov = dt.datetime(2026, 11, 1, 9, tzinfo=UTC)
+    s = costs.summary("2026-10", now=nov)
+    assert not s["open"] and s["frozen"] and s["total"] == 31000                                   # the day after: made again and saved for good (not the early copy)
+    assert costs.summary("2026-10", now=nov + dt.timedelta(days=3))["frozen"]
+
+
+def test_the_bar_says_today_in_both_calendars_and_the_days_of_the_month_in_the_other_one(monkeypatch):
+    _stub_traffic(monkeypatch)
+    costs.save_settings(None, "gregorian")
+    s = costs.summary(now=dt.datetime(2026, 10, 31, 15, tzinfo=UTC))
+    assert (s["today"], s["today_j"], s["today_g"], s["weekday"]) == ("2026-10-31", "9 Aban 1405", "31 Oct 2026", "Saturday")
+    assert s["span_g"] == "1 – 31 Oct 2026" and s["span_j"] == "9 Mehr – 9 Aban 1405"
+    j = costs.summary("1405-08", now=dt.datetime(2026, 10, 31, 15, tzinfo=UTC))
+    assert j["label"] == "Aban 1405" and j["span_j"] == "1 – 30 Aban 1405" and j["span_g"] == "23 Oct – 21 Nov 2026" and j["today_j"] == "9 Aban 1405"
+    assert costs.day_info(D(2026, 12, 25), D(2026, 12, 25), D(2027, 1, 22))["span_g"] == "25 Dec 2026 – 22 Jan 2027"
+    costs.add_item({"name": "TR1", "kind": "monthly", "amount": 31000})
+    frozen = costs.summary("2026-09", now=dt.datetime(2026, 10, 31, 15, tzinfo=UTC))
+    assert frozen["today_j"] == "9 Aban 1405" and frozen["span_g"] == "1 – 30 Sep 2026"
+
+
 def test_a_month_without_traffic_or_without_prices_is_not_frozen(monkeypatch):
     _stub_traffic(monkeypatch, gb=0)
     costs.save_settings(None, "gregorian")
@@ -615,7 +649,7 @@ def test_a_refused_connection_is_tried_again_and_the_connection_is_kept_ten_minu
     (d / "income_key").write_text("not a real key", encoding="utf-8")
     refused = subprocess.CompletedProcess([], 255, "", "ssh: connect to host x port 22: Connection refused\n")
     good = subprocess.CompletedProcess([], 0, '{"ok": true}\n', "")
-    seq, seen, slept = [refused, refused, good], [], []
+    seq, seen, slept = [refused] * (costs.INCOME_TRIES - 1) + [good], [], []
 
     def run(argv, **kw):
         seen.append(argv)
@@ -623,11 +657,11 @@ def test_a_refused_connection_is_tried_again_and_the_connection_is_kept_ten_minu
 
     monkeypatch.setattr(costs.subprocess, "run", run)
     monkeypatch.setattr(costs.time, "sleep", lambda s: slept.append(s))
-    assert costs._income_ssh("192.0.2.20", 22, "root", 1, 2) == '{"ok": true}\n' and len(seen) == 3 and slept == [costs.INCOME_WAIT] * 2
+    assert costs._income_ssh("192.0.2.20", 22, "root", 1, 2) == '{"ok": true}\n' and len(seen) == costs.INCOME_TRIES and slept == [costs.INCOME_WAIT] * (costs.INCOME_TRIES - 1)
     assert "ControlMaster=auto" in seen[0] and "ControlPersist=600" in seen[0] and any(x.startswith("ControlPath=") and x.endswith("income-%C") for x in seen[0])
     seen.clear()
     slept.clear()
-    seq[:] = [refused, refused, refused]
+    seq[:] = [refused] * costs.INCOME_TRIES
 
     with pytest.raises(RuntimeError, match="refused"):
         costs._income_ssh("192.0.2.20", 22, "root", 1, 2)
@@ -665,6 +699,24 @@ def test_when_the_bot_host_cannot_be_reached_the_last_good_read_is_shown_old_and
 
     with pytest.raises(RuntimeError, match="refused"):
         costs.bot_income(D(2026, 10, 1), D(2026, 10, 10), now)
+
+
+def test_a_bot_host_that_just_failed_is_not_asked_again_for_another_month(monkeypatch):
+    _bot(monkeypatch)
+    fails = []
+
+    def refuse(*a):
+        fails.append(a)
+        raise RuntimeError("the bot host refused: x")
+
+    monkeypatch.setattr(costs, "_income_ssh", refuse)
+    now = dt.datetime(2026, 10, 10, 12, tzinfo=UTC)
+
+    for first, upto in ((D(2026, 10, 1), D(2026, 10, 10)), (D(2026, 9, 1), D(2026, 9, 30)), (D(2026, 8, 1), D(2026, 8, 31))):          # a click on another month must not wait for the refusal again
+        with pytest.raises(RuntimeError, match="refused"):
+            costs.bot_income(first, upto, now)
+
+    assert len(fails) == 1
 
 
 def test_the_income_of_a_finished_range_is_kept_for_good(monkeypatch):
@@ -717,6 +769,15 @@ def test_the_page_is_in_the_menu_loaded_titled_and_asks_only_routes_that_exist(c
     for method, path in (("GET", "/api/costs"), ("GET", "/api/costs/summary"), ("PUT", "/api/costs/settings"), ("POST", "/api/costs/rates/fetch"), ("POST", "/api/costs/items"), ("PUT", "/api/costs/items/{item_id}"), ("DELETE", "/api/costs/items/{item_id}")):
         assert method.lower() in spec.get(path, {}), (method, path)
         assert path.replace("/{item_id}", "") in js
+
+
+def test_the_bar_shows_today_and_the_dollar_against_the_lira_and_each_server_has_a_card_without_the_tax_written():
+    js = (WEB / "costs.js").read_text(encoding="utf-8")
+    assert "USD/TRY" in js and "d.rates.USD / d.rates.TRY" in js and "s.today_j" in js and "s.today_g" in js and "s.span_g" in js and "s.span_j" in js
+    assert "function csCard(" in js and "csCardRows(" in js and "Price per TB of traffic" in js and '"Traffic used"' in js and '"Traffic cost"' in js and '"Rent"' in js
+    price = js[js.index("const csPrice"):js.index("const csGroupSum")]
+    assert "tax" not in price.replace("csTaxed", "")                                                              # the price line is the price with its tax in it: the tax is not written
+    assert js.count("% tax") == 1                                                                                 # (only the tooltip says what was typed)
 
 
 def test_the_page_never_writes_a_price_without_asking_and_escapes_what_the_owner_typed():

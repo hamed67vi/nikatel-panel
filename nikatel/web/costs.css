@@ -6,6 +6,9 @@ html body #page .costs h3 small { font-weight: 400; font-size: 12px; }
 /* the bar: the month, the calendar, the rates of the day */
 html body #page .cs-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; padding: 10px 14px; }
 html body #page .cs-nav { display: flex; align-items: center; gap: 8px; } html body #page .cs-nav b { min-width: 120px; text-align: center; font-size: 15px; }
+html body #page .cs-mon { display: flex; flex-direction: column; align-items: center; min-width: 120px; line-height: 1.25; } html body #page .cs-mon b { min-width: 0; } html body #page .cs-mon small { color: var(--mut); font-size: 11px; white-space: nowrap; }
+html body #page .cs-today { display: flex; flex-direction: column; line-height: 1.25; padding: 2px 12px; border-left: 2px solid var(--acc-2); } html body #page .cs-today b { font-size: 14px; } html body #page .cs-today small { color: var(--mut); font-size: 11px; white-space: nowrap; }
+html body #page .cs-bar.cs-wait { opacity: .6; pointer-events: none; transition: opacity .15s; }
 html body #page .cs-fill { flex: 1 1 0; min-width: 0; }
 html body #page .cs-seg { display: inline-flex; flex: none; gap: 2px; padding: 3px; border-radius: 10px; background: rgba(255,255,255,.045); border: 1px solid var(--line); }
 html body #page .cs-seg button { border: 0; background: transparent; color: var(--mut); padding: 5px 12px; border-radius: 8px; font-size: 12.5px; cursor: pointer; }
@@ -13,7 +16,7 @@ html body #page .cs-seg button.on { background: var(--panel-2); color: var(--tex
 html body #page .cs-rates { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; }
 html body #page .cs-chip { display: inline-flex; align-items: baseline; gap: 6px; padding: 6px 11px; border-radius: 999px; background: var(--panel); border: 1px solid var(--line); white-space: nowrap; }
 html body #page .cs-chip .cs-sym { color: var(--acc-2); font-weight: 700; } html body #page .cs-chip b { font-size: 14px; } html body #page .cs-chip small { color: var(--mut); font-size: 11px; }
-html body #page .cs-chip em { font-style: normal; font-size: 11px; } html body #page .cs-chip em.up { color: var(--bad); } html body #page .cs-chip em.dn { color: var(--ok); }
+html body #page .cs-chip em { font-style: normal; font-size: 11px; } html body #page .cs-chip em.up { color: var(--bad); } html body #page .cs-chip em.dn { color: var(--ok); } html body #page .cs-chip em.flat { color: var(--mut); }      /* (the dollar against the lira is no cost of yours: no red, no green) */
 html body #page .cs-live { display: inline-flex; align-items: center; gap: 8px; padding: 0 4px; }
 html body #page .cs-live span { display: flex; flex-direction: column; line-height: 1.25; } html body #page .cs-live b { font-size: 12.5px; font-weight: 600; } html body #page .cs-live small { color: var(--mut); font-size: 11px; }
 html body #page .cs-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--unk); flex: none; }
@@ -56,6 +59,17 @@ html body #page .cs-act { display: inline-flex; gap: 6px; justify-content: flex-
 html body #page .cs-scroll { max-height: 560px; overflow-y: auto; padding-right: 2px; }
 html body #page .cs-items { width: 100%; }
 html body #page .cs-items td:nth-child(1), html body #page .cs-items td:nth-child(3) { white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere; }      /* (a name and a price are read whole: the cell grows taller, it is not cut) */
+/* a card for each server: its rent | its price per TB | the month (traffic used, its cost, the rent, the total) */
+html body #page .cs-cards { display: flex; flex-direction: column; gap: 12px; }
+html body #page .cs-addbar h3 { margin: 0; } html body #page .cs-addbar h3 button { flex: none; white-space: nowrap; } html body #page .cs-addbar h3 small { flex: 1 1 0; min-width: 0; text-align: right; }
+html body #page .cs-srv-h { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 10px; } html body #page .cs-srv-h h3 { margin: 0; font-size: 16px; }
+html body #page .cs-srv-t { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.2; } html body #page .cs-srv-t b { font-size: 18px; color: var(--acc-2); } html body #page .cs-srv-t small { color: var(--mut); font-size: 11px; }
+html body #page .cs-srv-g { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.25fr); gap: 12px; }
+html body #page .cs-blk { display: flex; flex-direction: column; gap: 8px; min-width: 0; padding: 10px 12px; border-radius: var(--r-s); background: var(--panel-2); border: 1px solid var(--line); }
+html body #page .cs-blk > small { color: var(--mut); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
+html body #page .cs-ln { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; } html body #page .cs-ln > span:first-child { display: flex; flex-direction: column; min-width: 0; line-height: 1.35; } html body #page .cs-ln .cs-act { flex: none; flex-direction: row; } html body #page .cs-ln b { font-size: 14px; overflow-wrap: anywhere; }
+html body #page .cs-mini { width: 100%; border-collapse: collapse; font-size: 13px; } html body #page .cs-mini th { color: var(--mut); font-weight: 500; font-size: 11px; text-align: left; padding: 0 0 4px; } html body #page .cs-mini td { padding: 3px 0; } html body #page .cs-mini .r { text-align: right; white-space: nowrap; }
+html body #page .cs-mini .cs-sum td { border-top: 1px solid var(--line); padding-top: 6px; font-weight: 700; color: var(--acc-2); }
 html body #page .cs-hist { display: flex; flex-direction: column; }
 html body #page .cs-h { display: grid; grid-template-columns: minmax(110px, 1.2fr) 2fr 1fr 1.4fr; gap: 10px; align-items: baseline; padding: 8px 4px; border-bottom: 1px solid var(--line); cursor: pointer; font-size: 13px; }
 html body #page .cs-h:hover { background: var(--panel); } html body #page .cs-h em { font-style: normal; color: var(--acc-2); text-align: right; } html body #page .cs-h small { color: var(--mut); }
@@ -68,7 +82,7 @@ html body .cs-form .cs-wide { grid-column: 1 / -1; } html body .cs-form .cs-chec
 html body .cs-form .cs-help { grid-column: 1 / -1; color: var(--mut); font-size: 12.5px; min-height: 18px; }
 html body .cs-form .cs-btns { grid-column: 1 / -1; display: flex; gap: 10px; justify-content: flex-end; }
 @media (max-width: 900px) {
-  html body #page .cs-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } html body #page .cs-two { grid-template-columns: minmax(0, 1fr); } html body #page .cs-fill { display: none; }
+  html body #page .cs-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } html body #page .cs-two { grid-template-columns: minmax(0, 1fr); } html body #page .cs-fill { display: none; } html body #page .cs-srv-g { grid-template-columns: minmax(0, 1fr); }
   html body #page .costs .cs-items { display: block; overflow-x: auto; }
 }
 @media (max-width: 560px) {
