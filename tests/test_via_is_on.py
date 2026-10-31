@@ -44,7 +44,8 @@ def test_a_server_reached_through_a_jump_and_looked_at_lately_stays_on_when_the_
     pulse.run()
     pulse._slow_until.clear()
     pulse.run()
-    assert _row(sid) == (True, "") and pulse._miss.get(sid, 0) == 0
+    online, err = _row(sid)
+    assert online is True and err.startswith(pulse.IRAN_ONLY) and pulse._miss.get(sid, 0) == 0          # (the row says why it is on)
 
 
 def test_it_is_not_asked_every_three_seconds(monkeypatch):

@@ -225,6 +225,17 @@ def sample_server(server_id: int) -> None:
 
                 return
 
+            if pulse.proven(srv.id) and "key is not accepted" not in str(e) and "host key" not in str(e):
+                # somebody inside Iran sees it answer (services/vantage.py): the panel's host and its jump servers cannot open an SSH session to it, it is not "offline"
+                srv.last_error = f"{pulse.IRAN_ONLY} ({pulse.proof_how(srv.id)}); the SSH session of the panel fails: {e}"[:300]
+
+                if was_online is not True:
+                    srv.online = True
+                    emit(db, "warn", "servers", f"Server {srv.name} is on ({pulse.proof_how(srv.id)}); the SSH session of the panel to it fails: {e}", srv.name)
+                    _wake_tunnels()
+
+                return
+
             srv.online = False
             srv.last_error = str(e)[:300]
 
@@ -241,9 +252,11 @@ def sample_server(server_id: int) -> None:
 
             return
 
+        from . import pulse as _pulse
+
         srv.online = True
         srv.last_seen_at = facts["ts"]
-        srv.last_error = ""
+        srv.last_error = srv.last_error if (srv.last_error or "").startswith(_pulse.IRAN_ONLY) and (_pulse.proven(srv.id) or _pulse.carried(srv.id, facts["ts"])) else ""
         srv.facts = facts
         _reboot_done(srv, facts)
         _peak(srv, facts)

@@ -477,6 +477,13 @@ echo "TPING $h:$p 10 $ok $avg"
 rm -rf "$d"
 """, {"HOST": r"^[A-Za-z0-9][A-Za-z0-9.\-]{0,120}$", "PORT": r"^\d{1,5}$"}),
 
+    # is the OTHER end of a tunnel there, seen from this (foreign) server, read-only (services/vantage.py): "PEER_EST <open TCP connections whose remote address is the peer>" and, when an L3 link and the inner address of the
+    # peer are given, "PEER_PING <answered>/3" over that link. The way the panel learns that an Iran server is on while its own host is cut from it (in a cut abroad -> Iran only the spoof link still answers).
+    "peer_alive": (r"""p='@PEER@'; i='@IFACE@'; a='@INNER@'
+n=$(ss -Htn state established dst "$p" 2>/dev/null | wc -l); echo "PEER_EST ${n:-0}"
+if [ -n "$i" ] && [ -n "$a" ]; then r=$(ping -c 3 -i 0.3 -W 1 -I "$i" -q "$a" 2>/dev/null | grep -o '[0-9]* received' | cut -d' ' -f1); echo "PEER_PING ${r:-0}/3"; fi
+""", {"PEER": r"^\d{1,3}(\.\d{1,3}){3}$", "IFACE": r"^[A-Za-z0-9_.\-]{0,15}$", "INNER": r"^(\d{1,3}(\.\d{1,3}){3})?$"}),
+
     # can this server open a TCP connection to host:port (several at once): "REACH host:port 1|0 <connect ms>". Only connects, sends nothing.
     "tcp_reach": (r"""for hp in @TARGETS@; do h=${hp%:*}; p=${hp##*:}; ( s=$(date +%s%N); if timeout 4 bash -c "echo > /dev/tcp/$h/$p" 2>/dev/null; then e=$(date +%s%N); echo "REACH $hp 1 $(( (e - s) / 1000000 ))"; else echo "REACH $hp 0 0"; fi ) & done; wait
 """, {"TARGETS": r"^[A-Za-z0-9][A-Za-z0-9.\-]{0,100}:\d{1,5}( [A-Za-z0-9][A-Za-z0-9.\-]{0,100}:\d{1,5}){0,39}$"}),

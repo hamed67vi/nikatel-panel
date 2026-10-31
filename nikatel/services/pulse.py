@@ -34,6 +34,10 @@ _refusing: dict[int, float] = {}          # server id -> when it last answered w
 VIA_GRACE = 150          # a server the panel reaches over SSH only THROUGH another Iran server (its address is cut from the panel's host, not from Iran) is on while its last full look is younger than this (the full look is every two minutes)
 VIA_MEMORY = 900          # ...and it counts as such for this long after the panel was last seen going that way
 _via_seen: dict[int, float] = {}          # server id -> when the panel last reached it through a jump server
+PROOF_GRACE = 200          # an Iran server the panel's host cannot connect to is ON while someone inside Iran saw it answer this recently (services/vantage.py asks every minute)
+IRAN_ONLY = "the panel's host cannot connect to it, but it is on"          # the start of the note in its row (the end says who saw it)
+_missed_at: dict[int, float] = {}          # server id -> when the panel's own connection to it last failed
+_proof: dict[int, tuple[float, str]] = {}          # server id -> (when, who) an Iran server or check-host.net last saw it answer
 _miss: dict[int, int] = {}
 _seen: dict[int, float] = {}          # server id -> when its SSH port last answered
 _asked: dict[int, float] = {}
@@ -62,6 +66,35 @@ def carried(sid: int, last_seen: float | None) -> bool:
     three seconds later - a new "answers again" / "does not answer" pair every two minutes, a tunnel that flapped down and up, and the Doctor repairing a tunnel that carried the users."""
     now = time.time()
     return now - _via_seen.get(sid, 0.0) < VIA_MEMORY and now - float(last_seen or 0) <= VIA_GRACE
+
+
+def prove(sid: int, how: str) -> bool:
+    """An Iran server (or check-host.net) saw this server answer from inside Iran. True when it was not proven a moment ago (the first proof is the news)."""
+    new = not proven(sid)
+    _proof[sid] = (time.time(), how)
+    return new
+
+
+def proven(sid: int) -> bool:
+    p = _proof.get(sid)
+    return bool(p) and time.time() - p[0] <= PROOF_GRACE
+
+
+def proof_how(sid: int) -> str:
+    return (_proof.get(sid) or (0.0, ""))[1]
+
+
+def missing(seconds: float = 30.0) -> list[int]:
+    """The servers whose connection from the panel's host failed in the last `seconds` (services/vantage.py asks about them from inside Iran)."""
+    now = time.time()
+    return [sid for sid, t in _missed_at.items() if now - t <= seconds]
+
+
+def _wake_vantage() -> None:
+    try:
+        jobs.trigger("vantage")
+    except KeyError:
+        return          # not registered (tests)
 
 
 def refusing(sid: int, seconds: float = 60.0) -> bool:
@@ -146,6 +179,9 @@ def run() -> None:
                 _miss[sid] = 0
                 _seen[sid] = time.time()
 
+                _missed_at.pop(sid, None)
+                _proof.pop(sid, None)
+
                 if refused:
                     _refusing[sid] = time.time()
                     _slow_until[sid] = time.time() + SLOW_SECONDS
@@ -153,7 +189,7 @@ def run() -> None:
                     _refusing.pop(sid, None)
                     _slow_until.pop(sid, None)
 
-                    if s.online is not False and (s.last_error or "").startswith(REFUSAL):
+                    if s.online is not False and (s.last_error or "").startswith((REFUSAL, IRAN_ONLY)):
                         s.last_error = ""          # (it takes connections again)
 
                 if s.online is False:
@@ -170,10 +206,27 @@ def run() -> None:
 
                 continue
 
-            if carried(sid, s.last_seen_at):          # (the panel's own way in is cut, the way through another server works: not off - and not asked again every 3 s)
+            first = sid not in _missed_at or time.time() - _missed_at[sid] > 30
+            _missed_at[sid] = time.time()
+
+            if proven(sid) or carried(sid, s.last_seen_at):          # (the panel's own way in is cut, but somebody inside Iran sees it or the way through another Iran server works: it is ON - and not asked again every 3 s)
                 _miss[sid] = 0
                 _slow_until[sid] = time.time() + SLOW_SECONDS
+                note = f"{IRAN_ONLY} ({proof_how(sid) if proven(sid) else 'its SSH answers through another Iran server'})"
+
+                if s.online is False:
+                    s.online, s.last_error = True, note[:300]
+                    emit(db, "warn", "servers", f"Server {s.name} is on: {note}.", s.name)
+                    log.info("pulse: %s is cut from the panel's host but is on", s.name)
+                    changed = True
+                    moved.append(sid)
+                elif not s.last_error or s.last_error.startswith(IRAN_ONLY):
+                    s.last_error = note[:300]
+
                 continue
+
+            if first and s.role == "iran":          # (the first miss of an Iran server: ask from inside Iran now, not at the next minute)
+                _wake_vantage()
 
             _miss[sid] = _miss.get(sid, 0) + 1
             _slow_until.pop(sid, None)

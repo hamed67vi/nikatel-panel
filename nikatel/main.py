@@ -182,6 +182,9 @@ def _register_jobs() -> None:
 
     _ssh.set_jump_provider(nodes.jump_candidates)                # a server whose direct SSH stalls is reached through another Iran server (ssh.py)
     jobs.register("pulse", 3, pulse.run)                        # a server that is switched off is called off within ~8 s (two misses of 3 s), a server that came back is put back within seconds; the tunnels that end on it are looked at at once (1.69.49)
+    from .services import vantage
+
+    jobs.register("vantage", 60, vantage.run)                   # an Iran server the panel's host cannot connect to is asked about from INSIDE Iran (the Iran servers of the panel, check-host.net): on, even when it is cut from abroad (services/vantage.py)
     jobs.register("tunnels", s.tunnel_check_interval, tunnels.check_all)
     jobs.register("tunnels-fast", 8, tunnels.check_unhealthy)   # the tunnels that are not up are looked at again every ~8 s (and at once when a server goes off or comes back)
     jobs.register("livebw", 5, livebw.run)                      # what the users use of each tunnel RIGHT NOW: the counters of its card on the Iran server, every 5 s while the page looks at the tunnels, every 30 s otherwise (services/livebw.py)
