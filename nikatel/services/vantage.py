@@ -3,8 +3,8 @@ connection from outside to the Iran servers: find a way that the panel tells on 
 
 The pulse (services/pulse.py) knows one thing: whether the panel's HOST can open a TCP connection. A server that is cut from abroad but works for its users inside Iran is on, and the pulse called it off: the row said
 Offline, its tunnel said down, the Doctor repaired it. This job asks for a proof of life, once a minute and at the first miss, for every Iran server whose connection from the panel's host failed. The evidence, in this order:
-  1. its TUNNELS, seen from the FOREIGN end (the panel reaches the foreign servers): the reviewed script `peer_alive` counts the open TCP connections between the foreign server and the Iran server and, for a tunnel with
-     an L3 link of its own (BackPack Direct - the IP-spoofing carrier is one), pings the inner address of the Iran end over it. In a cut of the line abroad -> Iran only what still passes can answer - the spoof tunnel -
+  1. its TUNNELS, seen from the FOREIGN end (the panel reaches the foreign servers): the reviewed script `peer_alive` counts the TCP connections between the foreign server and the Iran server that were heard from in the
+     last 90 s (an "established" line alone is no proof) and, for a tunnel with a link of its own (BackPack Direct - the IP-spoofing carrier is one - or a GRE link), pings the inner address of the Iran end over it. In a cut of the line abroad -> Iran only what still passes can answer - the spoof tunnel -
      and that is exactly the evidence that counts then; nothing from the outside world is asked.
   2. the other Iran servers of the panel that the panel can reach open a TCP connection to its SSH port (for the day when one address is filtered from the panel's host and the others are not).
 Any answer proves the server is on: the pulse keeps it on for PROOF_GRACE seconds and writes who saw it in its row. No answer proves nothing: the pulse's own rule (two misses in a row) stays, so a server that is
@@ -21,6 +21,7 @@ from ..log import get_logger
 from ..models import Server, Tunnel
 from ..ssh import Node, SSHError, run_script
 from . import pulse
+from .tunnels import sname
 
 log = get_logger("servers")
 
@@ -53,11 +54,11 @@ def parse_view(out: str) -> tuple[int, int]:
 
 def seen_by_tunnel(foreign: str, est: int, ping: int) -> str:
     """Pure: what the foreign end of a tunnel says about the Iran server ("" when nothing shows it is there)."""
-    if est > 0:
-        return f"{est} open connection{'s' if est > 1 else ''} of its tunnel to {foreign}"
-
-    if ping > 0:
+    if ping > 0:          # (a ping through the link is a live probe; a connection is only "heard from lately")
         return f"the link of its tunnel to {foreign} answers"
+
+    if est > 0:
+        return f"{est} live connection{'s' if est > 1 else ''} of its tunnel to {foreign}"
 
     return ""
 
@@ -89,6 +90,8 @@ def _tunnel_ends(sid: int) -> list[tuple[str, Node, str, str]]:
 
             if str(t.transport or "").startswith("l3:") and rec.get("inner_net") and t.iran_tunnel_ip and _IPV4.fullmatch(str(t.iran_tunnel_ip)):
                 iface, inner = f"bp{int(rec['inner_net'])}", str(t.iran_tunnel_ip)
+            elif str(t.type or "").lower() in ("backhaul", "gre") and t.iran_tunnel_ip and _IPV4.fullmatch(str(t.iran_tunnel_ip)):
+                iface, inner = sname(t)[:15], str(t.iran_tunnel_ip)          # (a GRE link: the interface carries the name of the tunnel; its packets pass where a ping and a new connection do not - the owner's server cut from abroad, 2026-10-31)
 
             if f.id not in out or (iface and not out[f.id][2]):
                 out[f.id] = (f.name, Node(f.host, f.ssh_user, f.ssh_port), iface, inner)

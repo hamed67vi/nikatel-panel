@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.69.172 - The proof of life of a cut Iran server is a ping through its GRE link, and an "established" connection that nobody has heard from is no proof
+
+> **In short:** the owner (2026-10-31) asked why an Iran server that check-host.net shows as reachable only from Iran still has working configs. Measured: from 8 foreign servers its ping and ports get no answer, a NEW TCP connection from the tunnel's own foreign server to the port of its old Chisel connection gets none either, but the GRE link between that server and the Iran server passes both ways (a ping of the inner address through it: 3 of 3, 0 % lost; 304 M packets in, 276 M out) and the TCP connections of the tunnel run inside it. While measuring, a flaw of 1.69.168 showed: its proof counted "established" TCP connections, and the only one it found was that old Chisel connection with 157 KB unacknowledged and growing - dying, not alive (a connection stays established for hours after its far end died). Now the script `peer_alive` counts only TCP connections heard from in the last 90 s (`lastrcv` of `ss -i`), and the foreign end also pings the inner address of a GRE link (a backhaul or gre tunnel: the interface carries the name of the tunnel) as it did for an L3 link.
+
+- **Script** (`ssh.py` `peer_alive`): `PEER_EST` = connections with `lastrcv` < 90 s.
+- **Job** (`services/vantage.py` `_tunnel_ends`): a backhaul / gre tunnel is pinged through (`IFACE` = its name, `INNER` = the inner address of the Iran end); the sentence says "live connections".
+- Tests: `tests/test_vantage.py` (a silent established connection is not counted; the GRE ping).
+
 ## 1.69.171 - Costs: the price of one GB in a month that began before the panel started counting is no longer too high
 
 > **In short:** the owner (2026-10-31): "fix it" - after the live page showed 5,407 toman for one GB in Aban 1405 against about 3,500 worked out by hand. The new PasarGuard panel counts traffic only from 25 October, so the first two days of the month had cost but no traffic. The page now reads the first day on which a panel recorded traffic and scales the month's GB - and with it the price of a GB, the profit of a GB and the price of a GB of each node - from the days it has, and says so in a warning.

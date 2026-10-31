@@ -477,10 +477,10 @@ echo "TPING $h:$p 10 $ok $avg"
 rm -rf "$d"
 """, {"HOST": r"^[A-Za-z0-9][A-Za-z0-9.\-]{0,120}$", "PORT": r"^\d{1,5}$"}),
 
-    # is the OTHER end of a tunnel there, seen from this (foreign) server, read-only (services/vantage.py): "PEER_EST <open TCP connections whose remote address is the peer>" and, when an L3 link and the inner address of the
+    # is the OTHER end of a tunnel there, seen from this (foreign) server, read-only (services/vantage.py): "PEER_EST <TCP connections to the peer that were HEARD FROM in the last 90 s>" (an ESTABLISHED line alone proves nothing: a connection stays established for hours after its far end died - 2026-10-31, a Chisel connection with 157 KB unacknowledged still showed) and, when an L3 link or a GRE link and the inner address of the
     # peer are given, "PEER_PING <answered>/3" over that link. The way the panel learns that an Iran server is on while its own host is cut from it (in a cut abroad -> Iran only the spoof link still answers).
     "peer_alive": (r"""p='@PEER@'; i='@IFACE@'; a='@INNER@'
-n=$(ss -Htn state established dst "$p" 2>/dev/null | wc -l); echo "PEER_EST ${n:-0}"
+n=$(ss -Htni state established dst "$p" 2>/dev/null | awk '{ for (k = 1; k <= NF; k++) if ($k ~ /^lastrcv:/) { split($k, a, ":"); if (a[2] + 0 < 90000) c++ } } END { print c + 0 }'); echo "PEER_EST ${n:-0}"
 if [ -n "$i" ] && [ -n "$a" ]; then r=$(ping -c 3 -i 0.3 -W 1 -I "$i" -q "$a" 2>/dev/null | grep -o '[0-9]* received' | cut -d' ' -f1); echo "PEER_PING ${r:-0}/3"; fi
 """, {"PEER": r"^\d{1,3}(\.\d{1,3}){3}$", "IFACE": r"^[A-Za-z0-9_.\-]{0,15}$", "INNER": r"^(\d{1,3}(\.\d{1,3}){3})?$"}),
 

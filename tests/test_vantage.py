@@ -99,8 +99,9 @@ def test_the_answers_of_the_scripts_are_read():
 
 
 def test_what_a_foreign_end_says_and_who_saw_it():
-    assert vantage.seen_by_tunnel("aaa", 3, 0) == "3 open connections of its tunnel to aaa"
-    assert vantage.seen_by_tunnel("aaa", 1, 3) == "1 open connection of its tunnel to aaa"
+    assert vantage.seen_by_tunnel("aaa", 3, 0) == "3 live connections of its tunnel to aaa"
+    assert vantage.seen_by_tunnel("aaa", 1, 0) == "1 live connection of its tunnel to aaa"
+    assert vantage.seen_by_tunnel("aaa", 1, 3) == "the link of its tunnel to aaa answers"          # (the ping through the link is told first)
     assert vantage.seen_by_tunnel("aaa", 0, 2) == "the link of its tunnel to aaa answers"
     assert vantage.seen_by_tunnel("aaa", 0, 0) == ""
     assert vantage.decide(["x", "y", "z"], ["irn-a"]) == (True, "seen by its tunnels: x; y")          # (the tunnels come first)
@@ -115,7 +116,10 @@ def test_the_script_counts_connections_and_pings_over_the_link(tmp_path):
 
     bindir = tmp_path / "bin"
     bindir.mkdir()
-    (bindir / "ss").write_text("#!/bin/bash\necho 'ESTAB 0 0 10.1.1.1:1 198.51.100.9:2'\necho 'ESTAB 0 0 10.1.1.1:3 198.51.100.9:4'\n")
+    (bindir / "ss").write_text("#!/bin/bash\n"
+                               "echo 'ESTAB 0 0 10.1.1.1:1 198.51.100.9:2'\necho '\t cubic rto:288 rtt:85.8/1.4 lastsnd:1200 lastrcv:2300 lastack:2300'\n"
+                               "echo 'ESTAB 0 157160 10.1.1.1:3 198.51.100.9:4'\necho '\t cubic rto:288 rtt:85.8/1.4 lastsnd:200 lastrcv:900000 lastack:900000'\n"          # (established, 157 KB unacknowledged, silent for 15 minutes: not a proof)
+                               "echo 'ESTAB 0 0 10.1.1.1:5 198.51.100.9:6'\necho '\t cubic lastsnd:10 lastrcv:89000 lastack:100'\n")
     (bindir / "ping").write_text("#!/bin/bash\necho '3 packets transmitted, 2 received, 33% packet loss'\n")
 
     for f in ("ss", "ping"):
@@ -159,13 +163,29 @@ def test_the_foreign_end_of_a_tunnel_is_asked_first_with_its_l3_link_and_the_ira
     assert asked == [("203.0.113.10", "peer_alive", {"PEER": "198.51.100.111", "IFACE": "bp10", "INNER": "10.10.10.1"})]
 
 
+def test_a_gre_link_is_pinged_through_by_the_foreign_end(monkeypatch):
+    _clear()
+    t = _server("t1g", "198.51.100.115", online=False)
+    f = _server("f1g", "203.0.113.16", role="foreign")
+    _tunnel("g", t, f, inner="10.119.195.233")                                          # (a backhaul tunnel over GRE: its interface carries its name)
+    asked = []
+
+    def script(node, name, params=None, timeout=0):
+        asked.append(dict(params or {}))
+        return "PEER_EST 0\nPEER_PING 3/3\n"
+
+    monkeypatch.setattr(vantage, "run_script", script)
+    assert vantage.ask(t, set()) == (True, "seen by its tunnels: the link of its tunnel to vt-f1g answers")
+    assert asked == [{"PEER": "198.51.100.115", "IFACE": "vt-g", "INNER": "10.119.195.233"}]
+
+
 def test_a_tcp_tunnel_is_seen_by_its_open_connections(monkeypatch):
     _clear()
     t = _server("t2", "198.51.100.121", online=False)
     f = _server("f3", "203.0.113.12", role="foreign")
     _tunnel("c", t, f)
     monkeypatch.setattr(vantage, "run_script", lambda node, name, params=None, timeout=0: "PEER_EST 4\n")
-    assert vantage.ask(t, set()) == (True, "seen by its tunnels: 4 open connections of its tunnel to vt-f3")
+    assert vantage.ask(t, set()) == (True, "seen by its tunnels: 4 live connections of its tunnel to vt-f3")
 
 
 def test_when_no_tunnel_sees_it_the_iran_servers_that_work_open_the_connection_and_the_cut_ones_are_not_asked(monkeypatch):
@@ -222,7 +242,7 @@ def test_the_job_proves_the_servers_the_pulse_misses_and_the_pulse_keeps_them_on
     _pulse_cut(monkeypatch, "198.51.100.151")
     pulse.run()
     assert t in pulse.missing() and _row(t) == (True, "")                                # (one miss: not off yet)
-    monkeypatch.setattr(vantage, "ask", lambda sid, skip: (True, "seen by its tunnels: 2 open connections of its tunnel to aaa"))
+    monkeypatch.setattr(vantage, "ask", lambda sid, skip: (True, "seen by its tunnels: 2 live connections of its tunnel to aaa"))
     vantage.run()
     assert pulse.proven(t)
 
@@ -231,7 +251,7 @@ def test_the_job_proves_the_servers_the_pulse_misses_and_the_pulse_keeps_them_on
         pulse.run()
 
     online, err = _row(t)
-    assert online is True and err == f"{pulse.IRAN_ONLY} (seen by its tunnels: 2 open connections of its tunnel to aaa)" and pulse._miss.get(t, 0) == 0
+    assert online is True and err == f"{pulse.IRAN_ONLY} (seen by its tunnels: 2 live connections of its tunnel to aaa)" and pulse._miss.get(t, 0) == 0
 
 
 def test_a_server_the_pulse_already_called_off_is_put_back_on_with_one_event_when_it_is_proven(monkeypatch):
