@@ -389,6 +389,46 @@ def test_without_a_panel_the_traffic_is_missing_and_it_is_said():
     assert out == {} and not ok and errors == ["no PasarGuard panel is connected"]
 
 
+# ------------------------------------------------------------------ a month that began before the panel started counting
+def test_a_month_that_began_before_the_panel_scales_the_gb_and_the_price_of_a_gb():
+    t = tr("TR1", 100)
+    full = run([item(amount=3100, node="TR1")], today=D(2026, 10, 10), traffic=t)
+    half = costs.compute([item(amount=3100, node="TR1")], {"USD": 0, "EUR": 0}, "2026-10", D(2026, 10, 10), t, True, None, None, 0.5)
+    assert full["gb_est"] == 100 and full["coverage"] == 1.0 and full["per_gb"] == 10.0 and not full["warnings"]
+    assert half["gb"] == 100 and half["gb_est"] == 200 and half["coverage"] == 0.5 and half["gb_month"] == round(200 * 3.1, 2)
+    assert half["per_gb"] == 5.0 and half["per_gb_month"] == round(3100 / (200 * 3.1), 2) and half["by_node"][0]["per_gb"] == 5.0                  # the cost of 10 days over the GB of 10 days
+    assert any("first 5 days" in w for w in half["warnings"])
+    assert costs.compute([item()], {}, "2026-10", D(2026, 10, 10), t, True, None, None, 0)["gb_est"] == 100                                       # a nonsense share is ignored
+
+
+def test_the_first_day_with_traffic_is_read_from_the_usage_series(monkeypatch):
+    _panels(("p1", ["TR1"]))
+    monkeypatch.setattr(costs.panels, "cred_for", lambda pid: {"id": pid})
+    series = [{"t": "2026-10-01", "bytes": 0}, {"t": "2026-10-02", "bytes": 0}, {"t": "2026-10-03", "bytes": 5}, {"t": "2026-10-04", "bytes": 9}]
+    monkeypatch.setattr(costs.pg_usage, "usage", lambda c, preset, frm, to, now: {"granularity": "day", "series": series})
+    assert costs.traffic_since(D(2026, 10, 1), D(2026, 10, 4)) == D(2026, 10, 3)
+    assert costs.traffic_since(D(2026, 10, 1), D(2026, 10, 2)) is None                                         # one or two days: the series is by the hour
+    monkeypatch.setattr(costs.pg_usage, "usage", lambda c, preset, frm, to, now: {"granularity": "hour", "series": series})
+    assert costs.traffic_since(D(2026, 10, 1), D(2026, 10, 4)) is None
+    monkeypatch.setattr(costs.pg_usage, "usage", lambda c, preset, frm, to, now: {"granularity": "day", "series": [{"t": "2026-10-01", "bytes": 0}]})
+    assert costs.traffic_since(D(2026, 10, 1), D(2026, 10, 4)) is None                                         # nothing recorded at all
+
+    def down(*a):
+        raise PanelError("down", 0)
+
+    monkeypatch.setattr(costs.pg_usage, "usage", down)
+    assert costs.traffic_since(D(2026, 10, 1), D(2026, 10, 4)) is None
+
+
+def test_the_summary_scales_the_traffic_when_the_panel_began_counting_late(monkeypatch):
+    _stub_traffic(monkeypatch, gb=100)
+    costs.save_settings(None, "gregorian")
+    costs.add_item({"name": "TR1", "kind": "monthly", "amount": 31000})
+    monkeypatch.setattr(costs, "traffic_since", lambda first, upto, now=None: D(2026, 10, 6) if first <= D(2026, 10, 6) <= upto else None)
+    s = costs.summary(now=dt.datetime(2026, 10, 10, 12, tzinfo=UTC))                                           # the panel counts from the 6th: 5 days of 10
+    assert s["coverage"] == 0.5 and s["gb"] == 100 and s["gb_est"] == 200 and s["per_gb"] == round(s["so_far"] / 200, 2) and any("first 5 days" in w for w in s["warnings"])
+
+
 # ------------------------------------------------------------------ the income of the shop bot
 BOT_ANSWER = {"ok": True, "from": 1, "to": 2, "count": 730, "payers": 525, "total": 271091500, "buy": {"n": 349, "sum": 99740000}, "renew": {"n": 133, "sum": 38806500},
               "wallet": {"n": 152, "sum": 103567000}, "other": {"n": 96, "sum": 28978000}}

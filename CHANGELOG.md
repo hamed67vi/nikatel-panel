@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.69.171 - Costs: the price of one GB in a month that began before the panel started counting is no longer too high
+
+> **In short:** the owner (2026-10-31): "fix it" - after the live page showed 5,407 toman for one GB in Aban 1405 against about 3,500 worked out by hand. The new PasarGuard panel counts traffic only from 25 October, so the first two days of the month had cost but no traffic. The page now reads the first day on which a panel recorded traffic and scales the month's GB - and with it the price of a GB, the profit of a GB and the price of a GB of each node - from the days it has, and says so in a warning.
+
+- **What changed** (`services/costs.py`): `traffic_since()` takes the first Tehran day with traffic from the day-by-day series of the usage question the page already asks (a panel is asked nothing new; it is not asked at all for a range of one or two days, whose series is by the hour). `compute()` gets a `coverage` - the share of the days that have passed for which the panel has traffic. The customers' GB shown is `gb_est` (`gb` stays what was recorded), the tile says "N recorded, the first days of the month counted at the average", and a warning names how many days were not recorded. A month that began after the panel, or a panel that has all its days, is unchanged.
+- **Proved:** `tests/test_costs.py` (the arithmetic with a share of days, the first day read from a series - and None for an hourly one, an empty one, a panel that is down -, the summary), the menu / handlers / OpenAPI / demo / deploy tests. **Not proved:** on the live panel until it is updated (the figure for Aban 1405 is expected near the one worked out by hand).
+
 ## 1.69.170 - Costs: the income of the shop bot, and the profit
 
 > **In short:** the owner (2026-10-31): "I want to add to the Nikatel panel the incomes of the customer bot, and then my partner's panel" - and, asked how the panel may read the bot: "yes, a restricted key". The Costs page now shows the **income** of the shop bot - what the customers paid in the month (new services, renewals, wallet top-ups, extra volume and days) - and the **profit**: the income less the cost, and the profit of one GB. The partners' panel is the next step (how the partners pay is not decided yet).

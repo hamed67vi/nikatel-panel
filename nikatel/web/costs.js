@@ -31,7 +31,7 @@ function csDraw() {
   const tiles = `<div class="cs-tiles">`
     + `<div class="cs-tile"><small>Spent so far</small><b>${csMoney(s.so_far)}</b><span>${s.elapsed} of ${s.days} days${s.frozen ? " · saved" : ""}</span></div>`
     + `<div class="cs-tile"><small>${s.open ? "The whole month" : "The month"}</small><b>${csMoney(s.total)}</b><span>${s.open ? "if the traffic goes on like this" : "final"}</span></div>`
-    + `<div class="cs-tile"><small>Traffic of the customers</small><b>${s.traffic_ok ? csGb(s.gb) : "—"}</b><span>${s.traffic_ok && s.open && s.gb ? `about ${csGb(s.gb_month)} in the month` : "counted by the panel"}</span></div>`
+    + `<div class="cs-tile"><small>Traffic of the customers</small><b>${s.traffic_ok ? csGb(s.gb_est != null ? s.gb_est : s.gb) : "—"}</b><span>${s.traffic_ok && s.coverage != null && s.coverage < 1 ? `${csGb(s.gb)} recorded, the first days of the month counted at the average` : s.traffic_ok && s.open && s.gb ? `about ${csGb(s.gb_month)} in the month` : "counted by the panel"}</span></div>`
     + `<div class="cs-tile cs-big"><small>One GB costs you</small><b>${csMoney(s.per_gb, true)}</b><span>${s.per_gb_month != null && s.open ? `${csN(s.per_gb_month, s.per_gb_month < 100 ? 1 : 0)} toman at the end of the month` : "so far this month"}</span></div></div>`;
   const inc = s.income, IK = [["buy", "New services"], ["renew", "Renewals"], ["wallet", "Wallet top-ups"], ["other", "Extra volume and days"]];
   const incTiles = inc ? `<div class="cs-tiles">`

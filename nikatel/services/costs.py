@@ -318,9 +318,11 @@ def _gb(rec: dict, dirs: str) -> float:
 
 
 def compute(items: list[dict], rates: dict, key: str, today: dt.date, traffic: dict[str, dict], traffic_ok: bool = True, servers: dict[int, str] | None = None,
-            known_nodes: set[str] | None = None) -> dict:
+            known_nodes: set[str] | None = None, coverage: float = 1.0) -> dict:
     """What `items` cost in the month `key` as seen on `today`. `traffic` is {name in lower case: {"name", "users_gb", "node_gb", "out_gb", "in_gb", "kind"}} for the days of the month that have passed:
     kind "node" (the default) = a node of a PasarGuard panel, what the customers used; kind "iran" = an Iran server, an estimate from the panel's own samples (users_gb 0: it is no customers' traffic).
+    `coverage` (0-1) is the share of the days that have passed for which the panel HAS traffic (a new panel counts only from the day it started): the customers' GB and the price of a GB are scaled
+    up from the days it has, so a month that began before the panel did does not show a price of a GB made of all the cost and some of the traffic.
     Returns toman everywhere; the page shows dollars with the rate. Pure: no clock, no panel, no database."""
     servers = servers or {}
     first, last = month_bounds(key)
@@ -332,6 +334,8 @@ def compute(items: list[dict], rates: dict, key: str, today: dt.date, traffic: d
     pg = {k: t for k, t in traffic.items() if t.get("kind", "node") == "node"}
     all_users = sum(t["users_gb"] for t in pg.values())
     all_node = sum(t["node_gb"] for t in pg.values())
+    scale = 1 / coverage if 0 < coverage < 1 else 1.0
+    all_users_est = all_users * scale
     estimated = False
     warnings: list[str] = []
     rows: list[dict] = []
@@ -412,6 +416,9 @@ def compute(items: list[dict], rates: dict, key: str, today: dt.date, traffic: d
     elif elapsed and not all_users:
         warnings.append("The panel recorded no traffic in these days (it counts only from the day it started).")
 
+    if scale > 1 and traffic_ok and all_users:
+        warnings.append(f"The panel has no traffic for the first {round(elapsed * (1 - coverage))} days of this month (it counts from the day it started): the GB of the month and the price of a GB are scaled from the other days.")
+
     if estimated:
         warnings.append("The traffic of the Iran servers is an estimate from the last days of the panel's own samples (about ±10 %).")
 
@@ -430,12 +437,13 @@ def compute(items: list[dict], rates: dict, key: str, today: dt.date, traffic: d
             continue
 
         by_node.append({"name": t["name"], "gb": round(t["users_gb"], 2), "node_gb": round(t["node_gb"], 2), "so_far": c_far, "month": c_month, "priced": bool(mine),
-                        "per_gb": round(c_far / t["users_gb"], 2) if mine and t["users_gb"] > 0 and traffic_ok else None})
+                        "per_gb": round(c_far / (t["users_gb"] * scale), 2) if mine and t["users_gb"] > 0 and traffic_ok else None})
 
-    per_gb = round(total_so_far / all_users, 2) if traffic_ok and all_users > 0 else None
-    per_gb_month = round(total_month / (all_users * factor), 2) if traffic_ok and all_users > 0 else None
+    per_gb = round(total_so_far / all_users_est, 2) if traffic_ok and all_users > 0 else None
+    per_gb_month = round(total_month / (all_users_est * factor), 2) if traffic_ok and all_users > 0 else None
     return {"month": key, "label": key_label(key), "calendar": key_parts(key)[2], "first": first.isoformat(), "last": last.isoformat(), "days": days, "elapsed": elapsed, "open": elapsed < days,
-            "so_far": total_so_far, "total": total_month, "gb": round(all_users, 2), "node_gb": round(all_node, 2), "gb_month": round(all_users * factor, 2), "per_gb": per_gb, "per_gb_month": per_gb_month,
+            "so_far": total_so_far, "total": total_month, "gb": round(all_users, 2), "gb_est": round(all_users_est, 2), "coverage": round(coverage, 3), "node_gb": round(all_node, 2),
+            "gb_month": round(all_users_est * factor, 2), "per_gb": per_gb, "per_gb_month": per_gb_month,
             "usd_rate": float(rates.get("USD") or 0) or None, "by_group": by_group, "by_node": by_node, "by_server": by_server, "items": rows, "warnings": warnings, "traffic_ok": traffic_ok}
 
 
@@ -481,6 +489,40 @@ def traffic_of(first: dt.date, last: dt.date, now: dt.datetime | None = None) ->
                 rec["out_gb"] += float(r.get("gb") or 0)
 
     return out, not errors, errors, names
+
+
+def traffic_since(first: dt.date, upto: dt.date, now: dt.datetime | None = None) -> dt.date | None:
+    """The first Tehran day of `first`..`upto` on which a PasarGuard panel recorded any traffic: a new panel counts only from the day it started, so a month that began earlier has days without traffic.
+    Read from the day-by-day series of the usage question `traffic_of` has just asked (pg_usage keeps its answer). None for a range of one or two days (the series is by the hour then), when no panel
+    answers, or when nothing was recorded."""
+    if (upto - first).days + 1 <= 2:
+        return None
+
+    with session() as db:
+        ids = [p.id for p in db.query(Panel).filter(Panel.type == "pasarguard", Panel.enabled.is_(True)).order_by(Panel.id)]
+
+    best = None
+
+    for pid in ids:
+        try:
+            d = pg_usage.usage(panels.cred_for(pid), "custom", first.isoformat(), upto.isoformat(), now)
+        except (ValueError, RuntimeError, PanelError, OSError):
+            continue
+
+        if d.get("granularity") != "day":
+            continue
+
+        for point in d.get("series") or []:
+            if point.get("bytes"):
+                try:
+                    day = dt.date.fromisoformat(str(point["t"])[:10])
+                except ValueError:
+                    break
+
+                best = day if best is None else min(best, day)
+                break
+
+    return best
 
 
 def _iran_samples(first: dt.date, upto: dt.date, now: dt.datetime | None) -> dict[str, dict]:
@@ -613,7 +655,16 @@ def _one(doc: dict, key: str, now: dt.datetime | None) -> dict:
     first, last = month_bounds(key)
     today = pg_usage.tehran_date(now or dt.datetime.now(dt.timezone.utc))
     traffic, ok, errors, names = traffic_of(first, last, now)
-    out = compute(doc["items"], doc["rates"], key, today, traffic, ok, _servers(), names)
+    coverage = 1.0
+
+    if ok:
+        upto = min(last, today)
+        since = traffic_since(first, upto, now)
+
+        if since is not None and since > first:                              # the panel began counting after the month began
+            coverage = max(((upto - since).days + 1) / ((upto - first).days + 1), 0.05)
+
+    out = compute(doc["items"], doc["rates"], key, today, traffic, ok, _servers(), names, coverage)
     out["errors"] = errors
 
     if (doc.get("income") or {}).get("bot_server_id"):
@@ -626,7 +677,7 @@ def _one(doc: dict, key: str, now: dt.datetime | None) -> dict:
                 f = out["days"] / out["elapsed"] if 0 < out["elapsed"] < out["days"] else 1.0
                 month = round(raw["total"] * f)
                 out["income"] = {"bot": raw, "so_far": raw["total"], "month": month, "profit_so_far": raw["total"] - out["so_far"], "profit_month": month - out["total"],
-                                 "profit_per_gb": round((raw["total"] - out["so_far"]) / out["gb"], 2) if out["gb"] > 0 and out["traffic_ok"] else None}
+                                 "profit_per_gb": round((raw["total"] - out["so_far"]) / out["gb_est"], 2) if out["gb_est"] > 0 and out["traffic_ok"] else None}
 
     return out
 
