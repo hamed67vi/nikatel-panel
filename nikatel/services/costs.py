@@ -26,6 +26,7 @@ import time
 from typing import Any
 
 import httpx
+from sqlalchemy.exc import SQLAlchemyError
 
 from ..config import get_settings
 from ..db import session
@@ -283,6 +284,28 @@ def delete_item(item_id: int) -> None:
         invalidate()
 
 
+def server_removed(server_id: int, now: dt.datetime | None = None) -> int:
+    """A server was taken off the panel (the owner, 2026-11-01: "when we add or remove a server, it applies here too"): its prices end today - the rent already spent this month stays in the month, the next
+    months do not count it, a month that is already saved is not touched. Returns how many prices were ended. Never raises: Finance must not stop a server from being removed."""
+    try:
+        today = pg_usage.tehran_date(now or dt.datetime.now(dt.timezone.utc)).isoformat()
+
+        with _LOCK:
+            doc = settings.get("costs")
+            ended = [i for i in doc["items"] if i.get("server_id") == server_id and not (i.get("ends") and i["ends"] <= today)]
+
+            if not ended:
+                return 0
+
+            ids = {i["id"] for i in ended}
+            settings.put("costs", {"items": [{**i, "ends": today} if i["id"] in ids else i for i in doc["items"]]})
+            invalidate()
+            return len(ended)
+    except (SQLAlchemyError, ValueError, KeyError, TypeError, OSError) as e:
+        log.warning("costs: the prices of a removed server were not ended: %s", str(e)[:100])
+        return 0
+
+
 # ------------------------------------------------------------------ months (Jalali or Gregorian, "1405-08" or "2026-10")
 def key_parts(key: str) -> tuple[int, int, str]:
     """(year, month, calendar) of a month key; the year tells the calendar, as parse_date does."""
@@ -399,6 +422,7 @@ def compute(items: list[dict], rates: dict, key: str, today: dt.date, traffic: d
             rate *= 1 + float(it.get("tax") or 0) / 100                         # a price plus its tax (VAT): everything below is the price WITH the tax
 
         sname = servers.get(it.get("server_id") or 0, "")
+        gone = bool(servers) and bool(it.get("server_id")) and it["server_id"] not in servers                  # the server was taken off the panel (`server_removed` ends its prices on that day)
         node = (it.get("node") or "").strip() or (sname if sname.lower() in known else "")
         s0 = dt.date.fromisoformat(it["starts"]) if it.get("starts") else dt.date.min
         s1 = dt.date.fromisoformat(it["ends"]) if it.get("ends") else dt.date.max
@@ -410,7 +434,7 @@ def compute(items: list[dict], rates: dict, key: str, today: dt.date, traffic: d
         if rate is None:
             state = "no_rate"
             warnings.append(f"“{it['name']}” is in {it['cur']} and there is no {it['cur']} rate yet: it is not counted.")
-        elif not in_month:
+        elif not in_month or (gone and not it.get("ends")):                     # (a price of a server that is gone costs nothing: with an end day it is counted until that day)
             state = "idle"
         elif it["kind"] in ("monthly", "yearly"):
             base = it["amount"] * rate / (12 if it["kind"] == "yearly" else 1)
@@ -460,7 +484,7 @@ def compute(items: list[dict], rates: dict, key: str, today: dt.date, traffic: d
             elif pct >= 90:
                 warnings.append(f"“{it['name']}” is close to the {it['quota']:g} TB of its plan ({gb_month / TB:.1f} TB at this pace).")
 
-        rows.append({"id": it["id"], "name": it["name"], "group": it["group"], "kind": it["kind"], "cur": it["cur"], "amount": it["amount"], "tax": it.get("tax") or 0, "node": node, "server": sname,
+        rows.append({"id": it["id"], "name": it["name"], "group": it["group"], "kind": it["kind"], "cur": it["cur"], "amount": it["amount"], "tax": it.get("tax") or 0, "node": node, "server": sname, "gone": gone,
                      "state": state, "gb": gb, "quota": quota, "so_far": round(so_far), "month": round(total)})
 
     if not traffic_ok:

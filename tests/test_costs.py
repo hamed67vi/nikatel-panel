@@ -8,7 +8,7 @@ import httpx
 import pytest
 
 from nikatel.db import session
-from nikatel.models import Panel
+from nikatel.models import Panel, Server
 from nikatel.services import costs
 from nikatel.services.panels import PanelError
 
@@ -330,6 +330,41 @@ def test_items_get_numbers_and_survive_a_change_and_the_rates_and_calendar_are_c
                  lambda: costs.save_settings({"USD": -5}), lambda: costs.save_settings(None, "hijri")):
         with pytest.raises(ValueError):
             call()
+
+
+def test_the_prices_of_a_server_that_is_taken_off_the_panel_end_that_day_and_cost_nothing_after_it():
+    gone = item(kind="monthly", amount=3100, server_id=7, ends="2026-10-10")
+    r = run([gone], servers={1: "other"})["items"][0]                                        # server 7 is no longer in the inventory: its rent is counted until the day it ended
+    assert r["gone"] is True and r["state"] == "ok" and r["so_far"] == 3100 * 10 // 31 and r["month"] == 1000
+    assert run([gone], key="2026-11", servers={1: "other"})["items"][0]["state"] == "idle"            # the next month: nothing
+    orphan = item(kind="monthly", amount=3100, server_id=7)                                  # (a price that had no end day when its server went)
+    assert run([orphan], servers={1: "other"})["items"][0]["state"] == "idle" and run([orphan], servers={1: "other"})["total"] == 0
+    assert run([orphan], servers={7: "here"})["items"][0]["gone"] is False and run([orphan])["items"][0]["gone"] is False        # a server that is there, or no inventory given: nothing is gone
+
+
+def test_server_removed_ends_its_prices_today_and_leaves_the_others_and_the_saved_months(monkeypatch):
+    a = costs.add_item({"name": "S rent", "kind": "monthly", "amount": 5, "server_id": 7})
+    b = costs.add_item({"name": "S traffic", "kind": "per_tb", "amount": 5, "server_id": 7, "ends": "2026-10-05"})
+    c = costs.add_item({"name": "Other", "kind": "monthly", "amount": 5, "server_id": 8})
+    now = dt.datetime(2026, 10, 20, 9, tzinfo=UTC)
+    assert costs.server_removed(7, now) == 1                                                  # (b already ended earlier: it keeps its day)
+    ends = {i["id"]: i["ends"] for i in costs.get_state()["items"]}
+    assert ends == {a["id"]: "2026-10-20", b["id"]: "2026-10-05", c["id"]: ""}
+    assert costs.server_removed(7, now) == 0 and costs.server_removed(99, now) == 0
+
+
+def test_removing_a_server_from_the_panel_ends_its_prices_in_finance_and_a_new_server_is_in_its_list(client):
+    with session() as db:
+        sv = Server(name="gone-1", host="192.0.2.77", role="foreign")
+        db.add(sv)
+        db.flush()
+        sid = sv.id
+
+    assert sid in [s["id"] for s in client.get("/api/costs").json()["servers"]]                        # a server added to the panel is in the list the Finance page draws its rows from
+    it = client.post("/api/costs/items", json={"name": "gone-1 rent", "group": "foreign", "kind": "monthly", "amount": 10, "cur": "USD", "server_id": sid}).json()["item"]
+    assert client.delete(f"/api/servers/{sid}").status_code == 200
+    d = client.get("/api/costs").json()
+    assert sid not in [s["id"] for s in d["servers"]] and next(i["ends"] for i in d["items"] if i["id"] == it["id"])
 
 
 def _stub_traffic(monkeypatch, nodes=("TR1",), gb=10):
@@ -856,10 +891,14 @@ def test_the_bar_shows_today_and_the_dollar_against_the_lira_and_the_servers_are
 
     items = js[js.index("function csItemsTable"):js.index("const csNodesTable")]
     assert "<th>Group</th>" not in items and "<th>Server</th>" not in items and "<th>What</th><th>Price</th>" in items         # the list of prices has no Group and no Server column (the tooltip of the name says them)
-    assert js.count("csServerTable(d, s, cards)") == 2                                                                      # the function and its use: a server is ONE row in its tab (its rent and its traffic together)
+    assert js.count("csServerTable(d, s, cards, ") == 2                                                                     # the function and its use: a server is ONE row in its tab (its rent and its traffic together)
+    assert "csCardRows(s, keys, d)" in js and "((d && d.servers) || [])" in js and "no price yet" in js                 # every server of the inventory is a row, priced or not
+    assert "csGoneIdle" in js and "csInlineNew(this, ${rows.length ? rows[0].id : 0}" in js and "serverId = 0, group" in js                    # a removed server's old prices are not listed; a server with no price has its own dashes
+    assert "dollars(" in js and "$" in js[js.index("const dollars"):js.index("const dollars") + 200] and "const typed = " in js                  # the totals of the server tables say dollars under toman; a price says the money it is paid in
+    assert "cs-kpi" in js and "csSplit(" in js and "csProgress(" in js                                                          # the Overview summary is one card
     assert '["all", "All expenses"' not in js and 'sub: "foreign"' in js                                                    # no "All expenses" tab: the Overview is the total of everything
     assert "window.csInline = " in js and 'onclick="csInline(this, ${it.id}, ${per})"' in js and 'document.querySelector(".cs-in")' in js                # a number is changed where it stands, and the page's round does not redraw it away
-    assert "window.csInlineNew = " in js and 'onclick="csInlineNew(this, ${rows[0].id}' in js                                   # a dash (a price that is not there) is the place to type it
+    assert "window.csInlineNew = " in js and 'onclick="csInlineNew(this, ${rows.length ? rows[0].id : 0}' in js                                  # a dash (a price that is not there) is the place to type it
     assert 'onclick="hideModal(); csDel(${id})"' in js                                                                      # a price is removed in its window: the table has only a pencil
     price = js[js.index("const csParts"):js.index("const csEd")]
     assert "tax" not in price.replace("csTaxed", "")                                                              # the price line is the price with its tax in it: the tax is not written

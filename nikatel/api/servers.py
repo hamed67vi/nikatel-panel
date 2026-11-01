@@ -328,6 +328,10 @@ def delete_server(server_id: int, tunnels: bool = False):
     from ..services import knowledge
 
     knowledge.forget_server(server_id)               # (what the Doctor knew about its pairs goes with it)
+
+    from ..services import costs
+
+    costs.server_removed(server_id)                  # (Finance: its prices end today, the rent spent this month stays, the next months do not count it)
     return {"ok": True, "tunnels": gone}
 
 
