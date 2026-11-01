@@ -361,6 +361,10 @@ KINDS = [
     ("ipipgue:tcpmux", "Backhaul · TCP Mux over IPIP-in-UDP (GUE)", "IP-in-IP inside one UDP port with the GUE header, one per pair of servers, not encrypted", "Backhaul over another link", False),
     ("ipsec:tcpmux", "Backhaul · TCP Mux over IPsec (ESP)", "ESP (protocol 50), encrypted with AES-GCM, keys made by the panel", "Backhaul over another link", False),
     ("ipsecnat:tcpmux", "Backhaul · TCP Mux over IPsec in UDP (NAT-T)", "ESP inside one UDP port, encrypted with AES-GCM, keys made by the panel", "Backhaul over another link", False),
+    ("l2tpv3:tcpmux", "Backhaul · TCP Mux over L2TPv3", "a static L2TPv3 pseudowire (protocol 115): passes a route that drops TCP / UDP / ICMP but lets GRE, ESP and L2TPv3 through (C-Tunnel); not encrypted", "Backhaul over another link", False),
+    ("gretap:tcpmux", "Backhaul · TCP Mux over GRE-TAP", "ethernet over GRE (protocol 47): like GRE but an L2 pseudowire (C-Tunnel); not encrypted", "Backhaul over another link", False),
+    ("vxlan:tcpmux", "Backhaul · TCP Mux over VXLAN", "ethernet over one UDP port (4789, VXLAN; C-Tunnel); not encrypted", "Backhaul over another link", False),
+    ("geneve:tcpmux", "Backhaul · TCP Mux over Geneve", "ethernet over one UDP port (6081, Geneve; C-Tunnel); not encrypted", "Backhaul over another link", False),
     ("bp:tcpmux", "BackPack · TCP Mux", "many users over few connections", "BackPack", True),
     ("bp:tcp", "BackPack · TCP", "plain TCP", "BackPack", True),
     ("bp:stealth", "BackPack · TCP + Stealth", "looks like random bytes", "BackPack", True),
@@ -388,7 +392,7 @@ _TRANSPORT_LABEL = {"tcp": ("TCP", "plain TCP, one connection per user"), "wsmux
 _HAVE = {k[0] for k in KINDS}
 GRID_ONLY: set[str] = set()          # the kinds only the grid adds: the Doctor's standard order (knowledge.PRIOR) does not name them, a repair of a cut tunnel never walks the whole grid
 
-for _link in linkmodels.LINKS:
+for _link in linkmodels.LINKS + linkmodels.L2_LINKS:          # the nine plain models and the four L2 carriers (C-Tunnel): every Backhaul transport over each is a kind the pair test can build and measure
     if _link == "gre":
         continue
 

@@ -372,7 +372,7 @@ def test_the_survey_goes_on_to_the_rest_of_the_standard_list_and_then_to_the_var
         knowledge.record(ir, fr, {"kind": k, "ok": True, "score": 60}, "full")
 
     got = mine()
-    assert got and set(got[0]) == {f"{x}:{y}" for x in ("ipip", "ipipfou", "ipipgue", "fou", "gue", "ipsec", "ipsecnat", "wg") for y in knowledge.VARIANT_TRANSPORTS} - set(knowledge.PRIOR)      # every link that passed, with the other transports
+    assert got and set(got[0]) == {f"{x}:{y}" for x in ("ipip", "ipipfou", "ipipgue", "fou", "gue", "ipsec", "ipsecnat", "wg", "l2tpv3", "gretap", "vxlan", "geneve") for y in knowledge.VARIANT_TRANSPORTS} - set(knowledge.PRIOR)      # every link that passed, with the other transports (the C-Tunnel L2 carriers too)
     assert not set(got[0]) & set(knowledge.PRIOR)
 
     for k in got[0]:

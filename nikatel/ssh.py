@@ -590,8 +590,8 @@ modprobe ip_gre 2>/dev/null; modprobe fou 2>/dev/null; echo "FOU_MOD=$( (lsmod |
 echo "UDP=$(ss -lunH 2>/dev/null | awk '{print $4}' | sed 's/.*://' | sort -un | tr '\n' ' ')"
 echo "FOU_PORTS=$(ip fou show 2>/dev/null | grep -o 'port [0-9]*' | cut -d' ' -f2 | tr '\n' ' ')"
 echo "APT=$(command -v apt-get >/dev/null 2>&1 && echo 1 || echo 0)"
-for m in ipip xfrm_interface esp4; do modprobe "$m" 2>/dev/null; done
-echo "MODS=$(for m in ip_gre ipip fou xfrm_interface esp4 wireguard; do if lsmod | grep -q "^$m " || [ -d "/sys/module/$m" ]; then printf '%s ' "$m"; fi; done)"
+for m in ipip xfrm_interface esp4 l2tp_eth l2tp_ip vxlan geneve; do modprobe "$m" 2>/dev/null; done
+echo "MODS=$(for m in ip_gre ipip fou xfrm_interface esp4 wireguard l2tp_eth l2tp_ip vxlan geneve; do if lsmod | grep -q "^$m " || [ -d "/sys/module/$m" ]; then printf '%s ' "$m"; fi; done)"
 echo "IPIP_PAIRS=$(ip -d -o link show type ipip 2>/dev/null | grep -oE 'remote [0-9.]+ local [0-9.]+' | sed -E 's/remote ([0-9.]+) local ([0-9.]+)/\1>\2/' | tr '\n' ' ')"
 echo "TCP=$(ss -ltnH 2>/dev/null | awk '{print $4}' | sed 's/.*://' | sort -un | tr '\n' ' ')"
 echo "CHISEL=$([ -x /usr/local/bin/nikatel-chisel ] && echo 1 || echo 0)"
@@ -922,7 +922,7 @@ systemctl daemon-reload; ip tunnel del "$n" 2>/dev/null || true
 systemctl disable --now "nikatel-ipsec-sock-$n.service" >/dev/null 2>&1 || true
 systemctl disable --now "nikatel-carrier-$n.service" >/dev/null 2>&1 || true
 rm -f "/etc/systemd/system/nikatel-carrier-$n.service" "/etc/nikatel-chisel/$n.key" "/etc/nikatel-chisel/$n.crt" "/etc/nikatel-chisel/$n.tls.key" "/etc/nikatel-chisel/$n.srv.env" "/etc/nikatel-chisel/$n.cli.env"; systemctl daemon-reload
-if ip -d link show "$n" 2>/dev/null | grep -qE 'wireguard|gre |ipip|xfrm'; then ip link del "$n" 2>/dev/null || true; fi
+if ip -d link show "$n" 2>/dev/null | grep -qE 'wireguard|gre |gretap|ipip|xfrm|vxlan|geneve|l2tp'; then ip link del "$n" 2>/dev/null || true; fi
 rm -f "/etc/nikatel/wg/$n.key" "/etc/nikatel/ipsec/$n.keys"; echo "REMOVED $n"
 """, {"NAME": _TNAME, "PORT": r"^\d{1,5}$", "TRANSPORT": r"^(tcp|tcpmux|wsmux|wssmux)$"}),
 
@@ -1219,7 +1219,7 @@ echo "PROBE_DOWN $n"
     # the LINK PROBE (services/linkprobe.py): the up or down script of a temporary link "lp-<model>" that the probe has just written (nikatel-gre-up-lp-fou ...) is run; nothing but those two scripts is ever run
     "link_probe_run": (r"""n='@NAME@'; f="/usr/local/sbin/nikatel-gre-@MODE@-$n"
 if [ -x "$f" ]; then "$f"; echo "LINK_PROBE @MODE@ $n rc=$?"; else echo "LINK_PROBE @MODE@ $n missing rc=1"; fi
-""", {"NAME": r"^lp-[a-z]{2,11}$", "MODE": r"^(up|down)$"}),
+""", {"NAME": r"^lp-[a-z0-9]{2,11}$", "MODE": r"^(up|down)$"}),
 
     # the LINK PROBE, last step (on BOTH servers, always run): the temporary link comes down, its scripts, its key file and its tagged firewall rules are removed
     "link_probe_clean": (r"""n='@NAME@'
@@ -1230,7 +1230,7 @@ ip link set "$n" down 2>/dev/null || true; ip link del "$n" 2>/dev/null || true
 rm -f "/usr/local/sbin/nikatel-gre-up-$n" "/usr/local/sbin/nikatel-gre-down-$n" "/etc/nikatel/ipsec/$n.keys" "/etc/nikatel/wg/$n.key"
 rm -f "/etc/systemd/system/nikatel-carrier-$n.service" /etc/nikatel-chisel/$n.key /etc/nikatel-chisel/$n.crt /etc/nikatel-chisel/$n.tls.key /etc/nikatel-chisel/$n.srv.env /etc/nikatel-chisel/$n.cli.env; systemctl daemon-reload 2>/dev/null || true
 echo "LINK_PROBE_CLEAN $n"
-""", {"NAME": r"^lp-[a-z]{2,11}$"}),
+""", {"NAME": r"^lp-[a-z0-9]{2,11}$"}),
 
     # SPOOF TEST, before it: what a server needs for its part is installed when it is missing (the owner started the test; 1.69.13: a new Debian 12 server has no iptables, no ping, no tcpdump and the test stopped with "iptables is not installed on the
     # sending server"). ROLE send needs iptables and ping, ROLE listen needs tcpdump. Done BEFORE the listener starts, so a slow apt does not eat its listening time. "TRIED <packages>" says what was missing and tried, then READY or what is still missing.
@@ -1605,6 +1605,8 @@ for i in $(ip -o link show type gre 2>/dev/null | awk -F': ' '{print $2}' | cut 
 for i in $(ip -o link show type wireguard 2>/dev/null | awk -F': ' '{print $2}' | cut -d@ -f1 | grep -E '^(test|lp)-'); do ip link del "$i" 2>/dev/null || true; done
 for i in $(ip -o link show type ipip 2>/dev/null | awk -F': ' '{print $2}' | cut -d@ -f1 | grep -E '^(test|lp)-'); do ip link del "$i" 2>/dev/null || true; done
 for i in $(ip -o link show type xfrm 2>/dev/null | awk -F': ' '{print $2}' | cut -d@ -f1 | grep -E '^(test|lp)-'); do ip link del "$i" 2>/dev/null || true; done
+for ty in gretap vxlan geneve l2tpeth; do for i in $(ip -o link show type "$ty" 2>/dev/null | awk -F': ' '{print $2}' | cut -d@ -f1 | grep -E '^(test|lp)-'); do ip link del "$i" 2>/dev/null || true; done; done
+for t in $(ip l2tp show tunnel 2>/dev/null | sed -n 's/^Tunnel \([0-9]*\),.*/\1/p'); do ip l2tp show session tunnel_id "$t" 2>/dev/null | grep -qi session || ip l2tp del tunnel tunnel_id "$t" 2>/dev/null || true; done
 for s in /usr/local/sbin/nikatel-gre-up-lp-* /usr/local/sbin/nikatel-gre-down-lp-*; do [ -e "$s" ] && rm -f "$s"; done; rm -f /etc/nikatel/ipsec/lp-*.keys /etc/nikatel/wg/lp-*.key 2>/dev/null
 for u in $(systemctl list-units --all --no-legend --plain 'nikatel-ipsec-sock-test-*' 2>/dev/null | awk '{print $1}'); do systemctl stop "$u" >/dev/null 2>&1 || true; done
 rm -f /etc/nikatel/wg/test-*.key /etc/nikatel/ipsec/test-*.keys /etc/systemd/system/nikatel-carrier-test-*.service /etc/systemd/system/nikatel-carrier-lp-*.service /etc/nikatel-chisel/lp-* 2>/dev/null

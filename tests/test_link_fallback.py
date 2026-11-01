@@ -51,7 +51,7 @@ def test_the_models_come_in_one_order_and_wireguard_only_where_it_is_allowed():
     while (k := builder.next_link(tried)):
         order.append(k)
         tried.append(k)
-    assert order == ["gre", "fou", "gue", "ipsecnat", "ipipfou", "ipipgue", "ipip", "ipsec"]                  # (the ones in UDP first; no wg: a build never installs a package for a fall-back)
+    assert order == ["gre", "fou", "gue", "ipsecnat", "ipipfou", "ipipgue", "ipip", "ipsec", "gretap", "l2tpv3", "vxlan", "geneve"]                  # (the ones in UDP first, then the raw-protocol ones and the C-Tunnel L2 carriers; no wg: a build never installs a package for a fall-back)
     assert builder.next_link(order) == "" and builder.next_link(order, wg_ok=True) == "wg"
     assert set(builder.FALLBACK_LINKS) == set(linkmodels.ALL_LINKS)                                                  # (no model is forgotten, none is made up)
 
@@ -77,7 +77,7 @@ def test_a_build_that_is_not_the_owners_does_not_walk_the_models(walk):
 def test_when_no_model_passes_the_story_says_which_were_tried(walk):
     b = make_build(link_fallback=True)
     log = walk(b, bad=set(linkmodels.ALL_LINKS))
-    assert log["built"] == ["gre", "fou", "gue", "ipsecnat", "ipipfou", "ipipgue", "ipip", "ipsec"]
+    assert log["built"] == ["gre", "fou", "gue", "ipsecnat", "ipipfou", "ipipgue", "ipip", "ipsec", "gretap", "l2tpv3", "vxlan", "geneve"]
     assert any("None of the link models passed" in s[0] and "tried: GRE," in s[0] and "IPsec (ESP)" in s[0] for s in log["said"])
     assert log["final"][2] is False and "Stopped:" in log["final"][0]
 

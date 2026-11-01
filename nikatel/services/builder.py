@@ -422,6 +422,10 @@ def link_scripts(link: str, name: str, local: str, remote: str, key: int, addr_c
             raise ValueError("an IPsec link needs its keys and SPIs")
 
         files.update(linkmodels.ipsec_files(link, name, local, remote, int(key), addr_cidr, int(mtu), int(port) if link in LINK_PORTS else 0, int(ipsec["spi_tx"]), int(ipsec["spi_rx"]), str(ipsec["key_tx"]), str(ipsec["key_rx"]), fw_up, fw_down, _LINK_SYSCTL))
+    elif link == "l2tpv3":                                       # the one L2 carrier with its own `ip l2tp` scripts (IP protocol 115)
+        files.update(linkmodels.l2tp_files(link, name, local, remote, int(key), addr_cidr, int(mtu), fw_up, fw_down, _LINK_SYSCTL))
+    elif link in linkmodels.L2_LINKS:                            # VXLAN / Geneve / GRE-TAP: one `ip link add type …`
+        files.update(linkmodels.l2_files(link, name, local, remote, int(key), addr_cidr, int(mtu), int(port) if link in LINK_PORTS else 0, int(ttl), fw_up, fw_down, _LINK_SYSCTL))
     else:
         files.update(linkmodels.enc_files(link, name, local, remote, int(key), addr_cidr, int(mtu), int(port) if link in LINK_PORTS else 0, int(ttl), fw_up, fw_down, _LINK_SYSCTL))
 
@@ -629,7 +633,7 @@ class LinkFailed(RuntimeError):
 
 # The models tried after the one the owner chose, when it does not pass (the owner, 2026-10-20: "there are several GRE models - when the build finds that one does not answer it must test the others"). The ones in UDP come first (a route that
 # filters IP protocol 47 passes UDP most of the time), then the ones in raw IP protocols. WireGuard is last and only where `wg` is on the servers already: a build never installs a package by itself for a fall-back.
-FALLBACK_LINKS = ("gre", "fou", "gue", "ipsecnat", "ipipfou", "ipipgue", "ipip", "ipsec", "wg", "wgchisel", "wgchiselfwd")
+FALLBACK_LINKS = ("gre", "fou", "gue", "ipsecnat", "ipipfou", "ipipgue", "ipip", "ipsec", "gretap", "l2tpv3", "vxlan", "geneve", "wg", "wgchisel", "wgchiselfwd")
 NEEDS_WG_TOOL = ("wg", *linkmodels.CARRIER_LINKS)          # the models that need wireguard-tools on both servers (installed only when the owner asked: `install_wg`)
 
 
@@ -1101,7 +1105,7 @@ def _prepare_link(b: Build, iran: Node, foreign: Node, link: str) -> tuple[int, 
     wg_port, door, tcp = linkmodels.carrier_ports(port) if carried else (0, 0, 0)
     dials = "the foreign server dials the Iran server" if carried and linkmodels.CARRIER_DIAL[link] == "foreign" else "the Iran server dials the foreign server"
     carrier = (f"TCP port {tcp} (Chisel, TLS WebSocket; {dials}), WireGuard on UDP {wg_port} inside it, door 127.0.0.1:{door}" if carried else
-               f"UDP port {port}" if port else {"ipip": "IP protocol 4", "ipsec": "IP protocol 50 (ESP)"}[link])
+               f"UDP port {port}" if port else {"ipip": "IP protocol 4", "ipsec": "IP protocol 50 (ESP)", "gretap": "IP protocol 47 (GRE)", "l2tpv3": "IP protocol 115 (L2TPv3)"}[link])
     _say(aid, f"{LINK_TITLE[link]} link: {carrier} on both servers" + (", each server made its own key (the private key stays on it)" if link in NEEDS_WG_TOOL else ", keys made for the two directions (a file of 0600 on each server)" if link in ("ipsec", "ipsecnat") else ""))
     return port, pubs
 
@@ -1228,7 +1232,7 @@ def _build(b: Build) -> None:
     carried = link in linkmodels.CARRIER_LINKS
     filtered = (f"TCP port {linkmodels.carrier_ports(link_port)[2]} (the carrier) is probably filtered between these two servers, or Chisel does not run on one of them" if carried else
                 f"UDP port {link_port} is probably filtered between these two servers" if link_port else
-                {"gre": "GRE (protocol 47)", "ipip": "IPIP (protocol 4)", "ipsec": "ESP (protocol 50)"}[link] + " is probably filtered between these two servers")
+                {"gre": "GRE (protocol 47)", "ipip": "IPIP (protocol 4)", "ipsec": "ESP (protocol 50)", "gretap": "GRE-TAP (protocol 47)", "l2tpv3": "L2TPv3 (protocol 115)"}[link] + " is probably filtered between these two servers")
 
     # 4. the link on both sides (GRE, GRE / IPIP inside UDP, WireGuard or IPsec)
     def link_side(label: str, node: Node, local: str, remote: str, addr: str, peer_pub: str, ipsec: dict | None = None) -> None:

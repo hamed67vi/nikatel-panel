@@ -45,7 +45,7 @@ UNIT = "/etc/systemd/system/nikatel-carrier-ca-ir1.service"
 
 # ------------------------------------------------------------------ the registry, the ports, the kinds
 def test_the_nine_plain_models_are_what_they_were_and_two_carried_models_come_beside_them():
-    assert len(linkmodels.LINKS) == 9 and linkmodels.CARRIER_LINKS == ("wgchisel", "wgchiselfwd") and linkmodels.ALL_LINKS == linkmodels.LINKS + linkmodels.CARRIER_LINKS
+    assert len(linkmodels.LINKS) == 9 and linkmodels.CARRIER_LINKS == ("wgchisel", "wgchiselfwd") and linkmodels.ALL_LINKS == linkmodels.LINKS + linkmodels.L2_LINKS + linkmodels.CARRIER_LINKS
     assert not set(linkmodels.CARRIER_LINKS) & set(linkmodels.PORTS) and not any(linkmodels.is_udp(k) for k in linkmodels.CARRIER_LINKS)          # (what must pass is a TCP port, not a UDP one)
     assert [linkmodels.needs(k) for k in linkmodels.CARRIER_LINKS] == ["tcp", "tcp"] and linkmodels.needs("wg") == "udp"
     assert linkmodels.CARRIER_DIAL == {"wgchisel": "foreign", "wgchiselfwd": "iran"} and set(linkmodels.CARRIER_TITLE) == set(linkmodels.CARRIER_LINKS)

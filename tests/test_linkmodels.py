@@ -41,7 +41,8 @@ def test_there_are_nine_models_and_every_one_says_what_must_pass_between_the_ser
     assert linkmodels.ENCRYPTED == {"wg", "ipsec", "ipsecnat"} and linkmodels.ONE_PER_PAIR == {"ipip", "ipipfou", "ipipgue"}
     ranges = sorted(linkmodels.PORTS.values())
     assert all(a[1] < b[0] for a, b in itertools.pairwise(ranges))                                          # no two models share a UDP port range
-    assert set(linkmodels.TITLE) == set(linkmodels.LINKS) == set(linkmodels.OVERHEAD) == set(linkmodels.KERNEL)
+    assert set(linkmodels.TITLE) == set(linkmodels.OVERHEAD) == set(linkmodels.KERNEL) == set(linkmodels.LINKS + linkmodels.L2_LINKS)      # the nine plain models and the four L2 carriers (C-Tunnel)
+    assert linkmodels.L2_LINKS == ("l2tpv3", "vxlan", "geneve", "gretap") and [linkmodels.needs(k) for k in linkmodels.L2_LINKS] == ["l2tp", "udp", "udp", "gre"]
 
 
 def test_a_kind_is_the_link_and_the_transport_and_gre_keeps_the_bare_transport():
@@ -58,9 +59,9 @@ def test_the_pair_test_the_survey_and_the_doctor_know_every_link():
         assert tunnel_test.kind_parts(kind) == ("backhaul", "tcpmux")
         assert ap.kind_of("backhaul", "tcpmux", {"link": linkmodels.split_kind(kind)[0]}) == kind
 
-    assert set(knowledge.LINK_KINDS) - {"wg:tcp"} == set(linkmodels.all_kinds()[1:]) and set(knowledge.LINK_KINDS) <= set(knowledge.CUT_LINKS)
+    assert set(knowledge.LINK_KINDS) - {"wg:tcp"} == set(linkmodels.all_kinds()[1:]) | {f"{k}:tcpmux" for k in linkmodels.L2_LINKS} and set(knowledge.LINK_KINDS) <= set(knowledge.CUT_LINKS)
     assert {tunnel_test.kind_link(k) for k in linkmodels.all_kinds()} == set(linkmodels.LINKS)
-    assert set(knowledge.UDP_LINK_KINDS) == {"fou:tcpmux", "gue:tcpmux", "wg:tcpmux", "ipipfou:tcpmux", "ipipgue:tcpmux", "ipsecnat:tcpmux", "wg:tcp"}            # the ones that need a UDP port, not a raw protocol
+    assert set(knowledge.UDP_LINK_KINDS) == {"fou:tcpmux", "gue:tcpmux", "wg:tcpmux", "ipipfou:tcpmux", "ipipgue:tcpmux", "ipsecnat:tcpmux", "wg:tcp", "vxlan:tcpmux", "geneve:tcpmux"}            # the ones that need a UDP port, not a raw protocol (VXLAN / Geneve added)
     assert {k[3] for k in tunnel_test.KINDS if k[0] in knowledge.LINK_KINDS} == {"Backhaul over another link"}
 
 
@@ -261,7 +262,8 @@ def test_a_survey_that_found_the_links_that_pass_on_a_pair_tries_them_first():
 
 def test_the_measured_order_of_the_links_puts_the_raw_protocols_first_and_the_udp_ones_that_were_slow_last():
     """Measured on the test route (2026-10-17, Iran server -> foreign server, 4 TCP streams): IPIP 1307 Mb/s, IPIP in FOU 1228, IPsec ESP 1055, IPIP in GUE 43, IPsec in UDP 30, WireGuard 19, GRE in FOU 2.4, GRE in GUE 2.0."""
-    assert list(knowledge.LINK_KINDS[:3]) == ["ipip:tcpmux", "ipipfou:tcpmux", "ipsec:tcpmux"] and list(knowledge.LINK_KINDS[-3:]) == ["fou:tcpmux", "gue:tcpmux", "wg:tcp"]
+    assert list(knowledge.LINK_KINDS[:3]) == ["ipip:tcpmux", "ipipfou:tcpmux", "ipsec:tcpmux"] and list(knowledge.LINK_KINDS[6:9]) == ["fou:tcpmux", "gue:tcpmux", "wg:tcp"]
+    assert list(knowledge.LINK_KINDS[9:]) == ["l2tpv3:tcpmux", "gretap:tcpmux", "vxlan:tcpmux", "geneve:tcpmux"]       # the C-Tunnel L2 carriers last (not measured for speed yet; the link probe decides which passes per pair)
     assert knowledge.cut_order(True, True, True)[-len(knowledge.CUT_LINKS):] == list(knowledge.LINK_KINDS)
 
 

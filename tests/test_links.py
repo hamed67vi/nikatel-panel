@@ -116,7 +116,7 @@ def test_the_reviewed_scripts_for_a_link_take_only_what_their_rules_allow():
     i = ssh.render_action("wg_install", {})
     assert "apt-get install -y -qq wireguard-tools" in i and "WG_FAIL" in i
     r = ssh.render_action("remove_tunnel_files", {"NAME": "ca-ir1", "PORT": "9901", "TRANSPORT": "tcpmux"})
-    assert 'rm -f "/etc/nikatel/wg/$n.key" "/etc/nikatel/ipsec/$n.keys"' in r and "grep -qE 'wireguard|gre |ipip|xfrm'" in r      # (the keys go with the tunnel; a WireGuard / IPIP / xfrm link is deleted with `ip link`)
+    assert 'rm -f "/etc/nikatel/wg/$n.key" "/etc/nikatel/ipsec/$n.keys"' in r and "grep -qE 'wireguard|gre |gretap|ipip|xfrm|vxlan|geneve|l2tp'" in r      # (the keys go with the tunnel; a WireGuard / IPIP / xfrm / L2 link is deleted with `ip link`)
 
 
 # ------------------------------------------------------------------ the kinds the Doctor knows

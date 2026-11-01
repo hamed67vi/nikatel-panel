@@ -333,7 +333,7 @@ def test_the_ladder_only_has_known_steps_and_the_retry_wait_never_shrinks():
         d = {"iran_error": r.choice(["", "x"]), "state": r.choice([None, "up", "down", "degraded"]), "units_bad": r.choice([[], ["a"]]), "under_loss_i": num(r), "under_loss_f": num(r), "ext_blocked": r.choice([True, False, None]),
              "gre": r.choice([True, False]), "gre_loss": num(r), "link": r.choice([None, "gre", "wg", "ipsec", "wgchisel", "zz"]), "flap_fails": r.choice([None, 0, 5]), "flap_n": 10, "port_open": r.choice([None, True, False])}
         cause, why = ap.classify(d)
-        assert cause in {"server_unreachable", "healthy", "units_down", "route_cut", "gre_blocked", "lossy_route", "port_blocked", "unknown"} and why
+        assert cause in {"server_unreachable", "healthy", "units_down", "route_cut", "gre_blocked", "lossy_route", "port_blocked", "no_service", "unknown"} and why
         steps = ap.ladder_for(cause, "tcpmux", r.choice(["restart", "rebuild", "switch", "zz", None]), r.choice([True, False]))
         assert set(steps) <= {"restart", "rebuild", "relink", "switch", "move"} and len(steps) == len(set(steps))
 

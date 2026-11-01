@@ -92,16 +92,25 @@ def classify(d: dict) -> tuple[str, str]:
         return "units_down", "tunnel services are not running: " + ", ".join(d["units_bad"][:3])
 
     loss_i, loss_f = d.get("under_loss_i"), d.get("under_loss_f")
+    # something between the two servers clearly carries data: the inner link ping answers, or a TCP connection opens. Used below so a route is NOT called "cut" from ICMP of the PUBLIC addresses alone - a route may drop ICMP while
+    # GRE / ESP / L2TPv3 pass (seen on a real pair, 2026-11: the GRE and ESP links came up 20/20 both ways while ping of the public addresses was 100 % lost, and the Doctor wrongly read it as "route cut").
+    link_passes = (d.get("gre") and d.get("gre_loss") is not None and d["gre_loss"] < 50) or bool(d.get("dial_i")) or bool(d.get("dial_f"))
+
+    # a CONFIRMED "no service" (nothing listens on the foreign port the tunnel delivers to): no tunnel TYPE can carry data to a port that has no listener, so the autopilot must NOT walk through the tunnel kinds
+    # (the owner, 2026-11: a tunnel swapped through 18 kinds because its forwarded foreign port had no service). It is the cause only when the link itself is not cut - if the link is cut, that cut is the real problem.
+    if d.get("no_service") and not (d.get("gre") and (d.get("gre_loss") is None or d["gre_loss"] >= 50) and not link_passes):
+        ports = ", ".join(str(p) for p in (d.get("no_service_ports") or []))
+        return "no_service", f"the tunnel is connected but nothing listens on port {ports} of the foreign server: no tunnel type can carry data to a port that has no service - add the inbound there, or point the tunnel at a port that has one (Ports…)"
 
     if d.get("ext_blocked"):
         return "route_cut", f"port {d.get('user_port') or ''} answers on the Iran server but not from another Iran server: it is blocked in front of the server, only another Iran server helps"
 
-    if (loss_i is not None and loss_i >= 50) or (loss_f is not None and loss_f >= 50):
+    if not link_passes and ((loss_i is not None and loss_i >= 50) or (loss_f is not None and loss_f >= 50)):
         return "route_cut", f"the two servers cannot reach each other (loss {loss_i}% / {loss_f}%): the route between them is cut or filtered"
 
     link = d.get("link") or "gre"
     udp = linkmodels.is_udp(link)                  # the link under Backhaul is in a UDP port (WireGuard, GRE / IPIP inside UDP, IPsec in UDP): what is filtered is that port, not protocol 47 (the cause keeps the name "gre_blocked": the same ladder)
-    raw = {"ipip": "IPIP (protocol 4)", "ipsec": "ESP (protocol 50)"}.get(link, "")       # a raw-protocol link other than GRE: what is filtered is that protocol
+    raw = {"ipip": "IPIP (protocol 4)", "ipsec": "ESP (protocol 50)", "gretap": "GRE-TAP (protocol 47)", "l2tpv3": "L2TPv3 (protocol 115)"}.get(link, "")       # a raw-protocol link other than GRE: what is filtered is that protocol
     title = linkmodels.NAMES.get(link, "GRE")
     carried = linkmodels.is_carrier(link)          # a WireGuard link inside a Chisel carrier: what is filtered is the one TCP port of the carrier (or the carrier is down)
 
@@ -238,8 +247,10 @@ def diagnose(tunnel_id: int, max_age: int = 20) -> dict:
 
     gre = info["type"] in ("backhaul", "gre")
     units_bad = [f"{u} ({s})" for side in ("iran_units", "foreign_units") for u, s in (det.get(side) or {}).items() if s != "active"]
+    ns = det.get("no_service") or {}
     facts = {"state": info["state"], "last_error": info["last_error"], "iran_error": det.get("iran_error", ""), "foreign_error": det.get("foreign_error", ""),
-             "units_bad": units_bad, "gre": gre, "gre_loss": det.get("loss_pct"), "port": info["port"], "link": rec.get("link") or "gre"}
+             "units_bad": units_bad, "gre": gre, "gre_loss": det.get("loss_pct"), "port": info["port"], "link": rec.get("link") or "gre",
+             "no_service": bool(ns.get("confirmed")), "no_service_ports": ns.get("ports") or []}
 
     with session() as db:        # the recent history: a link that answers only now and then is a route problem, whatever this one check found
         recent = [bool(c.ok) for c in db.scalars(select(TunnelCheck).where(TunnelCheck.tunnel_id == tunnel_id).order_by(TunnelCheck.id.desc()).limit(10))]
@@ -1043,6 +1054,10 @@ def smart_fix(aid: int, tunnel_id: int, level: str, source: str = "manual", fini
     if d["cause"] == "healthy":
         _say(aid, f"{snap['name']}: nothing to repair.", done=finish, ok=True)
         return True
+
+    if d["cause"] == "no_service":          # connected but nothing listens on the foreign port: no tunnel type can carry data to a port with no listener, so the Doctor does NOT swap types or move (the owner, 2026-11: a "no service" tunnel is not a cut tunnel)
+        _say(aid, f"{snap['name']}: connected but no service on the foreign port - the tunnel type is not swapped for this (no type can reach a port with no listener). Add the inbound there, or point the tunnel at a port that has one (Ports…).", done=finish, ok=False)
+        return False
 
     steps = ladder_for(d["cause"], d["kind"], level, d.get("ext_blocked", False))
 

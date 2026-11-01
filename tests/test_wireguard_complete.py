@@ -387,10 +387,10 @@ def worker(monkeypatch):
 
 
 def test_a_build_of_the_owner_falls_back_to_wireguard_when_the_tools_are_already_on_both_servers_without_asking_for_an_install(worker):
-    plain = [k for k in linkmodels.LINKS if k != "wg"]
-    assert worker(set(plain), ready=True)[-1] == "wg"                                                                  # (nothing is installed: the tools are there)
-    assert worker(set(plain), ready=False)[-1] != "wg" and "wg" not in worker(set(plain), ready=False)                  # not there, and no install asked: it is not tried
-    assert worker(set(plain), ready=False, install_wg=True)[-1] == "wg"
+    before_wg = [k for k in linkmodels.ALL_LINKS if k not in ("wg", "wgchisel", "wgchiselfwd")]                          # every model before WireGuard in the fall-back order (the plain ones and the L2 carriers): WireGuard is reached only when they all fail
+    assert worker(set(before_wg), ready=True)[-1] == "wg"                                                              # (nothing is installed: the tools are there)
+    assert worker(set(before_wg), ready=False)[-1] != "wg" and "wg" not in worker(set(before_wg), ready=False)          # not there, and no install asked: it is not tried
+    assert worker(set(before_wg), ready=False, install_wg=True)[-1] == "wg"
 
 
 def test_the_tools_are_ready_only_when_both_servers_have_the_tool_and_the_module(monkeypatch):

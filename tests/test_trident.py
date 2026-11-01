@@ -43,13 +43,14 @@ def writable(monkeypatch):
 
 
 # ------------------------------------------------------------------ the kinds
-def test_every_one_of_the_64_kinds_has_traits_and_the_families_are_what_a_filter_sees():
+def test_every_one_of_the_80_kinds_has_traits_and_the_families_are_what_a_filter_sees():
     kinds = [k[0] for k in tunnel_test.KINDS]
-    assert len(kinds) == 64
+    assert len(kinds) == 80          # 64 + the four C-Tunnel L2 carriers x 4 transports
 
     for k in kinds:
         t = trident.traits(k)
-        assert set(t) == {"family", "l4", "dial", "tls", "enc", "over"} and isinstance(t["enc"], bool) and 0 <= t["over"] <= 100 and t["family"] in ("gre", "ipip", "esp", "udp", "tcp", "icmp") and t["dial"] in ("iran", "foreign")
+        assert set(t) == {"family", "l4", "dial", "tls", "enc", "over"} and isinstance(t["enc"], bool) and 0 <= t["over"] <= 100 and t["family"] in ("gre", "ipip", "esp", "udp", "tcp", "icmp", "l2tp") and t["dial"] in ("iran", "foreign")
+    assert trident.traits("gretap:tcpmux")["family"] == "gre" and trident.traits("vxlan:tcpmux")["family"] == "udp" and trident.traits("l2tpv3:tcpmux")["family"] == "l2tp"
 
     assert trident.traits("tcpmux")["family"] == "gre" and trident.traits("wssmux")["tls"] is True
     assert trident.traits("wg:tcpmux")["family"] == "udp" and trident.traits("fou:tcpmux")["family"] == "udp" and trident.traits("ipip:tcpmux")["family"] == "ipip" and trident.traits("ipsec:tcpmux")["family"] == "esp"

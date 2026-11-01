@@ -104,10 +104,11 @@ _STATE: dict = {"init": False, "reconciled": 0.0, "cleaned": 0.0}
 _BP_L4 = {"tcpmux": "tcp", "tcp": "tcp", "stealth": "tcp", "ws": "tcp", "wsmux": "tcp", "wss": "tcp", "wssmux": "tcp", "pck": "tcp-raw", "kcp": "udp", "quic": "udp", "xdi": "icmp"}
 _BPD_L4 = {"udp": "udp", "quic": "udp", "pck": "tcp-raw", "xdi": "icmp"}
 _FAMILY = {"tcp": "tcp", "tcp-raw": "tcp", "udp": "udp", "icmp": "icmp"}
-_LINK_FAMILY = {"wg": "udp", "fou": "udp", "gue": "udp", "ipipfou": "udp", "ipipgue": "udp", "ipsecnat": "udp", "ipip": "ipip", "ipsec": "esp"}
+_LINK_FAMILY = {"wg": "udp", "fou": "udp", "gue": "udp", "ipipfou": "udp", "ipipgue": "udp", "ipsecnat": "udp", "ipip": "ipip", "ipsec": "esp",
+                "gretap": "gre", "vxlan": "udp", "geneve": "udp", "l2tpv3": "l2tp"}      # the C-Tunnel L2 carriers: GRE-TAP falls to a protocol-47 filter like GRE, VXLAN / Geneve to a UDP filter, L2TPv3 (protocol 115) to its own (it survives when the others are filtered)
 # What a packet-carrying kind adds to every packet (bytes: the outer IP header and what the carrier puts on it); a kind that rides a TCP STREAM adds none to the packets (TCP cuts them to size by itself). The owner, 2026-10-24: the premium
 # Backhaul of a friend shows MTU 1320 for its raw-packet mode against 1500 for TCP: the MTU of a strand is part of how good it is.
-_OVER_LINK = {"ipip": 20, "ipipfou": 48, "ipipgue": 56, "fou": 28, "gue": 36, "ipsec": 56, "ipsecnat": 64, "wg": 60}
+_OVER_LINK = {"ipip": 20, "ipipfou": 48, "ipipgue": 56, "fou": 28, "gue": 36, "ipsec": 56, "ipsecnat": 64, "wg": 60, "l2tpv3": 42, "vxlan": 50, "geneve": 50, "gretap": 38}
 _OVER_L4 = {"tcp": 0, "tcp-raw": 40, "udp": 28, "icmp": 52}
 _ENC_LINKS = ("wg", "ipsec", "ipsecnat", "wgchisel", "wgchiselfwd")
 

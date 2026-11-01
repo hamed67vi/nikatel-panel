@@ -23,18 +23,30 @@ import ipaddress
 import re
 
 LINKS = ("gre", "fou", "gue", "ipip", "ipipfou", "ipipgue", "wg", "ipsec", "ipsecnat")
+# ------------------------------------------------------------------ the L2 (ethernet pseudowire) carriers of C-Tunnel (github.com/CIAUB/C-Tunnel), 1.69.x
+# The kernel makes each of these itself (no daemon, no third-party binary): a point-to-point ethernet interface between the two servers, with the inner /30 put ON it, and Backhaul runs over the /30 exactly as over a GRE link.
+# They sit beside the nine plain models in `linkmodels.L2_LINKS` so the tests that pin `LINKS == 9` stay as they are. What differs is the `ip link add` (or `ip l2tp`) command and the overhead.
+#   l2tpv3   static L2TPv3 pseudowire, IP encapsulation = IP protocol 115 (the ONE carrier measured, 2026-11-01/02, to pass a route that drops TCP / UDP / ICMP / IPIP while letting GRE, ESP and L2TPv3 through)
+#   vxlan    ethernet over UDP 4789 (the VNI tells the tunnels apart, so many share the port)
+#   geneve   ethernet over UDP 6081
+#   gretap   ethernet over GRE (IP protocol 47) - like GRE but L2; useful where plain GRE passes and an L2 link is wanted
+L2_LINKS = ("l2tpv3", "vxlan", "geneve", "gretap")
+L2_TITLE = {"l2tpv3": "L2TPv3", "vxlan": "VXLAN", "geneve": "Geneve", "gretap": "GRE-TAP"}
 TRANSPORTS = ("tcpmux", "tcp", "wsmux", "wssmux")          # the Backhaul transports that run over a link
 TITLE = {"gre": "GRE", "fou": "GRE over UDP (FOU)", "gue": "GRE over UDP (GUE)", "ipip": "IPIP", "ipipfou": "IPIP over UDP (FOU)", "ipipgue": "IPIP over UDP (GUE)", "wg": "WireGuard",
-         "ipsec": "IPsec (ESP)", "ipsecnat": "IPsec (ESP in UDP, NAT-T)"}
-PORTS = {"fou": (5500, 5599), "gue": (5600, 5699), "ipipfou": (5700, 5799), "ipipgue": (5800, 5899), "wg": (51820, 51919), "ipsecnat": (4500, 4599)}      # the UDP port range of a link: ONE port, the same on both servers
-NEEDS = {"gre": "gre", "ipip": "ipip", "ipsec": "esp"}                         # a link that is not in a UDP port needs a raw IP protocol to pass: "gre" = 47, "ipip" = 4, "esp" = 50
-ENCRYPTED = frozenset({"wg", "ipsec", "ipsecnat"})
-ONE_PER_PAIR = frozenset({"ipip", "ipipfou", "ipipgue"})                       # IPIP has no key: the kernel holds ONE tunnel per pair of addresses
+         "ipsec": "IPsec (ESP)", "ipsecnat": "IPsec (ESP in UDP, NAT-T)", **L2_TITLE}
+PORTS = {"fou": (5500, 5599), "gue": (5600, 5699), "ipipfou": (5700, 5799), "ipipgue": (5800, 5899), "wg": (51820, 51919), "ipsecnat": (4500, 4599),
+         "vxlan": (4789, 4799), "geneve": (6081, 6091)}      # the UDP port range of a link: ONE port, the same on both servers (VXLAN / Geneve keep their standard port as the base of the range)
+NEEDS = {"gre": "gre", "ipip": "ipip", "ipsec": "esp", "gretap": "gre", "l2tpv3": "l2tp"}       # a link that is not in a UDP port needs a raw IP protocol to pass: "gre" = 47, "ipip" = 4, "esp" = 50, "l2tp" = 115
+ENCRYPTED = frozenset({"wg", "ipsec", "ipsecnat"})          # the L2 carriers are all plaintext (like GRE / FOU): they hide nothing by themselves
+ONE_PER_PAIR = frozenset({"ipip", "ipipfou", "ipipgue"})                       # IPIP has no key: the kernel holds ONE tunnel per pair of addresses (the L2 carriers carry a VNI / tunnel id / GRE key, so many per pair)
 UDP_LINKS = tuple(k for k in LINKS if k in PORTS)
 RAW_LINKS = tuple(k for k in LINKS if k not in PORTS)
-OVERHEAD = {"gre": 24, "fou": 52, "gue": 56, "ipip": 20, "ipipfou": 48, "ipipgue": 52, "wg": 80, "ipsec": 76, "ipsecnat": 84}      # bytes added to every packet (the worst case)
+OVERHEAD = {"gre": 24, "fou": 52, "gue": 56, "ipip": 20, "ipipfou": 48, "ipipgue": 52, "wg": 80, "ipsec": 76, "ipsecnat": 84,
+            "l2tpv3": 50, "vxlan": 50, "geneve": 50, "gretap": 42}      # bytes added to every packet (the worst case; the L2 ones add an ethernet header on top of their encapsulation)
 KERNEL = {"gre": ("ip_gre",), "fou": ("ip_gre", "fou"), "gue": ("ip_gre", "fou"), "ipip": ("ipip",), "ipipfou": ("ipip", "fou"), "ipipgue": ("ipip", "fou"), "wg": ("wireguard",),
-          "ipsec": ("xfrm_interface", "esp4"), "ipsecnat": ("xfrm_interface", "esp4")}      # the modules a link needs (fou carries GUE too)
+          "ipsec": ("xfrm_interface", "esp4"), "ipsecnat": ("xfrm_interface", "esp4"),
+          "l2tpv3": ("l2tp_eth", "l2tp_ip"), "vxlan": ("vxlan",), "geneve": ("geneve",), "gretap": ("ip_gre",)}      # the modules a link needs (fou carries GUE too; l2tp_eth pulls l2tp_core / l2tp_netlink, l2tp_ip gives the IP-encap socket)
 _IPV4 = re.compile(r"(\d{1,3}\.){3}\d{1,3}")
 _NAME = re.compile(r"[a-z0-9][a-z0-9-]{0,14}")
 _HEX20 = re.compile(r"[0-9a-f]{40}")
@@ -51,9 +63,9 @@ _HEX20 = re.compile(r"[0-9a-f]{40}")
 # is faster when the Iran side dials). In both the Iran WireGuard end starts the talk (endpoint 127.0.0.1:Q) and the foreign end answers whoever it hears from (roaming): ONE UDP flow carries both directions.
 # One number N (52000-52099) gives the three ports: P = N (WireGuard, both servers), Q = N + 100 (the loopback door of the dialling-in side, Iran), C = 9400 + (N - 52000) (the TCP port of the Chisel server).
 CARRIER_LINKS = ("wgchisel", "wgchiselfwd")
-ALL_LINKS = LINKS + CARRIER_LINKS
+ALL_LINKS = LINKS + L2_LINKS + CARRIER_LINKS
 CARRIER_TITLE = {"wgchisel": "WireGuard in Chisel (foreign dials)", "wgchiselfwd": "WireGuard in Chisel (Iran dials)"}
-NAMES = {**TITLE, **CARRIER_TITLE}                                  # a name for every model, plain or carried
+NAMES = {**TITLE, **CARRIER_TITLE}                                  # a name for every model, plain, L2 or carried (TITLE already holds the L2 ones)
 CARRIER_DIAL = {"wgchisel": "foreign", "wgchiselfwd": "iran"}       # who opens the TCP connection of the carrier (the other side runs the Chisel server)
 CARRIER_RANGE = (52000, 52099)
 CARRIER_TCP_BASE = 9400
@@ -295,7 +307,7 @@ def firewall_match(link: str, port: int) -> str:
     if link in PORTS:
         return f"-p udp --dport {int(port)}"
 
-    return {"ipip": "-p 4", "ipsec": "-p 50"}[link]
+    return {"ipip": "-p 4", "ipsec": "-p 50", "gretap": "-p 47", "l2tpv3": "-p 115"}[link]
 
 
 def enc_files(link: str, name: str, local: str, remote: str, key: int, addr_cidr: str, mtu: int, port: int, ttl: int, fw_up: str, fw_down: str, sysctl: str) -> dict[str, str]:
@@ -343,6 +355,156 @@ def ipsec_files(link: str, name: str, local: str, remote: str, ifid: int, addr_c
 
     keys = f"KEY_TX={key_tx}\nKEY_RX={key_rx}\n"
     return {f"/usr/local/sbin/nikatel-gre-up-{name}": fill(up, fw_up, True), f"/usr/local/sbin/nikatel-gre-down-{name}": fill(down, fw_down, False), f"/etc/nikatel/ipsec/{name}.keys": keys}
+
+
+# ------------------------------------------------------------------ the L2 carriers of C-Tunnel: VXLAN / Geneve / GRE-TAP (one `ip link add type`), and L2TPv3 (ip l2tp)
+# Each makes a point-to-point ethernet interface named like the tunnel; the inner /30 is put ON it and Backhaul runs over the /30, exactly as over a GRE link. The down script deletes the interface only when its alias
+# says it is ours ("nikatel:<name>"), so an interface of the same name that is not ours is never removed. Everything that goes into a script is checked first (the scripts run as root on a server).
+_L2_UP = """#!/bin/sh
+# Nikatel @TITLE@ link @NAME@  (idempotent: also used by the health-check timer). An ethernet pseudowire with the inner /30 on it; Backhaul runs over the /30.
+NAME=@NAME@
+LOCAL=@LOCAL@
+REMOTE=@REMOTE@
+PORT=@PORT@
+KEY=@KEY@
+VNI=@VNI@
+ADDR=@ADDR@
+MTU=@MTU@
+TTL=@TTL@
+TAG="nikatel-gre-$NAME"
+
+@MODPROBE@
+@FIREWALL@
+if ! ip link show "$NAME" >/dev/null 2>&1; then
+  ip link add "$NAME" type @ADDARGS@ || exit 1
+fi
+ip link set dev "$NAME" alias "nikatel:$NAME" 2>/dev/null || true
+ip link set "$NAME" mtu "$MTU"
+ip addr show dev "$NAME" | grep -q "inet ${ADDR%/*}/" || ip addr add "$ADDR" dev "$NAME"
+ip link set "$NAME" up
+@SYSCTL@"""
+_L2_DOWN = """#!/bin/sh
+NAME=@NAME@
+TAG="nikatel-gre-$NAME"
+ip link set "$NAME" down 2>/dev/null || true
+if ip -d link show "$NAME" 2>/dev/null | grep -q "nikatel:$NAME"; then ip link del "$NAME" 2>/dev/null || true; fi
+@FIREWALL@exit 0
+"""
+# the `ip link add ... type <these>` of each L2 carrier. VXLAN / Geneve tell their tunnels apart by the VNI (so many can share the UDP port); GRE-TAP by the GRE key (like GRE). `nolearning` keeps VXLAN a pure
+# point-to-point link (no MAC learning, no multicast). The modules are loaded first so a fresh server can bring the link up from its unit at boot.
+_L2_ADD = {
+    "vxlan": ('vxlan id "$VNI" local "$LOCAL" remote "$REMOTE" dstport "$PORT" ttl "$TTL" nolearning', ("vxlan",)),
+    "geneve": ('geneve id "$VNI" remote "$REMOTE" dstport "$PORT" ttl "$TTL"', ("geneve",)),          # (geneve picks its own source address from the route to REMOTE; it takes no `local`)
+    "gretap": ('gretap local "$LOCAL" remote "$REMOTE" key "$KEY" ttl "$TTL"', ("ip_gre",)),
+}
+_L2TP_UP = """#!/bin/sh
+# Nikatel L2TPv3 link @NAME@  (idempotent: also used by the health-check timer). A STATIC L2TPv3 pseudowire with IP encapsulation (IP protocol 115, no control plane) - the carrier measured to pass where a route
+# drops TCP / UDP / ICMP / IPIP but lets GRE, ESP and L2TPv3 through. The tunnel and session ids are the SAME pair on both servers, mirror-swapped (baked in: this end is the @ROLE@ one). Backhaul runs over the inner /30.
+NAME=@NAME@
+LOCAL=@LOCAL@
+REMOTE=@REMOTE@
+ADDR=@ADDR@
+MTU=@MTU@
+TID=@TID@
+PTID=@PTID@
+SID=@SID@
+PSID=@PSID@
+TAG="nikatel-gre-$NAME"
+
+modprobe l2tp_eth 2>/dev/null || true
+modprobe l2tp_ip 2>/dev/null || true
+@FIREWALL@
+if ! ip link show "$NAME" >/dev/null 2>&1; then
+  ip l2tp show tunnel tunnel_id "$TID" 2>/dev/null | grep -q . || ip l2tp add tunnel tunnel_id "$TID" peer_tunnel_id "$PTID" encap ip local "$LOCAL" remote "$REMOTE" || exit 1
+  ip l2tp add session name "$NAME" tunnel_id "$TID" session_id "$SID" peer_session_id "$PSID" || { ip l2tp del tunnel tunnel_id "$TID" 2>/dev/null; exit 1; }
+fi
+ip link set dev "$NAME" alias "nikatel:$NAME" 2>/dev/null || true
+ip addr show dev "$NAME" | grep -q "inet ${ADDR%/*}/" || ip addr add "$ADDR" dev "$NAME"
+ip link set "$NAME" mtu "$MTU" up
+@SYSCTL@"""
+_L2TP_DOWN = """#!/bin/sh
+NAME=@NAME@
+TID=@TID@
+SID=@SID@
+TAG="nikatel-gre-$NAME"
+ip link set "$NAME" down 2>/dev/null || true
+ip l2tp del session tunnel_id "$TID" session_id "$SID" 2>/dev/null || true
+ip l2tp del tunnel tunnel_id "$TID" 2>/dev/null || true
+if ip -d link show "$NAME" 2>/dev/null | grep -q "nikatel:$NAME"; then ip link del "$NAME" 2>/dev/null || true; fi
+@FIREWALL@exit 0
+"""
+
+
+def l2_ids(key: int, local: str, remote: str) -> tuple[int, int, int, int]:
+    """Pure: the (tunnel_id, peer_tunnel_id, session_id, peer_session_id) of ONE end of an L2TPv3 pseudowire. Both ends derive the SAME two ids from the GRE key and mirror them by which public address is the smaller, so the two
+    ends agree without the panel sending anything per end (as GRE and IPIP agree on one key). L2TPv3 over IP demuxes an incoming data packet by its SESSION id, so the two ids must differ and be unique on a server across its
+    l2tpv3 links: a ~30-bit value from the key, with the two ends' ids differing in a high bit (collision between two links of one server is about one in a billion). Session id = tunnel id (separate namespaces)."""
+    t1 = (int(key) % 0x3FFFFFFE) + 1          # 1 .. ~1.07e9
+    t2 = t1 | 0x40000000                       # the other end's id: the same value with bit 30 set (always distinct, still < 2**31)
+
+    if int(ipaddress.IPv4Address(local)) < int(ipaddress.IPv4Address(remote)):
+        return t1, t2, t1, t2
+
+    return t2, t1, t2, t1
+
+
+def _l2_check(link: str, name: str, local: str, remote: str, port: int, mtu: int) -> None:
+    if link not in L2_LINKS:
+        raise ValueError("this is not an L2 carrier")
+
+    if not _NAME.fullmatch(name) or not _IPV4.fullmatch(local) or not _IPV4.fullmatch(remote) or not 576 <= int(mtu) <= 1500:
+        raise ValueError("a link needs a tunnel name, two IPv4 addresses and an MTU")
+
+    if link in PORTS:
+        lo, hi = PORTS[link]
+
+        if not lo <= int(port) <= hi:
+            raise ValueError(f"the UDP port of a {TITLE[link]} link is {lo}-{hi}")
+
+
+def l2_files(link: str, name: str, local: str, remote: str, key: int, addr_cidr: str, mtu: int, port: int, ttl: int, fw_up: str, fw_down: str, sysctl: str) -> dict[str, str]:
+    """The up and down script of a VXLAN / Geneve / GRE-TAP link - {path: text}. The VNI is the low 24 bits of the GRE key (the same on both ends); GRE-TAP uses the key itself."""
+    _l2_check(link, name, local, remote, port, mtu)
+
+    if link == "l2tpv3":
+        raise ValueError("L2TPv3 has its own files (l2tp_files)")
+
+    add_args, modules = _L2_ADD[link]
+    vni = int(key) % 0x1000000 or 1                                  # a 24-bit VNI, never 0
+    up = _L2_UP.replace("@TITLE@", TITLE[link]).replace("@MODPROBE@", "\n".join(f"modprobe {m} 2>/dev/null || true" for m in modules)).replace("@ADDARGS@", add_args)
+    down = _L2_DOWN
+    put = {"@NAME@": name, "@LOCAL@": local, "@REMOTE@": remote, "@PORT@": str(int(port)), "@KEY@": str(int(key)), "@VNI@": str(vni), "@ADDR@": addr_cidr, "@MTU@": str(int(mtu)), "@TTL@": str(int(ttl))}
+
+    def fill(text: str, firewall: str, with_sysctl: bool) -> str:
+        text = text.replace("@FIREWALL@", firewall).replace("@SYSCTL@", sysctl if with_sysctl else "")
+
+        for k, v in put.items():
+            text = text.replace(k, v)
+
+        return text
+
+    return {f"/usr/local/sbin/nikatel-gre-up-{name}": fill(up, fw_up, True), f"/usr/local/sbin/nikatel-gre-down-{name}": fill(down, fw_down, False)}
+
+
+def l2tp_files(link: str, name: str, local: str, remote: str, key: int, addr_cidr: str, mtu: int, fw_up: str, fw_down: str, sysctl: str) -> dict[str, str]:
+    """The up and down script of an L2TPv3 pseudowire end (IP encap, protocol 115) - {path: text}. The ids are mirror-derived (`l2_ids`), so the two ends agree."""
+    if link != "l2tpv3":
+        raise ValueError("this is not an L2TPv3 link")
+
+    _l2_check(link, name, local, remote, 0, mtu)
+    tid, ptid, sid, psid = l2_ids(int(key), local, remote)
+    role = "low" if int(ipaddress.IPv4Address(local)) < int(ipaddress.IPv4Address(remote)) else "high"
+    put = {"@NAME@": name, "@LOCAL@": local, "@REMOTE@": remote, "@ADDR@": addr_cidr, "@MTU@": str(int(mtu)), "@TID@": str(tid), "@PTID@": str(ptid), "@SID@": str(sid), "@PSID@": str(psid), "@ROLE@": role}
+
+    def fill(text: str, firewall: str, with_sysctl: bool) -> str:
+        text = text.replace("@FIREWALL@", firewall).replace("@SYSCTL@", sysctl if with_sysctl else "")
+
+        for k, v in put.items():
+            text = text.replace(k, v)
+
+        return text
+
+    return {f"/usr/local/sbin/nikatel-gre-up-{name}": fill(_L2TP_UP, fw_up, True), f"/usr/local/sbin/nikatel-gre-down-{name}": fill(_L2TP_DOWN, fw_down, False)}
 
 
 # ------------------------------------------------------------------ a WireGuard link inside a Chisel carrier
