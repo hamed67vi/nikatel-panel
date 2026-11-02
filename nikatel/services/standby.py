@@ -154,7 +154,9 @@ def choose_kind(kinds: list[str], primary_kind: str, pair: dict | None, now: int
     """(the type of the standby, the sentence that says why) - ('', why not) when none can be. `kinds`: the Doctor's candidates for this pair, best first (`knowledge.plan_for`). Left out: the tunnel's own type, what
     failed on this pair lately, what the licence does not allow, what a standby build failed with lately (`skip`). Chosen: a type whose family of carriers is not BLOCKED on the route today (`blocked_families`, the
     weather of services/weather.py; a blocked one only when nothing else is left), then a type known to connect on this pair before an unknown one, and in each of the two groups one with ANOTHER carrier than the
-    tunnel's before one with the same (a standby that falls with the tunnel is no standby)."""
+    tunnel's before one with the same (a standby that falls with the tunnel is no standby), and among those one that does not need the SAME server to dial as the tunnel does (`knowledge.dial_side`: a tunnel where the foreign
+    server dials in and a standby where it dials in too both stop when the Iran server is cut from abroad; one where the Iran server dials out, or a kernel link, does not - the owner, 2026-11-02: what is ready must
+    stand when the Iran server is cut, when the foreign server is filtered, or both)."""
     from . import weather
 
     bad = set(knowledge.blocked(pair, now))
@@ -165,8 +167,10 @@ def choose_kind(kinds: list[str], primary_kind: str, pair: dict | None, now: int
 
     known = {r["kind"] for r in knowledge.ranked(pair, now, include_poor=True)}
     mine = carrier(primary_kind)
-    best = min(enumerate(pool), key=lambda it: (weather.family_of_kind(it[1]) in blocked_families, carrier(it[1]) == mine, it[1] not in known, it[0]))[1]
+    side = knowledge.dial_side(primary_kind)
+    best = min(enumerate(pool), key=lambda it: (weather.family_of_kind(it[1]) in blocked_families, carrier(it[1]) == mine, bool(side) and knowledge.dial_side(it[1]) == side, it[1] not in known, it[0]))[1]
     note = ("known to connect on this pair" if best in known else "not tested on this pair yet") + (", another carrier than the tunnel's" if carrier(best) != mine else ", the same carrier as the tunnel (nothing else was left)")
+    note += ", and it does not need the same server to dial as the tunnel does" if side and knowledge.dial_side(best) != side else ""
     note += " (its family is blocked on this route today: nothing else was left)" if weather.family_of_kind(best) in blocked_families else ""
     return best, f"{best}: {note}"
 

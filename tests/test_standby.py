@@ -135,6 +135,20 @@ def test_the_standby_has_another_carrier_than_the_tunnel_and_what_is_known_to_co
     assert kind == "" and "no other tunnel type" in why                                                              # the tunnel's own type is never its standby
 
 
+def test_a_standby_does_not_need_the_same_server_to_dial_as_its_tunnel():
+    """(the owner, 2026-11-02, tunnels no longer behind a CDN: what is ready must stand when the Iran server is cut from abroad, when the foreign server is filtered from Iran, or both. Two types where the foreign
+    server dials in, whatever their carriers, both stop when the Iran server is cut from abroad - the standby takes the other side, or a kernel link)"""
+    good = lambda kind, score=70: knowledge.merge(None, {"kind": kind, "ok": True, "score": score, "latency_ms": 120.0, "loss_pct": 0.0}, "latency", NOW)
+    kinds = ["bp:wssmux", "chisel:tls", "paqet", "bpd:pck", "ipsec:tcpmux"]
+
+    kind, why = standby.choose_kind(kinds, "bp:tcp", {}, NOW)
+    assert kind == "paqet" and "does not need the same server to dial" in why                                      # a BackPack tunnel (the foreign server dials in): not Chisel reverse, which also needs the foreign server to dial in
+    assert standby.choose_kind(["bpd:pck", "chisel:fwd", "bp:wssmux", "tcpmux"], "paqet", {}, NOW)[0] == "bp:wssmux"          # an Iran-dials tunnel: not BackPack Direct or Chisel forward, which stop with it when the foreign server is filtered
+    assert standby.choose_kind(["chisel:tls", "paqet"], "tcpmux", {}, NOW)[0] == "chisel:tls"                      # a kernel-link tunnel dials nowhere: nothing changes, the order of the list decides
+    assert standby.choose_kind(["chisel:tls", "paqet"], "bp:tcp", {"kinds": {"chisel:tls": good("chisel:tls", 90)}}, NOW)[0] == "paqet"          # the other side beats a known type of the same side (as another carrier beats a known one of the same carrier)
+    assert standby.choose_kind(["chisel:tls"], "bp:tcp", {}, NOW)[0] == "chisel:tls"                              # only the same side is left: better than none
+
+
 def test_a_standby_on_the_carrier_of_its_tunnel_is_replaced_only_by_a_known_type_of_another_carrier():
     """(the drill with real tunnels, 2026-10-18: the Doctor brought a swapped tunnel back to Backhaul over GRE while its standby was Backhaul over GRE too - a GRE filter would have cut both)"""
     good = lambda kind, score=70: knowledge.merge(None, {"kind": kind, "ok": True, "score": score, "latency_ms": 120.0, "loss_pct": 0.0}, "latency", NOW)

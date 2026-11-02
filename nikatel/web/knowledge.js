@@ -4,6 +4,19 @@
 
 const knKind = r => `<span class="kn-k${r.measure === "full" ? " full" : ""}" title="${esc(apName(r.kind) + " - " + (r.score != null ? "score " + r.score : "it connects") + (r.latency_ms != null ? ", " + Math.round(r.latency_ms) + " ms" : "") + (r.loss_pct ? ", " + r.loss_pct + " % loss" : "") + (r.down_mbps != null ? ", download " + bwFmt(r.down_mbps) : "") + " (tested " + ago(r.at) + " ago)")}">${esc(apName(r.kind))} <b>${r.down_mbps != null ? bwFmt(r.down_mbps) : r.latency_ms != null ? Math.round(r.latency_ms) + " ms" : "works"}</b></span>`;
 
+/* what the Doctor has READY if this pair is cut: the Iran server cut from abroad, the foreign server filtered from Iran, both (read from ready_for of /api/doctor/knowledge) */
+const KN_CUTS = {iran_cut: ["Iran cut", "the Iran server is cut from abroad (the foreign server cannot open a connection to it)"], foreign_cut: ["Foreign filtered", "the foreign server is filtered from Iran (the Iran server cannot open a connection to it)"], both_cut: ["Both cut", "neither server can open a connection to the other"]};
+const KN_LVL = {ready: ["✓", "A tunnel type that stays possible in this cut passed its last test"], maybe: ["~", "Only kernel-link types (GRE, IPIP, ESP, L2TPv3 ...) passed their last test: whether they still pass is known only when the cut happens"], none: ["✕", "No tunnel type is known to work in this cut"]};
+const knReady = p => {
+  const rf = p.ready_for; if (!p.tunnels || !rf) return "";
+  return `<span class="kn-rdy">${Object.keys(KN_CUTS).map(key => {
+    const r = rf[key]; if (!r) return "";
+    const [label, what] = KN_CUTS[key], [icon, why] = KN_LVL[r.level] || KN_LVL.none;
+    const tip = `If ${what}: ${why}.` + (r.kind ? ` Best: ${apName(r.kind)}${r.score != null ? ", score " + r.score : ""}, tested ${ago(r.at)} ago${r.old ? " (older than a week: it is tested again soon)" : ""}; ${r.n} type${r.n === 1 ? "" : "s"} in all.` : "");
+    return `<span class="kn-r ${esc(r.level)}" title="${esc(tip)}">${icon} ${esc(label)}${r.kind ? ` <b>${esc(apName(r.kind))}</b>` : ""}</span>`;
+  }).join("")}</span>`;
+};
+
 window.knLoad = async () => {
   const box = $("#kn-box"); if (!box) return;
   let k; try { k = await api("/api/doctor/knowledge"); } catch (e) { if (!state.kn) box.innerHTML = `<div class="err">${esc(e.message)}</div>`; return; }
@@ -31,7 +44,7 @@ function knMarkup(k) {
     ${run ? `<span class="busy-chip"><i class="spin"></i>${esc(pairName(run.iran_id))} · ${esc(apName(run.kind || "…"))} · ${run.done} of ${run.total}</span><button class="sm" onclick="knStop()">Stop</button>` : `<small class="mut">${k.ready.length} tunnel types per pair at night (${k.kinds} by hand)</small>`}</div>`;
   const rows = k.pairs.map(p => `<div class="ap-row kn-row"><b>${esc(p.iran)} ⇄ ${esc(p.foreign)}</b><span class="mut kn-n" title="Tunnels that run on this pair now">${p.tunnels ? p.tunnels + " tunnel" + (p.tunnels === 1 ? "" : "s") : "no tunnel"}</span>
       <span class="kn-best">${p.best.slice(0, 4).map(knKind).join("") || '<span class="mut">nothing tested yet</span>'}${p.best.length > 4 ? `<small class="mut">+${p.best.length - 4}</small>` : ""}</span>
-      <span class="kn-bad" title="${esc(p.blocked.map(b => apName(b.kind) + (b.error ? ": " + b.error : "")).join("\n"))}">${p.blocked.length ? `✕ ${p.blocked.slice(0, 3).map(b => esc(apName(b.kind))).join(", ")}${p.blocked.length > 3 ? " +" + (p.blocked.length - 3) : ""}` : ""}</span>
+      <span class="kn-bad" title="${esc(p.blocked.map(b => apName(b.kind) + (b.error ? ": " + b.error : "")).join("\n"))}">${knReady(p)}${p.blocked.length ? `<span>✕ ${p.blocked.slice(0, 3).map(b => esc(apName(b.kind))).join(", ")}${p.blocked.length > 3 ? " +" + (p.blocked.length - 3) : ""}</span>` : ""}</span>
       ${(p.untested || []).length ? `<span class="kn-unt mut" title="${esc(p.untested.map(b => apName(b.kind) + ": " + (b.error || "not tested")).join("\n"))}">⚠ not tested: ${p.untested.slice(0, 2).map(b => esc(apName(b.kind))).join(", ")}${p.untested.length > 2 ? " +" + (p.untested.length - 2) : ""} · ${p.untested.some(b => b.reason === "tools") ? "tools missing" : "could not be tried"}</span>` : ""}
       ${p.cuts ? `<span class="pill warn kn-cuts" title="Times this pair was cut in the last 7 days">${p.cuts} cut${p.cuts === 1 ? "" : "s"}</span>` : ""}
       <time class="mut" title="${p.at ? when(p.at) : ""}">${p.at ? ago(p.at) + " ago" : "never"}</time>

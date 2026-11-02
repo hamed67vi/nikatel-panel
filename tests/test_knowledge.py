@@ -71,6 +71,48 @@ def test_the_night_window_may_wrap_past_midnight_and_equal_hours_mean_any_time()
     assert knowledge.in_window(at(12), tz, 0, 0)
 
 
+# ------------------------------------------------------------------ what is READY in each cut (the owner, 2026-11-02: the tunnels are no longer behind a CDN - the Doctor must know what to apply when the Iran server is cut
+# from abroad, when the foreign server is filtered from Iran, or both)
+def _ok(kind, score=70, at=NOW):
+    return knowledge.merge(None, {"kind": kind, "ok": True, "score": score, "latency_ms": 90.0, "loss_pct": 0.0}, "latency", at)
+
+
+def test_every_tunnel_type_has_exactly_one_side_that_dials_or_none():
+    assert [knowledge.dial_side(k) for k in ("paqet", "bpd:pck", "chisel:fwd", "bp:wssmux", "chisel:tls", "tcpmux", "ipsec:tcpmux", "l2tpv3:tcpmux")] == ["iran", "iran", "iran", "foreign", "foreign", "", "", ""]
+
+    for k in knowledge.PRIOR:            # (a type that sat in two groups, or in none, would be judged wrong in a cut)
+        assert (k in knowledge.FORWARD_KINDS) + (k in knowledge.REVERSE_KINDS) + (k in knowledge.RAW_KINDS) == 1, k
+
+
+def test_readiness_names_the_type_that_stands_in_each_cut():
+    pair = {"kinds": {"paqet": _ok("paqet", 72), "bp:wssmux": _ok("bp:wssmux", 90), "tcpmux": _ok("tcpmux", 95), "bpd:pck": knowledge.merge(None, {"kind": "bpd:pck", "ok": False, "error": "no data"}, "latency", NOW)}}
+    r = knowledge.readiness(pair, NOW)
+    assert (r["iran_cut"]["level"], r["iran_cut"]["kind"], r["iran_cut"]["score"], r["iran_cut"]["n"]) == ("ready", "paqet", 72, 1)          # the Iran server cut from abroad: only where it dials out stays possible (Paqet; the failed BackPack Direct does not count)
+    assert (r["foreign_cut"]["level"], r["foreign_cut"]["kind"]) == ("ready", "bp:wssmux")                                                 # the foreign server filtered: only where the foreign server dials in
+    assert (r["both_cut"]["level"], r["both_cut"]["kind"], r["both_cut"]["old"]) == ("maybe", "tcpmux", False)                              # both: nobody can dial - only a kernel link might still pass, and that is known only when it happens
+
+
+def test_readiness_is_maybe_when_only_kernel_links_passed_and_none_when_nothing_did():
+    only_links = {"kinds": {"ipsec:tcpmux": _ok("ipsec:tcpmux", 63), "l2tpv3:tcpmux": _ok("l2tpv3:tcpmux", 80)}}
+    r = knowledge.readiness(only_links, NOW)
+    assert {k: (v["level"], v["kind"]) for k, v in r.items()} == {"iran_cut": ("maybe", "l2tpv3:tcpmux"), "foreign_cut": ("maybe", "l2tpv3:tcpmux"), "both_cut": ("maybe", "l2tpv3:tcpmux")}
+    r = knowledge.readiness({}, NOW)
+    assert all(v == {"level": "none", "kind": "", "score": None, "at": 0, "n": 0, "old": False} for v in r.values()) and set(r) == {"iran_cut", "foreign_cut", "both_cut"}
+    assert knowledge.readiness(None, NOW)["iran_cut"]["level"] == "none"
+
+
+def test_readiness_counts_only_fresh_tests_that_scored_well_enough():
+    weak = {"kinds": {"paqet": _ok("paqet", 40)}}
+    assert knowledge.readiness(weak, NOW)["iran_cut"]["level"] == "none"                                                                  # it passed, but 40 is not a way out
+    stale = {"kinds": {"paqet": _ok("paqet", 80, at=NOW - 20 * DAY)}}
+    assert knowledge.readiness(stale, NOW)["iran_cut"]["level"] == "none"                                                                 # older than the failed-kind rest period: only a hint
+    week = {"kinds": {"paqet": _ok("paqet", 80, at=NOW - 9 * DAY)}}
+    r = knowledge.readiness(week, NOW)["iran_cut"]
+    assert (r["level"], r["old"]) == ("ready", True)                                                                                       # still counted, but marked old: the survey tests it again
+    mixed = {"kinds": {"paqet": _ok("paqet", 55), "chisel:fwd": _ok("chisel:fwd", 88)}}
+    assert knowledge.readiness(mixed, NOW)["iran_cut"]["kind"] == "chisel:fwd" and knowledge.readiness(mixed, NOW)["iran_cut"]["n"] == 2   # the best of the types that stand
+
+
 # ------------------------------------------------------------------ what is kept in the panel
 def two_servers(name="a"):
     n = next(HOSTS)
@@ -96,8 +138,9 @@ def test_every_result_is_kept_per_pair_and_the_page_state_shows_it(client):
     assert row["foreign_id"] == fr and row["tunnels"] == 1 and row["tested"] == 2 and row["best"][0]["kind"] == "bpd:pck" and row["best"][0]["down_mbps"] == 665.0
     assert [b["kind"] for b in row["blocked"]] == ["bpd:udp"] and row["blocked"][0]["error"] == "handshake did not complete" and row["due"] == len(knowledge.READY) - 2
     assert s["on"] is True and (s["from_hour"], s["to_hour"]) == (2, 6) and s["running"] is None and s["kinds"] == len(knowledge.PRIOR) and s["ready"] == knowledge.READY and row["cuts"] == 0        # the night survey is on: nights only, quiet servers only
+    assert row["ready_for"]["iran_cut"]["level"] == "ready" and row["ready_for"]["iran_cut"]["kind"] == "bpd:pck" and row["ready_for"]["foreign_cut"]["level"] == "none" and row["ready_for"]["both_cut"]["level"] == "none"       # (BackPack Direct: the Iran server dials out)
     j = client.get("/api/doctor/knowledge").json()
-    assert j["ok"] and any(p["iran_id"] == ir for p in j["pairs"])
+    assert j["ok"] and any(p["iran_id"] == ir for p in j["pairs"]) and next(p for p in j["pairs"] if p["iran_id"] == ir)["ready_for"]["iran_cut"]["kind"] == "bpd:pck"
 
 
 def test_the_quality_test_of_a_live_tunnel_with_a_door_is_a_free_full_measurement(monkeypatch):

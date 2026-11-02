@@ -147,6 +147,28 @@ def classify(d: dict) -> tuple[str, str]:
     return "unknown", "the services run and the servers answer, but no data passes: " + str(d.get("last_error") or "no reason found")
 
 
+def scenario_of(d: dict) -> tuple[str, str]:
+    """(code, one sentence) - WHICH side of the pair is cut, from who can still open a TCP connection to whom (pure, see test_autopilot): "iran_cut" (the Iran server is cut from abroad: the foreign server cannot open
+    a connection to it, it can still open one outward), "foreign_cut" (the foreign server is filtered from Iran: the Iran server cannot open one to it, the foreign server can still dial in), "both_cut" (neither can).
+    ("", "") when a server answered both ways, or when the question was not asked (`dial_i` / `dial_f` are only asked for a tunnel that is not up). The owner, 2026-11-02: the Doctor must say which cut it faces
+    and know what to apply - the order of the tunnel types already follows these two answers (`knowledge.cut_order`); this is the sentence in front of it."""
+    di, df = d.get("dial_i"), d.get("dial_f")
+
+    if di is None or df is None:
+        return "", ""
+
+    if not di and not df:
+        return "both_cut", "Both ways are cut: neither server can open a connection to the other. Only a kernel link (GRE, IPIP, ESP, L2TPv3 ...) can still pass, because the connection that carries the users runs inside it; if none does, the Doctor asks to move the tunnel to another Iran server."
+
+    if di and not df:
+        return "iran_cut", "The Iran server is cut from abroad: the foreign server cannot open a connection to it, the Iran server can still open one outward. The tunnel types where the foreign server dials in cannot connect; those where the Iran server dials out (Paqet, BackPack Direct, Chisel forward), and kernel links, can."
+
+    if df and not di:
+        return "foreign_cut", "The foreign server is filtered from Iran: the Iran server cannot open a connection to it, the foreign server can still dial in. The tunnel types where the Iran server dials out cannot connect; those where the foreign server dials in (BackPack, Chisel), and kernel links, can."
+
+    return "", ""
+
+
 def ladder_for(cause: str, kind: str, level: str = "switch", ext_blocked: bool = False) -> list[str]:
     """The steps that make sense, in order, limited by `level`. A tunnel that is cut climbs until SOMETHING connects: a restart, a rebuild, then another tunnel type - whichever connects, the type does not matter
     (the owner, 2026-10-16). `ext_blocked`: the port is cut in front of the Iran server itself (another tunnel type cannot help, only another Iran server)."""
@@ -286,6 +308,7 @@ def diagnose(tunnel_id: int, max_age: int = 20) -> dict:
 
             scan_res = fs.result() if fs is not None else None
 
+    facts["scenario"], facts["scenario_text"] = scenario_of(facts)
     facts["where"] = (scan_res or {}).get("where")
     facts["where_text"] = (scan_res or {}).get("text", "")
     facts["scan_rows"] = [{"label": r["label"], "from": r["from"], "to": r["to"], "loss": r["loss"]} for r in (scan_res or {}).get("rows", [])]
@@ -309,6 +332,9 @@ def diagnose(tunnel_id: int, max_age: int = 20) -> dict:
     for label, v in (("Iran → foreign", facts.get("dial_i")), ("foreign → Iran", facts.get("dial_f"))):
         if v is not None:
             findings.append({"ok": v, "text": f"{label}: " + ("TCP connections open" if v else "TCP connections do NOT open (filtered)")})
+
+    if facts["scenario"]:
+        findings.append({"ok": False, "text": facts["scenario_text"]})
 
     if gre:
         findings.append({"ok": facts["gre_loss"] is not None and facts["gre_loss"] < 50, "text": linkmodels.NAMES.get(facts["link"], "GRE") + " link: " + ("no answer" if facts["gre_loss"] is None else f"{facts['gre_loss']}% loss over the inner addresses")})
@@ -340,7 +366,7 @@ def diagnose(tunnel_id: int, max_age: int = 20) -> dict:
 
     advice = ai.advise(json.dumps({"tunnel": info["name"], "type": kind, "cause": cause, "summary": why, "facts": {k: v for k, v in facts.items() if k != "last_error"}, "last_error": str(info["last_error"] or "")[:200]}, ensure_ascii=False)) if cause != "healthy" else None
 
-    return {**info, "where": facts.get("where"), "kind": kind, "cause": cause, "summary": why, "findings": findings, "ai": (advice or {}).get("diagnosis", ""),
+    return {**info, "where": facts.get("where"), "scenario": facts["scenario"], "scenario_text": facts["scenario_text"], "kind": kind, "cause": cause, "summary": why, "findings": findings, "ai": (advice or {}).get("diagnosis", ""),
             "ladder": ladder_for(cause, kind, "switch", facts["ext_blocked"]), "can_switch": cause in ("gre_blocked", "port_blocked", "unknown", "lossy_route", "units_down") or (cause == "route_cut" and not facts["ext_blocked"]),
             "can_move": cause in ("route_cut", "server_unreachable", "lossy_route") or cause == "unknown", "ext_blocked": facts["ext_blocked"], "dial_i": facts.get("dial_i"), "dial_f": facts.get("dial_f")}
 
@@ -1050,6 +1076,9 @@ def smart_fix(aid: int, tunnel_id: int, level: str, source: str = "manual", fini
 
     d = diagnose(tunnel_id)
     _say(aid, f"{snap['name']}: {d['summary']}.")
+
+    if d.get("scenario_text"):
+        _say(aid, d["scenario_text"])
 
     if d["cause"] == "healthy":
         _say(aid, f"{snap['name']}: nothing to repair.", done=finish, ok=True)

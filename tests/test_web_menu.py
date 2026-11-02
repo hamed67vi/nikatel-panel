@@ -1754,6 +1754,17 @@ def test_the_knowledge_tab_does_not_jump_and_a_pair_is_two_small_lines():
     assert 'class="pill warn kn-cuts"' in kn and '<span class="kn-bad"' in kn
 
 
+def test_the_knowledge_tab_shows_what_is_ready_in_each_cut_on_the_second_line():
+    """The owner, 2026-11-02: the Doctor must be ready for the Iran server cut from abroad, the foreign server filtered, or both - and the page shows it. The pair stays two small lines (2026-10-19): the three chips
+    sit on the second line, in the box of the red list of failed types."""
+    kn, css = _web("knowledge.js"), _web("lab.css")
+    assert "const knReady = p =>" in kn and "p.ready_for" in kn and all(key in kn for key in ("iran_cut", "foreign_cut", "both_cut")) and 'class="kn-rdy"' in kn
+    assert '<span class="kn-bad" title="${esc(p.blocked.map(' in kn and ">${knReady(p)}${p.blocked.length ?" in kn            # (the chips are INSIDE the second line, not a third one)
+    assert "rdy" not in css.split("kn-row {", 1)[1].split("}", 1)[0]                                                                   # (no third row in the grid)
+    row = "html body #page .ap-tasks .ap-row.kn-row"
+    assert f"{row} .kn-r {{" in css and f"{row} .kn-r.ready {{" in css and f"{row} .kn-r.maybe {{" in css and f"{row} .kn-r.none {{" in css and 'html[data-mode="light"] body #page .ap-tasks .ap-row.kn-row .kn-r {' in css
+
+
 def test_the_type_list_has_best_of_the_day_which_the_panel_resolves_when_build_is_pressed():
     """The owner, 2026-10-19: "a tunnel mode that puts the best tunnel of the day on it"."""
     app = _web("app.js")

@@ -151,6 +151,28 @@ def test_explain_needs_a_key_and_hands_the_facts_to_the_ai(client, monkeypatch):
     assert ap.situation()["totals"]["tunnels"] == 0
 
 
+def test_the_scenario_says_which_side_of_the_pair_is_cut():
+    """(the owner, 2026-11-02: the Doctor must detect that the Iran server is cut from abroad, or the foreign server filtered, or both - and say so before it applies a tunnel type)"""
+    iran, foreign, both = (ap.scenario_of({"dial_i": i, "dial_f": f}) for i, f in ((True, False), (False, True), (False, False)))
+    assert (iran[0], foreign[0], both[0]) == ("iran_cut", "foreign_cut", "both_cut")
+    assert "Iran server is cut from abroad" in iran[1] and "foreign server cannot open a connection to it" in iran[1] and "Iran server dials out" in iran[1]
+    assert "foreign server is filtered from Iran" in foreign[1] and "Iran server cannot open a connection to it" in foreign[1] and "foreign server dials in" in foreign[1]
+    assert "Both ways are cut" in both[1] and "kernel link" in both[1]
+    assert ap.scenario_of({"dial_i": True, "dial_f": True}) == ("", "")                          # both open: not a cut of this kind
+    assert ap.scenario_of({"dial_i": True, "dial_f": None}) == ("", "") and ap.scenario_of({"dial_i": None, "dial_f": False}) == ("", "") and ap.scenario_of({}) == ("", "")          # a question that was not asked is not an answer
+
+
+def test_the_order_of_the_types_follows_the_scenario():
+    """the order a cut tunnel is tried in (`knowledge.cut_order` + `unreachable`) matches the sentence of each scenario"""
+    from nikatel.services import knowledge
+
+    a = knowledge.cut_order(True, False, True)                    # the Iran server is cut from abroad: where the Iran server dials out first
+    b = knowledge.cut_order(False, True, True)                    # the foreign server is filtered: where the foreign server dials in first
+    assert a.index("paqet") < a.index("bp:wssmux") and b.index("bp:wssmux") < b.index("paqet")
+    assert knowledge.unreachable(True, False) == knowledge.REVERSE_KINDS and knowledge.unreachable(False, True) == knowledge.FORWARD_KINDS      # a type that cannot connect in that cut is put last
+    assert knowledge.unreachable(False, False) == knowledge.REVERSE_KINDS | knowledge.FORWARD_KINDS and knowledge.unreachable(True, True) == frozenset()          # both cut: only the kernel links are left
+
+
 def test_classify_flapping_as_a_lossy_route():
     cause, why = ap.classify({"state": "degraded", "flap_fails": 4, "flap_n": 10, "gre": True, "gre_loss": 0.0, "under_loss_i": 0, "under_loss_f": 0})
     assert cause == "lossy_route" and "flaps" in why

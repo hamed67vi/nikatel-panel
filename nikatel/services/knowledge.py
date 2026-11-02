@@ -426,6 +426,44 @@ def unreachable(dial_i: bool | None, dial_f: bool | None) -> frozenset:
     return (FORWARD_KINDS if dial_i is False else frozenset()) | (REVERSE_KINDS if dial_f is False else frozenset())
 
 
+RAW_KINDS = frozenset(GRE_KINDS) | frozenset(LINK_KINDS)          # Backhaul inside a kernel link (GRE, IPIP, ESP, L2TPv3 ...): the TCP that carries the users runs INSIDE the link, so no server has to open a connection across the cut
+
+
+def dial_side(kind: str) -> str:
+    """Who opens the connection that carries a tunnel across the route: "iran" (the Iran server dials out - these stop when the foreign address is filtered from Iran), "foreign" (the foreign server dials in - these
+    stop when the Iran server is cut from abroad), "" when neither does (a kernel link). Two tunnels on the same side fall to the same cut."""
+    return "iran" if kind in FORWARD_KINDS else "foreign" if kind in REVERSE_KINDS else ""
+
+
+READY_SCORE = 50                  # a type that scored at least this on its last test carries users well enough to be a way out of a cut
+CUT_SCENARIOS = (("iran_cut", FORWARD_KINDS), ("foreign_cut", REVERSE_KINDS), ("both_cut", frozenset()))          # (the Iran server cut from abroad: only the types where IT dials out stay possible; the foreign server filtered from Iran: only the types where the foreign server dials in; both: no dial at all)
+
+
+def readiness(pair: dict | None, now: int) -> dict[str, dict]:
+    """What the Doctor has READY for a pair in each cut, from its own tests (pure): {"iran_cut" | "foreign_cut" | "both_cut": {"level", "kind", "score", "at", "n", "old"}}.
+    "ready": a type that stays possible in that cut (the Iran server cut from abroad: one where the Iran server dials out; the foreign server filtered from Iran: one where the foreign server dials in) passed its last test
+    with `READY_SCORE` or more, less than `FAIL_FRESH` ago. "maybe": only kernel-link types (`RAW_KINDS`) passed - whether GRE / ESP / IPIP / L2TPv3 still pass when the cut happens is known only then (a route may drop TCP and
+    UDP and let them through - seen on a real pair). "none": nothing known to work. `kind` / `score` / `at`: the best of those; `n`: how many; `old`: the best was tested more than `REFRESH` ago."""
+    rows = []
+
+    for r in ranked(pair, now):
+        shown = r["user"] if r.get("user") is not None else r["score"]
+
+        if now - int(r["at"] or 0) <= FAIL_FRESH and (shown is None or shown >= READY_SCORE):          # (a type that carried data but was never scored counts: a real build checks that data passes)
+            rows.append(r)
+
+    out = {}
+
+    for key, side in CUT_SCENARIOS:
+        mine = [r for r in rows if r["kind"] in side]
+        level, pool = ("ready", mine) if mine else ("maybe", [r for r in rows if r["kind"] in RAW_KINDS])
+        best = pool[0] if pool else None
+        out[key] = {"level": level if best else "none", "kind": best["kind"] if best else "", "score": (best["user"] if best.get("user") is not None else best["score"]) if best else None,
+                    "at": int(best["at"] or 0) if best else 0, "n": len(pool), "old": bool(best) and now - int(best["at"] or 0) > REFRESH}
+
+    return out
+
+
 def candidates(pair: dict | None, current: str, no_gre: bool, lossy: bool, now: int, limit: int = LIMIT, base: list[str] | None = None, unreachable_kinds: frozenset = frozenset(),
                prefer: list[str] | None = None) -> list[str]:
     """The kinds the Doctor tries live when it must switch a tunnel, in the order it tries them: what is known to connect on this pair (best first), then what nobody tried yet (the order of `base`);
@@ -885,7 +923,7 @@ def state(now: int | None = None) -> dict:
         rows.append({"iran_id": i, "foreign_id": f, "iran": names[i], "foreign": names[f], "tunnels": live.get((i, f), 0), "at": int(p.get("at") or 0), "tested": len(kinds),
                      "due": len(due_kinds(p, READY, now)), "due_more": len(due_kinds(p, MORE, now)) + len(due_kinds(p, link_variants(p), now)), "best": ranked(p, now), "poor": poor(p, now), "cuts": repeats(i, f, now), "links": dict(p.get("links") or {}),
                      "blocked": [{"kind": x, "error": kinds[x]["last"].get("error") or "", "at": int(kinds[x]["last"].get("at") or 0)} for x in blocked(p, now)],
-                     "untested": untested(p)})
+                     "untested": untested(p), "ready_for": readiness(p, now)})
 
     rows.sort(key=lambda r: (r["iran"].lower(), r["foreign"].lower()))
     return {"on": bool(d["on"]), "from_hour": int(d["from_hour"]), "to_hour": int(d["to_hour"]), "tz_minutes": tz, "window_open": in_window(now, tz, int(d["from_hour"]), int(d["to_hour"])),

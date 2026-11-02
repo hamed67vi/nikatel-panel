@@ -1054,6 +1054,13 @@ html body #page .ap-tasks .ap-row.kn-row .kn-k b { font-weight: 800; font-size: 
 html body #page .ap-tasks .ap-row.kn-row .kn-k.full { border-color: rgba(61, 220, 151, .4); }
 html body #page .ap-tasks .ap-row.kn-row > .kn-bad { grid-area: bad; font-size: 9.5px; line-height: 1.35; color: #ff8a9b; margin: 2px 0 0; white-space: normal; overflow-wrap: anywhere; }
 html body #page .ap-tasks .ap-row.kn-row > .kn-bad:empty { display: none; }
+html body #page .ap-tasks .ap-row.kn-row > .kn-bad { display: flex; align-items: center; flex-wrap: wrap; gap: 3px 8px; }
+html body #page .ap-tasks .ap-row.kn-row .kn-rdy { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 3px 4px; min-width: 0; }
+html body #page .ap-tasks .ap-row.kn-row .kn-r { display: inline-flex; align-items: center; gap: 4px; height: 17px; padding: 0 7px; border-radius: 9px; font-size: 10px; white-space: nowrap; color: var(--mut); background: rgba(255, 255, 255, .05); border: 1px solid rgba(255, 255, 255, .12); }
+html body #page .ap-tasks .ap-row.kn-row .kn-r b { font-weight: 800; font-size: 10px; color: var(--text); font-variant-numeric: tabular-nums; }
+html body #page .ap-tasks .ap-row.kn-row .kn-r.ready { border-color: rgba(61, 220, 151, .45); }
+html body #page .ap-tasks .ap-row.kn-row .kn-r.maybe { border-color: rgba(255, 193, 77, .5); }
+html body #page .ap-tasks .ap-row.kn-row .kn-r.none { border-color: rgba(255, 138, 155, .55); color: #ff8a9b; }
 @media (max-width: 760px) { html body #page .ap-tasks .ap-row.kn-row { grid-template-columns: minmax(0, 1fr) auto auto; grid-template-areas: "name n btn" "best best best" "bad bad bad" "cuts cuts time"; row-gap: 3px; } html body #page .ap-tasks .ap-row.kn-row > .kn-cuts { justify-self: start; } html body #page .ap-tasks .ap-row.kn-row > time { justify-self: end; } }
 html body #page .kn-h { margin: 16px 2px 8px; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--mut); }
 html body #page .kn-inc { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 12px; }
@@ -1061,6 +1068,10 @@ html body #page .kn-fix { font-size: 12px; }
 html body #page .kn-none { padding: 6px 2px; font-size: 12px; }
 html[data-mode="light"] body #page .ap-tasks .ap-row.kn-row .kn-k { background: rgba(30, 50, 100, .06); border-color: rgba(30, 50, 100, .2); }
 html[data-mode="light"] body #page .ap-tasks .ap-row.kn-row > .kn-bad { color: #b4232f; }
+html[data-mode="light"] body #page .ap-tasks .ap-row.kn-row .kn-r { background: rgba(30, 50, 100, .06); border-color: rgba(30, 50, 100, .2); }
+html[data-mode="light"] body #page .ap-tasks .ap-row.kn-row .kn-r.ready { border-color: rgba(20, 140, 90, .55); }
+html[data-mode="light"] body #page .ap-tasks .ap-row.kn-row .kn-r.maybe { border-color: rgba(190, 120, 0, .55); }
+html[data-mode="light"] body #page .ap-tasks .ap-row.kn-row .kn-r.none { border-color: rgba(180, 35, 47, .55); color: #b4232f; }
 
 /* 1.64.0 - the small buttons of About & update (the owner, 2026-10-17, his picture of the nodes of PasarGuard: "make the buttons smaller, and keep a space above and below them"). The Settings rule of app.css
    (html body #page .sf button, with !important) made EVERY button of the card 32 px tall - as tall as its row - so the 24 px of the rules above never applied. These are 22 px in rows of 36 px: 7 px of air above and below. */
