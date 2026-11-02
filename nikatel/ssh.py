@@ -806,6 +806,33 @@ def _exec_once(node: Node, script: str, timeout: int, jump: Node | None = None) 
     return out
 
 
+def ensure_via(node: Node, timeout: int = 20) -> str:
+    """Prime the jump route to a server the panel reaches only through another Iran server, BEFORE a job (a build, the Doctor) runs its real SSH to it, so no call waits on a direct time-out first (the owner, 2026-11-02:
+    a build to an Iran server that is cut from abroad should use a connected Iran server as the intermediary by itself). A fresh jump already known is kept; otherwise the jump candidates are tried with a tiny probe and the
+    first that answers is cached (VIA_TTL), so every later call to this host goes straight through it. Returns the jump's address, or '' when none could be set (the caller then behaves exactly as before: direct, with the
+    usual fall-back to a jump on failure). Read-write only, like the scripts it precedes."""
+    host = node.host
+    v = _VIA.get(host)
+
+    if v is not None and v[1] > time.time():
+        return v[0].host
+
+    if _JUMPS is None:
+        return ""
+
+    for j in (_JUMPS(node) or [])[:3]:
+        try:
+            _exec_once(node, "echo nikatel-via-ok", min(timeout, 20), j)
+        except SSHError:
+            continue
+
+        _VIA[host] = (j, time.time() + VIA_TTL)
+        log.info("ssh %s: the jump through %s is primed for a build", host, j.host)
+        return j.host
+
+    return ""
+
+
 def run_script(node: Node, name: str, params: Mapping[str, str] | None = None, timeout: int = 40) -> str:
     """Run one reviewed script with validated parameters."""
     script = _script_text(name, params)

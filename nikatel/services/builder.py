@@ -25,7 +25,7 @@ from ..config import get_settings
 from ..db import session
 from ..log import get_logger
 from ..models import ActionLog, Server, Tunnel, is_standby, is_temp
-from ..ssh import Node, SSHError, run_action, run_script
+from ..ssh import Node, SSHError, ensure_via, run_action, run_script, via_of
 from ..ssh import target as ssh_target
 from . import linkmodels
 from . import settings as st
@@ -1155,6 +1155,17 @@ def _build(b: Build) -> None:
     aid, iran, foreign = b.aid, _node(b.iran), _node(b.foreign)
     link = str(b.opts.get("link") or "gre")
     ihost, fhost = b.iran.host, b.foreign.host           # (read here, not inside the threads of `_both`)
+
+    # an Iran server the panel reaches only THROUGH another Iran server (its address is cut from the panel's host, not from inside Iran): route the WHOLE build that way from the first call, so no step waits on a direct
+    # time-out first (the owner, 2026-11-02: "a build to an Iran server that is اکسز should use a connected Iran server as the intermediary by itself"). It primes the jump only when the server is known to be reached that
+    # way (a jump is already cached, or its row says so); a build to a normal server is untouched. Priming that finds no jump leaves the build to behave exactly as before (direct, then the usual fall-back).
+    from . import pulse
+
+    if via_of(ihost) or str(b.iran.last_error or "").startswith(pulse.IRAN_ONLY):
+        j = ensure_via(iran)
+
+        if j:
+            _say(aid, f"{b.iran.name} is reached only through another Iran server; the whole build goes through {j} (its own address is cut from here).")
 
     # 1. preflight (both servers asked at once)
     raw_i, raw_f = _both(lambda: run_script(iran, "build_facts", timeout=40), lambda: run_script(foreign, "build_facts", timeout=40))

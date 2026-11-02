@@ -79,3 +79,50 @@ def test_a_script_error_or_a_refused_key_is_not_a_reason_to_take_a_detour(monkey
 def test_the_jump_command_is_one_quoted_proxy_option():
     opt = ssh._proxy_option(Node("203.0.113.7", "root", 22))
     assert opt[0] == "-o" and opt[1].startswith("ProxyCommand=ssh ") and " -W %h:%p -- root@203.0.113.7" in opt[1]
+
+
+# a build to an Iran server that is cut from abroad primes the jump up front, so no step waits on a direct time-out (the owner, 2026-11-02)
+def test_ensure_via_keeps_a_fresh_jump_without_probing(monkeypatch):
+    target, jump = Node("203.0.113.9"), Node("203.0.113.7")
+    ssh._VIA["203.0.113.9"] = (jump, time.time() + 300)
+    probed = []
+    monkeypatch.setattr(ssh, "_exec_once", lambda *a, **k: probed.append(1) or "OK")
+    ssh.set_jump_provider(lambda n: [jump])
+    assert ssh.ensure_via(target) == "203.0.113.7" and probed == []                     # the known jump is kept, nothing is probed
+
+
+def test_ensure_via_primes_the_first_jump_that_answers_and_the_next_call_goes_straight_through_it(monkeypatch):
+    target, j1, j2 = Node("203.0.113.9"), Node("203.0.113.6"), Node("203.0.113.7")
+    tried = []
+
+    def once(node, script, timeout, j=None):
+        tried.append(j.host if j else None)
+
+        if j is None or j.host == "203.0.113.6":
+            raise SSHError("timeout after 20s")
+
+        return "nikatel-via-ok"
+
+    monkeypatch.setattr(ssh, "_exec_once", once)
+    ssh.set_jump_provider(lambda n: [j1, j2])
+    assert ssh.ensure_via(target) == "203.0.113.7" and tried == ["203.0.113.6", "203.0.113.7"]      # the first that answers is kept
+    assert ssh.via_of("203.0.113.9") == "203.0.113.7"
+    tried.clear()
+    assert ssh._exec(target, "x", 40) == "nikatel-via-ok" and tried == ["203.0.113.7"]              # no direct attempt first
+
+
+def test_ensure_via_does_nothing_when_no_jump_is_set_or_none_answers(monkeypatch):
+    target = Node("203.0.113.9")
+    assert ssh.ensure_via(target) == "" and "203.0.113.9" not in ssh._VIA                           # no provider: the build behaves as before
+    ssh.set_jump_provider(lambda n: [Node("203.0.113.7")])
+    monkeypatch.setattr(ssh, "_exec_once", lambda *a, **k: (_ for _ in ()).throw(SSHError("timeout after 20s")))
+    assert ssh.ensure_via(target) == "" and "203.0.113.9" not in ssh._VIA                           # none answered: nothing cached
+
+
+def test_a_build_primes_the_jump_for_a_cut_from_abroad_iran_server():
+    import inspect
+
+    from nikatel.services import builder
+
+    src = inspect.getsource(builder._build)
+    assert "ensure_via(iran)" in src and "IRAN_ONLY" in src and "via_of(ihost)" in src              # the build routes through a jump when the Iran server is reached only that way
