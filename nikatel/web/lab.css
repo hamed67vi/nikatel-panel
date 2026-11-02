@@ -1316,6 +1316,8 @@ html body #page .tun-tbl tr.clk:focus-visible { outline: 2px solid rgba(120, 160
 html body #page .tun-tbl td.td-node > b { display: flex; align-items: center; gap: 4px; min-width: 0; max-width: 100%; }
 html body #page .tun-tbl td.td-node > b > .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 html body #page .tun-tbl td.td-node > b > :not(.nm) { flex: none; }
+/* the name of the Iran node sits right above its address, on the same edge (the owner, 2026-11-03: "here the names should go on top of the IPs, like the Foreign column"): the Iran cell is right-aligned and the address followed it, but the name row above is a flex row, which ignores the cell's text-align, so the name stayed at the left */
+html body #page .tun-tbl td.td-node.ir > b { justify-content: flex-end; }
 
 /* the Marzban node card of a server: "Node installed" is a quiet green button that does nothing */
 html body #modal .ins-btn.ok, html body #modal .ins-btn.ok:disabled { color: var(--ok, #38d996) !important; border-color: color-mix(in srgb, var(--ok, #38d996) 45%, transparent) !important; background: color-mix(in srgb, var(--ok, #38d996) 12%, transparent) !important; opacity: 1; cursor: default; box-shadow: none; }
