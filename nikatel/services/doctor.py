@@ -273,7 +273,7 @@ def dismiss_suggestion(sid: str) -> None:
 
 
 # ------------------------------------------------------------------ moving one tunnel (a suggestion applied, a resource move, a return, the Move button)
-def _run_move(aid: int, tunnel_id: int, target_id: int, reason: str, why: str) -> None:
+def _run_move(aid: int, tunnel_id: int, target_id: int, reason: str, why: str, prefer: str = "") -> None:
     with session() as db:
         t = db.get(Tunnel, tunnel_id)
 
@@ -291,6 +291,9 @@ def _run_move(aid: int, tunnel_id: int, target_id: int, reason: str, why: str) -
     if why:
         p["why"] = why
 
+    if prefer:
+        p["prefer"] = {tunnel_id: prefer}                                  # (a move for quality: the type that was speed-tested on the new pair is the one that is built)
+
     if not p["target"]:
         autopilot._say(aid, "No target: " + ("; ".join(p["problems"]) or "the Iran server cannot carry this tunnel"), done=True, ok=False)
         return
@@ -301,7 +304,7 @@ def _run_move(aid: int, tunnel_id: int, target_id: int, reason: str, why: str) -
     failover._work(aid, p)
 
 
-def move_now(tunnel_id: int, iran_id: int, reason: str = "manual", why: str = "", rails: bool = True) -> int:
+def move_now(tunnel_id: int, iran_id: int, reason: str = "manual", why: str = "", rails: bool = True, prefer: str = "") -> int:
     """Start the move of one tunnel to this Iran server (the DNS records that serve only it follow). Returns the story id. `rails`: the limits of the automatic moves (how many a day,
     the cooldown) apply to every reason but "manual"; the Return button passes rails=False, because it is the operator asking (found by the real test: it was refused for two hours)."""
     with session() as db:
@@ -326,7 +329,7 @@ def move_now(tunnel_id: int, iran_id: int, reason: str = "manual", why: str = ""
         if block:
             raise ValueError(block)
 
-    return autopilot._start(f"move {name}", _run_move, tunnel_id, iran_id, reason, why, action="move", source="manual" if reason == "manual" else "auto")
+    return autopilot._start(f"move {name}", _run_move, tunnel_id, iran_id, reason, why, prefer, action="move", source="manual" if reason == "manual" else "auto")
 
 
 def apply_suggestion(sid: str) -> int:

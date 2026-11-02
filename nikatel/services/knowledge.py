@@ -412,6 +412,8 @@ def due_kinds(pair: dict | None, kinds: list[str], now: int, refresh: int = REFR
 
 REVERSE_KINDS = frozenset({"bp:tcpmux", "bp:tcp", "bp:stealth", "bp:wss", "bp:wssmux", "bp:ws", "bp:wsmux", "bp:kcp", "bp:quic", "bp:pck", "bp:xdi", "chisel", "chisel:tls"})      # the FOREIGN server dials the Iran server
 FORWARD_KINDS = frozenset({"bpd:udp", "bpd:quic", "bpd:pck", "bpd:xdi", "paqet", "chisel:fwd", "chisel:fwdtls"})                                                                   # the IRAN server dials the foreign server
+CARRIED_REVERSE = frozenset(f"{link}:{tr}" for link, who in linkmodels.CARRIER_DIAL.items() if who == "foreign" for tr in linkmodels.TRANSPORTS)      # WireGuard carried in Chisel: whoever opens the TCP connection of the carrier (never in the cut order: the owner builds them - the last resort of a cut)
+CARRIED_FORWARD = frozenset(f"{link}:{tr}" for link, who in linkmodels.CARRIER_DIAL.items() if who == "iran" for tr in linkmodels.TRANSPORTS)
 # For a tunnel that is CUT the first thing is to connect, so the order is by robustness against filtering, not by speed: TLS WebSocket kinds look like HTTPS, the foreign server dialling in works when the
 # foreign address is filtered from Iran (only the connections that START in Iran are cut), plain kinds next, UDP / raw / ICMP kinds last.
 CUT_REVERSE = ["bp:wssmux", "chisel:tls", "bp:tcpmux", "bp:wss", "bp:tcp", "chisel", "bp:stealth", "bp:wsmux", "bp:ws", "bp:kcp", "bp:pck", "bp:quic", "bp:xdi"]
@@ -439,13 +441,13 @@ def unreachable(dial_i: bool | None, dial_f: bool | None) -> frozenset:
     return (FORWARD_KINDS if dial_i is False else frozenset()) | (REVERSE_KINDS if dial_f is False else frozenset())
 
 
-RAW_KINDS = frozenset(GRE_KINDS) | frozenset(LINK_KINDS)          # Backhaul inside a kernel link (GRE, IPIP, ESP, L2TPv3 ...): the TCP that carries the users runs INSIDE the link, so no server has to open a connection across the cut
+RAW_KINDS = frozenset(GRE_KINDS) | frozenset(LINK_KINDS) | frozenset(f"{k.split(':', 1)[0]}:{tr}" for k in LINK_KINDS for tr in VARIANT_TRANSPORTS)          # Backhaul inside a kernel link (GRE, IPIP, ESP, L2TPv3 ...), with its three other transports too (the third tier of the survey): the TCP that carries the users runs INSIDE the link, so no server has to open a connection across the cut
 
 
 def dial_side(kind: str) -> str:
     """Who opens the connection that carries a tunnel across the route: "iran" (the Iran server dials out - these stop when the foreign address is filtered from Iran), "foreign" (the foreign server dials in - these
     stop when the Iran server is cut from abroad), "" when neither does (a kernel link). Two tunnels on the same side fall to the same cut."""
-    return "iran" if kind in FORWARD_KINDS else "foreign" if kind in REVERSE_KINDS else ""
+    return "iran" if kind in FORWARD_KINDS or kind in CARRIED_FORWARD else "foreign" if kind in REVERSE_KINDS or kind in CARRIED_REVERSE else ""
 
 
 READY_SCORE = 50                  # a type that scored at least this on its last test carries users well enough to be a way out of a cut

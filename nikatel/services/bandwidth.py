@@ -766,6 +766,8 @@ def investigate(aid: int, tunnel_id: int, finish: bool = True, relook: bool = Fa
 
     if code in DROP_SWAP_CODES and fixed is not True:
         _swap_after_drop(aid, tunnel_id, say)
+    elif code == "iran_wide":                                             # (1.69.186: every tunnel of this Iran server dropped - its own line or provider; no type of this server cures that, another Iran server may: the move for quality, only in the mode "move" and only when proved)
+        _move_for_quality(aid, tunnel_id, autopilot._snapshot(tunnel_id), f, say)
 
     if finish:
         autopilot._say(aid, "The Doctor keeps measuring this tunnel every 20 minutes and says when the bandwidth is back.", done=True, ok=True)
@@ -806,6 +808,20 @@ def drop_slots(kinds: list[str], cannot, extra: list[str], limit: int) -> tuple[
             keep.append(k)
 
     return keep, left_out
+
+
+def _move_for_quality(aid: int, tunnel_id: int, snap: dict, f: dict, say) -> None:
+    """(1.69.186) The tunnel has stayed dropped for `failover.QUALITY_DROP_AGE` and no type of its own server does better: another Iran server may carry it - `failover.quality_move` moves it by itself when one is PROVED much
+    faster (only in the Doctor's mode "move"; the owner, 2026-11-02). A short drop - an evening dip - is left alone: it passes by itself."""
+    from . import failover
+
+    bw = (snap.get("record") or {}).get("bw") or {}
+    since = int(((bw.get("drop") or bw.get("slow") or {}).get("since")) or 0)
+
+    if not since or int(time.time()) - since < failover.QUALITY_DROP_AGE:
+        return
+
+    failover.quality_move(aid, tunnel_id, "quality", float(f.get("now") or 0), f.get("rtt"), say)
 
 
 def _swap_after_drop(aid: int, tunnel_id: int, say) -> None:
@@ -873,6 +889,7 @@ def _swap_after_drop(aid: int, tunnel_id: int, say) -> None:
 
     if not kinds:
         say(f"No other tunnel type can be tried between {snap['iran_name']} and {snap['foreign_name']} (none is steady in the Doctor's memory, or the licence allows none).")
+        _move_for_quality(aid, tunnel_id, snap, f, say)
         return
 
     say(f"{snap['name']} ({cur}) dropped and nothing outside it explains it - the problem may not be on the other types. The Doctor tests {', '.join(kinds)} between {snap['iran_name']} and {snap['foreign_name']} now, speed included.")
@@ -890,6 +907,7 @@ def _swap_after_drop(aid: int, tunnel_id: int, say) -> None:
 
     if best is None:
         say(f"No tested type gives clearly more than {float(f.get('now') or 0):.0f} Mb/s with a clean line and a steady record: {snap['name']} stays {cur}, and the Doctor keeps measuring it.")
+        _move_for_quality(aid, tunnel_id, snap, f, say)
         return
 
     st_ = steady.get(best["kind"])
@@ -1276,6 +1294,7 @@ def _retype_later(tunnel_id: int) -> None:
         log.info("the change of type of tunnel %s not started: %s", tunnel_id, str(e)[:100])
 
 RELOOK_AFTER = 3 * 3600          # a drop that lasts is looked at again this long after its last look
+QUALITY_LOOK_AFTER = 90 * 60     # ... and once when it has lasted this long (= failover.QUALITY_DROP_AGE: from then on a move to another Iran server may be the cure)
 _RELOOKED: dict[int, int] = {}   # tunnel id -> when the Doctor last looked at its drop (kept in memory: after a restart of the panel a drop older than RELOOK_AFTER is looked at once more)
 
 
@@ -1286,7 +1305,13 @@ def relook_due(bw: dict | None, last: int, now: int) -> bool:
     bw = bw or {}
     since = int((bw.get("drop") or {}).get("since") or 0)
 
-    return bw.get("state") == "drop" and since > 0 and now - max(since, int(last or 0)) >= RELOOK_AFTER
+    if bw.get("state") != "drop" or since <= 0:
+        return False
+
+    if now - since >= QUALITY_LOOK_AFTER and int(last or 0) < since + QUALITY_LOOK_AFTER:
+        return True                           # (1.69.186: the look at the beginning of a drop cannot move a tunnel - an evening dip passes by itself; one more look when the drop has lasted long enough for a move)
+
+    return now - max(since, int(last or 0)) >= RELOOK_AFTER
 
 
 def _relook_later(tunnel_id: int, bw: dict) -> None:

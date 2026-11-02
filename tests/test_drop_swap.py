@@ -7,7 +7,7 @@ import pytest
 from nikatel.config import get_settings
 from nikatel.db import session
 from nikatel.models import ServerSample, Tunnel, TunnelCheck
-from nikatel.services import actions, autopilot, bandwidth, doctor, knowledge
+from nikatel.services import actions, autopilot, bandwidth, doctor, failover, knowledge
 from nikatel.services import settings as st
 
 NOW = 1_800_000_000
@@ -216,6 +216,74 @@ def test_the_change_started_by_hand_teaches_only_when_it_worked(monkeypatch):
     monkeypatch.setattr(autopilot, "_replace", lambda *a, **k: True)
     autopilot.replace_start(tid, "bp:ws")
     assert said[-1] == "Done." and knowledge.playbook(snap["iran_id"], snap["foreign_id"], "slow")["kind"] == "bp:ws"
+
+
+def _dropped_for(tid, ago):
+    """The tunnel has been dropped for `ago` seconds."""
+    with session() as db:
+        t = db.get(Tunnel, tid)
+        bw = dict(t.record["bw"])
+        bw["drop"] = {"since": int(time.time()) - ago, "from": 161.0, "now": 14.0}
+        t.record = {**t.record, "bw": bw}
+
+
+def _quality_calls(monkeypatch):
+    calls = []
+    monkeypatch.setattr(failover, "quality_move", lambda aid, tid, reason, now_mbps, rtt, say: calls.append((tid, reason, now_mbps, rtt)) or False)
+    return calls
+
+
+def test_a_tunnel_that_stayed_dropped_and_no_type_cures_is_handed_to_the_move_for_quality(monkeypatch):      # (1.69.186; the owner, 2026-11-02: "I gave the Doctor permission to change the IP as well")
+    tid = _world(monkeypatch)
+    _dropped_for(tid, 2 * 3600)
+    calls = _quality_calls(monkeypatch)
+    _said, tested, _calls = _spy(monkeypatch, [_row("tcp", 22.0), _row("paqet", 90.0, loss=4.0)])              # (no type is clearly better)
+    bandwidth.investigate(7, tid)
+    assert tested and calls == [(tid, "quality", 14.0, 100.0)]
+
+
+def test_a_drop_of_the_whole_iran_server_is_handed_to_the_move_for_quality_without_testing_types(monkeypatch):      # (the owner, 2026-11-02, on a tunnel that dropped with its server's other tunnel: "why does the Doctor do nothing?")
+    tid = _world(monkeypatch)
+    _dropped_for(tid, 2 * 3600)
+    now = int(time.time())
+
+    with session() as db:
+        t = db.get(Tunnel, tid)
+        bw = {"m": bandwidth.METHOD, "how": "link", "down": 10.0, "at": now - 60, "ref": 100.0, "state": "drop", "drop": {"since": now - 7200, "from": 100.0, "now": 10.0}, "suspect": False, "next_at": now + 1200, "hist": []}
+        db.add(Tunnel(name="dr-x", type="backhaul", transport="tcp", port=9902, iran_server_id=t.iran_server_id, foreign_server_id=t.foreign_server_id, state="up", forwarded_ports=[8077], record={"bw": bw}, secrets={}))
+
+    calls = _quality_calls(monkeypatch)
+    said, tested, _swaps = _spy(monkeypatch, [_row("tcp", 95.0)])
+    bandwidth.investigate(7, tid)
+    assert any("tunnels of the Iran server" in s and "dropped together" in s for s in said)                              # (the explanation: its own line or provider)
+    assert calls == [(tid, "quality", 14.0, 100.0)] and not tested                                                       # no type of this server cures it: no types are tested, the move is looked at
+
+
+def test_the_look_at_a_lasting_drop_comes_once_more_when_it_has_lasted_long_enough_for_a_move():
+    assert bandwidth.QUALITY_LOOK_AFTER == failover.QUALITY_DROP_AGE
+    bw = {"state": "drop", "drop": {"since": NOW}}
+    assert bandwidth.relook_due(bw, 0, NOW + 3600) is False                                                              # an hour: an evening dip, the first look was enough
+    assert bandwidth.relook_due(bw, 0, NOW + 91 * 60) is True                                                            # ninety minutes: a move may be the cure
+    assert bandwidth.relook_due(bw, NOW + 92 * 60, NOW + 100 * 60) is False                                              # (looked at just then)
+    assert bandwidth.relook_due(bw, NOW + 92 * 60, NOW + 92 * 60 + bandwidth.RELOOK_AFTER) is True                      # ... and every three hours after that
+
+
+def test_a_short_drop_is_not_moved(monkeypatch):
+    tid = _world(monkeypatch)
+    _dropped_for(tid, 10 * 60)                                                                                  # an evening dip: it passes by itself
+    calls = _quality_calls(monkeypatch)
+    _said, tested, _calls = _spy(monkeypatch, [_row("tcp", 22.0)])
+    bandwidth.investigate(7, tid)
+    assert tested and calls == []
+
+
+def test_a_cure_by_type_needs_no_move(monkeypatch):
+    tid = _world(monkeypatch)
+    _dropped_for(tid, 3 * 3600)
+    calls = _quality_calls(monkeypatch)
+    _said, _tested, swaps = _spy(monkeypatch, [_row("tcp", 95.0)])                                              # a proven steady type gives much more: the type is changed, nothing moves
+    bandwidth.investigate(7, tid)
+    assert swaps and calls == []
 
 
 @pytest.mark.parametrize("code_case", ["a"])

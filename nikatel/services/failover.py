@@ -47,7 +47,13 @@ REASONS = {"down": "the server does not answer",
            "gre_blocked": "GRE is filtered on its route and no other tunnel type works",
            "route_cut": "the route to the foreign server is cut",
            "lossy_route": "the route loses too many packets and no other tunnel type does better",
-           "port_blocked": "the tunnel port is blocked on its route and no other tunnel type works"}
+           "port_blocked": "the tunnel port is blocked on its route and no other tunnel type works",
+           "quality": "its speed dropped, no other tunnel type of its own server does better and another Iran server was proved much faster"}
+QUALITY_MIN_SCORE = 70     # (1.69.186, the owner, 2026-11-02: "I gave the Doctor permission to change the IP too - anything it likes, only speed, stability and quality must be high") the Iran server a tunnel is moved to for quality ranks at least this
+QUALITY_DELAY = 1.1        # ... answers the foreign server in at most this many times the tunnel's own delay ...
+QUALITY_LOSS = 1.0         # ... and loses at most this % of the packets
+QUALITY_DROP_AGE = 90 * 60  # a dropped tunnel is moved only after it has been dropped this long (an evening dip passes by itself)
+QUALITY_GAP = 3600         # one such move an hour for the whole panel: a bad evening must not move many tunnels one after another
 
 
 def conf() -> dict:
@@ -610,11 +616,15 @@ def _test_pair(aid: int, snap: dict, target: dict, old: str, first_ok: bool) -> 
         return []
 
 
-def _best_kind(aid: int, snap: dict, target: dict, cache: dict, first_ok: bool = False) -> str:
+def _best_kind(aid: int, snap: dict, target: dict, cache: dict, first_ok: bool = False, prefer: str = "") -> str:
     """The tunnel type to build on the new Iran server (the owner, 2026-10-19: "when it moves, the type stays the same as before unless the better ones do not answer - choose the best type here too"): the types are
     TESTED between the target and the foreign server (once for a pair, the tunnels of the pair share it); the best one that connects is built - but the type it has now stays when nothing beats it clearly
     (`autopilot.choose_better`: a clean line and BETTER_BY points more). When nothing connects the type it has now is built, as before."""
     old = autopilot.kind_of(snap["type"], snap["transport"], snap["record"])
+
+    if prefer:                                                   # (a move made for quality: the type that was SPEED-tested between the target and the foreign server and proved much faster is the one that is built)
+        autopilot._say(aid, f"{snap['name']}: {prefer} is built - it gave the speed that proved {target['name']} better in the test before this move.")
+        return prefer
 
     if not PICK_BEST:
         return old
@@ -678,7 +688,7 @@ def _work(aid: int, p: dict, finish: bool = True) -> bool:
             if src_on:
                 temp = _temp_name(snap["name"], str((snap.get("record") or {}).get("slug") or ""))
                 autopilot._say(aid, f"{snap['name']}: building the new {kind} tunnel on {p['target']['name']} as {temp} (the old one keeps running)…")
-                kind = _best_kind(aid, snap, p["target"], pairs)
+                kind = _best_kind(aid, snap, p["target"], pairs, prefer=str((p.get("prefer") or {}).get(t["id"]) or ""))
                 ok, story = autopilot._wait(autopilot._build_kind({**snap, "name": temp}, p["target"]["id"], snap["foreign_id"], kind, snap["record"].get("opts") if kind == old_kind else None))
 
                 if not ok:
@@ -783,9 +793,104 @@ def run_plan(p: dict) -> int:
     return autopilot._start(f"failover {p['server']}", _work, p, action="move")
 
 
+def quality_pick(ranking: list[dict], rtt: float | None) -> dict | None:
+    """Pure: the Iran server a tunnel may be moved to by itself for quality - the first row of `autopilot.ranking` (best first) that is on, ranks at least QUALITY_MIN_SCORE, has the room for one more tunnel, did not fail its
+    GRE check, has no cut tunnel of its own to this foreign server, answers it with at most QUALITY_LOSS % loss and in at most QUALITY_DELAY times the tunnel's own delay (`rtt`, None = not asked). None when there is none."""
+    for c in ranking:
+        if c.get("online", True) is False or int(c.get("score") or 0) < QUALITY_MIN_SCORE or c.get("gre_bad") or c.get("prev_cut") or room_for(c, 1):
+            continue
+
+        delay, loss = c.get("rtt_ms"), c.get("loss_pct")
+
+        if delay is None or loss is None or float(loss) > QUALITY_LOSS or (rtt and float(delay) > QUALITY_DELAY * float(rtt)):
+            continue
+
+        return c
+
+    return None
+
+
+def quality_move(aid: int, tunnel_id: int, reason: str, now_mbps: float, rtt: float | None, say) -> bool:
+    """(1.69.186) The Doctor moves a tunnel to another Iran server BY ITSELF, for speed and quality (the owner, 2026-11-02: "I gave the Doctor permission to change the IP as well - anything it likes, only speed, stability and quality must
+    be high"). Only in the mode "move", and only when it is PROVED: the tunnel dropped (or is cut) and no type of its own server does better; another Iran server ranks well for the foreign server (`quality_pick`) and the plan moves
+    this tunnel alone (no other tunnel is pulled along by a shared DNS record); and a SPEED test of the types between that server and the foreign server gives clearly more than the tunnel gives now, on a clean line (`bandwidth.drop_pick`).
+    The move is the one that never cuts the users (the new tunnel is built first, the DNS follows, the old one goes when it is quiet) with its rails: three a day for a tunnel, two hours between, and one move for quality an hour for the
+    whole panel. The type that gave the speed is the one that is built. True when a move was started."""
+    from ..ssh import SSHError
+    from . import bandwidth, doctor, knowledge, license
+
+    if not doctor.can_move() or move_blocked():
+        return False
+
+    snap = autopilot._snapshot(tunnel_id)
+    now = int(time.time())
+    moves = doctor._state()["moves"]
+    block = doctor.may_move(snap["name"], moves, now)
+    last = max((int(m.get("at") or 0) for m in moves if m.get("reason") == "quality"), default=0)
+
+    if not block and last and now - last < QUALITY_GAP:
+        block = f"another tunnel was moved for quality {(now - last) // 60} minutes ago (one an hour)"
+
+    if block:
+        say(f"No move for quality now: {block}.")
+        return False
+
+    try:
+        cand = quality_pick(autopilot.ranking(tunnel_id), rtt)
+    except (ValueError, RuntimeError) as e:
+        say(f"No move for quality: the Iran servers could not be ranked ({str(e)[:100]}).")
+        return False
+
+    if cand is None:
+        say("No move for quality: no other Iran server reaches the foreign server clearly better and has the room.")
+        return False
+
+    try:
+        plan = _make_plan(snap["iran_id"], {tunnel_id}, reason if reason in REASONS else "quality", target_id=cand["id"])
+    except (ValueError, RuntimeError) as e:
+        say(f"No move for quality to {cand['name']}: {str(e)[:120]}.")
+        return False
+
+    if plan["pulled"] or plan["problems"] or not plan["target"]:
+        why = ("it would pull " + ", ".join(plan["pulled"]) + " along (they share a DNS record with this tunnel)") if plan["pulled"] else "; ".join(plan["problems"]) or "no plan"
+        say(f"No move for quality to {cand['name']}: {why}.")
+        return False
+
+    cur = autopilot.kind_of(snap["type"], snap["transport"], snap["record"])
+    cannot = knowledge.cannot_try(knowledge.pair(cand["id"], snap["foreign_id"]), now)
+    order, _ = knowledge.plan_for(cand["id"], snap["foreign_id"], cur, False, True)
+    kinds = [k for k in ([cur] + [x for x in order if x != cur]) if k not in cannot and license.tunnel_kind_allowed(k)][:bandwidth.DROP_TRIES]
+    say(f"{snap['name']} runs at {float(now_mbps or 0):.0f} Mb/s and no type of {snap['iran_name']} does better: before moving it the Doctor speed-tests {', '.join(kinds)} between {cand['name']} ({cand.get('rtt_ms')} ms, {cand.get('loss_pct')} % loss) and {snap['foreign_name']}.")
+
+    try:
+        results = autopilot._recommend_now(aid, cand["id"], snap["foreign_id"], kinds, measure="full")
+    except (ValueError, RuntimeError, SSHError) as e:
+        say(f"The speed test could not run ({str(e)[:120]}): nothing is moved.")
+        return False
+
+    shown = ", ".join(f"{r['kind']} {float(r['down_mbps']):.0f} Mb/s" for r in results if r.get("down_mbps") is not None) or "none carried data"
+    say(f"Tested between {cand['name']} and {snap['foreign_name']}: {shown}.")
+    best = bandwidth.drop_pick(results, {}, float(now_mbps or 0), rtt)
+
+    if best is None:
+        say(f"No type gives clearly more than {float(now_mbps or 0):.0f} Mb/s there with a clean line: {snap['name']} stays on {snap['iran_name']}.")
+        return False
+
+    why = f"{snap['name']} gives {float(now_mbps or 0):.0f} Mb/s on {snap['iran_name']}; {best['kind']} gave {float(best['down_mbps']):.0f} Mb/s between {cand['name']} and {snap['foreign_name']} in a speed test just now, on a clean line"
+
+    try:
+        doctor.move_now(tunnel_id, cand["id"], "quality", why, prefer=best["kind"])
+    except ValueError as e:
+        say(f"The move was refused: {str(e)[:140]}.")
+        return False
+
+    say(f"The Doctor moves {snap['name']} from {snap['iran_name']} to {cand['name']} as {best['kind']}: {why}. The new tunnel is built first, the DNS follows, the old one goes when it is quiet (Tunnel Doctor → Moves can put the record back).")
+    return True
+
+
 def after_ladder(aid: int, tunnel_id: int, cause: str) -> bool:
-    """Called by the smart repair when a route problem survived every step. A poor route or packet loss NEVER moves a server by itself
-    (the operator's rule): the move is written down as a suggestion (Tunnel Doctor → one click), with the best Iran server for it. Returns False."""
+    """Called by the smart repair when a route problem survived every step. In the mode "move" the Doctor now moves the tunnel by itself when another Iran server is PROVED much faster (`quality_move`: the owner, 2026-11-02);
+    otherwise - or when nothing is proved - a poor route never moves a server by itself: the move is written down as a suggestion (Tunnel Doctor → one click), with the best Iran server for it. Returns True when a move was started."""
     from . import doctor
 
     if not ENABLED:
@@ -798,13 +903,16 @@ def after_ladder(aid: int, tunnel_id: int, cause: str) -> bool:
         autopilot._say(aid, f"No plan for a move: {str(e)[:160]}")
         return False
 
-    extra = (f" Also moved to keep the DNS consistent: {', '.join(p['pulled'])}." if p["pulled"] else "") + (f" Problems: {'; '.join(p['problems'])}." if p["problems"] else "")
+    if p.get("target") and doctor.mode() == "move" and quality_move(aid, tunnel_id, cause, 0.0, None, lambda line: autopilot._say(aid, line)):
+        return True
+
+    extra =(f" Also moved to keep the DNS consistent: {', '.join(p['pulled'])}." if p["pulled"] else "") + (f" Problems: {'; '.join(p['problems'])}." if p["problems"] else "")
     tgt = p.get("target") or {}
     doctor.suggest("route", tunnel_id, next((t["name"] for t in p["tunnels"] if t["id"] == tunnel_id), p.get("old_tunnel") or str(tunnel_id)), p["server_id"], p["server"], tgt.get("id"), tgt.get("name") or "",
                    f"{p['why']}; no tunnel type works on this route" + (f" - {tgt['name']} ranks best for it" if tgt else " - no other Iran server could carry it right now"))
 
     if tgt:
-        autopilot._say(aid, f"A route problem never moves the server by itself. Suggested: {_describe(p)}.{extra} Tunnel Doctor → Suggestions does it with one click.")
+        autopilot._say(aid, f"Not moved by itself (only in the mode “move”, and only when another Iran server is proved much faster in a speed test). Suggested: {_describe(p)}.{extra} Tunnel Doctor → Suggestions does it with one click.")
     else:
         autopilot._say(aid, "No other Iran server can carry " + (", ".join(t["name"] for t in p["tunnels"]) or "this tunnel") + " right now." + extra)
 

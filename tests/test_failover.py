@@ -207,23 +207,140 @@ def test_route_plan_moves_the_broken_tunnels_and_the_records_that_serve_only_the
     assert forced["target"]["id"] == ids["ir2"] and [t["name"] for t in forced["tunnels"]] == ["t2"] and [d["fqdn"] for d in forced["dns"]] == ["b.example.test"]
 
 
-def test_a_route_problem_never_moves_the_server_by_itself_it_is_suggested(monkeypatch):
+def test_a_route_problem_is_only_suggested_when_no_better_server_is_proved(monkeypatch):
     from nikatel.services import autopilot, doctor
 
     ids = _servers_and_tunnels()
     _dns_world(monkeypatch)
-    monkeypatch.setattr(autopilot, "ranking", lambda tid: [{"id": ids["ir2"], "name": "ir2", "score": 80}])
+    monkeypatch.setattr(autopilot, "ranking", lambda tid: [{"id": ids["ir2"], "name": "ir2", "score": 80}])           # (a row without a measured delay and loss proves nothing: quality_pick leaves it)
     said = []
     monkeypatch.setattr(autopilot, "_say", lambda aid, line, done=None, ok=None: said.append(line))
     st.put("repair", {"mode": "move"})
     assert failover.after_ladder(1, ids["t1"], "gre_blocked") is False and st.get("failover")["pending"] == []
     sug = doctor.state()["suggestions"]
     assert len(sug) == 1 and sug[0]["tunnel"] == "t1" and sug[0]["to_id"] == ids["ir2"] and sug[0]["kind"] == "route" and "no tunnel type works" in sug[0]["why"]
-    assert any("never moves the server by itself" in x and "ir2" in x for x in said)
+    assert any("Not moved by itself" in x and "ir2" in x for x in said)
     failover.after_ladder(1, ids["t1"], "gre_blocked")
     assert len(doctor.state()["suggestions"]) == 1                            # one per tunnel, the newest wins
     doctor.dismiss_suggestion(doctor.state()["suggestions"][0]["id"])           # the id of the NEWEST one (it differs when the two calls straddle a second)
     assert doctor.state()["suggestions"] == []
+
+
+# ------------------------------------------------------------------ the move for quality (1.69.186; the owner, 2026-11-02: "I gave the Doctor permission to change the IP as well - anything it likes, only speed, stability and quality
+# must be high")
+def _row(**kw):
+    return {"id": 9, "name": "ir2", "score": 85, "quality": 90, "resources": 80, "tunnels": 1, "rtt_ms": 40.0, "loss_pct": 0, "cpu": 10, **kw}
+
+
+def test_the_server_a_tunnel_may_move_to_for_quality_ranks_well_answers_cleanly_and_is_not_slower():
+    pick = failover.quality_pick
+    assert pick([_row()], 120.0)["id"] == 9
+    assert pick([_row(score=69)], 120.0) is None                                                   # not ranked well enough
+    assert pick([_row(loss_pct=2)], 120.0) is None and pick([_row(rtt_ms=None)], 120.0) is None    # it loses packets / was not measured
+    assert pick([_row(rtt_ms=140.0)], 120.0) is None and pick([_row(rtt_ms=130.0)], 120.0)["id"] == 9      # slower than the tunnel's own delay (1.1 times)
+    assert pick([_row(rtt_ms=500.0)], None)["id"] == 9                                             # the delay of the tunnel is not known (a cut tunnel): not asked
+    assert pick([_row(gre_bad=True)], 120.0) is None and pick([_row(prev_cut=True)], 120.0) is None and pick([_row(online=False)], 120.0) is None
+    assert pick([_row(tunnels=8)], 120.0) is None and pick([_row(resources=30)], 120.0) is None    # no room for one more tunnel
+    assert pick([_row(score=60), _row(id=10, name="ir3")], 120.0)["id"] == 10                      # the first row that qualifies
+
+
+def _quality_world(monkeypatch, mode="move", gain=400.0):
+    from nikatel.config import get_settings
+    from nikatel.services import autopilot, doctor
+
+    ids = _servers_and_tunnels()
+    _dns_world(monkeypatch)
+    monkeypatch.setattr(get_settings(), "read_only", False)
+    st.put("repair", {"mode": mode})
+    monkeypatch.setattr(autopilot, "ranking", lambda tid: [_row(id=ids["ir2"])])
+    said, started, tested = [], [], []
+    monkeypatch.setattr(autopilot, "_recommend_now", lambda aid, i, f, kinds, patience=1200, first_ok=False, measure="latency": tested.append((i, f, list(kinds), measure))
+                        or [{"kind": "bp:ws", "ok": True, "score": 70, "down_mbps": gain, "loss_pct": 0.0, "latency_ms": 45.0}])
+    monkeypatch.setattr(doctor, "move_now", lambda tid, iran, reason="manual", why="", rails=True, prefer="": started.append((tid, iran, reason, why, prefer)) or 7)
+    return ids, said, started, tested
+
+
+def test_a_dropped_tunnel_moves_by_itself_to_an_iran_server_that_a_speed_test_proves_much_faster(monkeypatch):
+    ids, said, started, tested = _quality_world(monkeypatch)
+    assert failover.quality_move(1, ids["t2"], "quality", 30.0, 120.0, said.append) is True
+    assert len(tested) == 1 and tested[0][0] == ids["ir2"] and tested[0][1] == ids["fi1"] and tested[0][3] == "full"                  # the speed is measured between the NEW Iran server and the foreign server
+    assert started == [(ids["t2"], ids["ir2"], "quality", started[0][3], "bp:ws")] and "30 Mb/s on ir1" in started[0][3] and "bp:ws gave 400 Mb/s" in started[0][3]
+    assert any("moves t2 from ir1 to ir2 as bp:ws" in s for s in said)
+
+
+def test_nothing_moves_by_itself_in_the_mode_fix(monkeypatch):
+    ids, said, started, tested = _quality_world(monkeypatch, mode="fix")
+    assert failover.quality_move(1, ids["t2"], "quality", 30.0, 120.0, said.append) is False and not tested and not started          # (fix mode: suggestions only)
+
+
+def test_nothing_moves_when_the_speed_of_the_other_server_is_not_clearly_better(monkeypatch):
+    ids, said, started, tested = _quality_world(monkeypatch, gain=50.0)                                                                  # 50 is not twice 30 (60)
+    assert failover.quality_move(1, ids["t2"], "quality", 30.0, 120.0, said.append) is False and len(tested) == 1 and not started
+    assert any("No type gives clearly more than 30 Mb/s there" in s for s in said)
+
+
+def test_nothing_moves_when_no_other_iran_server_ranks_well(monkeypatch):
+    ids, said, started, tested = _quality_world(monkeypatch)
+    monkeypatch.setattr(failover.autopilot, "ranking", lambda tid: [_row(id=ids["ir2"], score=50)])
+    assert failover.quality_move(1, ids["t2"], "quality", 30.0, 120.0, said.append) is False and not tested and not started and any("no other Iran server reaches" in s for s in said)
+
+
+def test_a_tunnel_that_shares_a_dns_record_with_another_is_not_moved_alone(monkeypatch):
+    ids, said, started, tested = _quality_world(monkeypatch)
+    assert failover.quality_move(1, ids["t1"], "quality", 0.0, None, said.append) is False and not tested and not started               # record a serves t1 AND t3: the move would pull t3 along
+    assert any("it would pull t3 along" in s for s in said)
+
+
+def test_one_move_for_quality_an_hour_and_the_rails_of_every_move_hold(monkeypatch):
+    import time
+
+    from nikatel.services import doctor
+
+    ids, said, started, tested = _quality_world(monkeypatch)
+    s = doctor._state()
+    s["moves"].append({"id": "q1", "at": int(time.time()) - 600, "reason": "quality", "tunnels": ["other"], "ok": True})
+    doctor._save(s)
+    assert failover.quality_move(1, ids["t2"], "quality", 30.0, 120.0, said.append) is False and not tested and any("one an hour" in x for x in said)
+    s = doctor._state()
+    s["moves"] = [{"id": "q2", "at": int(time.time()) - 600, "reason": "manual", "tunnels": ["t2"], "ok": True}]                         # this tunnel moved ten minutes ago
+    doctor._save(s)
+    assert failover.quality_move(1, ids["t2"], "quality", 30.0, 120.0, said.append) is False and not started and any("the next move waits" in x for x in said)
+
+
+def test_a_cut_tunnel_that_no_type_cures_is_moved_by_itself_in_the_mode_move_when_a_better_server_is_proved(monkeypatch):
+    from nikatel.services import autopilot
+
+    ids, said, started, _tested = _quality_world(monkeypatch)
+    monkeypatch.setattr(autopilot, "_say", lambda aid, line, done=None, ok=None: said.append(line))
+    assert failover.after_ladder(1, ids["t2"], "lossy_route") is True                                          # the repair counts the started move as its last step
+    assert len(started) == 1 and started[0][:3] == (ids["t2"], ids["ir2"], "quality") and started[0][4] == "bp:ws"
+
+
+def test_in_the_mode_fix_a_cut_tunnel_that_no_type_cures_is_only_suggested(monkeypatch):
+    from nikatel.services import autopilot
+
+    ids, said, started, tested = _quality_world(monkeypatch, mode="fix")
+    monkeypatch.setattr(autopilot, "_say", lambda aid, line, done=None, ok=None: said.append(line))
+    assert failover.after_ladder(1, ids["t2"], "lossy_route") is False and not started and not tested
+
+
+def test_a_move_for_quality_builds_the_type_that_was_speed_tested_and_the_plan_carries_it(monkeypatch):
+    from nikatel.services import autopilot, doctor
+
+    said = []
+    monkeypatch.setattr(autopilot, "_say", lambda aid, line, done=None, ok=None: said.append(line))
+    monkeypatch.setattr(failover, "_test_pair", lambda *a, **k: pytest.fail("the type is known: no second test"))
+    snap = {"name": "t2", "type": "backhaul", "transport": "tcpmux", "record": {}, "foreign_id": 1}
+    assert failover._best_kind(1, snap, {"id": 2, "name": "ir2"}, {}, prefer="bp:ws") == "bp:ws" and any("bp:ws is built" in s for s in said)
+    ids = _servers_and_tunnels()
+    got = []
+    monkeypatch.setattr(failover, "_make_plan", lambda *a, **k: {"target": {"id": ids["ir2"], "name": "ir2"}, "pulled": [], "problems": [], "why": "x"})
+    monkeypatch.setattr(failover, "_work", lambda aid, p: got.append(p))
+    doctor._run_move(1, ids["t2"], ids["ir2"], "quality", "because", "bp:ws")
+    assert got[0]["prefer"] == {ids["t2"]: "bp:ws"} and got[0]["why"] == "because"
+    got.clear()
+    doctor._run_move(1, ids["t2"], ids["ir2"], "manual", "")
+    assert "prefer" not in got[0]
 
 
 def test_check_moves_a_dead_server_in_mode_move_and_forgets_one_that_answers_again(monkeypatch):
