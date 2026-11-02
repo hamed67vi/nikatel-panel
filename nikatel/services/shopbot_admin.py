@@ -41,6 +41,10 @@ STATE_GROUPS = [
                             ("cartToCartAutoAcceptState", "Auto-accept card to card", "onoff", "accept receipts without an admin"), ("cartToCartAutoAcceptType", "Auto-accept type", "text", "0 = agents only, 1 = customers only, 2 = everybody"),
                             ("cartToCartAutoAcceptTime", "Auto-accept after (min)", "number", "minutes after the job first sees the receipt (default 10)"),
                             ("cartToCartAutoAcceptMaxHours", "Auto-accept: newest receipts only (hours)", "number", "older receipts are never accepted by the job (default 24)"),
+                            ("aiReceiptState", "AI receipt check", "text", "off / advise / on: advise = the AI only comments on each new receipt for the admins, on = it also gates the automatic approval (needs the Claude key on the bot server)"),
+                            ("aiReceiptNewMaxToman", "AI: biggest receipt of a new customer accepted automatically (Toman)", "number", "default 1000000"),
+                            ("aiReceiptMinConf", "AI: least confidence for automatic approval (%)", "number", "default 80, new customers 90"),
+                            ("aiReceiptDailyMax", "AI: checks per day (cost guard)", "number", "default 300"),
                             ("zarinpal", "ZarinPal gateway", "onoff", ""), ("nextpay", "NextPay gateway", "onoff", ""), ("nowPaymentWallet", "NowPayments (crypto)", "onoff", ""),
                             ("nowPaymentOther", "NowPayments for purchases", "onoff", ""), ("tronWallet", "TRON wallet payments", "onoff", ""), ("weSwapState", "WeSwap", "onoff", ""),
                             ("USDRate", "USD rate (Toman)", "number", ""), ("TRXRate", "TRX rate (Toman)", "number", "")]),
@@ -868,13 +872,26 @@ def states_structured() -> dict:
             "other": {k: v for k, v in cur.items() if k not in known}}
 
 
+_STATE_NUMBERS = {"cartToCartAutoAcceptTime": (1, 999999), "cartToCartAutoAcceptMaxHours": (1, 999999), "aiReceiptNewMaxToman": (1, 10**12), "aiReceiptMinConf": (1, 100), "aiReceiptDailyMax": (1, 999999)}
+
+
 def _state_checked(k: str, v: str) -> str:
-    """The receipt auto-accept job reads these three as numbers: a word, 0 or a negative one would make it accept at once, never, or whatever the PHP cast gives (ASCII digits only: PHP reads an Arabic-Indic digit as 0)."""
+    """The bot's receipt jobs read these as numbers (and the AI check as one of three words): a word, 0 or a negative one would make them accept at once, never, or whatever the PHP cast gives
+    (ASCII digits only: PHP reads an Arabic-Indic digit as 0)."""
     if k == "cartToCartAutoAcceptType" and v not in ("0", "1", "2"):
         raise ValueError("Auto-accept type must be 0 (agents only), 1 (customers only) or 2 (everybody)")
 
-    if k in ("cartToCartAutoAcceptTime", "cartToCartAutoAcceptMaxHours") and not (re.fullmatch(r"[0-9]{1,6}", v) and int(v) >= 1):
-        raise ValueError(f"{k} must be a whole number of 1 or more")
+    if k == "aiReceiptState":
+        v = v.lower()
+
+        if v not in ("off", "advise", "on"):
+            raise ValueError("AI receipt check must be off, advise or on")
+
+    if k in _STATE_NUMBERS:
+        lo, hi = _STATE_NUMBERS[k]
+
+        if not (re.fullmatch(r"[0-9]{1,13}", v) and lo <= int(v) <= hi):
+            raise ValueError(f"{k} must be a whole number from {lo} to {hi:,}")
 
     return v
 

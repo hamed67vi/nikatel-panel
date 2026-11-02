@@ -375,25 +375,38 @@ def test_the_auto_accept_numbers_are_checked_before_anything_is_written(db):
                    ("cartToCartAutoAcceptMaxHours", "0"), ("cartToCartAutoAcceptMaxHours", ""), ("cartToCartAutoAcceptMaxHours", "-1"), ("cartToCartAutoAcceptMaxHours", "٣")):          # (an Arabic-Indic 3: PHP reads it as 0)
         with pytest.raises(ValueError):
             adm.states_set({"supportID": "@help", k: bad})
+    for k, bad in (("aiReceiptState", ""), ("aiReceiptState", "yes"), ("aiReceiptState", "1"), ("aiReceiptState", "advice"),
+                   ("aiReceiptNewMaxToman", "0"), ("aiReceiptNewMaxToman", "-1"), ("aiReceiptNewMaxToman", "1m"), ("aiReceiptNewMaxToman", ""), ("aiReceiptNewMaxToman", "1000000000001"),
+                   ("aiReceiptMinConf", "0"), ("aiReceiptMinConf", "101"), ("aiReceiptMinConf", "80%"), ("aiReceiptMinConf", ""), ("aiReceiptMinConf", "-5"),
+                   ("aiReceiptDailyMax", "0"), ("aiReceiptDailyMax", "-300"), ("aiReceiptDailyMax", "many"), ("aiReceiptDailyMax", "")):
+        with pytest.raises(ValueError):
+            adm.states_set({"supportID": "@help", k: bad})
     assert db.writes == []          # (the good key beside the bad one is not written either)
 
-    for k, good in (("cartToCartAutoAcceptType", "0"), ("cartToCartAutoAcceptType", "1"), ("cartToCartAutoAcceptType", "2"), ("cartToCartAutoAcceptTime", "1"), ("cartToCartAutoAcceptMaxHours", "1")):
+    for k, good in (("cartToCartAutoAcceptType", "0"), ("cartToCartAutoAcceptType", "1"), ("cartToCartAutoAcceptType", "2"), ("cartToCartAutoAcceptTime", "1"), ("cartToCartAutoAcceptMaxHours", "1"),
+                    ("aiReceiptState", "off"), ("aiReceiptState", "advise"), ("aiReceiptState", "on"), ("aiReceiptMinConf", "1"), ("aiReceiptMinConf", "100"), ("aiReceiptNewMaxToman", "1"), ("aiReceiptDailyMax", "1")):
         adm.states_set({k: good})
-    adm.states_set({"cartToCartAutoAcceptType": " 2 ", "cartToCartAutoAcceptTime": " 10 ", "cartToCartAutoAcceptMaxHours": "24"})
+    adm.states_set({"cartToCartAutoAcceptType": " 2 ", "cartToCartAutoAcceptTime": " 10 ", "cartToCartAutoAcceptMaxHours": "24",
+                    "aiReceiptState": " Advise ", "aiReceiptNewMaxToman": "1000000", "aiReceiptMinConf": "80", "aiReceiptDailyMax": "300"})
     doc = json.loads(base64.b64decode(re.search(r'FROM_BASE64\("([^"]+)"\)', db.writes[-1]).group(1)))
-    assert (doc["cartToCartAutoAcceptType"], doc["cartToCartAutoAcceptTime"], doc["cartToCartAutoAcceptMaxHours"]) == ("2", "10", "24") and len(db.writes) == 6
+    assert (doc["cartToCartAutoAcceptType"], doc["cartToCartAutoAcceptTime"], doc["cartToCartAutoAcceptMaxHours"]) == ("2", "10", "24")
+    assert (doc["aiReceiptState"], doc["aiReceiptNewMaxToman"], doc["aiReceiptMinConf"], doc["aiReceiptDailyMax"]) == ("advise", "1000000", "80", "300") and len(db.writes) == 13
 
 
 def test_the_wallet_and_payment_switches_name_what_the_receipt_job_reads():
     items = {k: (label, kind, hint) for title, group in adm.STATE_GROUPS if title == "Wallet and payment" for k, label, kind, hint in group}
-    assert "aiReceiptState" not in items and not any("aiReceiptState" in k for _, g in adm.STATE_GROUPS for k, *_ in g)          # nothing in the bot or the panel read it
     assert items["cartToCartAutoAcceptType"][2] == "0 = agents only, 1 = customers only, 2 = everybody"
     assert items["cartToCartAutoAcceptTime"][2] == "minutes after the job first sees the receipt (default 10)"
     assert items["cartToCartAutoAcceptMaxHours"] == ("Auto-accept: newest receipts only (hours)", "number", "older receipts are never accepted by the job (default 24)")
     keys = list(items)
     assert keys.index("cartToCartAutoAcceptMaxHours") == keys.index("cartToCartAutoAcceptTime") + 1
+    assert items["aiReceiptState"] == ("AI receipt check", "text", "off / advise / on: advise = the AI only comments on each new receipt for the admins, on = it also gates the automatic approval (needs the Claude key on the bot server)")
+    assert items["aiReceiptNewMaxToman"] == ("AI: biggest receipt of a new customer accepted automatically (Toman)", "number", "default 1000000")
+    assert items["aiReceiptMinConf"] == ("AI: least confidence for automatic approval (%)", "number", "default 80, new customers 90")
+    assert items["aiReceiptDailyMax"] == ("AI: checks per day (cost guard)", "number", "default 300")
+    assert keys[keys.index("aiReceiptState"):keys.index("aiReceiptState") + 4] == ["aiReceiptState", "aiReceiptNewMaxToman", "aiReceiptMinConf", "aiReceiptDailyMax"]          # (the three numbers right after the switch)
     job = next(j for j in shopbot.CRON_JOBS if j["key"] == "rewardReport")
     assert "cartToCartAutoAcceptMaxHours" in job["descr"] and "cartToCartAutoAcceptMaxHours" in job["settings"]
     assert set(job["settings"]) <= {k for _, g in adm.STATE_GROUPS for k, *_ in g}          # (the jobs box draws a cell for each key it finds in the settings groups)
-    assert "aiReceiptState" not in (Path(__file__).resolve().parent.parent / "nikatel" / "web" / "app.js").read_text(encoding="utf-8")
+    assert '"cartToCartAutoAcceptState", "aiReceiptState", "zarinpal"' in (Path(__file__).resolve().parent.parent / "nikatel" / "web" / "app.js").read_text(encoding="utf-8")          # (the switch shows in the main part of the settings page)
 
