@@ -379,9 +379,13 @@ def _run_retype(aid: int, tunnel_id: int, kind: str, was: str, why: str, auto: b
         say(f"The link of {kind} does not pass between {snap['iran_name']} and {snap['foreign_name']}: nothing is built, {snap['name']} is not touched.", done=True, ok=False)
         return
 
+    started = int(time.time())
+
     if not autopilot._replace(aid, tunnel_id, snap["iran_id"], snap["foreign_id"], kind, "The Doctor suggested it and you asked for it.", snap=snap):
         say(f"The build of {kind} failed; {cur} was put back.", done=True, ok=False)
         return
+
+    autopilot.taught(snap, kind, started)                             # (a change the owner asked for while the tunnel had dropped is kept in the Doctor's memory, like its own swap)
 
     after, down = "", None
 

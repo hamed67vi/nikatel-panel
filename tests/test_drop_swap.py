@@ -155,6 +155,69 @@ def test_a_type_that_could_not_be_tried_a_day_ago_is_asked_again(monkeypatch):
     assert tested == [(["wg:tcpmux", "wg:tcp", "tcp"], "full")] and not any(s.startswith("Not tried") for s in said)
 
 
+def _poor(kind, score, down, ago=3600):
+    """A type that carried data in a test but scored under the line (the kind of memory a pair with a throttled carrier ends with)."""
+    return knowledge.merge(None, {"kind": kind, "ok": False, "score": score, "down_mbps": down, "latency_ms": 100.0, "loss_pct": 0.0}, "full", int(time.time()) - ago)
+
+
+def test_a_type_that_carried_data_before_is_tried_before_the_types_never_tried(monkeypatch):
+    tid = _world(monkeypatch, memory=False)
+    swingy = None
+
+    for ago, down in ((9, 500.0), (6, 20.0), (3, 400.0)):                                                                   # three tests with a huge swing: the type is known to be UNSTEADY
+        swingy = knowledge.merge(swingy, {"kind": "bp:kcp", "ok": False, "score": 40, "down_mbps": down, "latency_ms": 100.0, "loss_pct": 0.0}, "full", int(time.time()) - ago * 3600)
+
+    monkeypatch.setattr(knowledge, "pair", lambda i, f: {"kinds": {"bp:ws": _poor("bp:ws", 42, 300.0), "bp:tcp": _poor("bp:tcp", 38, 200.0), "paqet": _poor("paqet", 10, 20.0), "bp:kcp": swingy}})
+    monkeypatch.setattr(knowledge, "plan_for", lambda i, f, cur, a, b, now=None: (["l2tpv3:tcpmux", "gretap:tcpmux", "tcp"], []))
+    _said, tested, calls = _spy(monkeypatch, [_row("bp:ws", 300.0)])
+    bandwidth.investigate(7, tid)
+    assert len(tested) == 1 and tested[0][1] == "full" and set(tested[0][0]) == {"bp:ws", "bp:tcp", "paqet"}                  # what carried data goes first; the unsteady one and the kernel links that never carried data are not tried
+    assert not calls                                                                                                        # (a type that is not proven steady is still never taken by itself)
+
+
+def test_a_steady_type_is_still_tried_first_and_the_known_poor_ones_only_fill_the_empty_slots(monkeypatch):
+    tid = _world(monkeypatch)                                                                                               # the memory: tcp (steady) and paqet (one good test) - two types
+    now = int(time.time())
+    kinds = {"tcp": None, "paqet": knowledge.merge(None, {"kind": "paqet", "ok": True, "score": 50, "down_mbps": 150.0, "latency_ms": 100.0, "loss_pct": 0.0}, "full", now - 3600), "bp:ws": _poor("bp:ws", 42, 300.0)}
+
+    for i in range(3):
+        kinds["tcp"] = knowledge.merge(kinds["tcp"], {"kind": "tcp", "ok": True, "score": 55, "down_mbps": 118.0, "latency_ms": 100.0, "loss_pct": 0.0}, "full", now - 3600 * (4 - i))
+
+    monkeypatch.setattr(knowledge, "pair", lambda i, f: {"kinds": kinds})
+    _said, tested, _calls = _spy(monkeypatch, [_row("tcp", 95.0), _row("paqet", 200.0), _row("bp:ws", 300.0)])
+    bandwidth.investigate(7, tid)
+    assert tested == [(["tcp", "paqet", "bp:ws"], "full")]
+
+
+def test_a_change_made_by_hand_to_a_dropped_tunnel_is_kept_in_the_doctors_memory(monkeypatch):
+    tid = _world(monkeypatch)
+    snap = autopilot._snapshot(tid)                                                                                         # (the tunnel of this world has dropped: its record says so)
+    assert snap["record"]["bw"]["state"] == "drop"
+    autopilot.taught(snap, "bp:ws", int(time.time()) - 75)
+    pb = knowledge.playbook(snap["iran_id"], snap["foreign_id"], "slow")
+    assert pb["kind"] == "bp:ws" and pb["step"] == "swap" and pb["n"] == 1 and 70 <= pb["secs"] <= 90                       # the next drop of this pair tests bp:ws first
+
+    healthy = dict(snap, record={"bw": {"state": "ok", "down": 500.0}})                                                      # a healthy tunnel changed by choice: nothing is kept
+    autopilot.taught(healthy, "tcp", int(time.time()))
+    assert knowledge.playbook(snap["iran_id"], snap["foreign_id"], "slow")["kind"] == "bp:ws"
+    assert len(knowledge._doc()["incidents"]) == 1
+
+
+def test_the_change_started_by_hand_teaches_only_when_it_worked(monkeypatch):
+    tid = _world(monkeypatch)
+    snap = autopilot._snapshot(tid)
+    said = []
+    monkeypatch.setattr(autopilot, "_start", lambda label, fn, *a, **k: fn(1, *a))                                          # (the thread of the action runs here, at once)
+    monkeypatch.setattr(autopilot, "_say", lambda aid, line, done=None, ok=None: said.append(line))
+    monkeypatch.setattr(autopilot, "servers_off_of", lambda i, f: None)
+    monkeypatch.setattr(autopilot, "_replace", lambda *a, **k: False)
+    autopilot.replace_start(tid, "bp:ws")
+    assert said[-1] == "Not changed." and knowledge.playbook(snap["iran_id"], snap["foreign_id"], "slow") == {}               # it failed: nothing to learn
+    monkeypatch.setattr(autopilot, "_replace", lambda *a, **k: True)
+    autopilot.replace_start(tid, "bp:ws")
+    assert said[-1] == "Done." and knowledge.playbook(snap["iran_id"], snap["foreign_id"], "slow")["kind"] == "bp:ws"
+
+
 @pytest.mark.parametrize("code_case", ["a"])
 def test_the_swap_is_off_in_the_other_tests(code_case):
     assert bandwidth.DROP_SWAP is False and code_case

@@ -1413,6 +1413,18 @@ def explain(tunnel_id: int | None = None) -> dict:
     return {"text": text, "facts": facts}
 
 
+def taught(snap: dict, kind: str, started: int) -> None:
+    """A tunnel that had DROPPED (or was very slow) was changed by hand to `kind` and the new type is built and works: the Doctor keeps it the way it keeps its own swap (`knowledge.remember`, the cause "slow"), so the
+    next drop of this pair tests that type first (the owner, 2026-11-02: "teach the Doctor too"). A tunnel that was healthy is changed by choice, not to cure anything: nothing is kept for it."""
+    if ((snap.get("record") or {}).get("bw") or {}).get("state") not in ("drop", "slow"):
+        return
+
+    try:
+        knowledge.remember(snap["iran_id"], snap["foreign_id"], "slow", snap["name"], [{"step": "swap", "kind": kind, "ok": True}], True, max(0, int(time.time()) - int(started)))
+    except Exception:
+        log.exception("what the change of %s taught could not be kept", snap.get("name"))
+
+
 def replace_start(tunnel_id: int, kind: str) -> int:
     if kind not in tunnel_test.KIND_KEYS:
         raise ValueError("unknown tunnel type")
@@ -1423,7 +1435,12 @@ def replace_start(tunnel_id: int, kind: str) -> int:
         raise ValueError(off_note(off))
 
     def run(aid: int) -> None:
+        started = int(time.time())
         ok = _replace(aid, tunnel_id, snap["iran_id"], snap["foreign_id"], kind, "Chosen by you.")
+
+        if ok:
+            taught(snap, kind, started)
+
         _say(aid, "Done." if ok else "Not changed.", done=True, ok=ok)
 
     return _start(snap["name"], run)

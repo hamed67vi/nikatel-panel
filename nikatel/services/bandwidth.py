@@ -844,6 +844,11 @@ def _swap_after_drop(aid: int, tunnel_id: int, say) -> None:
             and r["kind"].rsplit(":", 1)[-1] != bad_family]
     kinds = [r["kind"] for r in rows]
 
+    if len(kinds) < DROP_TRIES:                                  # (1.69.185: a type that CARRIED data in an earlier test but scored under the line is tried before the types never tried - for a tunnel that gives 16 Mb/s one that scored 40 is
+        good = set(kinds)                                        # a real candidate. The Doctor looked three times and tested only kernel links that cannot run, never the plain carriers that gave 370 and 825 Mb/s: the owner, 2026-11-02)
+        kinds += [r["kind"] for r in knowledge.ranked(p, now, include_poor=True) if r["kind"] not in good and r["kind"] != cur and license.tunnel_kind_allowed(r["kind"])
+                  and (r.get("steady") is None or r["steady"] >= knowledge.STEADY_OK) and r["kind"].rsplit(":", 1)[-1] != bad_family]
+
     if not kinds:                                                # (nothing known about the pair: the Doctor's own order for it)
         plan, _ = knowledge.plan_for(snap["iran_id"], snap["foreign_id"], cur, False, True)
         kinds = [k for k in plan if k != cur and license.tunnel_kind_allowed(k) and k not in knowledge.blocked(p, now) and k.rsplit(":", 1)[-1] != bad_family]
