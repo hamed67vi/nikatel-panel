@@ -1,5 +1,6 @@
 """The full QA round on configs, panels, DNS and the shop bot: what a walk of the pages and a read of the code found."""
 import json
+import re
 import threading
 from pathlib import Path
 
@@ -120,6 +121,13 @@ class Db:
 
     def write(self, sql):
         self.writes.append(sql)
+        m = re.match(r'UPDATE pays SET state = "(\w+)"(?:, approved_by = (\d+))? WHERE id = \d+(?: AND state NOT IN \(([^)]*)\))?$', sql)
+
+        if m and self.pay["state"] not in re.findall(r'"(\w+)"', m.group(3) or ""):          # (the settlement is a conditional UPDATE that the panel reads back: the table must keep what MySQL would)
+            self.pay["state"] = m.group(1)
+
+            if m.group(2) is not None:
+                self.pay["approved_by"] = m.group(2)
 
         if sql.startswith("UPDATE users SET wallet"):
             self.gate.wait(2)          # the first approval is still busy here when the second one comes

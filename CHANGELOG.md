@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.69.189 - The test of two clicks on Approve follows the receipt read-back of 1.69.188
+
+> **In short:** a test-only follow-up to 1.69.188 (the owner, 2026-11-03: "do a complete review of the bot's automatic receipt approval status and fix the bugs"). `tests/test_qa_cfg_round.py` has its own fake bot database whose receipt never changed state; since 1.69.188 the panel reads the receipt back after settling it and refuses when it is not settled, so that fake made `test_two_clicks_on_approve_credit_the_wallet_once` wait for a wallet write that never came (a busy loop: it would hang a whole-suite run). The fake now applies the conditional UPDATE to its receipt like MySQL does. No panel code changed.
+>
+> **به زبان ساده:** فقط یک تست درست شد؛ خودِ پنل و رفتارش نسبت به ۱.۶۹.۱۸۸ تغییری نکرده است.
+
+- **Where**
+  - `tests/test_qa_cfg_round.py`: `Db.write` applies `UPDATE pays SET state = ... [, approved_by = N] WHERE id = N [AND state NOT IN (...)]` to its receipt.
+- **Proved:** `tests/test_qa_cfg_round.py` (the double click still credits the wallet once, a failed approval frees the payment, the decline text is escaped) and `tests/test_shopbot_admin.py`.
+- **Not proved:** the whole suite was not run for this one-file change; 1.69.188 shipped without that file in the quick set, which is how the break got through.
+
 ## 1.69.188 - Approving or declining a bot receipt from the panel can no longer collide with the bot's own job, and the auto-accept settings are checked
 
 > **In short:** the owner (2026-11-03): "do a complete review of the bot's automatic receipt approval status and fix the bugs". The review of the live bot (read-only) found the same defects in the panel's Shop bot → Payments **Approve / Decline**: it refused a receipt that was `approved`, `declined`, `paid` or `auto_cart_approved`, but not one the bot's job holds right now (`processing`), and it then wrote the new state with no check of its own - so an approval that met the job (or another admin's button) in the same moment could win together with it and the wallet was credited twice. Now `processing` is refused, the UPDATE carries the check itself (`AND state NOT IN (...)`), and the row is read back: when this call did not settle the receipt it says so and nothing is credited or sent. The settings list lost a switch nothing reads ("AI receipt check", `aiReceiptState`); the auto-accept numbers have hints and a new `cartToCartAutoAcceptMaxHours` (newest receipts only, default 24 hours); a Type outside 0 / 1 / 2 or a Time / MaxHours below 1 is refused instead of saved (the job reads them as numbers: 0 or a word made it accept at once or never).
