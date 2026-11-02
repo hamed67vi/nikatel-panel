@@ -189,12 +189,14 @@ def test_the_stability_of_a_type_needs_enough_tests_and_is_a_percent():
     for _ in range(ROUNDS):
         e = entry(r)
         s = kn.stability(e, NOW)
-        recent = [x for x in (e.get("hist") or []) if NOW - int(x.get("at") or 0) <= kn.FULL_FRESH]
+        month = [x for x in (e.get("hist") or []) if NOW - int(x.get("at") or 0) <= kn.FULL_FRESH]
+        week = [x for x in month if NOW - int(x.get("at") or 0) <= kn.STEADY_RECENT]
+        used = week if len(week) >= kn.STEADY_MIN_TESTS else month          # (1.69.184: the last week decides when it holds enough tests)
 
-        if len(recent) < kn.STEADY_MIN_TESTS:
+        if len(month) < kn.STEADY_MIN_TESTS:
             assert s is None
         else:
-            assert 0 <= s["pct"] <= 100 and s["n"] == len(recent) and 0 <= s["swing"] <= 1 and s["passed"] <= s["n"]
+            assert 0 <= s["pct"] <= 100 and s["n"] == len(used) and 0 <= s["swing"] <= 1 and s["passed"] <= s["n"]
 
 
 def test_the_night_window_wraps_past_midnight_and_equal_hours_mean_any_time():

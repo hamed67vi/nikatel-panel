@@ -40,6 +40,8 @@ RETRY_AFTER = 15 * 60        # a tunnel that could not be measured is left alone
 RETRY_FIRST = 90             # ... but a tunnel that has NO capacity yet (a new one) is tried again soon: its row shows a dash until the first test (the owner, 2026-10-21)
 REF_WINDOW = 7 * 86400       # the usual level is what the last week gave
 REF_MIN = 4                  # samples needed before anything is judged
+REF_HOUR_SPAN = 120          # minutes either side of the time of day that is "the same hour" (the owner, 2026-11-02: every evening the lines slow down and every tunnel read "dropped" against a level made mostly of nights and days)
+REF_HOUR_AGE = 12 * 3600     # ... and a sample counts as "the same hour" only when it is this old: the hours just before now are the drop itself, and a slow fall must not become its own usual level
 MIN_REF_MBPS = 20.0          # a tunnel whose usual level is under this is too slow to tell a drop from noise
 DROP_RATIO = 0.6             # under this share of the usual level: a drop
 LOW_RATIO = 0.8              # a drop ends over this share
@@ -67,14 +69,30 @@ _MEASURING: set[int] = set()       # every tunnel being measured now (the job or
 
 
 # ------------------------------------------------------------------ pure helpers (tested)
-def reference(hist: list, now: int) -> float | None:
-    """The usual level of a tunnel: the 75th percentile of what the last week measured (what it gives on a normal day, not its best minute and not its worst). None until REF_MIN samples exist."""
-    vals = sorted(float(x[1]) for x in hist if x and x[1] is not None and now - int(x[0]) <= REF_WINDOW)
+def _third_quarter(vals: list) -> float:
+    vals = sorted(vals)
+    return vals[round(0.75 * (len(vals) - 1))]
 
-    if len(vals) < REF_MIN:
+
+def _minutes_apart(a: int, b: int) -> int:
+    """Pure: how far two moments are from each other on the clock of the day (local time, round the midnight), in minutes."""
+    ta, tb = time.localtime(a), time.localtime(b)
+    gap = abs(ta.tm_hour * 60 + ta.tm_min - (tb.tm_hour * 60 + tb.tm_min))
+    return min(gap, 1440 - gap)
+
+
+def reference(hist: list, now: int) -> float | None:
+    """The usual level of a tunnel: the 75th percentile of what the last week measured (what it gives on a normal day, not its best minute and not its worst). None until REF_MIN samples exist.
+    1.69.184: against THIS time of day - when at least REF_MIN samples of the last week were taken within REF_HOUR_SPAN minutes of the same clock time (and at least REF_HOUR_AGE ago), the usual level is the lower of
+    the two: the evening is judged against the evenings, never against the nights. It can only be lower than before, so it adds no alarm; where the history is too short (a tunnel with a test door keeps a day and a half) nothing changes."""
+    rows = [(int(x[0]), float(x[1])) for x in hist if x and x[1] is not None and now - int(x[0]) <= REF_WINDOW]
+
+    if len(rows) < REF_MIN:
         return None
 
-    return vals[round(0.75 * (len(vals) - 1))]
+    usual = _third_quarter([v for _, v in rows])
+    same = [v for at, v in rows if now - at >= REF_HOUR_AGE and _minutes_apart(at, now) <= REF_HOUR_SPAN]
+    return min(usual, _third_quarter(same)) if len(same) >= REF_MIN else usual
 
 
 def verdict(down: float | None, ref: float | None, slow_line: float = SLOW_MBPS) -> str:
@@ -773,6 +791,23 @@ def drop_pick(results: list[dict], steady: dict, now_mbps: float, rtt: float | N
     return min(ok, key=lambda r: (steady.get(r["kind"]) is None, -float(r["down_mbps"]))) if ok else None
 
 
+def drop_slots(kinds: list[str], cannot, extra: list[str], limit: int) -> tuple[list[str], list[str]]:
+    """Pure: (the types to test, the types left out). The types a server cannot run (`cannot`) are left out of the first `limit` and the slots they would have taken go to the next ones (`extra`, in the Doctor's order);
+    a type that was not meant to be tried is never added, and nothing is tried twice."""
+    first = list(kinds)[:limit]
+    left_out = [k for k in first if k in cannot]
+    keep = [k for k in first if k not in cannot]
+
+    for k in list(kinds)[limit:] + [k for k in extra if k not in kinds]:
+        if len(keep) >= limit:
+            break
+
+        if k not in cannot and k not in keep:
+            keep.append(k)
+
+    return keep, left_out
+
+
 def _swap_after_drop(aid: int, tunnel_id: int, say) -> None:
     """A tunnel dropped and the look found no outside cause (the owner, 2026-10-21: "when we have a drop the Doctor must test the other types - the problem may not exist on them - and it can change the type; I said
     the tunnel must be steady"). The Doctor TESTS the other types the memory of the pair knows to be steady (or has not tried enough yet), with a real speed test, one after the other, and changes the tunnel to
@@ -818,6 +853,16 @@ def _swap_after_drop(aid: int, tunnel_id: int, say) -> None:
     if pb and pb["kind"] in kinds:
         kinds = [pb["kind"]] + [k for k in kinds if k != pb["kind"]]
         say(f"The last time this happened on {snap['iran_name']} ⇄ {snap['foreign_name']}, {pb['kind']} fixed it" + (f" ({pb['n']} times)" if pb["n"] > 1 else "") + " - it is tested first.")
+
+    cannot = knowledge.cannot_try(p, now)
+
+    if any(k in cannot for k in kinds[:DROP_TRIES]):             # (a type a server cannot run - wireguard-tools missing - would only fail and take a slot of the three: 1.69.184, the owner, 2026-11-02)
+        plan, _ = knowledge.plan_for(snap["iran_id"], snap["foreign_id"], cur, False, True)
+        steady_of = {r["kind"]: r.get("steady") for r in knowledge.ranked(p, now, include_poor=True)}
+        shut = knowledge.blocked(p, now)
+        extra = [k for k in plan if k != cur and license.tunnel_kind_allowed(k) and k not in shut and k.rsplit(":", 1)[-1] != bad_family and (steady_of.get(k) is None or steady_of[k] >= knowledge.STEADY_OK)]
+        kinds, left_out = drop_slots(kinds, cannot, extra, DROP_TRIES)
+        say(f"Not tried: {', '.join(left_out)} - a server lacks what they need (wireguard-tools), so a test could only fail; the slot goes to the next type" + ("s." if len(left_out) > 1 else "."))
 
     kinds = kinds[:DROP_TRIES]
 

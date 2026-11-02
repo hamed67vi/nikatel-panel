@@ -28,6 +28,45 @@ def test_the_usual_level_is_the_third_quarter_of_the_last_week_and_needs_four_sa
     assert bandwidth.reference(old + hist_of([100, 100, 100, 100]), NOW) == 100.0
 
 
+def local(day, hour, minute=0):
+    """A moment on the clock of the day (local time, November 2026): the usual level compares the same time of day."""
+    return int(time.mktime((2026, 11, day, hour, minute, 0, 0, 0, -1)))
+
+
+def three_days():
+    """Three days of a tunnel: about 1000 Mb/s in the mornings and the days, about 430 in the evenings (the owner, 2026-11-02: every evening the lines slow down)."""
+    day = [[local(d, h), 1000.0, None] for d in (2, 3, 4) for h in (2, 3, 4, 5, 6, 8, 10, 12, 14, 16)]
+    evening = [[local(d, h), 400.0 + 10 * d, None] for d in (2, 3, 4) for h in (20, 21, 22)]
+    return day + evening
+
+
+def test_the_usual_level_is_judged_against_the_same_time_of_day_when_there_is_history():
+    hist, evening, night = three_days(), local(5, 21, 30), local(5, 3, 0)
+    assert bandwidth.reference(hist, evening) == 440.0                          # the evening is judged against the evenings (not against the nights and the days: 1000)
+    assert bandwidth.reference(hist, night) == 1000.0                           # the night against the nights: nothing is lower than before, no alarm is added
+    assert bandwidth.reference(hist, local(5, 15, 0)) == 1000.0
+    assert bandwidth.reference(hist_of([100, 200, 300, 400]), NOW) == 300.0     # (a short history, nothing at the same hour: as before)
+    assert bandwidth._minutes_apart(local(5, 23, 50), local(6, 0, 10)) == 20 and bandwidth._minutes_apart(local(5, 21, 0), local(6, 21, 0)) == 0   # (round the midnight)
+
+
+def test_the_hours_just_before_now_are_not_the_same_hour_so_a_slow_fall_is_not_its_own_usual_level():
+    fresh = [[local(5, h), 100.0, None] for h in (18, 19, 20, 21)]                      # today the evening fell to 100 and stays there
+    assert bandwidth.reference(three_days() + fresh, local(5, 21, 30)) == 440.0         # (today's own samples are younger than 12 hours: they do not teach "the usual evening")
+    day_only = [r for r in three_days() if r[1] == 1000.0]                              # no evening in the history at all (a tunnel with a test door keeps a day and a half): the all-day level stands
+    assert bandwidth.reference(day_only + fresh, local(5, 21, 30)) == 1000.0
+
+
+def test_an_ordinary_evening_dip_is_not_a_drop_but_a_real_fall_in_the_evening_still_is():
+    bw = {"m": bandwidth.METHOD, "how": "link", "hist": three_days()}
+    now = local(5, 21, 30)
+    ok, change = bandwidth.add_sample(bw, now, 430.0, None, "link")                    # the evening level: it was a drop against the all-day level of 1000 until 1.69.184
+    assert change == "" and ok["suspect"] is False and ok["state"] == "ok" and ok["ref"] == 440.0
+    low, change = bandwidth.add_sample(bw, now, 150.0, None, "link")                   # well under the evening level: the first low sample, measured again soon
+    assert low["suspect"] is True
+    drop, change = bandwidth.add_sample(low, now + 180, 160.0, None, "link")
+    assert change == "drop" and drop["drop"]["from"] == 440.0 and drop["state"] == "drop"
+
+
 def test_the_verdict_says_ok_low_or_drop_against_the_usual_level():
     assert bandwidth.verdict(None, 300) == "none" and bandwidth.verdict(250, None) == "learning"
     assert bandwidth.verdict(300, 300) == "ok" and bandwidth.verdict(250, 300) == "ok" and bandwidth.verdict(230, 300) == "low" and bandwidth.verdict(179, 300) == "drop"

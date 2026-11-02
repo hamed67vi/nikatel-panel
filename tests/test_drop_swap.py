@@ -123,6 +123,38 @@ def test_with_no_memory_of_the_pair_the_doctors_own_order_is_tested(monkeypatch)
     assert doctor.state()["suggestions"] == []
 
 
+def test_the_slots_of_a_drop_test_go_to_types_a_server_can_run():
+    slots = bandwidth.drop_slots
+    assert slots(["wg:tcpmux", "wg:tcp", "tcp"], {"wg:tcpmux", "wg:tcp"}, ["bp:wss", "paqet"], 3) == (["tcp", "bp:wss", "paqet"], ["wg:tcpmux", "wg:tcp"])
+    assert slots(["tcp", "paqet", "bp:wss"], set(), ["chisel"], 3) == (["tcp", "paqet", "bp:wss"], [])                       # nothing to leave out: nothing changes
+    assert slots(["wg:tcp", "tcp"], {"wg:tcp"}, [], 3) == (["tcp"], ["wg:tcp"])                                                # nothing else to try: fewer than three, never a type that cannot run
+    assert slots(["tcp", "paqet", "bp:wss", "wg:tcp"], {"wg:tcp"}, [], 3) == (["tcp", "paqet", "bp:wss"], [])                  # the one that cannot run is beyond the three: it does not matter
+    assert slots(["wg:tcp", "tcp", "paqet", "bp:wss"], {"wg:tcp"}, ["bp:wss", "chisel"], 3) == (["tcp", "paqet", "bp:wss"], ["wg:tcp"])   # (the next type comes from the list first, the extra ones after; nothing twice)
+
+
+def test_a_type_a_server_cannot_run_does_not_take_a_slot_of_the_drop_test(monkeypatch):
+    now = int(time.time())
+    skip = lambda kind, ago: knowledge.merge(None, {"kind": kind, "ok": False, "skipped": "tools", "error": "not tested: wireguard-tools is not installed"}, "full", now - ago)
+    tid = _world(monkeypatch, memory=False)
+    monkeypatch.setattr(knowledge, "pair", lambda i, f: {"kinds": {"wg:tcpmux": skip("wg:tcpmux", 600), "wg:tcp": skip("wg:tcp", 600)}})
+    monkeypatch.setattr(knowledge, "plan_for", lambda i, f, cur, a, b, now=None: (["wg:tcpmux", "wg:tcp", "tcp", "bp:wss", "paqet", "chisel"], []))
+    said, tested, calls = _spy(monkeypatch, [_row("bp:wss", 80.0)])
+    bandwidth.investigate(7, tid)
+    assert tested == [(["tcp", "bp:wss", "paqet"], "full")] and not calls                                                       # the two slots a WireGuard type would have wasted went to the next types
+    assert any(s.startswith("Not tried: wg:tcpmux, wg:tcp - a server lacks what they need") for s in said)
+
+
+def test_a_type_that_could_not_be_tried_a_day_ago_is_asked_again(monkeypatch):
+    now = int(time.time())
+    skip = lambda kind, ago: knowledge.merge(None, {"kind": kind, "ok": False, "skipped": "tools", "error": "not tested: wireguard-tools is not installed"}, "full", now - ago)
+    tid = _world(monkeypatch, memory=False)                                                                                     # (the owner may have installed the tools since)
+    monkeypatch.setattr(knowledge, "pair", lambda i, f: {"kinds": {"wg:tcpmux": skip("wg:tcpmux", 2 * 86400), "wg:tcp": skip("wg:tcp", 2 * 86400)}})
+    monkeypatch.setattr(knowledge, "plan_for", lambda i, f, cur, a, b, now=None: (["wg:tcpmux", "wg:tcp", "tcp", "bp:wss", "paqet", "chisel"], []))
+    said, tested, _calls = _spy(monkeypatch, [_row("bp:wss", 80.0)])
+    bandwidth.investigate(7, tid)
+    assert tested == [(["wg:tcpmux", "wg:tcp", "tcp"], "full")] and not any(s.startswith("Not tried") for s in said)
+
+
 @pytest.mark.parametrize("code_case", ["a"])
 def test_the_swap_is_off_in_the_other_tests(code_case):
     assert bandwidth.DROP_SWAP is False and code_case

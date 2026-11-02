@@ -77,6 +77,30 @@ def _ok(kind, score=70, at=NOW):
     return knowledge.merge(None, {"kind": kind, "ok": True, "score": score, "latency_ms": 90.0, "loss_pct": 0.0}, "latency", at)
 
 
+def _hist(*rows):
+    """The kept tests of one kind: (days ago, passed, download) - the newest last."""
+    return {"hist": [{"at": NOW - int(d * 86400), "ok": ok, "m": "full", **({"down": v} if v is not None else {})} for d, ok, v in rows]}
+
+
+def test_only_the_tests_of_the_last_week_count_for_the_stability_when_there_are_enough_of_them():
+    old_fails = [(25, False, None), (24, False, None)]                                     # a failure from before a repair
+    recent = [(6, True, 500.0), (3, True, 520.0), (1, True, 480.0), (0.1, True, 510.0)]
+    s = knowledge.stability(_hist(*old_fails, *recent), NOW)
+    assert (s["n"], s["passed"], s["swing"]) == (4, 4, 0.92) and s["pct"] >= knowledge.STEADY_OK                                   # the month-old failures no longer hold it back
+    s = knowledge.stability(_hist(*old_fails, (3, True, 520.0), (1, True, 480.0)), NOW)                                            # only two recent tests: the whole month is looked at, as before
+    assert s["n"] == 4 and s["passed"] == 2 and s["pct"] < knowledge.STEADY_OK
+    s = knowledge.stability(_hist((6, True, 500.0), (3, False, None), (1, True, 480.0), (0.1, True, 510.0)), NOW)                  # a failure of THIS week still counts
+    assert s["passed"] == 3 and s["pct"] < knowledge.STEADY_OK
+    assert knowledge.stability(_hist((6, True, 500.0), (3, True, 520.0)), NOW) is None                                              # too few tests: not known, as always
+
+
+def test_the_types_a_server_cannot_run_are_left_out_of_a_drop_test_for_a_day():
+    skip = lambda kind, ago, why="tools": knowledge.merge(None, {"kind": kind, "ok": False, "skipped": why, "error": "not tested"}, "full", NOW - ago)
+    pair = {"kinds": {"wg:tcp": skip("wg:tcp", 3600), "wg:tcpmux": skip("wg:tcpmux", 2 * 86400), "paqet": skip("paqet", 60, "server"), "tcp": _ok("tcp")}}
+    assert knowledge.cannot_try(pair, NOW) == {"wg:tcp", "paqet"}                                                                   # (a skip older than a day is asked again; a type that was tried is never in it)
+    assert knowledge.cannot_try({}, NOW) == set() and knowledge.cannot_try(None, NOW) == set()
+
+
 def test_every_tunnel_type_has_exactly_one_side_that_dials_or_none():
     assert [knowledge.dial_side(k) for k in ("paqet", "bpd:pck", "chisel:fwd", "bp:wssmux", "chisel:tls", "tcpmux", "ipsec:tcpmux", "l2tpv3:tcpmux")] == ["iran", "iran", "iran", "foreign", "foreign", "", "", ""]
 

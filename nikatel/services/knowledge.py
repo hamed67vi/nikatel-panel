@@ -68,6 +68,8 @@ NUMS = ("score", "latency_ms", "jitter_ms", "loss_pct", "down_mbps", "up_mbps", 
 HIST = 12                   # the tests of one kind that are kept (the newest): what a type did over time, not only what it did once
 STEADY_MIN_TESTS = 3        # fewer tests than this: the stability of a type is NOT KNOWN (never "steady" on one good day)
 STEADY_OK = 75              # a type whose stability is under this (percent) is unsteady: it is put behind the steady ones
+STEADY_RECENT = 7 * 86400   # the tests of the last week decide when there are STEADY_MIN_TESTS of them: a failure of a month ago (a bug that is fixed, a server that was off) must not keep a type "unsteady" (the owner, 2026-11-02)
+ASK_AGAIN = 24 * 3600       # a type that could not be tried (a server lacks wireguard-tools) is not given a slot of a drop test for this long: it would only fail again
 STEADY_UNKNOWN = 0.85       # ... a type tested too few times counts this much of its user score; a steady one counts all of it, an unsteady one counts 0.7 x its stability
 STEADY_CUTS = 3             # a running tunnel that was cut this many times in a day is unsteady, whatever its test said (see bandwidth._upgrade_check)
 INCIDENTS = 200             # the cuts that are kept (the newest)
@@ -118,8 +120,14 @@ def merge(entry: dict | None, r: dict, measure: str, now: int) -> dict:
 def stability(e: dict | None, now: int) -> dict | None:
     """Pure: how steady one kind has been, from its kept tests of the last FULL_FRESH days: {"n": tests, "passed": how many passed, "swing": the lowest download / the highest (1 = always the same), "pct": 0-100}.
     None when fewer than STEADY_MIN_TESTS tests are kept: one good day proves nothing (the owner, 2026-10-21: "a type that works at first and later shows low bandwidth or problems must not be chosen").
-    pct = share of the tests that passed x (0.4 + 0.6 x swing), x 0.8 when any test lost more than 2 % of the packets."""
+    pct = share of the tests that passed x (0.4 + 0.6 x swing), x 0.8 when any test lost more than 2 % of the packets.
+    1.69.184: when at least STEADY_MIN_TESTS of those tests are from the last STEADY_RECENT (a week), only those count - what a type did lately is what it will do, and a failure from before a repair no longer
+    holds it back for a month; with fewer recent tests the whole month counts, as before."""
     h = [x for x in ((e or {}).get("hist") or []) if now - int(x.get("at") or 0) <= FULL_FRESH]
+    recent = [x for x in h if now - int(x.get("at") or 0) <= STEADY_RECENT]
+
+    if len(recent) >= STEADY_MIN_TESTS:
+        h = recent
 
     if len(h) < STEADY_MIN_TESTS:
         return None
@@ -330,6 +338,11 @@ def untested(pair: dict | None) -> list[dict]:
     asked again (a day later, or at once when the owner installs the tools)."""
     return [{"kind": k, "reason": "tools" if (e["last"].get("skipped") == "tools") else str(e["last"].get("skipped") or "server"), "error": e["last"].get("error") or "", "at": int(e["last"].get("at") or 0)}
             for k, e in sorted(((pair or {}).get("kinds") or {}).items()) if verdict(e) == "untested"]
+
+
+def cannot_try(pair: dict | None, now: int) -> set[str]:
+    """The kinds a drop test must not spend a slot on: they could not be tried on the pair within the last ASK_AGAIN (a server lacks wireguard-tools, or cannot run the engine) - see `untested`."""
+    return {x["kind"] for x in untested(pair) if now - int(x["at"] or 0) < ASK_AGAIN}
 
 
 def forget_tool_skips(server_id: int) -> None:
