@@ -4040,7 +4040,7 @@ window.sbTicketClose = async id => { if (!await gconfirm(`Close ticket #${id}? T
 Object.assign(sb, {st: null, stOpen: {}});
 const ST_PAY = [["bankAccount", "Card number"], ["holderName", "Card holder"], ["zarinpal", "ZarinPal merchant id"], ["nextpay", "NextPay key"], ["nowpayment", "NowPayments key"], ["tronwallet", "TRON wallet address"]];
 const ST_NOTE = "Every switch the bot reads on each message. Only what you change is written.";
-const ST_MAIN = new Set(["botState", "sellState", "renewAccountState", "testAccount", "agencyState", "agencyPlanDiscount", "walletState", "cartToCartState", "cartToCartAutoAcceptState", "aiReceiptState", "zarinpal", "nextpay", "gbPrice", "dayPrice", "cashbackPercent", "supportID", "rewardChannel", "lockChannel",
+const ST_MAIN = new Set(["botState", "sellState", "renewAccountState", "testAccount", "agencyState", "agencyPlanDiscount", "walletState", "cartToCartState", "cartToCartAutoAcceptState", "zarinpal", "nextpay", "gbPrice", "dayPrice", "cashbackPercent", "supportID", "rewardChannel", "lockChannel",
   "requirePhone", "requireIranPhone", "firstUseState", "miniAppState", "subLinkState", "configLinkState", "qrSubState", "qrConfigState", "wheelState", "giftState", "lotteryState", "renewAutoState", "pk:bankAccount", "pk:holderName"]);
 async function sbSettings() {
   const d = await api("/api/shopbot/settings");

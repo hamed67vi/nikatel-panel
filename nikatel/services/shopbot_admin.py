@@ -38,8 +38,9 @@ STATE_GROUPS = [
                ("increaseVolumeState", "Buy extra volume", "onoff", ""), ("increaseTimeState", "Buy extra days", "onoff", ""), ("switchLocationState", "Switch location", "onoff", ""),
                ("changeProtocolState", "Change protocol", "onoff", ""), ("agencyState", "Agents (resellers)", "onoff", ""), ("agencyPlanDiscount", "Agent discount %", "number", "percent off every plan for agents")]),
     ("Wallet and payment", [("walletState", "Wallet", "onoff", ""), ("walletAmounts", "Top-up amounts", "text", "comma separated, Toman"), ("cartToCartState", "Card to card", "onoff", ""),
-                            ("cartToCartAutoAcceptState", "Auto-accept card to card", "onoff", "accept receipts without an admin"), ("cartToCartAutoAcceptType", "Auto-accept type", "text", ""),
-                            ("cartToCartAutoAcceptTime", "Auto-accept after (min)", "number", ""), ("aiReceiptState", "AI receipt check", "onoff", "the panel's AI reads the receipt picture"),
+                            ("cartToCartAutoAcceptState", "Auto-accept card to card", "onoff", "accept receipts without an admin"), ("cartToCartAutoAcceptType", "Auto-accept type", "text", "0 = agents only, 1 = customers only, 2 = everybody"),
+                            ("cartToCartAutoAcceptTime", "Auto-accept after (min)", "number", "minutes after the job first sees the receipt (default 10)"),
+                            ("cartToCartAutoAcceptMaxHours", "Auto-accept: newest receipts only (hours)", "number", "older receipts are never accepted by the job (default 24)"),
                             ("zarinpal", "ZarinPal gateway", "onoff", ""), ("nextpay", "NextPay gateway", "onoff", ""), ("nowPaymentWallet", "NowPayments (crypto)", "onoff", ""),
                             ("nowPaymentOther", "NowPayments for purchases", "onoff", ""), ("tronWallet", "TRON wallet payments", "onoff", ""), ("weSwapState", "WeSwap", "onoff", ""),
                             ("USDRate", "USD rate (Toman)", "number", ""), ("TRXRate", "TRX rate (Toman)", "number", "")]),
@@ -184,17 +185,33 @@ def _one_at_a_time(pay_id: int):
             _PAY_BUSY.discard(int(pay_id))
 
 
-_SETTLED = ("approved", "declined", "paid", "auto_cart_approved")          # (paid / auto_cart_approved: the bot credited the wallet already - approving again would credit it twice)
+_SETTLED = ("approved", "declined", "paid", "auto_cart_approved", "processing")          # (paid / auto_cart_approved: the bot credited the wallet already - approving again would credit it twice; processing: the bot's job or an admin's button holds the receipt right now)
 
 
 def _check_open(p: dict) -> None:
     """Only a wallet top-up nobody has settled can be approved or declined: a purchase paid from the wallet (BUY_SUB, RENEW_ACCOUNT, INCREASE_VOLUME_..., state paid_with_wallet) has nothing to approve,
     and "approving" it would add its price to the wallet (money from nothing)."""
+    if p.get("state") == "processing":
+        raise ValueError("the bot is handling this payment right now")
+
     if p.get("state") in _SETTLED:
         raise ValueError(f"this payment was already {p['state']}")
 
     if str(p.get("type") or "INCREASE_WALLET") != "INCREASE_WALLET":
         raise ValueError("only a wallet top-up can be approved or declined here")
+
+
+def _settle(pay_id: int, state: str, admin_id: int | None = None) -> None:
+    """Move the receipt to `state` only if nobody settled it since it was read: the bot's job and the admins' buttons write the same row, so the UPDATE carries the check itself
+    (two settlements cannot both win) and the row is read back, because the write helper does not say how many rows it changed. For an approval the admin id written with it must also be the one read back
+    (another admin's approval leaves the same state). Raises when this call did not settle it - so nothing after it (the wallet credit) runs."""
+    shut = ", ".join(f'"{s}"' for s in _SETTLED)
+    by = "" if admin_id is None else f", approved_by = {int(admin_id)}"
+    write(f'UPDATE pays SET state = "{state}"{by} WHERE id = {int(pay_id)} AND state NOT IN ({shut})')
+    now = _pay(pay_id)
+
+    if now.get("state") != state or (admin_id is not None and str(now.get("approved_by") or "").strip() != str(int(admin_id))):
+        raise ValueError(f"this payment was settled by someone else just now ({now.get('state')})")
 
 
 def pay_approve(pay_id: int, admin_id: int = 0) -> dict:
@@ -214,7 +231,7 @@ def _pay_approve(pay_id: int, admin_id: int) -> dict:
 
     before = read(f'SELECT COALESCE(wallet, 0) AS w FROM users WHERE userid = "{uid}"')
     old = int(before[0]["w"]) if before else 0
-    write(f'UPDATE pays SET state = "approved", approved_by = {int(admin_id)} WHERE id = {int(pay_id)}')
+    _settle(pay_id, "approved", admin_id)
     write(f'UPDATE users SET wallet = COALESCE(wallet, 0) + {price} WHERE userid = "{uid}"')
     _admin_keys_done(p, "✅ تایید شد (پنل)")
     _tg("sendMessage", {"chat_id": uid, "parse_mode": "HTML", "text": f"✅ افزایش حساب شما با موفقیت تایید شد.\n💰 مبلغ <b>{price:,} تومان</b> به کیف پول شما اضافه شد.\n\n"
@@ -233,7 +250,7 @@ def _pay_decline(pay_id: int, reason: str) -> dict:
     _check_open(p)
 
     uid = str(p.get("user_id", "")).strip()
-    write(f'UPDATE pays SET state = "declined" WHERE id = {int(pay_id)}')
+    _settle(pay_id, "declined")
     _admin_keys_done(p, "❌ رد شد (پنل)")
 
     if re.fullmatch(r"-?\d{1,20}", uid):
@@ -851,6 +868,17 @@ def states_structured() -> dict:
             "other": {k: v for k, v in cur.items() if k not in known}}
 
 
+def _state_checked(k: str, v: str) -> str:
+    """The receipt auto-accept job reads these three as numbers: a word, 0 or a negative one would make it accept at once, never, or whatever the PHP cast gives (ASCII digits only: PHP reads an Arabic-Indic digit as 0)."""
+    if k == "cartToCartAutoAcceptType" and v not in ("0", "1", "2"):
+        raise ValueError("Auto-accept type must be 0 (agents only), 1 (customers only) or 2 (everybody)")
+
+    if k in ("cartToCartAutoAcceptTime", "cartToCartAutoAcceptMaxHours") and not (re.fullmatch(r"[0-9]{1,6}", v) and int(v) >= 1):
+        raise ValueError(f"{k} must be a whole number of 1 or more")
+
+    return v
+
+
 def states_set(changes: dict) -> dict:
     cur = setting_get("BOT_STATES")
 
@@ -858,7 +886,7 @@ def states_set(changes: dict) -> dict:
         if not shopbot._KEY.match(str(k)):
             raise ValueError("bad key")
 
-        cur[k] = str(v).strip()[:300]
+        cur[k] = _state_checked(k, str(v).strip()[:300])
 
     setting_put("BOT_STATES", cur)
     _event("info", "Bot settings changed: " + ", ".join(f"{k}={str(v)[:20]}" for k, v in changes.items())[:200], "")

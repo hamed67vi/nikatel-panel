@@ -3,6 +3,7 @@ text must travel as base64, and the bot's own rules (wallet on approve, one stat
 import base64
 import json
 import re
+from pathlib import Path
 
 import pytest
 
@@ -19,9 +20,13 @@ class FakeDb:
 
     def __init__(self, answers=None):
         self.answers, self.writes, self.tg = answers or {}, [], []
+        self.pays, self.before_write = {}, None          # a payment table that a settlement's UPDATE really changes (the panel reads the row back); before_write = what another writer does just before the next write
 
     def query(self, sql):
         assert re.match(READ_RE, shopbot._q(sql)), sql
+        one = re.fullmatch(r"SELECT \* FROM pays WHERE id = (\d+)", sql)
+        if one and one.group(1) in self.pays:
+            return [dict(self.pays[one.group(1)])]
         for needle, rows in self.answers.items():
             if needle in sql:
                 return rows() if callable(rows) else rows
@@ -29,7 +34,16 @@ class FakeDb:
 
     def write(self, sql):
         assert re.match(WRITE_RE, shopbot._q(sql)), sql
+        if self.before_write:
+            other, self.before_write = self.before_write, None
+            other()
         self.writes.append(sql)
+        m = re.fullmatch(r'UPDATE pays SET state = "(\w+)"(?:, approved_by = (\d+))? WHERE id = (\d+)(?: AND state NOT IN \(([^)]*)\))?', sql)
+        row = self.pays.get(m.group(3)) if m else None
+        if row is not None and row["state"] not in re.findall(r'"(\w+)"', m.group(4) or ""):          # (the WHERE of MySQL: a row in a listed state is left alone)
+            row["state"] = m.group(1)
+            if m.group(2) is not None:
+                row["approved_by"] = m.group(2)
         return "DONE\n"
 
     def telegram(self, method, body):
@@ -62,10 +76,11 @@ def test_literals_never_contain_what_the_scripts_refuse():
 
 def test_approve_adds_the_price_to_the_wallet_once_and_tells_both_sides(db):
     pay = {"id": "7", "hash_id": "abc", "user_id": "555", "price": "250000", "state": "pending", "chat_id": "100", "message_id": "9", "admins_messages": json.dumps([{"chat_id": "101", "message_id": "10"}])}
-    db.answers = {"FROM pays WHERE id = 7": [pay], "COALESCE(wallet, 0) AS w": [{"w": "1000"}]}
+    db.pays["7"] = pay
+    db.answers = {"COALESCE(wallet, 0) AS w": [{"w": "1000"}]}
     r = adm.pay_approve(7, admin_id=42)
     assert r["state"] == "approved" and r["wallet"] == 251000
-    assert any('SET state = "approved", approved_by = 42 WHERE id = 7' in w for w in db.writes)
+    assert any('SET state = "approved", approved_by = 42 WHERE id = 7 AND state NOT IN ("approved", "declined", "paid", "auto_cart_approved", "processing")' in w for w in db.writes)          # (the write itself refuses a receipt that is settled meanwhile)
     assert any('wallet = COALESCE(wallet, 0) + 250000 WHERE userid = "555"' in w for w in db.writes)
     methods = [m for m, _ in db.tg]
     assert methods.count("editMessageReplyMarkup") == 2 and "sendMessage" in methods         # the admin messages are settled, the user is told
@@ -77,9 +92,10 @@ def test_approve_adds_the_price_to_the_wallet_once_and_tells_both_sides(db):
 
 
 def test_decline_tells_the_user_the_reason(db):
-    db.answers = {"FROM pays WHERE id = 3": [{"id": "3", "hash_id": "h", "user_id": "9", "price": "5", "state": "pending", "chat_id": "", "message_id": "", "admins_messages": ""}]}
+    db.pays["3"] = {"id": "3", "hash_id": "h", "user_id": "9", "price": "5", "state": "pending", "chat_id": "", "message_id": "", "admins_messages": ""}
     adm.pay_decline(3, "the receipt is not readable")
-    assert any('SET state = "declined" WHERE id = 3' in w for w in db.writes)
+    assert any('SET state = "declined" WHERE id = 3 AND state NOT IN ("approved", "declined", "paid", "auto_cart_approved", "processing")' in w for w in db.writes)
+    assert db.pays["3"]["state"] == "declined"
     assert db.tg[-1][0] == "sendMessage" and "the receipt is not readable" in db.tg[-1][1]["text"]
 
 
@@ -195,7 +211,8 @@ def test_admin_api_routes(client, monkeypatch, db):
     client.put("/api/settings/shopbot", json={"host": "9.9.9.9"})
     pay = {"id": "1", "hash_id": "h", "user_id": "5", "price": "1000", "state": "pending", "chat_id": "", "message_id": "", "admins_messages": ""}
     db.answers = {"SELECT p.id, p.hash_id": lambda: [{"id": "1", "user_id": "5", "name": "A", "price": "1000", "state": "pending"}], "COUNT(*) AS n FROM pays": [{"n": "1"}], "GROUP BY p.state": [{"state": "pending", "c": "1"}, {"state": "approved", "c": "4"}, {"state": "have_sent", "c": "2"}],
-                  "FROM pays WHERE id = 1": [pay], "COALESCE(wallet, 0) AS w": [{"w": "0"}], "FROM needed_sofwares ORDER BY id DESC": [{"id": "2"}]}
+                  "COALESCE(wallet, 0) AS w": [{"w": "0"}], "FROM needed_sofwares ORDER BY id DESC": [{"id": "2"}]}
+    db.pays["1"] = pay
     r = client.get("/api/shopbot/pays?state=pending").json()
     assert r["counts"] == {"confirm": 2, "pending": 1, "approved": 4, "declined": 0, "all": 7} and r["per"] == 40
     assert client.get("/api/shopbot/pays?state=pending&limit=9").json()["per"] == 9 and client.get("/api/shopbot/pays?limit=1").json()["per"] == 5
@@ -292,7 +309,8 @@ def test_only_an_open_wallet_top_up_can_be_approved_or_declined(db):
     """a purchase paid from the wallet (the Mini App and the bot write BUY_SUB / RENEW_ACCOUNT / INCREASE_VOLUME_<order>_<id> in state paid_with_wallet) has nothing to approve - approving it added its price to the wallet;
     a top-up the bot already settled (paid, auto_cart_approved) was credited once and must not be credited again (the owner, 2026-10-23: payments must agree between the bot, the Mini App and the panel)"""
     base = {"id": "5", "hash_id": "h", "user_id": "555", "price": "130000", "chat_id": "", "message_id": "", "admins_messages": ""}
-    for typ, state in (("BUY_SUB", "paid_with_wallet"), ("RENEW_ACCOUNT", "paid_with_wallet"), ("INCREASE_VOLUME_12_3", "paid_with_wallet"), ("INCREASE_WALLET", "paid"), ("INCREASE_WALLET", "auto_cart_approved"), ("INCREASE_WALLET", "approved"), ("INCREASE_WALLET", "declined")):
+    for typ, state in (("BUY_SUB", "paid_with_wallet"), ("RENEW_ACCOUNT", "paid_with_wallet"), ("INCREASE_VOLUME_12_3", "paid_with_wallet"), ("INCREASE_WALLET", "paid"), ("INCREASE_WALLET", "auto_cart_approved"), ("INCREASE_WALLET", "processing"),
+                       ("INCREASE_WALLET", "approved"), ("INCREASE_WALLET", "declined")):
         db.answers = {"FROM pays WHERE id = 5": [dict(base, type=typ, state=state)], "COALESCE(wallet, 0) AS w": [{"w": "1000"}]}
         with pytest.raises(ValueError):
             adm.pay_approve(5)
@@ -300,6 +318,82 @@ def test_only_an_open_wallet_top_up_can_be_approved_or_declined(db):
             adm.pay_decline(5, "no")
     assert db.writes == [] and db.tg == []          # nothing was written, nobody was told
     for state in ("pending", "have_sent", "expired_have_sent"):
-        db.answers = {"FROM pays WHERE id = 5": [dict(base, type="INCREASE_WALLET", state=state)], "COALESCE(wallet, 0) AS w": [{"w": "1000"}]}
+        db.pays = {"5": dict(base, type="INCREASE_WALLET", state=state)}
+        db.answers = {"COALESCE(wallet, 0) AS w": [{"w": "1000"}]}
         assert adm.pay_approve(5)["wallet"] == 131000          # a card receipt (and, by hand, an expired one) is approved as before
+        assert db.pays["5"]["state"] == "approved"
+
+    for state in ("pending", "have_sent"):
+        db.pays = {"5": dict(base, type="INCREASE_WALLET", state=state)}
+        assert adm.pay_decline(5, "no")["state"] == "declined" and db.pays["5"]["state"] == "declined"
+
+
+def test_the_bot_busy_with_a_receipt_is_told_to_the_admin(db):
+    db.pays = {"5": {"id": "5", "hash_id": "h", "user_id": "555", "price": "1", "type": "INCREASE_WALLET", "state": "processing", "chat_id": "", "message_id": "", "admins_messages": ""}}
+    for call in (lambda: adm.pay_approve(5), lambda: adm.pay_decline(5, "no")):
+        with pytest.raises(ValueError, match="handling this payment"):
+            call()
+
+
+_RACES = [(action, state) for action in ("approve", "decline") for state in ("auto_cart_approved", "processing", "approved", "declined") if (action, state) != ("decline", "declined")]          # (a decline that meets another decline leaves the state it wrote itself and credits nobody: the customer may be told twice, that is all)
+
+
+@pytest.mark.parametrize("action, other_state", _RACES)
+def test_a_receipt_settled_between_the_read_and_the_write_is_not_settled_again(db, action, other_state):
+    """the bot's job (processing / auto_cart_approved) or another admin's button (approved / declined) takes the receipt after the panel read it as have_sent: the panel's UPDATE must leave it alone,
+    and nothing after it - the wallet credit, the messages to the admins and to the customer - may run (the wallet would be credited twice, or a declined receipt would be paid)"""
+    db.pays["5"] = {"id": "5", "hash_id": "h", "user_id": "555", "price": "130000", "type": "INCREASE_WALLET", "state": "have_sent", "approved_by": "0", "chat_id": "100", "message_id": "9", "admins_messages": ""}
+    db.answers = {"COALESCE(wallet, 0) AS w": [{"w": "1000"}]}
+
+    def other_writer():
+        db.pays["5"].update(state=other_state, approved_by="7663110028")
+
+    db.before_write = other_writer
+    with pytest.raises(ValueError, match="settled by someone else"):
+        if action == "approve":
+            adm.pay_approve(5)
+        else:
+            adm.pay_decline(5, "no")
+    assert db.pays["5"]["state"] == other_state          # the other writer's state stands
+    assert not any(w.startswith("UPDATE users") for w in db.writes) and db.tg == []
+
+
+def test_an_approval_by_another_admin_in_the_same_second_does_not_credit_twice(db):
+    """the other admin's approval leaves the same state the panel writes: the admin id read back tells whose approval it is"""
+    db.pays["5"] = {"id": "5", "hash_id": "h", "user_id": "555", "price": "130000", "type": "INCREASE_WALLET", "state": "have_sent", "approved_by": "0", "chat_id": "", "message_id": "", "admins_messages": ""}
+    db.answers = {"COALESCE(wallet, 0) AS w": [{"w": "1000"}]}
+    db.before_write = lambda: db.pays["5"].update(state="approved", approved_by="7663110028")
+    with pytest.raises(ValueError, match="settled by someone else"):
+        adm.pay_approve(5, admin_id=42)
+    assert not any(w.startswith("UPDATE users") for w in db.writes) and db.tg == []
+
+
+def test_the_auto_accept_numbers_are_checked_before_anything_is_written(db):
+    db.answers = {'type = "BOT_STATES"': [{"id": "1", "value": json.dumps({"cartToCartAutoAcceptState": "off"})}]}
+    for k, bad in (("cartToCartAutoAcceptType", "3"), ("cartToCartAutoAcceptType", "-1"), ("cartToCartAutoAcceptType", ""), ("cartToCartAutoAcceptType", "customers"), ("cartToCartAutoAcceptType", "1.0"),
+                   ("cartToCartAutoAcceptTime", "0"), ("cartToCartAutoAcceptTime", "-5"), ("cartToCartAutoAcceptTime", "ten"), ("cartToCartAutoAcceptTime", "1.5"), ("cartToCartAutoAcceptTime", ""),
+                   ("cartToCartAutoAcceptMaxHours", "0"), ("cartToCartAutoAcceptMaxHours", ""), ("cartToCartAutoAcceptMaxHours", "-1"), ("cartToCartAutoAcceptMaxHours", "٣")):          # (an Arabic-Indic 3: PHP reads it as 0)
+        with pytest.raises(ValueError):
+            adm.states_set({"supportID": "@help", k: bad})
+    assert db.writes == []          # (the good key beside the bad one is not written either)
+
+    for k, good in (("cartToCartAutoAcceptType", "0"), ("cartToCartAutoAcceptType", "1"), ("cartToCartAutoAcceptType", "2"), ("cartToCartAutoAcceptTime", "1"), ("cartToCartAutoAcceptMaxHours", "1")):
+        adm.states_set({k: good})
+    adm.states_set({"cartToCartAutoAcceptType": " 2 ", "cartToCartAutoAcceptTime": " 10 ", "cartToCartAutoAcceptMaxHours": "24"})
+    doc = json.loads(base64.b64decode(re.search(r'FROM_BASE64\("([^"]+)"\)', db.writes[-1]).group(1)))
+    assert (doc["cartToCartAutoAcceptType"], doc["cartToCartAutoAcceptTime"], doc["cartToCartAutoAcceptMaxHours"]) == ("2", "10", "24") and len(db.writes) == 6
+
+
+def test_the_wallet_and_payment_switches_name_what_the_receipt_job_reads():
+    items = {k: (label, kind, hint) for title, group in adm.STATE_GROUPS if title == "Wallet and payment" for k, label, kind, hint in group}
+    assert "aiReceiptState" not in items and not any("aiReceiptState" in k for _, g in adm.STATE_GROUPS for k, *_ in g)          # nothing in the bot or the panel read it
+    assert items["cartToCartAutoAcceptType"][2] == "0 = agents only, 1 = customers only, 2 = everybody"
+    assert items["cartToCartAutoAcceptTime"][2] == "minutes after the job first sees the receipt (default 10)"
+    assert items["cartToCartAutoAcceptMaxHours"] == ("Auto-accept: newest receipts only (hours)", "number", "older receipts are never accepted by the job (default 24)")
+    keys = list(items)
+    assert keys.index("cartToCartAutoAcceptMaxHours") == keys.index("cartToCartAutoAcceptTime") + 1
+    job = next(j for j in shopbot.CRON_JOBS if j["key"] == "rewardReport")
+    assert "cartToCartAutoAcceptMaxHours" in job["descr"] and "cartToCartAutoAcceptMaxHours" in job["settings"]
+    assert set(job["settings"]) <= {k for _, g in adm.STATE_GROUPS for k, *_ in g}          # (the jobs box draws a cell for each key it finds in the settings groups)
+    assert "aiReceiptState" not in (Path(__file__).resolve().parent.parent / "nikatel" / "web" / "app.js").read_text(encoding="utf-8")
 
