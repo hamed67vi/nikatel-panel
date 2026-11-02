@@ -306,3 +306,25 @@ html body #page .pg-admin-card .pg-admin-foot { flex: none; display: flex; align
 html body #page .pg-admin-card .pg-admin-foot button { height: 36px; padding: 0 16px; border-radius: 11px; font-size: 13px; font-weight: 600; }
 html[data-mode="light"] body #page .pg-admin-seg { background: #eef2fa; border-color: rgba(30, 50, 100, .14); } html[data-mode="light"] body #page .pg-admin-seg button { color: #4a5a7e; } html[data-mode="light"] body #page .pg-admin-seg button.on { background: #fff; color: #14213d; box-shadow: 0 1px 3px rgba(30, 50, 100, .18), inset 0 0 0 1px rgba(47, 111, 224, .35); }
 html[data-mode="light"] body #page .pg-admin-card { background: #fff; border-color: rgba(30, 50, 100, .14); box-shadow: 0 1px 2px rgba(30, 50, 100, .06); } html[data-mode="light"] body #page .pg-admin-card .pg-admin-sw { background: #f6f8fc; }html body #page .pg-bar .pg-admin-ib { width: 36px; height: 36px; }      /* (the bar's own rule made it 30 px: measured in a real browser) */
+/* the Investigate window of a PasarGuard user (1.69.191): a verdict strip, four figures, the usage by hour as bars, and small tables */
+html body #modal .pgu-inv .pgu-inv-v { padding: 9px 13px; margin: 0 0 8px; border-radius: 12px; border: 1px solid var(--line); background: rgba(255, 255, 255, .03); font-size: 13.5px; }
+html body #modal .pgu-inv .pgu-inv-v.ok { border-color: var(--ok); }
+html body #modal .pgu-inv .pgu-inv-v.warn { border-color: var(--warn); }
+html body #modal .pgu-inv .pgu-inv-v.bad { border-color: var(--bad); }
+html body #modal .pgu-inv .pgu-inv-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; margin: 0 0 8px; }
+html body #modal .pgu-inv .pgu-inv-k { display: flex; flex-direction: column; gap: 1px; padding: 7px 11px; border-radius: 12px; border: 1px solid var(--line); background: rgba(255, 255, 255, .03); }
+html body #modal .pgu-inv .pgu-inv-k > span { font-size: 11px; color: var(--mut); }
+html body #modal .pgu-inv .pgu-inv-k > b { font-size: 17px; font-weight: 700; }
+html body #modal .pgu-inv .pu-box { margin: 0 0 8px; }
+html body #modal .pgu-inv .pgu-inv-bars { display: flex; align-items: flex-end; gap: 2px; height: 92px; }
+html body #modal .pgu-inv .pgu-inv-bars i { flex: 1; min-width: 2px; background: var(--acc); border-radius: 2px 2px 0 0; }
+html body #modal .pgu-inv .pgu-inv-bars i.hot { background: var(--warn); }
+html body #modal .pgu-inv .pgu-inv-ax { display: flex; gap: 2px; margin-top: 3px; font-size: 10.5px; color: var(--mut); }
+html body #modal .pgu-inv .pgu-inv-ax span { flex: 1; min-width: 2px; white-space: nowrap; overflow: visible; }
+html body #modal .pgu-inv .pgu-inv-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr)); gap: 8px; }
+html body #modal .pgu-inv .pgu-inv-f { display: flex; align-items: flex-start; gap: 8px; padding: 5px 0; border-top: 1px solid var(--line); font-size: 12.5px; }
+html body #modal .pgu-inv .pgu-inv-f:first-of-type { border-top: 0; }
+html body #modal .pgu-inv .pgu-inv-f.warn .pill { color: var(--warn); }
+html body #modal .pgu-inv .pgu-inv-f.bad .pill { color: var(--bad); }
+html body #modal .pgu-inv .pgu-inv-f.ok .pill { color: var(--ok); }
+html body #modal .pgu-inv textarea.pgu-fmtta { min-height: 150px; font-family: inherit; line-height: 1.6; }

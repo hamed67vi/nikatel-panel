@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from ..auth import current_user
-from ..services import panels, pg_users
+from ..services import panels, pg_investigate, pg_users
 from ..services.panels import PanelError
 
 router = APIRouter(tags=["pasarguard"], dependencies=[Depends(current_user)])
@@ -193,3 +193,8 @@ def user_subscription(panel_id: int, username: str, format: str = "links"):
 def user_online(panel_id: int, username: str):
     """The addresses a user is connected from right now, on each node."""
     return {"ok": True, **_wrap(pg_users.online_ips, _cred(panel_id), username)}
+
+@router.get(U + "/investigate")
+def user_investigate(panel_id: int, username: str):
+    """Why a customer says the data ended fast or goes by itself: usage by hour and node, devices, subscription fetches, live addresses and a plain verdict (reads only)."""
+    return {"ok": True, **_wrap(pg_investigate.investigate, _cred(panel_id), username)}

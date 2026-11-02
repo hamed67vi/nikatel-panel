@@ -31,7 +31,8 @@ function pgUserShow() {      // the window of one user, made tight (1.47.0: the 
   const sub = u.sub || "", odd = !["active", "disabled", "on_hold"].includes(u.status);
   const admins = o.admins.map(a => a.name); if (u.admin && !admins.includes(u.admin)) admins.unshift(u.admin);
   const pause = '<svg viewBox="0 0 24 24"><path d="M9 5v14M15 5v14"/></svg>', skip = '<svg viewBox="0 0 24 24"><path d="M5 5l9 7-9 7zM18 5v14"/></svg>';
-  const acts = `${b(SI.reset, "Reset usage", "Set the used traffic back to zero", "pgUserDo('reset')")}${b(SI.key, "New link", "Revoke the subscription: a new link, the old one stops working", "pgUserDo('revoke_sub')")}${b(off ? SI.play : pause, off ? "Enable" : "Disable", off ? "Let the user connect again" : "Stop the user from connecting", `pgUserDo('${off ? "enable" : "disable"}')`)}`
+  const lens = '<svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6"/><path d="M16 16l4 4"/></svg>';
+  const acts = `${b(lens, "Investigate", "Why the data went fast: usage by hour and server, devices, subscription fetches and a plain verdict", "pgUserInvestigate()")}${b(SI.reset, "Reset usage", "Set the used traffic back to zero", "pgUserDo('reset')")}${b(SI.key, "New link", "Revoke the subscription: a new link, the old one stops working", "pgUserDo('revoke_sub')")}${b(off ? SI.play : pause, off ? "Enable" : "Disable", off ? "Let the user connect again" : "Stop the user from connecting", `pgUserDo('${off ? "enable" : "disable"}')`)}`
     + `${u.next_plan ? b(skip, "Next plan", "Start the next plan now: its data and duration replace the current ones", "pgUserDo('active_next')") : ""}${b(SI.trash, "Delete", "Remove the user from the panel", "pgUserDo('delete')", "danger")}<i class="mh-sep"></i>`;
   const usage = `<div class="pu-big"><b>${fmtB(used)}</b><span>${lim ? "of " + gb(lim) + " · " + pct + " %" : "unlimited"}</span></div>${lim ? `<div class="pu-bar"><i class="${pct >= 95 ? "bad" : pct >= 80 ? "warn" : ""}" style="width:${pct}%"></i></div>` : ""}`
     + kv("Left", lim ? fmtB(Math.max(0, lim - used)) : "—")
@@ -149,6 +150,47 @@ window.pgUserDevAll = async () => {
   if (!await gconfirm(`Remove every device of ${pgU.d.user.username}? All of them can connect again (and count as new devices).`, {danger: true})) return;
   try { await pgApi(pgU.id, `/user/${pgUEnc()}/devices/reset`, {method: "POST"}); toast("✓ All devices removed", "ok"); delete pgU.cache.devices; pgUserAct("devices"); } catch (e) { toast("✕ " + e.message, "bad"); }
 };
+
+/* "Investigate" (1.69.191, the owner, 2026-11-03: "a customer says his data ended fast or goes by itself: I enter his username and it shows how much he used, when, with which devices and fetches"): the usage by hour and
+   server, the devices against their limit, the last fetches of the subscription, the live addresses and a plain verdict, with a short message for the customer. It only reads (the buttons at the bottom are the usual ones). */
+window.pgUserInvestigate = async () => {
+  const nm = pgU.d.user.username, head = `<b>${esc(nm)}</b> <span class="pill">Investigate</span>`, back = '<button type="button" class="sm" onclick="pgUserInvBack()">← Back to the user</button>';
+  showModal(head, '<div class="loading"><i class="spin"></i><span>Reading the usage, the devices and the fetches…</span></div>', "wide pgu pgu-inv", back);
+  let r; try { r = await pgApi(pgU.id, `/user/${pgUEnc()}/investigate`); } catch (e) { showModal(head, `<div class="err">${esc(e.message)}</div>`, "wide pgu pgu-inv", back); return; }
+  pgU.inv = r;
+  showModal(head, pgUInvHtml(r), "wide pgu pgu-inv", back + '<button type="button" class="sm" onclick="pgUserInvCopy(this)" title="Copy a short message for the customer (Persian)">Copy message for the customer</button>');
+};
+window.pgUserInvBack = () => { pgUserShow(); pgUserAct(pgU.act); };
+window.pgUserInvCopy = btn => { if (pgU.inv && pgU.inv.text) copyFrom(btn, pgU.inv.text); };
+window.pgUserInvDevAll = async () => {
+  if (!await gconfirm(`Remove every device of ${pgU.d.user.username}? All of them can connect again (and count as new devices).`, {danger: true})) return;
+  try { await pgApi(pgU.id, `/user/${pgUEnc()}/devices/reset`, {method: "POST"}); toast("✓ All devices removed", "ok"); delete pgU.cache.devices; pgUserInvestigate(); } catch (e) { toast("✕ " + e.message, "bad"); }
+};
+window.pgUserInvNew = async () => { await pgUserDo("revoke_sub"); };
+function pgUInvHtml(r) {
+  const u = r.user, us = r.usage, v = r.verdict, dv = r.devices, fe = r.fetches;
+  const kpi = (l, val, sub = "") => `<div class="pgu-inv-k"><span>${l}</span><b>${val}</b>${sub ? `<small class="mut">${sub}</small>` : ""}</div>`;
+  const age = u.age_days < 1 ? Math.round(u.age_days * 24) + " h" : u.age_days.toFixed(1) + " d";
+  const cards = `<div class="pgu-inv-kpis">${kpi("Used", fmtB(u.used), u.limit ? `of ${fmtB(u.limit)} · ${u.pct} %` : "unlimited")}${kpi("Account age", age, "created " + esc(pgUWhen(u.created_at)))}${kpi("Average", u.per_day + " GB / day", "since it was created")}${kpi("Last online", esc(pgUAgo(u.online_at)), esc(String(u.status).replace("_", " ")))}</div>`;
+  const hs = us.hours, max = Math.max(1, ...hs.map(h => h.bytes)), hot = us.busiest ? [us.busiest.first, us.busiest.first + us.busiest.count] : [-1, -1];
+  const bars = hs.length ? `<div class="pgu-inv-bars">${hs.map((h, i) => `<i class="${i >= hot[0] && i < hot[1] ? "hot" : ""}" style="height:${Math.max(1, Math.round(h.bytes * 100 / max))}%" title="${esc(h.local.slice(5))} · ${fmtB(h.bytes)}${h.node ? " · " + esc(h.node) : ""}"></i>`).join("")}</div>`
+    + `<div class="pgu-inv-ax">${hs.map(h => `<span>${h.hour % 6 === 0 ? String(h.hour).padStart(2, "0") : ""}</span>`).join("")}</div>` : '<div class="mut">no hourly usage rows</div>';
+  const nodes = (rows, none) => `<table class="tbl pgu-tbl"><tbody>${rows.length ? rows.map(x => `<tr><td class="name">${esc(x.name)}</td><td class="mut">${fmtB(x.bytes)}</td><td class="mut">${Math.round(x.share * 100)} %</td></tr>`).join("") : `<tr><td class="mut">${none}</td></tr>`}</tbody></table>`;
+  const tb = (cols, rows, none) => `<table class="tbl pgu-tbl"><colgroup>${cols.map(c => `<col${c[1] ? ` style="width:${c[1]}"` : ""}>`).join("")}</colgroup><thead><tr>${cols.map(c => `<th>${c[0]}</th>`).join("")}</tr></thead><tbody>${rows || `<tr><td colspan="${cols.length}" class="mut">${none}</td></tr>`}</tbody></table>`;
+  const devs = tb([["Device"], ["First seen", "84px"], ["Last used", "84px"]], dv.rows.map(d => `<tr><td class="name"><div class="ell" title="${esc(pgUDevRow(d))}">${esc(pgUDevRow(d))}</div></td><td class="mut">${esc(pgUAgo(d.first))}</td><td class="mut">${esc(pgUAgo(d.last))}</td></tr>`).join(""), "no device has connected yet");
+  const subs = tb([["When", "74px"], ["App"], ["Address", "120px"]], fe.rows.map(x => `<tr><td class="mut" title="${esc(pgUWhen(x.at))}">${esc(pgUAgo(x.at))}</td><td class="name"><div class="ell" title="${esc(x.agent)}">${esc(x.agent || "—")}</div></td><td class="mono mut">${esc(x.ip || "—")}</td></tr>`).join(""), "the link has not been fetched yet");
+  const live = r.online.length ? tb([["Node"], ["Address", "150px"], ["Connections", "90px"]], r.online.map(x => `<tr><td class="name">${esc(x.node)}</td><td class="mono">${esc(x.ip)}</td><td class="mut">${x.connections}</td></tr>`).join(""), "") : '<div class="mut">not connected to any node right now (or the panel cannot tell)</div>';
+  const find = r.findings.map(f => `<div class="pgu-inv-f ${f.level}"><span class="pill">${{ok: "ok", info: "note", warn: "check", bad: "problem"}[f.level]}</span><div><b>${esc(f.title)}</b>${f.detail ? `<div class="mut">${esc(f.detail)}</div>` : ""}</div></div>`).join("");
+  return `<div class="pgu-inv-v ${v.level}"><b>${v.level === "ok" ? "✓" : "⚠"} ${esc(v.title)}</b></div>${cards}
+    <section class="pu-box"><h5>What was found</h5>${find}</section>
+    <section class="pu-box"><h5>Usage by hour, the last 2 days (Tehran time)<small class="mut">${fmtB(us.total_48h)} in all${us.night_share ? " · " + Math.round(us.night_share * 100) + " % at night (01:00-06:00)" : ""}</small></h5>${bars}</section>
+    <div class="pgu-inv-cols"><section class="pu-box"><h5>By server, last 2 days</h5>${nodes(us.by_node_48h, "no usage")}</section><section class="pu-box"><h5>By server, last 30 days</h5>${nodes(us.by_node_30d, "no usage")}</section></div>
+    <div class="pgu-inv-cols"><section class="pu-box"><h5 class="${dv.count > dv.limit ? "err" : ""}">Devices <small class="mut">${dv.count} of ${dv.limit}${dv.own_limit ? "" : " (the panel rule)"}</small></h5>${devs}${dv.count ? '<div class="pgu-foot"><button type="button" class="sm danger" onclick="pgUserInvDevAll()">Remove all devices</button></div>' : ""}</section>
+      <section class="pu-box"><h5>Subscription fetches <small class="mut">${fe.addresses} address${fe.addresses === 1 ? "" : "es"} · ${fe.apps} app${fe.apps === 1 ? "" : "s"} in the last ${fe.read}${fe.count > fe.read ? " of " + fe.count : ""}</small></h5>${subs}</section></div>
+    <section class="pu-box"><h5>Connected right now</h5>${live}</section>
+    <section class="pu-box"><h5>Message for the customer</h5><textarea class="pgu-fmtta" dir="rtl" readonly spellcheck="false">${esc(r.text)}</textarea><div class="pgu-foot"><button type="button" class="sm danger" onclick="pgUserInvNew()" title="Revoke the subscription: a new link, the old one stops working">New link</button></div></section>
+    <small class="mut">${r.limits.map(esc).join(" ")}${r.notes.length ? " " + r.notes.map(esc).join(" ") : ""}</small>`;
+}
 
 /* ---------------------------------------------------------------- the tools of the Users list */
 window.pgUsersMenu = () => pnType() !== "pasarguard" ? "" : `<button type="button" class="sm pgu-tools" aria-haspopup="menu" title="More things to do with users" onclick="nkMenu(this, pgUsersItems(), event)">More… ▾</button>`;

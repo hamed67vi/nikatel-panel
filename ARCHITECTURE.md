@@ -113,6 +113,7 @@ nikatel/
     pg_safe.py       PasarGuard Safe update: ONE button for the panel and its nodes - the nodes first, the one that carries the least traffic first, one at a time (the run stops at the first node that does not hold), the panel itself last
     pg_cores.py      PasarGuard cores (Xray configs): make / duplicate / delete (also several at once), inbound add / change / delete with a REALITY builder, dry run, save with a backup and a read-back, restart, rollback, api/pg_cores.py, web/pg_cores.js
     pg_admin.py      PasarGuard admins (also several at once through the panel's bulk calls), API keys and settings (7 sections as forms), api/pg_admin.py, web/pg_admin.js
+    pg_investigate.py  Investigate one PasarGuard user (the owner, 2026-11-03): usage by hour and node, devices against their limit, subscription fetches, live addresses, a plain verdict (pure `judge`) and a short message for the customer, read only; the route is in api/pg_users.py, the window in web/pg_users.js
     pg_roles.py      PasarGuard admin roles (permissions, limits, access, device rules) with backups and restore, api/pg_roles.py, web/pg_roles.js
     pg_client_templates.py  PasarGuard client (subscription) templates - Clash, Xray, sing-box, User-Agent lists - with backups, delete several in one call, api/pg_client_templates.py, web/pg_client.js
     pg_system.py     what the panel keeps about itself - version, resources, user counters - api/pg_system.py (the System tab was removed on 2026-10-15; its Users box is in Usage > Users, read through /usage/overview)
