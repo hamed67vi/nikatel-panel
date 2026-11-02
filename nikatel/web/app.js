@@ -617,12 +617,35 @@ function nkDdIc(name, title, g) {      // the little picture of an item (the own
   if (name === "model") return ["cube", ""];
   return null;
 }
+// Create tunnel: a very faint colour on a tunnel-type card by the SCENARIO it answers (the owner, 2026-11-02: "colour the cards, but very slightly, so the list stays uniform"). A thin left bar + a ~5% tint, no layout
+// shift; grouped by WHO can still connect, not by the transport (the icon already follows the transport). green = the route is clean; blue = the Iran server can dial out (forward, fast); amber = the Iran side is blocked
+// and the foreign server dials in (reverse), or Backhaul over another link; red = both ways are hard-blocked / the last resort (L2TPv3 where only GRE/ESP/L2TPv3 pass, WireGuard in Chisel, ICMP, a forged source).
+function ttypeScenario(value) {
+  const i = String(value).indexOf("|");
+
+  if (i < 0) return "";
+
+  const eng = value.slice(0, i), tr = value.slice(i + 1);
+
+  if (eng === "auto") return "";                                                      // Automatic / Trident: no tint (the panel chooses)
+
+  if (/wgchisel|l2tpv3|xdi|spoof/.test(tr)) return "sc-red";                          // survives when almost everything is cut
+
+  if (eng === "backpack_direct" || eng === "paqet" || (eng === "chisel" && tr.startsWith("fws"))) return "sc-blue";      // the Iran server dials out (forward)
+
+  if (eng === "backpack" || eng === "chisel" || (eng === "backhaul" && tr.includes(":"))) return "sc-amber";            // the foreign server dials in (reverse), or Backhaul over another link
+
+  if (eng === "backhaul") return "sc-green";                                          // Backhaul over GRE: the clean route
+
+  return "";
+}
 function nkDdItem(o, g, name) {
   let text = o.textContent.trim(); if (g && text.startsWith(g + " · ")) text = text.slice(g.length + 3);      // (the group says it already: "Backhaul over GRE · TCP Mux" is "TCP Mux" under its heading)
   const k = text.indexOf(" — "), title = k > 0 ? text.slice(0, k) : text, note = k > 0 ? text.slice(k + 3) : "", ic = nkDdIc(name, title, g);
+  const sc = name === "ttype" ? ttypeScenario(o.value) : "";      // a faint scenario colour on a tunnel-type card (keeps the list uniform)
   const star = '<i class="nk-dd-star"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/></svg></i>';
   const noteHtml = esc(note).replace(/\s*⭐/, " " + star);
-  return `<button type="button" role="option" class="nk-dd-i${o.selected ? " on hl" : ""}${ic ? "" : " noic"}" data-i="${o.index}" aria-selected="${o.selected}" ${o.disabled ? "disabled" : ""} onclick="nkDdPick(${o.index})">${ic ? `<i class="nk-dd-ic ${ic[1]}"><svg viewBox="0 0 24 24" aria-hidden="true">${NKDD_IC[ic[0]]}</svg></i>` : ""}<span class="nk-dd-tx"><span class="nk-dd-t">${esc(title)}</span>${note ? `<span class="nk-dd-n">${noteHtml}</span>` : ""}</span><svg class="nk-dd-ck" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></button>`;
+  return `<button type="button" role="option" class="nk-dd-i${o.selected ? " on hl" : ""}${ic ? "" : " noic"}${sc ? " " + sc : ""}" data-i="${o.index}" aria-selected="${o.selected}" ${o.disabled ? "disabled" : ""} onclick="nkDdPick(${o.index})">${ic ? `<i class="nk-dd-ic ${ic[1]}"><svg viewBox="0 0 24 24" aria-hidden="true">${NKDD_IC[ic[0]]}</svg></i>` : ""}<span class="nk-dd-tx"><span class="nk-dd-t">${esc(title)}</span>${note ? `<span class="nk-dd-n">${noteHtml}</span>` : ""}</span><svg class="nk-dd-ck" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></button>`;
 }function nkDdOpen(sel, anchor) {
   if ((anchor && nkDdAnchor === anchor) || (!anchor && nkDdSel === sel)) { nkDdClose(); return; } nkDdClose(); nkDdAnchor = anchor || null;
   const html = [...sel.children].map(ch => ch.tagName === "OPTGROUP" ? `<div class="nk-dd-g" role="presentation">${esc(ch.label)}</div>` + [...ch.children].map(o => nkDdItem(o, ch.label, sel.__combo ? "model" : sel.name)).join("") : nkDdItem(ch, "", sel.__combo ? "model" : sel.name)).join("");
