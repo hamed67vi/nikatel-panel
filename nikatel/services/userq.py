@@ -305,7 +305,9 @@ def run() -> None:
         now = int(time.time())
         looked = []
 
-        for tid, ux in read_all(now).items():
+        grades = read_all(now)
+
+        for tid, ux in grades.items():
             change = _store(tid, ux, now)
 
             if change and change[1] in ("poor", "bad") and change[0] in ("good", "fair", "unknown", ""):
@@ -313,6 +315,10 @@ def run() -> None:
 
         for tid in looked:
             _investigate_later(tid)
+
+        from . import dnsheal
+
+        dnsheal.look(grades)                                 # (a config that is down while its tunnel is up: is its name pointed at a server that carries the port? 1.69.196)
     finally:
         with _LOCK:
             _RUNNING[0] = False

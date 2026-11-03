@@ -21,7 +21,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
     "outbound": {"mode": "spread", "gateways": [], "foreign": [], "ports": [], "port_mark": 0, "routes": [], "health": {}, "users": {"mode": "manual", "after_minutes": 5, "back_minutes": 30, "auto": {}}},                         # the Outbound section (services/outbound.py): how the exits are used, the Iran servers that carry it, the forwards, what the last checks found. The exit links themselves are in the table outbound_configs
     "accounts": {"links": [], "sub_secret": ""},                                                                         # hand-made links between users with different names on different panels (services/accounts.py)
     "capacity": {"tunnels": {}, "acted": {}},                    # the tunnels whose capacity is filling and when the Doctor last looked for more (services/capacity.py)
-    "doctor": {"moves": [], "suggestions": [], "back": {}, "tried": {}, "res_at": {}, "retyped": {}, "retype_done": {}},                    # the Doctor's ledger of moves, its suggestions, who came back when
+    "doctor": {"moves": [], "suggestions": [], "back": {}, "tried": {}, "res_at": {}, "retyped": {}, "retype_done": {}, "dns_heal": {}},                  # the Doctor's ledger of moves, its suggestions, who came back when
     # the tunnel cores (services/engines.py): `auto` = the Doctor keeps them up to date by itself (off until the owner switches it on), `hour` = the local hour it starts (panel clock), `bad` = {core: version} that did
     # not hold on a server and was put back (never tried again by itself), `last` = what the last automatic run did
     "engines": {"auto": False, "hour": 5, "bad": {}, "last": {}},

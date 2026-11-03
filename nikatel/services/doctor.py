@@ -10,6 +10,8 @@
             as one healthy Iran server is left; the storm guard of the repair never holds a move back.
           * an Iran server whose resources are exhausted (CPU or RAM >= 90 % for 15 minutes): its busiest tunnel goes to a server
             with room - one per hour per server.
+          * a config that is DOWN while its tunnel is up and listens, whose DNS name points at no Iran server that forwards its port: the record is pointed at the Iran server of that tunnel
+            (services/dnsheal.py, 1.69.196; one name once in 6 hours, never a CDN name or a wildcard).
           * NEVER for packet loss or a poor route: those climb the ladder, and when no tunnel type works a move is suggested.
           * back: a server that came back and stayed healthy for 3 hours gets back the tunnels that left it because it was off.
 
@@ -65,11 +67,12 @@ def _state() -> dict:
     s.setdefault("tried", {})
     s.setdefault("res_at", {})
     s.setdefault("retype_done", {})
+    s.setdefault("dns_heal", {})
     return s
 
 
 def _save(s: dict) -> None:
-    st.put("doctor", {"moves": s["moves"][-60:], "suggestions": s["suggestions"][-20:], "back": s["back"], "tried": s["tried"], "res_at": s["res_at"], "retype_done": s["retype_done"]})
+    st.put("doctor", {"moves": s["moves"][-60:], "suggestions": s["suggestions"][-20:], "back": s["back"], "tried": s["tried"], "res_at": s["res_at"], "retype_done": s["retype_done"], "dns_heal": s["dns_heal"]})
 
 
 RETYPE_GAP = 24 * 3600     # the Doctor changes the TYPE of a very slow tunnel by itself at most once in this time (1.69.17)
