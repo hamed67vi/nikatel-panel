@@ -77,4 +77,5 @@ def test_nothing_is_changed_when_the_doctor_is_off_or_the_panel_is_read_only_or_
 def test_the_active_tasks_rows_are_calm_and_no_type_suggestion_is_drawn():
     app, css = (WEB / "app.js").read_text(encoding="utf-8"), (WEB / "doctor.css").read_text(encoding="utf-8")
     assert '.filter(s => s.kind !== "type")' in app and "&& bwHurts(t) && !lossy.includes(t)" in app          # no suggestion of a type; a drop the users do not feel is not an active task
-    assert 'class="mut work-chip watch quiet"' in app and "work-chip.quiet" in css and ".ap-att .ap-row .ap-why { color: var(--mut)" in css and ".ap-att .ap-row { min-height: 46px" in css
+    assert 'class="dx-chip run"' in app and "work-chip" not in app.split("PAGES.actions = async", 1)[1].split("window.apRow =", 1)[0]          # (no "watching" chip: a chip only when the Doctor works on it or waits for a server)
+    assert "html body #page .dx-why { flex: 1 1 auto;" in css and "html body #page .dx-row { display: flex; align-items: center; gap: 12px; min-height: 42px;" in css          # (one quiet line per tunnel, the reason in grey)

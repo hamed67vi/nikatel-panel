@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.69.200 - The Tunnel Doctor page, redesigned: one bar, one line per tunnel, the log under the row
+
+> **In short:** the owner (2026-11-04), a picture of the Doctor page: "redesign this section - show the information very, very short, easy to work with, remove the extra explanations - and show the log when we click on it". The three big mode cards are ONE bar (Off | Fix | Fix + move, the minutes of the last one, the "Add capacity" switch, Fix all and Explain). Every tunnel in Active is ONE line - a dot, the name, the reason in a few words and what the Doctor does - and a click opens its log under the row: the facts, what the Doctor did (live while it runs), Open tunnel and Diagnose. "Detail" and "Live" are gone; the rows of Done open their log the same way; a server that is off is one line; the long sentences are tips on hover.
+>
+> **به زبان ساده:** صفحهٔ Doctor خلاصه شد: سه کارت حالت شد یک نوار (Off | Fix | Fix + move)، هر تانل یک خط است (نقطه، نام، دلیل کوتاه) و با کلیک روی خط، لاگش زیرش باز می‌شود (وضعیت‌ها، کارهای دکتر، دکمه‌های باز کردن تانل و Diagnose). «Detail» و «Live» برداشته شد و توضیح‌های اضافی شد راهنمای هاور.
+
+- **Where:** `web/app.js` (`PAGES.actions` is drawn again; new `apRow` and `apLogFill`; `tkSimple` and `tkWorking` are one-line rows; `apDetail` is gone), `web/doctor.css` (the card rules are replaced by the `.dx-` rules), tests.
+- **Proved:** tests of the markup, the rules and the CSS, and a walk in a private demo panel in a browser: the mode bar in the modes Off (a "Fix" on every row and "Fix all") and Fix, a row that opens its log and stays open when the page is drawn again, the log of a running repair, the rows of Done with their log, the other tabs still draw, and the phone width (no sideways scroll).
+- **Not proved:** a real repair running on a real tunnel (the demo has none: its answers were fed to the page); the light theme; the tabs Analytics, Knowledge and Reviewer keep their own content (they were not redrawn); the new labels have no Persian text yet (Persian work is paused).
+
 ## 1.69.199 - The nightly switch of the PasarGuard card is one clean line, with an (i)
 
 > **In short:** the owner (2026-11-04, with a picture of the row): "remove these extra explanations and put a neat little i in a corner instead". The row under the two Safe update buttons is now one line: the title **Update automatically every night at 03:00 (Iran time)**, a small round (i) beside it, and the switch. The paragraph is gone from the card: the (i) shows it as a tooltip, and a click on it opens a window with what a night does, step by step, the note about the 10-20 s drop of a node that restarts, and the **Rehearse tonight's run** button (the link under the switch moved there). The lines "Held back: …" and "Last night: …" still appear under the title, only when there is something to say.

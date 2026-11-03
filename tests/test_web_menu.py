@@ -617,7 +617,7 @@ def test_an_autofilled_field_keeps_the_kits_colours_and_the_doctor_buttons_are_o
     uk, css, app = _web("uikit.css"), _web("lab.css"), _web("app.js")
     assert "input:-webkit-autofill" in uk and "-webkit-text-fill-color: #e8ebf7 !important" in uk and "html body .eye { color: var(--uk-mut); }" in uk and "width:" not in uk
     assert ".ap-ttabs, .ana-head .tabs, .bt-range) { display: inline-flex;" in css and ".ap-ttabs .tab-ic {" in css and ".ap-ttabs .tic" not in css and ".ap-thead button:not([data-k]) { height: 32px; border-radius: 11px;" in css
-    assert 'tabBtn("now", "wrench", "Active Tasks", nowN, "")' in app and 'tabBtn("ana", "bars", "Analytics", 0,' in app and '<i class="tic">' not in app.split("class=\"card ap-tasks fx-box\"", 1)[1].split("ap-tbody", 1)[0]          # (.tic is the round flag of a tunnel: it drew a ring around every icon; 1.57.33: the tabs after the owner's picture)
+    assert 'tabBtn("now", "wrench", "Active", nowN, "")' in app and 'tabBtn("ana", "bars", "Analytics", 0,' in app and '<i class="tic">' not in app.split("class=\"card ap-tasks fx-box\"", 1)[1].split("ap-tbody", 1)[0]          # (.tic is the round flag of a tunnel: it drew a ring around every icon; 1.57.33: the tabs after the owner's picture)
 
 
 def test_the_geometry_of_a_lab_row_is_three_numbers_and_every_row_has_one_cell_per_column():
@@ -825,10 +825,10 @@ def test_the_doctor_page_after_the_picture_and_the_tab_switch_that_does_not_jump
     a switch between CDN / Tunnel manager / Tunnel Doctor that does not jump (one bar shape, one width, no late paint of the old tab), Create tunnel without a redraw, the kit menu of its selects, the why line of a failed build."""
     app, lab, css, dr, index, main = _web("app.js"), _web("lab.js"), _web("lab.css"), _web("doctor.css"), INDEX, (WEB.parent / "main.py").read_text(encoding="utf-8")
     assert '<link rel="stylesheet" href="/static/doctor.css">' in index and '"doctor.css"' in main
-    assert 'mcard("off", "bars", "Doctor Mode", "Only monitors and reports.' in app and 'mcard("fix", "wrench", "Auto Fix Tunnels"' in app and 'mcard("move", "server", "Auto Move to Iran Server"' in app and "window.apHow" not in app and "apNodePick" not in app and "dr-node" not in app and 'window.apStep = (btn, dir) =>' in app
-    assert "`<div class=\"dr-top\">${storm}${disturb}${modes}${lanesRow}</div>" in app and ".dr-head, .dr-top, .set-top" in app and 'if (pg0 && pg0.querySelector(".fx-box")) fxFit();' in app
+    assert 'seg("off", "Off", "Only monitors and reports.' in app and 'seg("fix", "Fix", "Restarts, rebuilds' in app and 'seg("move", "Fix + move"' in app and "mcard(" not in app and "window.apHow" not in app and "apNodePick" not in app and "dr-node" not in app and 'window.apStep = (btn, dir) =>' in app      # (2026-11-04: the three mode cards are ONE segmented bar)
+    assert "`<div class=\"dr-top dx-top\">${storm}${disturb}${modes}</div>" in app and ".dr-head, .dr-top, .set-top" in app and 'if (pg0 && pg0.querySelector(".fx-box")) fxFit();' in app
     assert "navCtl.abort(); navCtl = new AbortController(); navSeq++; state.resetScroll = true; const m = $(\".main\"); if (m) m.scrollTop = 0; staleGuard(); }\n  subSet(page, k); refresh();" in app
-    assert "html body .main { scrollbar-gutter: stable; }" in css and "html body.tabbed #page > .dr-top:first-child { border-top-left-radius: 0; margin-top: 0; }" in dr and "html body #page .dr-card.on {" in dr and "html body #page .dr-empty {" in dr
+    assert "html body .main { scrollbar-gutter: stable; }" in css and "html body.tabbed #page > .dr-top:first-child { border-top-left-radius: 0; margin-top: 0; }" in dr and "html body #page .dx-seg button.on {" in dr and "html body #page .dx-empty {" in dr
     assert "const apModeDraw = (box, k) =>" in app and 'const bd = $("#ap-t-" + k); if (bd) bd.scrollTop = 0; fxFit();' in app and "html body #page .ap-tasks.fx-box { flex: none; overflow: hidden; }" in dr
     assert "window.openBuild = async () => {" in app and 'if (state.page === "tunnels" && $("#page .tun-box")) { state.build = true;' in app
     assert "function nkDdOpen(sel, anchor) {" in app and 'select[data-dd]' in app and '<select name="ttype" data-dd data-ddw="520"' in app and '<select name="iran_id" required data-dd' in app and "html body .nk-dd .nk-dd-i.on .nk-dd-ck { visibility: visible; }" in css and "function nkDdIc(name, title, g) {" in app and "html body .nk-dd .nk-dd-ic {" in css
@@ -892,12 +892,18 @@ def test_more_smoothness_the_tab_style_with_the_page_the_bar_in_place_and_quiet_
     assert "if (pnPS() !== pn.curPS) pnUsersLoad(+pn.id); else pnFitSoon(pn.curPS);" in app and '.nk-dd, .lab-menu, .pn-uchk:checked, .pn-hchk:checked' in app
 
 
-def test_the_rows_of_active_tasks_after_the_picture():
-    """The owner, 2026-10-16 (his picture): a dot with its word, buttons with icons - blue for what to do, dark for the rest."""
+def test_the_rows_of_active_are_one_line_and_the_log_opens_under_the_row_that_is_clicked():
+    """The owner, 2026-10-16 (his picture): a dot, buttons - blue for what to do; 2026-11-04 (his picture of the page): "very short information, easy to work with, no extra explanations - and the log when I click on it":
+    ONE line per tunnel (dot, name, the reason in a few words, what the Doctor does), the facts, the log and the buttons under the row; the open row survives the redraw."""
     app, dr = _web("app.js"), _web("doctor.css")
-    assert '${apIc("wifi")}<span>Live</span>' in app and '${apIc("sync")}<span>Move now</span>' in app and '${apIc("spark")}<span>Fix with AI</span>' in app and "📡" not in app.split("PAGES.actions = async", 1)[1].split("window.apMode", 1)[0]
-    assert '"down" : "degraded") : kind === "slow" ? "degraded" : kind === "users" ? (t.ux.grade === "bad" ? "down" : "degraded") : t.state}">' in app
-    assert 'html body #page .ap-tasks .ap-row .st::before { content: ""; flex: none; width: 12px;' in dr and "html body #page .ap-tasks .ap-row button.pri { background: #2f7bf5;" in dr and "html body #page .ap-tasks .nw-box.sug-box {" in dr
+    page = app.split("PAGES.actions = async", 1)[1].split("window.apRow =", 1)[0]
+    assert '<div class="dx-row" role="button"' in page and 'onclick="apRow(this, ' in page and '<i class="dx-dot ${dotOf(t, kind)}"></i>' in page and 'class="dx-story fix"' in page
+    assert '${apIc("sync")}<span>Move now</span>' in app and "📡" not in page and ">Detail<" not in page and "apLive(" not in page and "work-chip" not in page          # (no "Detail" link, no "Live" button, no "watching" chip: the click opens the log)
+    assert "const dotOf = (t, kind) =>" in page and '"red" : "amber"' in page and "const reasonOf = (t, kind) =>" in page
+    assert "window.apRow = (el, name) =>" in app and "const apLogFill = async name =>" in app and "state.apOpen === t.name" in page and "if (state.apOpen) apLogFill(state.apOpen);" in page          # (the open row is drawn open and its log is read again: it is live while the Doctor works)
+    for sel in (".dx-row {", ".dx-item.open > .dx-log { display: block; }", ".dx-dot.red {", ".dx-why {", ".dx-seg button.on {"):
+        assert "html body #page " + sel in dr, sel
+    assert "html body #page .ap-tasks .nw-box.sug-box {" in dr
 
 
 def test_the_model_of_the_ai_is_a_field_with_a_list_that_opens_as_the_kit_menu():
@@ -1218,7 +1224,7 @@ def test_the_pages_read_the_loss_of_a_tunnel_through_one_function():
     """1.60.0: every ping lost while the tunnel carries data is "no ping", never "100 % of the data is lost" (the Doctor's page said so for a tunnel that worked)."""
     app = _web("app.js")
     assert "const tunLoss = t => {" in app and "if (l != null && l >= 100 && t.state === \"up\") return {v: null, blocked: true};" in app
-    assert 'lossy = tl.filter(t => t.state === "up" && (tunLoss(t).v || 0) >= SHOW_LOSS)' in app and "loss = tunLoss(t).v || 0, why =" in app and "(tunLoss(t).v || 0) >= LOSS_SEVERE" in app
+    assert 'lossy = tl.filter(t => t.state === "up" && (tunLoss(t).v || 0) >= SHOW_LOSS)' in app and "Math.round(tunLoss(t).v || 0)} % of the packets lost" in app and "(tunLoss(t).v || 0) >= LOSS_SEVERE" in app
     assert 'l.blocked ? "no ping" : "—"' in app and "const l = tunLoss(t)" not in app.split("const pingCell = t => {", 1)[0] and "l = tunLoss(t)" in app.split("const pingCell = t => {", 1)[1].split("const row = t => {", 1)[0] and "const lossTip = t =>" in app and "the path between its two servers (ping)" in app
     assert "const tunSev = t => { const loss = tunLoss(t).v || 0;" in app
     assert ".tlink .loss.blk {" in _web("lab.css")
@@ -1236,7 +1242,7 @@ def test_the_tunnel_table_has_the_lamp_before_the_name_and_the_bandwidth_in_plac
     capcell = app.split("const bwCap = t => {", 1)[1].split("/* the numbers of what the users use change by themselves", 1)[0]
     assert "▼" not in capcell and "<em>" not in capcell and "b.state === \"drop\" ? \"drop\" : b.state === \"slow\" ? \"slow\" : \"ok\"" in capcell and "b.state === \"low\"" not in capcell      # one number, red only for a drop or a stall (a "low" one is not coloured any more, 1.64.5; a VERY SLOW one is amber, 1.69.14); no second red number in the row
     assert "const bwFmt = v =>" in app and "const bwTip = t =>" in app and "const bwWhy = t =>" in app and "[\"drop\", \"slow\"].includes((t.bw || {}).state)" in app
-    assert 'slow = tl.filter(t => t.state === "up" && ["drop", "slow"].includes((t.bw || {}).state) && bwHurts(t) && !lossy.includes(t))' in app and 'kind === "slow" ? bwWhy(t)' in app and "${slow.map(t => row(t, \"slow\")).join(\"\")}" in app
+    assert 'slow = tl.filter(t => t.state === "up" && ["drop", "slow"].includes((t.bw || {}).state) && bwHurts(t) && !lossy.includes(t))' in app and 'bwFelt(t) || b.state === "slow" ? esc(bwWhy(t))' in app and 'slow.map(t => row(t, "slow"))' in app
     assert "kinds=fix,autopilot,balance,underuse,move,speed" in app and 'a.action === "speed" && /Where the problem is/.test' in app and "window.bwMeasure = async id =>" in app and 'api(`/api/tunnels/${id}/bandwidth`, {method: "POST"})' in app
     assert 'row("Capacity", cap)' in app and 'id="tun-bwbox-${t.id}">${tunBwBoxInner(t)}' in app and 'kv("Traffic", ' not in app and 'onclick="bwMeasure(${t.id})"' in app
     assert "html body #page .tun-tbl td.name .tun-lamp {" in css and "--tun-start: calc(var(--tun-pad) + var(--tun-dot) + var(--tun-gap))" in css and ".tun-tbl .bwcap.drop b" in css and "html body #page .tun-tbl td.bwc" in css
@@ -1246,8 +1252,8 @@ def test_the_doctor_says_what_the_users_get_and_asks_for_the_links_it_lacks():
     """1.61.0 (the owner, 2026-10-16: "I want the Doctor to truly say whether the user gets a quality internet"): the grade of what the configs through a tunnel do comes into the tunnel window, the
     tip of the bandwidth cell and the Doctor page (a row "users"); the configs that ride no known tunnel are counted with a button that ties them to one (the Configs page is switched off)."""
     app = _web("app.js")
-    assert "const uxTip = t =>" in app and "const uxWhy = t =>" in app and "+ uxTip(t);" in app and 'kind === "users" ? uxWhy(t)' in app
-    assert 'users = tl.filter(t => t.state === "up" && ["poor", "bad"].includes((t.ux || {}).grade)' in app and '${users.map(t => row(t, "users")).join("")}' in app and "const tunUsersCell = t =>" in app and 'kv("Users", ' not in app      # (the Users row has its own row in the summary table of the window, see the test of the table)
+    assert "const uxTip = t =>" in app and "const uxWhy = t =>" in app and "+ uxTip(t);" in app and "esc(uxWhy(t))" in app
+    assert 'users = tl.filter(t => t.state === "up" && ["poor", "bad"].includes((t.ux || {}).grade)' in app and 'users.map(t => row(t, "users"))' in app and "const tunUsersCell = t =>" in app and 'kv("Users", ' not in app      # (the Users row has its own row in the summary table of the window, see the test of the table)
     assert "const usersNote = u => u && u.total > u.linked ?" in app and "${usersNote(dc && dc.users)}" in app and 'onclick="apLinkConfigs()"' in app
     assert "window.apLinkConfigs = async () =>" in app and "window.apLinkSave = async () =>" in app and 'api("/api/configs/" + s.dataset.cid, {method: "PUT", body: JSON.stringify({tunnel: s.value})})' in app
     assert 'api("/api/doctor"), api("/api/configs"), api("/api/tunnels")' in app
@@ -1344,7 +1350,7 @@ def test_a_suggestion_to_change_the_type_has_its_own_tag_and_button():
     app = _web("app.js")
     row = app.split("const sugRow = s =>", 1)[1].split("const sugBox =", 1)[0]
     assert 's.kind === "type" ? "speed"' in row and 's.kind === "type" ? `<button class="sm pri" onclick="apSugApply(' in row and "<span>Change type</span>" in row and "old type is put back" in row
-    assert 'sugs.some(s => s.kind !== "type")' in app                                                  # (the note "it would do this by itself" is about moves: a change of type is never done by itself)
+    assert 'sugs.some(s => s.kind !== "type")' not in app and '.filter(s => s.kind !== "type")' in app                    # (2026-11-04: the note "it would do this by itself" is gone with the other extra sentences; a type is never suggested)
 
 
 def test_the_tag_of_a_cut_tunnel_names_the_end_that_is_cut(tmp_path):

@@ -975,7 +975,7 @@ def test_the_tunnel_window_the_doctor_page_and_the_job_know_the_lanes():
     fa = (web / "i18n.fa.doctor.js").read_text(encoding="utf-8")
     assert "function tunLane(t)" in app and "tunTrident(t) + tunLane(t) + tunGrid(t)" in app                                     # a bar under the standby's
     assert all(f"window.{f} = async" in app for f in ("tunLaneStart", "tunLaneStop", "apLanes")) and "/lane/start" in app and "/lane/stop" in app and "/api/lanes/settings" in app
-    assert 'class="dr-lanes"' in app and "Add capacity by itself" in app and "${modes}${lanesRow}" in app                           # the owner's switch on the Doctor page
+    assert 'aria-label="Add capacity by itself"' in app and 'onchange="apLanes(this.checked)"' in app and "${lanes}<span class=\"sp\"></span>${acts}" in app                           # the owner's switch on the Doctor page (2026-11-04: in the bar of the mode, as "Add capacity")
     assert "Lane · Sharing {} % + {} %" in fa and "Add capacity by itself" in fa and "Share now" in fa
     assert 'jobs.register("lanes", 10, lanes.run)' in inspect.getsource(main._register_jobs)
 
