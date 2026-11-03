@@ -331,6 +331,17 @@ if command -v pasarguard >/dev/null 2>&1 && pasarguard help 2>&1 | grep -qw back
 if [ -d /opt/pasarguard ]; then echo "DIR /opt/pasarguard"; else echo "DIR none"; fi
 echo "DOCKER $(docker ps --format '{{.Names}}' 2>/dev/null | grep -ci pasarguard)"
 echo "DF $(df -P /var/lib 2>/dev/null | awk 'NR==2{print $4}')"
+N=$(docker ps --format '{{.Names}} {{.Image}}' 2>/dev/null | awk '$2 ~ /pasarguard\/panel/ {print $1; exit}')
+echo "CONTAINER ${N:-none}"
+if [ -n "$N" ]; then
+  echo "REF $(docker inspect --format '{{.Config.Image}}' "$N" 2>/dev/null | head -1)"
+  echo "ID $(docker inspect --format '{{.Image}}' "$N" 2>/dev/null | head -1)"
+  P=$(docker inspect --format '{{ index .Config.Labels "com.docker.compose.project" }}' "$N" 2>/dev/null | head -1); W=$(docker inspect --format '{{ index .Config.Labels "com.docker.compose.project.working_dir" }}' "$N" 2>/dev/null | head -1)
+  echo "SERVICE $(docker inspect --format '{{ index .Config.Labels "com.docker.compose.service" }}' "$N" 2>/dev/null | head -1)"
+  echo "PROJECT $P"; echo "WDIR $W"
+  if docker ps --filter "label=com.docker.compose.project=$P" --format '{{.Image}}' 2>/dev/null | grep -q '^postgres'; then echo "DB postgres"; elif [ -f /var/lib/pasarguard/db.sqlite3 ]; then echo "DB sqlite"; else echo "DB unknown"; fi
+  echo "OVERRIDES $( { grep -c ':/code/' "$W/docker-compose.override.yml" 2>/dev/null || true; } )"
+fi
 exit 0
 """, {}),
 
@@ -2034,6 +2045,79 @@ EOS
 nohup setsid bash -c 'bash /var/lib/nikatel-install/pgpanel.sh > /var/lib/nikatel-install/pgpanel.log 2>&1 && touch /var/lib/nikatel-install/pgpanel.ok || touch /var/lib/nikatel-install/pgpanel.fail' >/dev/null 2>&1 &
 echo STARTED
 """, {"BACKUP": r"^[01]$"}),
+
+    # keep a PasarGuard PANEL that runs from a compose file before it is updated (services/pg_auto.py, the nightly update): the image that runs (a local tag + a note with the compose project, service and folder), its
+    # compose files and .env, and a dump of its database (pg_dump through the postgres container of the same project, or a copy of the SQLite file); the last three dumps are kept. Nothing is restarted.
+    # The words that matter: PANEL_KEPT, DUMP postgres|sqlite|none, OVERRIDES n (files of the panel the owner replaces through the override file); NO_CONTAINER, NO_COMPOSE, TAG_FAILED, DUMP_FAILED.
+    "pgpanel_keep": (r"""K=/var/lib/nikatel-install/pgpanel-prev; mkdir -p "$K"; chmod 700 "$K"; rm -f "$K/note.txt"
+N=$(docker ps --format '{{.Names}} {{.Image}}' 2>/dev/null | awk '$2 ~ /pasarguard\/panel/ {print $1; exit}')
+[ -n "$N" ] || { echo NO_CONTAINER; exit 0; }
+ID=$(docker inspect --format '{{.Image}}' "$N" 2>/dev/null | head -1); REF=$(docker inspect --format '{{.Config.Image}}' "$N" 2>/dev/null | head -1)
+P=$(docker inspect --format '{{ index .Config.Labels "com.docker.compose.project" }}' "$N" 2>/dev/null | head -1)
+S=$(docker inspect --format '{{ index .Config.Labels "com.docker.compose.service" }}' "$N" 2>/dev/null | head -1)
+W=$(docker inspect --format '{{ index .Config.Labels "com.docker.compose.project.working_dir" }}' "$N" 2>/dev/null | head -1)
+[ -n "$ID" ] && [ -n "$REF" ] && [ -n "$P" ] && [ -n "$S" ] && [ -d "$W" ] || { echo NO_COMPOSE; exit 0; }
+docker tag "$ID" nikatel/pg-panel-prev:keep || { echo TAG_FAILED; exit 0; }
+for f in docker-compose.yml docker-compose.override.yml compose.yml compose.override.yml .env; do [ -f "$W/$f" ] && cp -a "$W/$f" "$K/$f"; done; chmod 600 "$K/.env" 2>/dev/null
+TS=$(date +%Y%m%d-%H%M%S)
+PGC=$(docker ps --filter "label=com.docker.compose.project=$P" --format '{{.Names}} {{.Image}}' 2>/dev/null | awk '$2 ~ /^postgres/ {print $1; exit}')
+if [ -n "$PGC" ]; then
+  if docker exec "$PGC" sh -c 'exec pg_dump -U "${POSTGRES_USER:-postgres}" -d "${POSTGRES_DB:-postgres}" -Fc' > "$K/db-$TS.dump" 2> "$K/dump.err" && [ -s "$K/db-$TS.dump" ]; then echo "DUMP postgres $K/db-$TS.dump $(stat -c %s "$K/db-$TS.dump")"; else echo "DUMP_FAILED postgres $(tail -c 200 "$K/dump.err" 2>/dev/null | tr '\n' ' ')"; rm -f "$K/db-$TS.dump"; exit 0; fi
+elif [ -f /var/lib/pasarguard/db.sqlite3 ]; then
+  if cp -a /var/lib/pasarguard/db.sqlite3 "$K/db-$TS.sqlite3"; then echo "DUMP sqlite $K/db-$TS.sqlite3 $(stat -c %s "$K/db-$TS.sqlite3")"; else echo "DUMP_FAILED sqlite"; exit 0; fi
+else
+  echo "DUMP none (no postgres container in the project $P and no /var/lib/pasarguard/db.sqlite3: the database is somewhere else)"
+fi
+ls -1t "$K"/db-* 2>/dev/null | tail -n +4 | xargs -r rm -f
+printf 'REF=%s\nID=%s\nNAME=%s\nPROJECT=%s\nSERVICE=%s\nDIR=%s\nAT=%s\n' "$REF" "$ID" "$N" "$P" "$S" "$W" "$TS" > "$K/note.txt"
+echo "OVERRIDES $( { grep -c ':/code/' "$W/docker-compose.override.yml" 2>/dev/null || true; } )"
+echo "PANEL_KEPT $ID"
+exit 0
+""", {}),
+
+    # update a PasarGuard PANEL that runs from a compose file (services/pg_auto.py), only after pgpanel_keep (a fresh note): the new image is pulled and the panel service ALONE is recreated - its database and the other
+    # services of the project are not touched. SAME_IMAGE when the registry has nothing newer than what runs; PULL_FAILED when the pull did not work (nothing was changed); PANEL_UPDATED / PANEL_UPDATE_FAILED.
+    "pgpanel_update": (r"""F=/var/lib/nikatel-install/pgpanel-prev/note.txt
+[ -n "$(find "$F" -mmin -30 2>/dev/null)" ] || { echo NO_KEEP; exit 0; }
+REF=$(sed -n 's/^REF=//p' "$F" | head -1); ID=$(sed -n 's/^ID=//p' "$F" | head -1); S=$(sed -n 's/^SERVICE=//p' "$F" | head -1); W=$(sed -n 's/^DIR=//p' "$F" | head -1)
+[ -n "$REF" ] && [ -n "$S" ] && [ -d "$W" ] || { echo NO_KEEP; exit 0; }
+cd "$W" || { echo NO_DIR; exit 0; }
+if docker compose version >/dev/null 2>&1; then DC="docker compose"; else DC="docker-compose"; fi
+if ! timeout 1200 $DC pull -q "$S" > /tmp/nikatel-pgpanel-pull.log 2>&1; then tail -n 5 /tmp/nikatel-pgpanel-pull.log; echo PULL_FAILED; exit 0; fi
+NEW=$(docker image inspect --format '{{.Id}}' "$REF" 2>/dev/null | head -1)
+[ -n "$NEW" ] && [ "$NEW" != "$ID" ] || { echo SAME_IMAGE; exit 0; }
+timeout 600 $DC up -d --no-deps "$S" > /tmp/nikatel-pgpanel-up.log 2>&1; rc=$?
+tail -n 8 /tmp/nikatel-pgpanel-up.log
+if [ "$rc" -eq 0 ]; then echo "PANEL_UPDATED $NEW"; else echo "PANEL_UPDATE_FAILED $rc"; fi
+exit 0
+""", {}),
+
+    # put the panel image back that pgpanel_keep kept (only while the note is fresh) and recreate the panel service alone from it. The database is NOT put back: the dump is there for the owner.
+    "pgpanel_rollback": (r"""F=/var/lib/nikatel-install/pgpanel-prev/note.txt
+[ -n "$(find "$F" -mmin -180 2>/dev/null)" ] || { echo NO_PREV; exit 0; }
+REF=$(sed -n 's/^REF=//p' "$F" | head -1); ID=$(sed -n 's/^ID=//p' "$F" | head -1); S=$(sed -n 's/^SERVICE=//p' "$F" | head -1); W=$(sed -n 's/^DIR=//p' "$F" | head -1)
+[ -n "$REF" ] && [ -n "$ID" ] && [ -n "$S" ] && [ -d "$W" ] || { echo NO_PREV; exit 0; }
+docker image inspect "$ID" >/dev/null 2>&1 || { echo NO_IMAGE; exit 0; }
+docker tag "$ID" "$REF" || { echo TAG_FAILED; exit 0; }
+cd "$W" || { echo NO_DIR; exit 0; }
+if docker compose version >/dev/null 2>&1; then DC="docker compose"; else DC="docker-compose"; fi
+timeout 600 $DC up -d --no-deps --force-recreate "$S" > /tmp/nikatel-pgpanel-rollback.log 2>&1; rc=$?
+tail -n 8 /tmp/nikatel-pgpanel-rollback.log
+if [ "$rc" -eq 0 ]; then echo ROLLED_BACK; else echo "ROLLBACK_FAILED $rc"; fi
+exit 0
+""", {}),
+
+    # restart the panel service alone (the one known fix for a panel that does not answer after its update, tried once by services/pg_auto.py before the old image comes back)
+    "pgpanel_restart": (r"""F=/var/lib/nikatel-install/pgpanel-prev/note.txt
+S=$(sed -n 's/^SERVICE=//p' "$F" 2>/dev/null | head -1); W=$(sed -n 's/^DIR=//p' "$F" 2>/dev/null | head -1)
+[ -n "$S" ] && [ -d "$W" ] || { echo NO_PREV; exit 0; }
+cd "$W" || { echo NO_DIR; exit 0; }
+if docker compose version >/dev/null 2>&1; then DC="docker compose"; else DC="docker-compose"; fi
+timeout 300 $DC restart "$S" > /tmp/nikatel-pgpanel-restart.log 2>&1; rc=$?
+tail -n 5 /tmp/nikatel-pgpanel-restart.log
+if [ "$rc" -eq 0 ]; then echo RESTARTED; else echo "RESTART_FAILED $rc"; fi
+exit 0
+""", {}),
 
     # change the login password of the SSH user (the payload is base64 of "user:password"; it never appears in the logs). The panel logs in with its key, so it is not affected.
     "set_password": (r"""set -e; u=$(echo '@B64@' | base64 -d | cut -d: -f1); [ "$u" = '@USER@' ] || { echo BAD_USER; exit 1; }

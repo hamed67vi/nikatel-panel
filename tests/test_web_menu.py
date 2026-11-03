@@ -1633,7 +1633,7 @@ def test_the_pasarguard_card_has_two_safe_buttons_and_no_list():
     """The owner, 2026-10-18: "an option for the update of the panel and one for only the nodes"; 2026-10-31: the Panels / Nodes box "removed entirely", and "instead of 3 buttons the two buttons that are Safe update - and
     when there is no update their buttons are off"."""
     upd, css = _web("pg_update.js"), _web("lab.css")
-    assert 'const go = `<div class="pgu-go">${btn("panel", "Safe update panel…", panelLeft,' in upd and '${btn("nodes", "Safe update nodes…", nodesLeft,' in upd and "return hero + go;" in upd
+    assert 'const go = `<div class="pgu-go">${btn("panel", "Safe update panel…", panelLeft,' in upd and '${btn("nodes", "Safe update nodes…", nodesLeft,' in upd and "return hero + go + autoRow;" in upd      # (autoRow: the nightly switch under the two buttons, 2026-11-03)
     assert 'class="pgu-list"' not in upd and "window.pgUpdAll" not in upd and "const prow = " not in upd and "const nrow = " not in upd and "pgUpdPanelTop" not in upd and "pgUpdNodesOnly" not in upd and "pgu-safe" not in upd
     assert "const panelLeft = panels.some(p => p.behind === true), nodesLeft = swN.length > 0 || xrN.length > 0;" in upd and '${left && !ro ? "" : "disabled"}' in upd and '"Nothing to update: "' in upd      # (off when there is nothing to update, and when the panel is read-only)
     assert "window.pgUpdSafe = async scope =>" in upd and "api(`/api/pg-updates/safe/plan?scope=${scope}`)" in upd and 'JSON.stringify({scope, typed:' in upd and "window.pgUpdAddHost = pid =>" in upd and "pgUpdAddHost(${p.id})" in upd

@@ -382,14 +382,25 @@ def test_a_server_that_is_not_ready_is_not_touched(world, monkeypatch):
     assert ok is False and world.net.actions == [] and "pg-node command is not on its server" in "\n".join(lines) and "Nothing was changed" in "\n".join(lines)
 
 
-def test_a_failed_xray_update_leaves_the_node_as_it_was(world, monkeypatch):
+def test_a_failed_xray_update_is_tried_once_more_and_then_leaves_the_node_as_it_was(world, monkeypatch):
     world.net.add(1, "a")
     world.net.core_fail.add(1)
     aid = _run(monkeypatch, [_row_of(1, "a")])
     lines, ok, _ = story(aid)
     text = "\n".join(lines)
-    assert ok is False and world.net.nodes[1]["xray"] == "26.10.29" and "the node is connected with its old Xray" in text
-    assert [a[0] for a in world.net.actions] == ["pgnode_update", "pgnode_core"]                                  # (the software stays updated: it was watched and held; only Xray did not)
+    assert ok is False and world.net.nodes[1]["xray"] == "26.10.29" and "the node is connected with its old Xray" in text and "tried once more" in text
+    assert [a[0] for a in world.net.actions] == ["pgnode_update", "pgnode_core", "pgnode_core"]                   # (the software stays updated: it was watched and held; the Xray command is tried twice - its download can fail once - and then the node is left as it was)
+
+
+def test_a_node_that_is_slow_to_come_back_gets_one_more_connect_request_before_its_old_version(world, monkeypatch):
+    world.net.add(1, "a")
+    world.net.hang.add(1)
+    asked = []
+    monkeypatch.setattr(pg_nodes, "node_reconnect", lambda c, i: asked.append(i) or {})
+    aid = _run(monkeypatch, [_row_of(1, "a")])
+    lines, ok, _ = story(aid)
+    assert ok is False and asked == [1, 1, 1] and "asking the panel once more to connect to it" in "\n".join(lines)      # (once after the update, once more as the known fix, once after the old image came back)
+    assert [a[0] for a in world.net.actions] == ["pgnode_update", "pgnode_rollback"]
 
 
 def test_a_node_that_is_the_newest_already_is_skipped(world, monkeypatch):

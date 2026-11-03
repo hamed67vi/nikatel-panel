@@ -31,6 +31,8 @@ FREE_KB = 400_000                     # free space on /var/lib a node needs for 
 SOAK = 45.0                           # seconds a node is watched after it came back
 BACK_LIMIT = 150.0                    # seconds an old version gets to be connected again
 RUN_TIMEOUT = 420                     # seconds an update command may run on a node
+AGAIN = 90.0                          # seconds a node gets after the ONE more connect request that is tried before its old version comes back (the known, safe fix: the panel's own reconnect)
+CORE_RETRY_WAIT = 20.0                # seconds before the Xray command is tried once more (its download from GitHub can fail once); a second failure leaves the node as it was
 USAGE_ROUNDS = 3
 USAGE_GAP = 2.0
 LABEL = "pg safe update"
@@ -314,36 +316,46 @@ def _back_core(node, c: dict, node_id: int, before: dict) -> str:
     return f"the old Xray {old} is back and the node is connected" if ok else f"the old Xray is back but the node is {last.get('status') or 'not answering'} - look at it by hand"
 
 
-def _update_node(aid: int, i: int, total: int, row: dict, node_tag: str, xray_tag: str) -> bool:
-    """Update one node (its software, then its Xray). True = done (or nothing to do); False = it went wrong, the story is ended (done, not ok) after the way back was tried."""
+def stop_line(i: int, total: int, name: str, text: str) -> str:
+    """The last line of a run that stopped at one node."""
+    return f"Stopped at {i}/{total}: {name} - {text} The nodes after it were not touched."
+
+
+def _core(node, version: str) -> str:
+    try:
+        return run_action(node, "pgnode_core", {"VERSION": version}, timeout=RUN_TIMEOUT)
+    except (SSHError, ValueError) as e:
+        return "ERROR " + str(e)[:120]
+
+
+def _update_node(aid: int, i: int, total: int, row: dict, node_tag: str, xray_tag: str) -> tuple[bool, str, str]:
+    """Update one node (its software, then its Xray): (done, why, part). done = True when it is done (or there was nothing to do); False when it went wrong - `why` is the sentence (the way back was tried; the caller ends
+    the story with `stop_line`) and `part` the step that failed ("software" / "xray" / "" when nothing was changed). Two known fixes are tried before the way back: the panel is asked ONCE more to connect to a node that
+    did not come back, and the Xray command is run ONCE more when it did not finish (its download can fail once)."""
     say = autopilot._say
     name = row["name"]
-
-    def stop(text: str) -> bool:
-        say(aid, f"Stopped at {i}/{total}: {name} - {text} The nodes after it were not touched.", done=True, ok=False)
-        return False
 
     try:
         c = panels.cred_for(row["panel_id"])
         node, sname, _ip = extras._node(row["server"]["id"])
         before = _row(c, row["node_id"])
     except (panels.PanelError, ValueError) as e:
-        return stop(f"it could not be read ({str(e)[:140]}).")
+        return False, f"it could not be read ({str(e)[:140]}).", ""
 
     say(aid, f"{i}/{total} {name} (on {sname}, {row.get('usage_text') or '—'} now): looking at its server (read-only)…")
 
     if before.get("status") != "connected":
-        return stop(f"it is {before.get('status') or 'not connected'} now: connect it first.")
+        return False, f"it is {before.get('status') or 'not connected'} now: connect it first.", ""
 
     try:
         info = parse_node_info(run_script(node, "pgnode_info", timeout=40))
     except (SSHError, ValueError) as e:
-        return stop(f"its server did not answer ({str(e)[:120]}). Nothing was changed.")
+        return False, f"its server did not answer ({str(e)[:120]}). Nothing was changed.", ""
 
     why = node_blockers(info)
 
     if why:
-        return stop("; ".join(why) + ". Nothing was changed.")
+        return False, "; ".join(why) + ". Nothing was changed.", ""
 
     do_sw = pg_update.newer(node_tag, before.get("version")) is True
     do_core = pg_update.newer(xray_tag, before.get("xray")) is True
@@ -357,39 +369,45 @@ def _update_node(aid: int, i: int, total: int, row: dict, node_tag: str, xray_ta
             out = "ERROR " + str(e)[:120]
 
         if any(w in out for w in ("NO_CLI", "NO_CONTAINER", "TAG_FAILED")):
-            return stop(f"the update could not start on its server ({out.strip()[-120:]}). Nothing was changed.")
+            return False, f"the update could not start on its server ({out.strip()[-120:]}). Nothing was changed.", ""
 
         if "NODE_UPDATED" not in out:
             say(aid, f"    the update command did not finish well ({out.strip()[-140:]}); putting the old image back…")
-            return stop(_back_software(node, c, row["node_id"], before) + ".")
+            return False, _back_software(node, c, row["node_id"], before) + ".", "software"
 
         _reconnect(c, row["node_id"])
         ok, last = _wait_state(c, row["node_id"], "version", node_tag, pg_update.NODE_LIMIT)
 
+        if not ok:                                                      # the known fix, once: the panel asked again to connect to it (a node that was slow to start answers to that)
+            say(aid, f"    it is {last.get('status') or 'not answering'} and shows {last.get('version') or '?'} after {int(pg_update.NODE_LIMIT // 60)} minutes; asking the panel once more to connect to it…")
+            _reconnect(c, row["node_id"])
+            ok, last = _wait_state(c, row["node_id"], "version", node_tag, AGAIN)
+
         if ok:
             ok, why2 = _soak(c, row["node_id"], "version", last.get("version", ""))
         else:
-            why2 = f"it is {last.get('status') or 'not answering'} and shows {last.get('version') or '?'} after {int(pg_update.NODE_LIMIT // 60)} minutes"
+            why2 = f"it is {last.get('status') or 'not answering'} and shows {last.get('version') or '?'} after one more connect request"
 
         if not ok:
             say(aid, f"    {why2}; putting the old image back…")
-            return stop(_back_software(node, c, row["node_id"], before) + ".")
+            return False, _back_software(node, c, row["node_id"], before) + ".", "software"
 
         say(aid, f"    {name} is connected again: software {last.get('version')}, watched for {int(SOAK)} s.")
         before = last
 
     if do_core:
         say(aid, f"    Xray {before.get('xray') or '?'} → {xray_tag}: pg-node core-update (Xray restarts: its users drop for 10-20 s)…")
+        out = _core(node, xray_tag)
 
-        try:
-            out = run_action(node, "pgnode_core", {"VERSION": xray_tag}, timeout=RUN_TIMEOUT)
-        except (SSHError, ValueError) as e:
-            out = "ERROR " + str(e)[:120]
+        if "CORE_UPDATED" not in out:                                   # the known fix, once: the same command again (the download of the core can fail once)
+            say(aid, f"    the Xray update did not finish well ({out.strip()[-140:]}); the command is tried once more in {int(CORE_RETRY_WAIT)} s…")
+            time.sleep(CORE_RETRY_WAIT)
+            out = _core(node, xray_tag)
 
         if "CORE_UPDATED" not in out:
-            say(aid, f"    the Xray update did not finish well ({out.strip()[-140:]}); checking the node…")
+            say(aid, f"    the Xray update did not finish well again ({out.strip()[-140:]}); checking the node…")
             ok0, _last0 = _wait_state(c, row["node_id"], "xray", before.get("xray", ""), 60)
-            return stop("the node is connected with its old Xray." if ok0 else _back_core(node, c, row["node_id"], before) + ".")
+            return False, ("the node is connected with its old Xray." if ok0 else _back_core(node, c, row["node_id"], before) + "."), "xray"
 
         ok, last = _wait_state(c, row["node_id"], "xray", xray_tag, pg_update.NODE_LIMIT)
 
@@ -400,14 +418,14 @@ def _update_node(aid: int, i: int, total: int, row: dict, node_tag: str, xray_ta
 
         if not ok:
             say(aid, f"    {why2}; putting the old Xray back…")
-            return stop(_back_core(node, c, row["node_id"], before) + ".")
+            return False, _back_core(node, c, row["node_id"], before) + ".", "xray"
 
         say(aid, f"    {name} is connected again: Xray {last.get('xray')}, watched for {int(SOAK)} s.")
 
     if not do_sw and not do_core:
         say(aid, f"    {name} is the newest already - skipped.")
 
-    return True
+    return True, "", ""
 
 
 # ------------------------------------------------------------------ the run
@@ -430,7 +448,11 @@ def _safe_story(aid: int, scope: str = "all") -> None:
         say(aid, "Order: " + ", ".join(f"{n['name']} ({n['usage_text']})" for n in nodes[:12]) + (", …" if len(nodes) > 12 else ""))
 
     for i, row in enumerate(nodes, 1):
-        if not _update_node(aid, i, len(nodes), row, node_tag, xray_tag):
+        ok, why, _part = _update_node(aid, i, len(nodes), row, node_tag, xray_tag)
+
+        if not ok:
+            say(aid, stop_line(i, len(nodes), row["name"], why), done=True, ok=False)
+
             with session() as db:
                 emit(db, "warn", "panels", f"PasarGuard Safe update stopped at {row['name']} ({i} of {len(nodes)}).", "")
 

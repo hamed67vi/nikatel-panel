@@ -25,6 +25,10 @@ DEFAULTS: dict[str, dict[str, Any]] = {
     # the tunnel cores (services/engines.py): `auto` = the Doctor keeps them up to date by itself (off until the owner switches it on), `hour` = the local hour it starts (panel clock), `bad` = {core: version} that did
     # not hold on a server and was put back (never tried again by itself), `last` = what the last automatic run did
     "engines": {"auto": False, "hour": 5, "bad": {}, "last": {}},
+    # the PasarGuard panel and its nodes updated by themselves at night (services/pg_auto.py): `auto` = the owner's switch (OFF until he flips it), `hour` = the local hour it starts (panel clock, Tehran by
+    # default), `budget_minutes` = no new node or the panel is started after this long, `bad` = {node | xray | panel: {version, why, day}} a release that did not hold and was put back (never tried again by
+    # itself; the buttons still try it), `last` = what the last night did
+    "pg_auto": {"auto": False, "hour": 3, "budget_minutes": 60, "bad": {}, "last": {}},
     # the probe(s): primary + standby list [{name, api_url, api_token}]
     "probe": {"api_url": "", "api_token": "", "standby": [], "server_id": 0},
     # the shop bot: where it runs (reached over SSH with the panel's key) and its public webhook URL

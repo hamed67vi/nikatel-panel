@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from ..auth import current_user
-from ..services import pg_safe, pg_update
+from ..services import pg_auto, pg_safe, pg_update, settings
 from ..services.panels import PanelError
 from ..ssh import SSHError
 
@@ -39,8 +39,39 @@ class PanelIn(BaseModel):
 @router.get("/pg-updates")
 def pg_updates(force: bool = False):
     """The newest releases of PasarGuard (panel and node) and Xray on GitHub (asked once an hour, `force` asks now), every PasarGuard panel with its installed version and the server of ours that runs it, and
-    every node of them with its software and Xray version - each marked behind or not (null when a version is not known). One read of each panel."""
-    return {"ok": True, **_wrap(pg_update.overview, force)}
+    every node of them with its software and Xray version - each marked behind or not (null when a version is not known). One read of each panel. `auto`: the nightly update switch and what the last night did."""
+    return {"ok": True, **_wrap(pg_update.overview, force), "auto": pg_auto.state()}
+
+
+class AutoIn(BaseModel):
+    enabled: bool
+    hour: int | None = Field(None, ge=0, le=23)      # the local hour (panel clock, Tehran by default) the night starts at
+
+
+@router.get("/pg-updates/auto")
+def pg_auto_get():
+    """The nightly update of PasarGuard: on or off, the hour (panel clock), the time budget, the releases held back after they did not hold, what the last night did."""
+    return {"ok": True, **pg_auto.state()}
+
+
+@router.post("/pg-updates/auto")
+def pg_auto_set(body: AutoIn):
+    """The switch of the nightly update (the panel and its nodes, by themselves, once a night at `hour` on the panel clock): the Safe update with a time budget, the users looked at after every node, the panel kept
+    and put back when it does not hold, a summary in the feed and on Telegram. Off until it is switched on."""
+    changes: dict = {"auto": body.enabled}
+
+    if body.hour is not None:
+        changes["hour"] = body.hour
+
+    settings.put("pg_auto", changes)
+    return {"ok": True, **pg_auto.state()}
+
+
+@router.post("/pg-updates/auto/rehearse", status_code=202)
+def pg_auto_rehearse():
+    """Walk tonight's run now without changing anything, as an action (the story is read with /api/actions/{id}): what would be updated in which order, which configs would be checked after each node, what the
+    panel step would do, what is left out and why. Refused while a PasarGuard update runs."""
+    return {"ok": True, "action_id": _wrap(pg_auto.rehearse)}
 
 
 @router.get("/pg-updates/panels/{panel_id}/plan")
