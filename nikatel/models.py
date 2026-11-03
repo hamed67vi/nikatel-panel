@@ -361,6 +361,37 @@ class CfgBucket(Base):
     n: Mapped[int] = mapped_column(Integer, default=0)                      # how many samples
 
 
+class UserWatch(Base):
+    """A PasarGuard user under watch (services/pg_watch.py): read every `every` seconds until `ends_at` - his used traffic and the addresses he is connected from right now."""
+    __tablename__ = "user_watches"
+    __table_args__ = (Index("ix_user_watches_user", "panel_id", "username"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    panel_id: Mapped[int] = mapped_column(Integer)
+    username: Mapped[str] = mapped_column(String(128))
+    user_id: Mapped[int] = mapped_column(Integer)                           # the id on the PasarGuard panel
+    started_at: Mapped[int] = mapped_column(Integer, default=now)
+    ends_at: Mapped[int] = mapped_column(Integer)
+    every: Mapped[int] = mapped_column(Integer, default=120)
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    last_at: Mapped[int] = mapped_column(Integer, default=0)                # the last read (also a failed one)
+    last_used: Mapped[int | None] = mapped_column(Integer, nullable=True)   # the used traffic at the last good read: the next one's difference is the usage between them
+    last_error: Mapped[str] = mapped_column(String(200), default="")
+
+
+class UserWatchSample(Base):
+    """One read of a watched user: the used traffic, how much it grew since the read before, and the live addresses [{node, ip, seen}]."""
+    __tablename__ = "user_watch_samples"
+    __table_args__ = (Index("ix_user_watch_samples_watch_ts", "watch_id", "ts"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    watch_id: Mapped[int] = mapped_column(ForeignKey("user_watches.id", ondelete="CASCADE"))
+    ts: Mapped[int] = mapped_column(Integer)
+    used: Mapped[int] = mapped_column(Integer, default=0)
+    delta: Mapped[int] = mapped_column(Integer, default=0)
+    online: Mapped[list] = mapped_column(JSON, default=list)
+
+
 class ApiToken(Base):
     """The sign-in of a machine (docs/api.md section 3): only the hash of the token is kept; the token itself is shown once when it is made."""
     __tablename__ = "api_tokens"

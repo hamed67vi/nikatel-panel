@@ -159,8 +159,9 @@ window.pgUserInvestigate = async () => {
   let r; try { r = await pgApi(pgU.id, `/user/${pgUEnc()}/investigate`); } catch (e) { showModal(head, `<div class="err">${esc(e.message)}</div>`, "wide pgu pgu-inv", back); return; }
   pgU.inv = r;
   showModal(head, pgUInvHtml(r), "wide pgu pgu-inv", back + '<button type="button" class="sm" onclick="pgUserInvCopy(this)" title="Copy a short message for the customer (Persian)">Copy message for the customer</button>');
+  pgUserWatchLoad();
 };
-window.pgUserInvBack = () => { pgUserShow(); pgUserAct(pgU.act); };
+window.pgUserInvBack = () => { clearTimeout(pgU.wt); pgUserShow(); pgUserAct(pgU.act); };
 window.pgUserInvCopy = btn => { if (pgU.inv && pgU.inv.text) copyFrom(btn, pgU.inv.text); };
 window.pgUserInvDevAll = async () => {
   if (!await gconfirm(`Remove every device of ${pgU.d.user.username}? All of them can connect again (and count as new devices).`, {danger: true})) return;
@@ -188,8 +189,47 @@ function pgUInvHtml(r) {
     <div class="pgu-inv-cols"><section class="pu-box"><h5 class="${dv.count > dv.limit ? "err" : ""}">Devices <small class="mut">${dv.count} of ${dv.limit}${dv.own_limit ? "" : " (the panel rule)"}</small></h5>${devs}${dv.count ? '<div class="pgu-foot"><button type="button" class="sm danger" onclick="pgUserInvDevAll()">Remove all devices</button></div>' : ""}</section>
       <section class="pu-box"><h5>Subscription fetches <small class="mut">${fe.addresses} address${fe.addresses === 1 ? "" : "es"} · ${fe.apps} app${fe.apps === 1 ? "" : "s"} in the last ${fe.read}${fe.count > fe.read ? " of " + fe.count : ""}</small></h5>${subs}</section></div>
     <section class="pu-box"><h5>Connected right now</h5>${live}</section>
+    <section class="pu-box" id="pgu-watch"><h5>Watch</h5><div class="loading"><i class="spin"></i><span>Reading…</span></div></section>
     <section class="pu-box"><h5>Message for the customer</h5><textarea class="pgu-fmtta" dir="rtl" readonly spellcheck="false">${esc(r.text)}</textarea><div class="pgu-foot"><button type="button" class="sm danger" onclick="pgUserInvNew()" title="Revoke the subscription: a new link, the old one stops working">New link</button></div></section>
     <small class="mut">${r.limits.map(esc).join(" ")}${r.notes.length ? " " + r.notes.map(esc).join(" ") : ""}</small>`;
+}
+
+/* the WATCH box of the Investigate window (1.69.193, the owner, 2026-11-03: "watch the user for some hours and see"): a watch reads the user every 2 minutes - his used traffic and the addresses he is connected from - into the panel's own
+   database (services/pg_watch.py). The box shows the usage in 10-minute bars (Tehran time), every address with when it was first and last seen, and the findings; while a watch runs it reloads itself every minute. */
+const pgUTeh = t => new Date((t + 12600) * 1000), pgUHm = t => String(pgUTeh(t).getUTCHours()).padStart(2, "0") + ":" + String(pgUTeh(t).getUTCMinutes()).padStart(2, "0");
+const pgUDur = m => m >= 90 ? (m / 60).toFixed(1).replace(/\.0$/, "") + " h" : m + " min";
+window.pgUserWatchLoad = async () => {
+  const box = $("#pgu-watch"); if (!box) return;
+  let w; try { w = await pgApi(pgU.id, `/user/${pgUEnc()}/watch`); } catch (e) { box.innerHTML = `<h5>Watch</h5><div class="err">${esc(e.message)}</div>`; return; }
+  if (!$("#pgu-watch")) return;
+  pgUWatchDraw(w); clearTimeout(pgU.wt);
+  if (w.active) pgU.wt = setTimeout(() => { if ($("#pgu-watch")) pgUserWatchLoad(); }, 60000);
+};
+window.pgUserWatchStart = async h => {
+  try { const w = await pgApi(pgU.id, `/user/${pgUEnc()}/watch`, {method: "POST", body: {hours: h}}); toast(`✓ Watching ${pgU.d.user.username}`, "ok"); pgUWatchDraw(w); pgUserWatchLoad(); } catch (e) { toast("✕ " + e.message, "bad"); }
+};
+window.pgUserWatchStop = async () => {
+  if (!await gconfirm(`Stop watching ${pgU.d.user.username}? What was seen stays for 14 days.`)) return;
+  try { await pgApi(pgU.id, `/user/${pgUEnc()}/watch`, {method: "DELETE"}); toast("✓ Watch stopped", "ok"); pgUserWatchLoad(); } catch (e) { toast("✕ " + e.message, "bad"); }
+};
+function pgUWatchDraw(w) {
+  const box = $("#pgu-watch"); if (!box) return;
+  const wt = w.watch, sm = w.summary, on = w.active, hs = on ? [1, 6, 24, 72] : [3, 12, 24, 72];
+  const head = `<h5>Watch${wt ? ` <span class="pill">${on ? "running" : "ended"}</span>` : ""}<span class="sp"></span><span class="mut">${on ? "longer" : "watch for"}</span>${hs.map(h => `<button type="button" class="sm" onclick="pgUserWatchStart(${h})">${on ? "+" : ""}${h} h</button>`).join("")}${on ? '<button type="button" class="sm danger" onclick="pgUserWatchStop()">Stop</button>' : ""}</h5>`;
+  if (!wt) { box.innerHTML = head + '<div class="mut">Not watched. A watch reads this user every 2 minutes (his used traffic and the addresses he is connected from) and keeps it for 14 days: leave it running for some hours to see what goes on while the customer says the data goes by itself.</div>'; return; }
+  const line = `<div class="mut">${on ? "Watching since" : "Watched from"} ${esc(pgUWhen(wt.started_at))} · ${on ? "until " + esc(pgUWhen(wt.ends_at)) : "ended " + esc(pgUAgo(wt.ends_at))} · ${sm.samples} read${sm.samples === 1 ? "" : "s"}${wt.last_at ? " · last read " + esc(pgUAgo(wt.last_at)) : ""}${wt.last_error ? ` · <span class="err">${esc(wt.last_error)}</span>` : ""}</div>`;
+  const own = sm.addresses.filter(a => !a.ours).length, kpi = (l, v, s = "") => `<div class="pgu-inv-k"><span>${l}</span><b>${v}</b>${s ? `<small class="mut">${s}</small>` : ""}</div>`;
+  const cards = `<div class="pgu-inv-kpis">${kpi("Used while watching", fmtB(sm.total), sm.span ? pgUDur(Math.round(sm.span / 60)) : "")}${kpi("Addresses", String(sm.addresses.length), own + " not ours")}${kpi("At the same moment", String(sm.simultaneous), "most addresses in one read")}${kpi("Busiest 10 minutes", sm.peak ? fmtB(sm.peak.bytes) : "—", sm.peak ? pgUHm(sm.peak.t) : "")}</div>`;
+  let bars = "";
+  if (sm.bars.length) {
+    const by = Object.fromEntries(sm.bars.map(b => [b.t, b])), t0 = sm.bars[0].t, t1 = sm.bars[sm.bars.length - 1].t, xs = [], max = Math.max(1, ...sm.bars.map(b => b.bytes));
+    for (let t = t0; t <= t1; t += 600) xs.push(t);
+    bars = `<div class="pgu-inv-bars">${xs.map(t => { const b = by[t] || {bytes: 0, ips: 0}; return `<i class="${sm.peak && t === sm.peak.t ? "hot" : ""}" style="height:${Math.max(1, Math.round(b.bytes * 100 / max))}%" title="${pgUHm(t)} · ${fmtB(b.bytes)} · ${b.ips} address${b.ips === 1 ? "" : "es"}"></i>`; }).join("")}</div><div class="pgu-inv-ax">${xs.map(t => `<span>${pgUTeh(t).getUTCMinutes() === 0 && pgUTeh(t).getUTCHours() % 3 === 0 ? pgUHm(t) : ""}</span>`).join("")}</div>`;
+  }
+  const find = sm.findings.map(f => `<div class="pgu-inv-f ${f.level}"><span class="pill">${{ok: "ok", info: "note", warn: "check", bad: "problem"}[f.level]}</span><div><b>${esc(f.title)}</b>${f.detail ? `<div class="mut">${esc(f.detail)}</div>` : ""}</div></div>`).join("");
+  const rows = sm.addresses.map(a => `<tr><td class="mono ell" title="${esc(a.ip)}">${esc(a.ip)}${a.ours ? ' <small class="mut">our ' + esc(a.ours) + "</small>" : ""}</td><td class="name"><div class="ell">${esc(a.nodes.join(", ") || "—")}</div></td><td class="mut">${pgUHm(a.first)}</td><td class="mut">${pgUHm(a.last)}</td><td class="mut">${pgUDur(a.minutes)}</td></tr>`).join("");
+  const tb = `<table class="tbl pgu-tbl"><colgroup><col><col style="width:90px"><col style="width:62px"><col style="width:62px"><col style="width:70px"></colgroup><thead><tr><th>Address</th><th>Node</th><th>First</th><th>Last</th><th>Seen for</th></tr></thead><tbody>${rows || '<tr><td colspan="5" class="mut">no address was listed in any read</td></tr>'}</tbody></table>`;
+  box.innerHTML = head + line + (sm.samples ? cards + (bars ? "<h5>Usage in 10-minute steps (Tehran time)</h5>" + bars : "") + (find ? "<h5>What was seen</h5>" + find : "") + "<h5>Addresses</h5>" + tb : "");
 }
 
 /* ---------------------------------------------------------------- the tools of the Users list */

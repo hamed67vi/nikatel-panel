@@ -666,5 +666,5 @@ def test_the_api_is_for_signed_in_owners_of_pasarguard_panels_only(client, fake,
 def test_every_route_of_the_users_has_a_short_description(client):
     spec = client.app.openapi()
     mine = {(m, p): op for p, ops in spec["paths"].items() if "/pg/user/" in p or "/pg/user-tools/" in p for m, op in ops.items()}
-    assert len(mine) == 18
+    assert len(mine) == 21
     assert all(0 < len((op.get("description") or "").split("\n")[0]) <= 300 for op in mine.values())

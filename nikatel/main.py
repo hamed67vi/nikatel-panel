@@ -46,6 +46,7 @@ from .services import (
     nodes,
     outbound,
     panels,
+    pg_watch,
     probe,
     pulse,
     report,
@@ -221,6 +222,7 @@ def _register_jobs() -> None:
     jobs.register("panels", 15, panels.check_all)          # a panel that stops answering or a node that drops off a Marzban / PasarGuard panel shows within ~30 s (two checks; the reconnect request is still sent at most every 30 s)
     jobs.register("geo", 3600, nodes.geo_missing_job)
     jobs.register("filter", 3600, nodes.filter_daily_job)
+    jobs.register("user-watch", 60, pg_watch.run)               # the users the owner put under watch (services/pg_watch.py): every 2 minutes the used traffic and the addresses each is connected from are read into the panel's own database; ends by itself
     jobs.register("cfgstats", 300, cfgstats.run)               # the usage of the configs of a PasarGuard panel (services/cfgstats.py): the counters of the servers whose meter the owner switched on are read every five minutes into hours, the CDN reports of the DNS accounts once an hour (read only); nothing happens while no meter is on and no host is behind a CDN
 
 

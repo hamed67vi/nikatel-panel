@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from ..auth import current_user
-from ..services import panels, pg_investigate, pg_users
+from ..services import panels, pg_investigate, pg_users, pg_watch
 from ..services.panels import PanelError
 
 router = APIRouter(tags=["pasarguard"], dependencies=[Depends(current_user)])
@@ -46,6 +46,10 @@ class UserIn(BaseModel):
     group_ids: list[int] | None = None
     hwid_limit: int | None = None
     next_plan: dict | None = None
+
+
+class WatchIn(BaseModel):
+    hours: float = Field(24, ge=pg_watch.MIN_HOURS, le=pg_watch.MAX_HOURS)
 
 
 class ActionIn(BaseModel):
@@ -198,3 +202,24 @@ def user_online(panel_id: int, username: str):
 def user_investigate(panel_id: int, username: str):
     """Why a customer says the data ended fast or goes by itself: usage by hour and node, devices, subscription fetches, live addresses and a plain verdict (reads only)."""
     return {"ok": True, **_wrap(pg_investigate.investigate, _cred(panel_id), username)}
+
+
+@router.get(U + "/watch")
+def user_watch(panel_id: int, username: str):
+    """The newest watch of a user (running or finished): the usage in 10-minute bars, every address with first / last seen, and a few plain findings."""
+    _cred(panel_id)
+    return {"ok": True, **_wrap(pg_watch.status, panel_id, username)}
+
+
+@router.post(U + "/watch")
+def user_watch_start(panel_id: int, username: str, body: WatchIn):
+    """Watch a user for some hours (0.25 to 72): every 2 minutes his used traffic and the addresses he is connected from are read and kept. A watch that runs is only made longer."""
+    _cred(panel_id)
+    return {"ok": True, **_wrap(pg_watch.start, panel_id, username, body.hours)}
+
+
+@router.delete(U + "/watch")
+def user_watch_stop(panel_id: int, username: str):
+    """End the running watch of a user now (what it saw stays for 14 days)."""
+    _cred(panel_id)
+    return {"ok": True, **_wrap(pg_watch.stop, panel_id, username)}
