@@ -755,6 +755,8 @@ html body #page .eng-auto-t { display: grid; gap: 2px; min-width: 0; line-height
 html[data-mode="light"] body #page .ab-h > .ss-ic { background: #f3f6fc; border-color: rgba(30, 50, 100, .14); color: #4a5b86; } html[data-mode="light"] body #page .aim-use { color: #1456c8; }
 /* 1.57.51 (4) - the cores and the PasarGuard panels / nodes each sit in ONE box of a fixed size, the list scrolls inside it (the owner, 2026-10-16) */
 html body #page #eng-box, html body #page .abt-pg .abt-cb { display: flex; flex-direction: column; gap: 6px; overflow: hidden; }
+/* 1.69.201 - that box clips what is painted outside it, and a switch sits flush at its edge: the glow of a switch (a 1 px ring and a 10 px blur) was cut off in a straight line, so it looked boxed (the owner, 2026-11-04, with a picture of the nightly switch: it went into a box, on the right of the button). The box takes the room out of the card's own padding (11 px on the sides, 10 px below), so nothing moves and nothing is cut. */
+html body #page #eng-box, html body #page .abt-pg .abt-cb { margin-left: -11px; margin-right: -11px; margin-bottom: -10px; padding: 0 11px 10px; }
 html body #page .abt-pg #pgu-box { display: flex; flex: 1 1 auto; flex-direction: column; gap: 6px; min-height: 0; }
 html body #page :is(.eng-list, .pgu-list) { flex: 1 1 auto; min-height: 0; box-sizing: border-box; padding: 6px; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; border: 1px solid var(--uk-line); border-radius: 12px; background: #0b1220; }
 html body #page .pgu-list { display: grid; align-content: start; gap: 6px; }

@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.69.201 - The glow of a switch is no longer cut off by the box it sits in
+
+> **In short:** the owner (2026-11-04, with a picture of the nightly switch of the PasarGuard card): "it went into a box - on the right of the button". The cause: the box of the card clips whatever is painted outside it (`overflow: hidden`, so the list scrolls inside a fixed box), and the switch sits flush at its right edge, so the blue glow around the switch (a 1 px ring and a 10 px blur) was cut off in a straight line - a rectangle instead of a soft glow. The box now takes the room the glow needs (11 px on the sides, 10 px below) out of the card's own padding, so nothing moves and nothing is clipped. The same box holds the nightly switch of the Tunnel cores card, so it is fixed there too.
+>
+> **به زبان ساده:** درخشش آبی دور کلید شبانه از لبهٔ کارت با یک خط صاف بریده می‌شد و انگار کلید در یک باکس رفته بود؛ حالا جای کافی برایش هست و چیزی جابه‌جا نمی‌شود.
+
+- **Where:** `web/lab.css` (the rule of `#eng-box` and `.abt-pg .abt-cb`), `tests/test_switch_glow_room.py` (new).
+- **Proved:** the cause and the fix on a copy of the panel's own CSS in a browser (the glow cut off before, whole after; no horizontal scroll), the new test (and it fails without the fix), the card and web menu tests, ruff, `node --check`.
+- **Not proved:** the live panel after the owner's Update; a phone width.
+
 ## 1.69.200 - The Tunnel Doctor page, redesigned: one bar, one line per tunnel, the log under the row
 
 > **In short:** the owner (2026-11-04), a picture of the Doctor page: "redesign this section - show the information very, very short, easy to work with, remove the extra explanations - and show the log when we click on it". The three big mode cards are ONE bar (Off | Fix | Fix + move, the minutes of the last one, the "Add capacity" switch, Fix all and Explain). Every tunnel in Active is ONE line - a dot, the name, the reason in a few words and what the Doctor does - and a click opens its log under the row: the facts, what the Doctor did (live while it runs), Open tunnel and Diagnose. "Detail" and "Live" are gone; the rows of Done open their log the same way; a server that is off is one line; the long sentences are tips on hover.
