@@ -21,6 +21,7 @@ are moved too (closure). The DNS is touched only after every tunnel moved. Every
 old and new address, which server, when), so the panel can list the changes and put any of them back with one click."""
 from __future__ import annotations
 
+import fnmatch
 import time
 
 from sqlalchemy import select
@@ -28,7 +29,7 @@ from sqlalchemy import select
 from ..config import get_settings
 from ..db import session
 from ..log import get_logger
-from ..models import Config, Server, Tunnel
+from ..models import Config, Panel, Server, Tunnel
 from . import arvan, autopilot, dnsprov, telegram
 from . import settings as st
 from .events import emit
@@ -219,8 +220,59 @@ def _fetch_records(ip: str) -> tuple[list[dict], str]:
     return recs, "; ".join(errors)
 
 
-def _records(ip: str, tunnels: list[dict]) -> tuple[list[dict], str]:
-    """The records that carry `ip`, each with the configs that use its name and the tunnels (of this server) those configs go through."""
+_HOSTS_LAST: dict[int, dict[str, set[int]]] = {}      # the last reading of the hosts of each PasarGuard panel: a panel that is down for a minute must not turn a move into a guess
+
+
+def _hosts_by_name(rows: list[dict]) -> dict[str, set[int]]:
+    """Pure: {name: {port}} - the names the hosts of a PasarGuard panel dial and the port each name is dialled on. A host with no port of its own (or a range) says nothing about a tunnel and is skipped;
+    a disabled host stays (it may be switched on again, and its record must not be left behind)."""
+    from . import cfgmap
+
+    out: dict[str, set[int]] = {}
+
+    for h in rows:
+        port = cfgmap.port_of(h.get("port"))
+
+        if port is None:
+            continue
+
+        for a in cfgmap._strs(h.get("address")):
+            out.setdefault(a.lower(), set()).add(port)
+
+    return out
+
+
+def _host_ports() -> tuple[dict[str, set[int]], str]:
+    """{name: {port}} of the hosts of every PasarGuard panel (one read-only question each); the second value says which panel could not be read and had no earlier reading. Tests replace this."""
+    from . import panels, pg_cores
+
+    with session() as db:
+        found = [(p.id, p.name) for p in db.scalars(select(Panel).where(Panel.type == "pasarguard", Panel.enabled.is_(True)))]
+
+    out: dict[str, set[int]] = {}
+    errors = []
+
+    for pid, pname in found:
+        try:
+            got = _hosts_by_name(pg_cores._as_list(panels.call(panels.cred_for(pid), "GET", "/api/hosts"), "hosts"))
+            _HOSTS_LAST[pid] = got
+        except (ValueError, RuntimeError) as e:                                  # (PanelError is a RuntimeError)
+            got = _HOSTS_LAST.get(pid)
+
+            if got is None:
+                errors.append(f"the hosts of the PasarGuard panel {pname} could not be read ({str(e)[:100]})")
+                continue
+
+        for n, ps in got.items():
+            out.setdefault(n, set()).update(ps)
+
+    return out, "; ".join(errors)
+
+
+def _records(ip: str, tunnels: list[dict], hosts: bool = True) -> tuple[list[dict], str]:
+    """The records that carry `ip`, each with the configs that use its name and the tunnels (of this server) they go through - by a probe config that names the record, by the origin port of a CDN record,
+    and by a host of a PasarGuard panel that dials the name on the port of a tunnel (the owner, 2026-11-03: the US config died after its tunnel moved: its TLS host lives in the panel, not in the probe
+    configs, and its record has no origin port, so the record was tied to no tunnel and stayed on the old server). `hosts=False` leaves the panels alone (a whole-server move takes every record anyway)."""
     if not dnsprov.accounts():
         return [], ""
 
@@ -228,13 +280,23 @@ def _records(ip: str, tunnels: list[dict]) -> tuple[list[dict], str]:
         configs = [(c.name, str((c.meta or {}).get("address", "")).lower(), int((c.meta or {}).get("port") or 0)) for c in db.scalars(select(Config))]
 
     recs, err = _fetch_records(ip)
+    dialled: dict[str, set[int]] = {}
+
+    if hosts and recs:
+        dialled, herr = _host_ports()
+        err = "; ".join(x for x in (err, herr) if x)
+
+    named = {x["fqdn"].lower() for x in recs if "*" not in x["fqdn"]}
 
     for r in recs:
         mine = [(n, p) for n, a, p in configs if a == r["fqdn"].lower()]
         r["configs"] = [n for n, _ in mine]
         by_config = {t["id"] for t in tunnels if any(p in t["ports"] for _, p in mine)}
         by_port = {t["id"] for t in tunnels if r.get("port") and int(r["port"]) in t["ports"]}       # a CDN record whose origin port is the port of a tunnel belongs to that tunnel (found by the real test: without this a record no probe config names was left on the old server)
-        r["tunnels"] = sorted(by_config | by_port)
+        fq = r["fqdn"].lower()
+        ports = set().union(*(ps for n, ps in dialled.items() if n == fq or ("*" in fq and n not in named and fnmatch.fnmatchcase(n, fq))))        # (a wildcard record serves the names under it that have no record of their own)
+        by_host = {t["id"] for t in tunnels if ports & t["ports"]}
+        r["tunnels"] = sorted(by_config | by_port | by_host)
 
     return recs, err
 
@@ -290,14 +352,14 @@ def _make_plan(server_id: int, move: set[int] | None, reason: str, target_id: in
         info = {"server_id": s.id, "server": s.name, "ip": s.host}
 
     tunnels = _tunnels_of(server_id)
-    recs, dns_error = _records(info["ip"], tunnels)
+    recs, dns_error = _records(info["ip"], tunnels, hosts=move is not None)       # (a whole-server move takes every record: the panels are not asked)
     all_ids = {t["id"] for t in tunnels}
     asked = all_ids if move is None else set(move) & all_ids
     moved = all_ids if move is None else closure(asked, recs)
     whole = moved == all_ids
     moving = [t for t in tunnels if t["id"] in moved]
     dns = [r for r in recs if whole or (r["tunnels"] and set(r["tunnels"]) <= moved)]
-    left = [] if whole else [{"fqdn": r["fqdn"], "configs": r["configs"]} for r in recs if r not in dns]
+    left = [] if whole else [{"fqdn": r["fqdn"], "configs": r["configs"], "tunnels": r["tunnels"]} for r in recs if r not in dns]
     rankings, problems, skipped, candidates = {}, [], {}, []
     ports = set().union(*(t["ports"] for t in moving)) if moving else set()
 
@@ -457,7 +519,7 @@ def move_server(server_id: int, target_id: int, expect: list[int] | None = None,
         raise ValueError("no Iran server can take these tunnels now: " + "; ".join(p["problems"])[:300])
 
     if p["dns_error"]:
-        raise ValueError(f"a DNS account did not answer ({p['dns_error'][:200]}): its records could not follow the tunnels - fix the account (Tunnels → CDN) and try again")
+        raise ValueError(f"a DNS account did not answer or the hosts of a panel could not be read ({p['dns_error'][:200]}): the records could not be matched to the tunnels, so they could not follow them - fix the account (Tunnels → CDN) or the panel and try again")
 
     if expect is not None and set(expect) != set(p["move"]):
         raise ValueError("the tunnels of this server changed since you looked: look at the plan again")
@@ -664,6 +726,13 @@ def _apply_dns(aid: int, p: dict) -> tuple[list[dict], list[str], list[dict]]:
     return done, errors, logged
 
 
+def _say_left(aid: int, p: dict) -> None:
+    """The records that still carry the old server's address after a partial move, and why - said in the story where the operator reads it (the owner, 2026-11-03: a record tied to no tunnel stayed behind and a config died without a word)."""
+    for d in p.get("left_alone") or []:
+        why = "it also serves a tunnel that stays" if d.get("tunnels") else "nothing tells which tunnel it serves"
+        autopilot._say(aid, f"DNS {d['fqdn']}: still points at {p['ip']} ({why}) - left alone; if a config uses it, point it by hand (Tunnels → CDN).")
+
+
 def _work(aid: int, p: dict, finish: bool = True) -> bool:
     """Inside story `aid`: move the tunnels, then - only when all moved - the DNS. When the source server is on, the new tunnels are
     built and checked FIRST, the DNS changed, the old tunnels kept for the TTL + 5 minutes, and only then removed (nobody is cut).
@@ -731,6 +800,7 @@ def _work(aid: int, p: dict, finish: bool = True) -> bool:
         built = []
     else:
         done_dns, errors, logged = _apply_dns(aid, p)
+        _say_left(aid, p)
 
         if built:
             if done_dns:
@@ -938,7 +1008,7 @@ def replace_plan(old_tunnel_id: int, new_iran_id: int) -> dict:
 
     recs, dns_error = _records(info["ip"], _tunnels_of(info["server_id"]))
     dns = [r for r in recs if r["tunnels"] == [old_tunnel_id]]
-    left = [{"fqdn": r["fqdn"], "configs": r["configs"]} for r in recs if r not in dns and old_tunnel_id in r["tunnels"]]
+    left = [{"fqdn": r["fqdn"], "configs": r["configs"], "tunnels": r["tunnels"]} for r in recs if r not in dns and old_tunnel_id in r["tunnels"]]
     now = int(time.time())
     return {**info, "id": f"{info['server_id']}-{now}", "reason": "replace", "why": f"{info['old_tunnel']} was replaced by a tunnel on {target['name']}", "whole": False,
             "tunnels": [], "move": [], "pulled": [], "target": target, "dns": [{k: v for k, v in r.items() if k != "tunnels"} for r in dns], "left_alone": left,
