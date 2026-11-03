@@ -1223,7 +1223,7 @@ def test_the_tunnel_window_and_the_job_know_the_trident():
 
     web = Path(__file__).resolve().parent.parent / "nikatel" / "web"
     app = (web / "app.js").read_text(encoding="utf-8")
-    assert "function tunTrident(t)" in app and "tunStandby(t) + tunTrident(t) + tunBwBox(t)" in app                           # a bar under the standby's
+    assert "function tunTrident(t)" in app and "tunStandby(t) + tunTrident(t) + tunLane(t) + tunGrid(t)" in app                           # a bar under the standby's
     assert all(f"window.{f} = async" in app for f in ("tunTridentSet", "tunTridentRebalance")) and "/trident/rebalance" in app and "`/api/tunnels/${id}/trident`" in app
     assert '{key: "trident", label: "Trident"}' in app and '"auto:trident": "three tunnels of different kinds' in app                 # Create tunnel → Automatic → Trident
     assert 'kind: bk.kind === "auto" && bk.transport === "trident" ? "trident" : bk.kind' in app and 'K.key === "auto" && tr.key === "trident"' in app and "🔱 Trident" in app

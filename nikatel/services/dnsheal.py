@@ -1,4 +1,4 @@
-﻿"""The Doctor and the DNS name of a config that does not connect (1.69.196).
+"""The Doctor and the DNS name of a config that does not connect (1.69.196).
 
 The owner (2026-11-03): a Turkey TLS config was down for a long while although its tunnel was up. Cause: the tunnel had been moved to another Iran server and the record of the config's name still
 pointed at the old one, which does not forward the port. The Doctor judged the tunnel (up, listening) and never looked at the name the users dial. He asked that the Doctor, in the mode he had put it

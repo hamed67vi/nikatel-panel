@@ -973,7 +973,7 @@ def test_the_tunnel_window_the_doctor_page_and_the_job_know_the_lanes():
     web = Path(__file__).resolve().parent.parent / "nikatel" / "web"
     app = (web / "app.js").read_text(encoding="utf-8")
     fa = (web / "i18n.fa.doctor.js").read_text(encoding="utf-8")
-    assert "function tunLane(t)" in app and "tunBwBox(t) + tunLane(t) + tunGrid(t)" in app                                     # a bar under the standby's
+    assert "function tunLane(t)" in app and "tunTrident(t) + tunLane(t) + tunGrid(t)" in app                                     # a bar under the standby's
     assert all(f"window.{f} = async" in app for f in ("tunLaneStart", "tunLaneStop", "apLanes")) and "/lane/start" in app and "/lane/stop" in app and "/api/lanes/settings" in app
     assert 'class="dr-lanes"' in app and "Add capacity by itself" in app and "${modes}${lanesRow}" in app                           # the owner's switch on the Doctor page
     assert "Lane · Sharing {} % + {} %" in fa and "Add capacity by itself" in fa and "Share now" in fa

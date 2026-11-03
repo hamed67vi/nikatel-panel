@@ -13,7 +13,7 @@ def test_every_tunnel_that_runs_has_the_meter_and_only_a_problem_has_a_word():
     cell = js.split("const bwCell = t => {", 1)[1].split("/* the Ping / Loss cell", 1)[0]
     assert "return bwMeterFor(t) + why;" in cell and 'if (!["up", "degraded"].includes(t.state)) return `<span class="cut-tag' in cell                       # (a cut tunnel: still its tag, no meter)
     fn = js.split("const bwMeterFor = t => {", 1)[1].split("const bwTone", 1)[0]
-    assert 'prob ? (!hurt ? "dip" : stall || b.state === "drop" ? "drop" : "slow") : full ? "full" : "ok"' in fn and 'prob ? (stall ? "no data" : b.state === "drop" ? "dropped" : "very slow") : full ? "nearly full" : idle ? "no users" : ""' in fn
+    assert 'prob ? (!hurt ? "dip" : stall || b.state === "drop" ? "drop" : "slow") : full ? "full" : "ok"' in fn and 'prob ? (stall ? "no data" : b.state === "drop" ? "low for users" : "very slow") : full ? "nearly full" : idle ? "no users" : ""' in fn
 
 
 def test_the_total_is_on_the_left_and_the_users_use_beside_it():
@@ -24,7 +24,7 @@ def test_the_total_is_on_the_left_and_the_users_use_beside_it():
 
 def test_the_list_is_live_while_it_is_open():
     js = (WEB / "app.js").read_text(encoding="utf-8")
-    assert "document.querySelector('[id^=\"tun-use-\"], .tun-tbl')" in js.split("const tunLiveTick = async () => {", 1)[1].split("};", 1)[0]
+    assert "document.querySelector('[id^=\"tun-bwbox-\"], .tun-tbl')" in js.split("const tunLiveTick = async () => {", 1)[1].split("};", 1)[0]
     paint = js.split("const tunLivePaint = () => {", 1)[1].split("const tunLiveStop", 1)[0]
     assert '.tun-tbl td.bwc[data-tid]' in paint and "bwMeterFor(t)" in paint and "nm.dataset.k !== m.dataset.k) { m.replaceWith(nm);" in paint            # (only a meter whose numbers changed is replaced)
     assert 'setInterval(() => { if (state.page === "tunnels" && !document.hidden && !tunLiveT && document.querySelector(".tun-tbl")) tunLiveStart(); }, 2000);' in js

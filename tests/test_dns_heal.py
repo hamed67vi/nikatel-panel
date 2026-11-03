@@ -1,4 +1,4 @@
-﻿"""The Doctor points the DNS name of a config that is DOWN at the Iran server that really carries its port (the owner, 2026-11-03: the Turkey TLS config was down for hours while its tunnel was up; the
+"""The Doctor points the DNS name of a config that is DOWN at the Iran server that really carries its port (the owner, 2026-11-03: the Turkey TLS config was down for hours while its tunnel was up; the
 tunnel had been moved and the record of the name still pointed at the old Iran server; the Doctor judged only the tunnel)."""
 import time
 

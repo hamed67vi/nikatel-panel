@@ -11,7 +11,7 @@ import pytest
 WEB = Path(__file__).resolve().parent.parent / "nikatel" / "web"
 APP = (WEB / "app.js").read_text(encoding="utf-8")
 HELPERS = APP[APP.index("const noSvcText = "): APP.index("/* the ORDER of the tunnel list")]
-BANNER = APP[APP.index("function tunBanner(t) {"): APP.index("/* two boxes under the grid")]
+BANNER = APP[APP.index("function tunBanner(t) {"): APP.index("/* two rows of the summary table")]
 LIST = APP[APP.index("PAGES.tunnelsList = async"): APP.index("function tunGrid(t)")]
 
 
@@ -27,7 +27,7 @@ def run(tmp_path):
         driver.write_text(
             "globalThis.window = globalThis;\n"
             "const esc = s => String(s).replace(/[&<>\"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '\"': '&quot;', \"'\": '&#39;'}[c]));\n"
-            "const SHOW_LOSS = 20, BW_STALL = 1; const tunLoss = t => ({v: null, blocked: false}); const bwHurts = () => false;\n"
+            "const SHOW_LOSS = 20, BW_STALL = 1; const tunLoss = t => ({v: null, blocked: false}); const bwHurts = () => false; const bwFelt = () => false;\n"
             "const tunOffServers = () => ''; const outWhy = e => e; const durText = s => Math.round(s) + ' s'; const bwWhy = () => '';\n"
             + HELPERS + "\n" + BANNER + "\n(() => { const res = {};\n" + script + "\nprocess.stdout.write(JSON.stringify(res)); })();\n", encoding="utf-8")
         r = subprocess.run([node, str(driver)], capture_output=True, text=True, encoding="utf-8", timeout=60, check=False)

@@ -1238,7 +1238,7 @@ def test_the_tunnel_table_has_the_lamp_before_the_name_and_the_bandwidth_in_plac
     assert "const bwFmt = v =>" in app and "const bwTip = t =>" in app and "const bwWhy = t =>" in app and "[\"drop\", \"slow\"].includes((t.bw || {}).state)" in app
     assert 'slow = tl.filter(t => t.state === "up" && ["drop", "slow"].includes((t.bw || {}).state) && bwHurts(t) && !lossy.includes(t))' in app and 'kind === "slow" ? bwWhy(t)' in app and "${slow.map(t => row(t, \"slow\")).join(\"\")}" in app
     assert "kinds=fix,autopilot,balance,underuse,move,speed" in app and 'a.action === "speed" && /Where the problem is/.test' in app and "window.bwMeasure = async id =>" in app and 'api(`/api/tunnels/${id}/bandwidth`, {method: "POST"})' in app
-    assert 'kv("Capacity", ' in app and '<span>In use now</span><div id="tun-use-${t.id}">' in app and 'kv("Traffic", ' not in app and 'onclick="bwMeasure(${t.id})"' in app
+    assert 'row("Capacity", cap)' in app and 'id="tun-bwbox-${t.id}">${tunBwBoxInner(t)}' in app and 'kv("Traffic", ' not in app and 'onclick="bwMeasure(${t.id})"' in app
     assert "html body #page .tun-tbl td.name .tun-lamp {" in css and "--tun-start: calc(var(--tun-pad) + var(--tun-dot) + var(--tun-gap))" in css and ".tun-tbl .bwcap.drop b" in css and "html body #page .tun-tbl td.bwc" in css
     assert "Speed test…" in lab                                                                   # (the menu of a tunnel is as it was)
 
@@ -1247,7 +1247,7 @@ def test_the_doctor_says_what_the_users_get_and_asks_for_the_links_it_lacks():
     tip of the bandwidth cell and the Doctor page (a row "users"); the configs that ride no known tunnel are counted with a button that ties them to one (the Configs page is switched off)."""
     app = _web("app.js")
     assert "const uxTip = t =>" in app and "const uxWhy = t =>" in app and "+ uxTip(t);" in app and 'kind === "users" ? uxWhy(t)' in app
-    assert 'users = tl.filter(t => t.state === "up" && ["poor", "bad"].includes((t.ux || {}).grade)' in app and '${users.map(t => row(t, "users")).join("")}' in app and "const tunUsersBox = t =>" in app and 'kv("Users", ' not in app      # (the Users row of the Link box is its own box now, see the test of the second row of boxes)
+    assert 'users = tl.filter(t => t.state === "up" && ["poor", "bad"].includes((t.ux || {}).grade)' in app and '${users.map(t => row(t, "users")).join("")}' in app and "const tunUsersCell = t =>" in app and 'kv("Users", ' not in app      # (the Users row has its own row in the summary table of the window, see the test of the table)
     assert "const usersNote = u => u && u.total > u.linked ?" in app and "${usersNote(dc && dc.users)}" in app and 'onclick="apLinkConfigs()"' in app
     assert "window.apLinkConfigs = async () =>" in app and "window.apLinkSave = async () =>" in app and 'api("/api/configs/" + s.dataset.cid, {method: "PUT", body: JSON.stringify({tunnel: s.value})})' in app
     assert 'api("/api/doctor"), api("/api/configs"), api("/api/tunnels")' in app
@@ -1384,7 +1384,7 @@ def test_the_bandwidth_column_holds_the_capacity_and_what_the_users_use_and_the_
     assert '<col style="width:13%"><col style="width:14%"><col style="width:10%"><col style="width:9%"><col style="width:11%"><col style="width:11%"><col style="width:8%"><col style="width:56px">' in app and app.count("<col ") >= 8      # (the owner, 2026-10-17: "the address cells are very crowded, too much empty space between the columns": every column but the last has a share of the width (the shares were tuned in a demo panel at 2000 / 1440 / 1180 px so the gaps between the columns come out about equal; the fluid layer spreads what they do not add up to), so no column piles up the room that is left)
     assert '"bandwidthmb s": 118' in _web("fluid.js")
     assert "const useOf = t =>" in app and "const bwUtil = t =>" in app and "const bwUse = t =>" in app and "const bwBar = t =>" in app and "const bwCap = t =>" in app and 'class="bwuse ${u.live ? "live" : "old"}"' in app
-    assert "let tunLiveT = null;" in app and 'api("/api/tunnels/live")' in app and "setInterval(tunLiveTick, 4000)" in app and 'document.addEventListener("visibilitychange"' in app and "applyQ(); fxFit(); tunLiveStart();" not in app and "else { tunStrip(t.id); tunLiveStart(); }" in app and 'id="tun-use-${t.id}">${tunUseHtml(t)}' in app
+    assert "let tunLiveT = null;" in app and 'api("/api/tunnels/live")' in app and "setInterval(tunLiveTick, 4000)" in app and 'document.addEventListener("visibilitychange"' in app and "applyQ(); fxFit(); tunLiveStart();" not in app and "else { tunStrip(t.id); tunLiveStart(); }" in app and 'id="tun-bwbox-${t.id}">${tunBwBoxInner(t)}' in app
     assert "const liveAge = l => l.age + (Date.now() - (state.liveAt || Date.now())) / 1000;" in app                                # (the age comes from the server: no clock of the browser is compared with the server's)
     for sel in (".bwx {", ".bwr {", ".bwcap b {", ".bwsep {", ".bwuse {", ".bwbar {", "th.bwh .bwh-in em {"):
         assert "html body #page .tun-tbl " + sel in css, sel
@@ -1398,10 +1398,10 @@ def test_the_bandwidth_row_is_one_number_each_and_the_breakdown_moved_into_the_t
     usecell = app.split("const bwUse = t => {", 1)[1].split("const bwBar = t =>", 1)[0]
     assert "<em>" not in capcell and "▼" not in capcell and capcell.count("bwNum(capOf(t))") == 1                                 # the row: one capacity number, no second one beside it
     assert usecell.count("<i>↓</i>") == 1 and "↑" not in usecell and usecell.count("bwNum(u.down)") == 1 and "u.up" not in usecell      # the row: one usage number (the download), the upload is gone from here
-    status = app.split('box(SI.clock, "Status"', 1)[1].split("const link = box", 1)[0]
-    link = app.split("const link = box(SI.link", 1)[1].split("return `<div class=\"sgrid\">", 1)[0]
-    assert "const tunUseHtml = t => useOf(t) ?" in app and "↓ ${bwFmt(useOf(t).down)} ↑ ${bwFmt(useOf(t).up)}" in app.split("const tunUseHtml = t =>", 1)[1].split("const tunLivePaint", 1)[0] and "% of the capacity" in app.split("const tunUseHtml = t =>", 1)[1].split("const tunLivePaint", 1)[0] and "tunUseHtml(t)" in status      # the tunnel window still has both numbers, with the share of the capacity they use
-    assert 'kv("Capacity", ' in link and "usually ${t.bw.ref ?" in link and "ago</small>" in link and "bwWhy(t)" in link and "bwMeasure(" in link              # ... and the capacity, its usual level, when it was last measured, and why it dropped
+    grid = app.split("function tunGrid(t) {", 1)[1].split("/* the \"times the tunnel was down\" box", 1)[0]
+    big = app.split("const tunBwBoxInner = t => {", 1)[1].split("const capTip", 1)[0]
+    assert "const tunUseHtml" not in app and "in use now ↓" in big and "· ↑ ${bwNum(u.up)}" in big and "<small>used</small>" in big and "tunBwBoxInner(t)" in grid      # the tunnel window still has both numbers, with the share of the capacity they use (the big meter of the Bandwidth row)
+    assert 'row("Capacity", cap)' in grid and "usually ${b.ref ?" in grid and "ago</small>" in grid and "bwWhy(t)" in big and "bwMeasure(" in grid              # ... and the capacity, its usual level, when it was last measured; the sentence about a drop is the Bandwidth row's (only when the users feel it)
 
 
 def test_the_numbers_of_the_bandwidth_cell_are_formatted_and_judged_the_way_the_owner_reads_them(tmp_path):
@@ -1506,24 +1506,30 @@ def test_the_address_cells_of_the_tunnel_table_breathe_and_the_columns_share_the
     assert 'html:not([data-mode="light"]) body #page .tun-tbl td.td-node .ip-copy { color: #97a5c3; }' in block and "td.td-node b { font-weight: 700; }" in block
 
 
-def test_the_tunnel_window_has_a_second_row_of_boxes_for_the_users_and_the_stability_and_the_list_stays_calm():
-    """The owner, 2026-10-17: "show the stability and the quality of the users' internet inside their own box, not in the cards - I do not want the cards to be crowded". Row one: Servers | Status | Link; row two: Users' internet | Stability | Last results."""
+def test_the_tunnel_window_is_one_summary_table_and_the_list_stays_calm():
+    """The owner, 2026-10-17: "show the stability and the quality of the users' internet ... I do not want the cards to be crowded"; 2026-11-03 (his picture of the window with its nine boxes): "instead of all these windows, one nice table with
+    the information written in summary". The banners stay on top; the Route, Traffic and Health rows are ONE table."""
     app, css = _web("app.js"), _web("lab.css")
     body = app.split("function tunWinHtml(t) {", 1)[1].split("function tunBanner", 1)[0]
-    assert "tunBanner(t) + tunStandby(t) + tunTrident(t) + tunBwBox(t) + tunLane(t) + tunGrid(t) + `<div class=\"sgrid\">${tunUsersBox(t)}${tunUpBox(t)}${tunResBox(t)}</div>`" in body
-    assert 'data-b="users"' in app and 'data-b="stability"' in app and 'data-b="results"' in app and "<i>${SI.users}</i>Users' internet" in app and "<i>${SI.pulse}</i>Stability" in app
-    users = app.split("const tunUsersBox = t => {", 1)[1].split("const tunUpBox = t =>", 1)[0]
-    assert all(f'kv("{w}", ' in users for w in ("Quality", "Problems")) and "Tie the configs to their tunnels in the Doctor page" in users and "-webkit-line-clamp: 2" in css      # (two rows, two lines of the problems, two of the Doctor's sentence: the row of boxes stays as tall as the Stability box)
-    stab = app.split("const tunUpBox = t =>", 1)[1].split("function tunResBox", 1)[0]
-    assert '["Answered", "Cuts", "Last cut", "Up for"]' in stab and 'class="lab-ups" id="tun-ov-${t.id}"' in stab
+    assert "tunBanner(t) + tunStandby(t) + tunTrident(t) + tunLane(t) + tunGrid(t);" in body and 'class="sgrid"' not in body
+    grid = app.split("function tunGrid(t) {", 1)[1].split("/* the \"times the tunnel was down\" box", 1)[0]
+    assert '<table class="tsum">' in grid and grid.count("<table") == 1 and 'class="sbox' not in grid and 'class="kv2"' not in grid
+    for g in ("Route", "Traffic", "Health"):
+        assert f'grp("{g}")' in grid, g
+    for k in ("Servers", "Type", "Bandwidth", "Capacity", "Latency", "Quality", "State", "Users' internet", "Stability"):
+        assert f'<th>{k}</th>' in grid or f'row("{k}", ' in grid, k
+    users = app.split("const tunUsersCell = t => {", 1)[1].split("const UP_WORD", 1)[0]
+    assert "Tie the configs to their tunnels in the Doctor page" in users and "-webkit-line-clamp: 2" in css      # (two lines of the problems, two of the Doctor's sentence: a row of the table stays short)
+    assert '["Answered", "Cuts", "Last cut", "Up for"]' in grid and 'class="lab-ups" id="tun-ov-${t.id}"' in grid and 'id="tun-st-${i}-${t.id}"' in grid and 'id="tun-ov-pct-${t.id}"' in grid
     assert "api(`/api/tunnels/${id}/stability`)" in app and "/checks?hours=24" not in app.split("async function tunStrip(id) {", 1)[1].split("\n}\n", 1)[0]
     row = app.split("const row = t => {", 1)[1].split("const creating = false;", 1)[0]
-    assert "t.ux" not in row and "stability" not in row.lower()                                           # (the rows of the list carry neither: the two boxes are in the window)
-    for sel in ('.sbox[data-b="users"] .us-line {', '.sbox[data-b="stability"] .lab-ups {', '.sbox[data-b="users"] .us-note {'):
+    assert "t.ux" not in row and "stability" not in row.lower()                                           # (the rows of the list carry neither: they are in the window)
+    for sel in ("table.tsum {", ".tsum th {", ".tsum td {", ".tsum tr.g > th {", ".tsum .us-line {", ".tsum .lab-ups {", ".tsum .us-note {"):
         assert "html body #modal .tunwin " + sel in css, sel
+    assert '.tunwin .sbox[data-b="users"]' not in css and '.tunwin .sbox[data-b="stability"]' not in css
 
 
-def test_the_users_box_counts_what_the_doctor_keeps_of_the_configs_that_ride_the_tunnel(tmp_path):
+def test_the_users_row_counts_what_the_doctor_keeps_of_the_configs_that_ride_the_tunnel(tmp_path):
     import json
     import shutil
     import subprocess
@@ -1536,18 +1542,18 @@ def test_the_users_box_counts_what_the_doctor_keeps_of_the_configs_that_ride_the
         pytest.skip("node is not installed here")
 
     app = _web("app.js")
-    code = app[app.index("const UX_WORD ="): app.index("const tunUpBox = t =>")]
+    code = app[app.index("const UX_WORD ="): app.index("const UP_WORD =")]
     driver = tmp_path / "ux.js"
     driver.write_text(
         "const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;'); const ago = () => '5m'; const SI = {users: '<svg></svg>'};\n" + code + "\n"
         "const bad = [{config: 'a', issue: 'down', text: 'does not connect'}, {config: 'b', issue: 'slow_ping', text: 'ping 900 ms'}, {config: 'c', issue: 'slow_speed', text: 'speed 3 Mb/s'}, {config: 'd', issue: 'unstable', text: 'half of its tests'}];\n"
-        "const res = {good: tunUsersBox({ux: {grade: 'good', known: 4, bad: [], at: 1}}), poor: tunUsersBox({ux: {grade: 'poor', known: 5, at: 1, bad, why: {text: 'The tunnel is healthy but the problem is BEYOND it.'}}}),\n"
-        "  fair: tunUsersBox({ux: {grade: 'fair', known: 6, at: 1, bad: bad.slice(0, 1), why: {text: 'not shown for fair'}}}), none: tunUsersBox({}), unk: tunUsersBox({ux: {grade: 'unknown', known: 0, bad: []}})};\n"
+        "const res = {good: tunUsersCell({ux: {grade: 'good', known: 4, bad: [], at: 1}}), poor: tunUsersCell({ux: {grade: 'poor', known: 5, at: 1, bad, why: {text: 'The tunnel is healthy but the problem is BEYOND it.'}}}),\n"
+        "  fair: tunUsersCell({ux: {grade: 'fair', known: 6, at: 1, bad: bad.slice(0, 1), why: {text: 'not shown for fair'}}}), none: tunUsersCell({}), unk: tunUsersCell({ux: {grade: 'unknown', known: 0, bad: []}})};\n"
         "process.stdout.write(JSON.stringify(res));\n", encoding="utf-8")
     r = subprocess.run([node, str(driver)], capture_output=True, text=True, encoding="utf-8", timeout=60, check=False)
     assert r.returncode == 0, r.stderr[-600:]
     res = json.loads(r.stdout)
-    assert '<b class="gw-ok">Good</b> <small class="mut">4 of 4 configs fine</small>' in res["good"] and ">none<" in res["good"] and 'class="us-line"' not in res["good"] and "5m ago" in res["good"] and "answers as it usually does" in res["good"]
+    assert '<b class="gw-ok">Good</b> <small class="mut">4 of 4 configs fine · 5m ago</small>' in res["good"] and 'class="us-line"' not in res["good"] and "answers as it usually does" in res["good"]
     assert '<b class="err">Poor</b>' in res["poor"] and "1 of 5 configs fine" in res["poor"] and "2 slow · 1 unstable · 1 down" in res["poor"]
     assert res["poor"].count('<div class="us-line"') == 2 and "+2 more" in res["poor"] and "BEYOND it" in res["poor"] and 'class="bw-why" title="The tunnel' in res["poor"]      # two lines, the rest counted, the Doctor's sentence under them (the whole of it in the tooltip)
     assert '<b class="warn">Fair</b>' in res["fair"] and "5 of 6 configs fine" in res["fair"] and "not shown for fair" not in res["fair"]            # (the Doctor's sentence is for a poor or bad grade)
