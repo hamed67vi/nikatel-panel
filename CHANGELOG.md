@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.69.202 - The tunnel window is squeezed so that it needs no scroll
+
+> **In short:** the owner (2026-11-04), a picture of the tunnel window with a scroll bar at its side: "squeeze these so that nobody has to scroll". The summary table of 1.69.197 is seven rows now instead of nine plus three headings: Tunnel (servers, type, ports), Link, Bandwidth (the bar and its numbers on ONE line), Quality (latency, loss, capacity, score in one row of pairs), State, Users (the grade and its problems on one line; the Doctor's sentence is the tip of the grade) and Stability (the numbers and a thinner strip). "Room to spare." is not written any more, the padding of the rows and the height of the banners are smaller. Measured in a browser: the body of the window is exactly as tall as its content at 1280 x 720 (the table is about 270 px).
+>
+> **به زبان ساده:** جدول پنجرهٔ تانل فشرده شد: هفت ردیف به‌جای نُه ردیف و سه سرتیتر، چند اطلاعات در یک ردیف، نوار پهنای باند و عددهایش در یک خط، و فاصله‌ها کمتر. حالا روی صفحه‌ای با ارتفاع ۷۲۰ پیکسل هم اسکرول لازم نیست.
+
+- **Where:** `web/app.js` (`tunGrid`, `tunUsersCell`, one sentence less in `tunBwBoxInner`), `web/lab.css` (the `.tsum` rules), tests.
+- **Proved:** tests of the rows and the CSS, and a measure in a private demo panel in a browser: no scroll at 1280 x 800 and 1280 x 720, and 4 to 7 pixels over at a height of 640 with three bad configs (two lines of problems); the light theme looks right too.
+- **Not proved:** a window with more banners above the table (the standby, the lane and the Trident bars each add a line); the new row labels have no Persian text yet (Persian work is paused).
+
 ## 1.69.201 - The glow of a switch is no longer cut off by the box it sits in
 
 > **In short:** the owner (2026-11-04, with a picture of the nightly switch of the PasarGuard card): "it went into a box - on the right of the button". The cause: the box of the card clips whatever is painted outside it (`overflow: hidden`, so the list scrolls inside a fixed box), and the switch sits flush at its right edge, so the blue glow around the switch (a 1 px ring and a 10 px blur) was cut off in a straight line - a rectangle instead of a soft glow. The box now takes the room the glow needs (11 px on the sides, 10 px below) out of the card's own padding, so nothing moves and nothing is clipped. The same box holds the nightly switch of the Tunnel cores card, so it is fixed there too.

@@ -1025,33 +1025,40 @@ html body #page .tun-tbl td.td-node .ip-copy { margin-top: 3px; font-size: 11.5p
 html:not([data-mode="light"]) body #page .tun-tbl td.td-node .ip-copy { color: #97a5c3; }
 
 /* the window of a tunnel is ONE summary table (the owner, 2026-11-03: "instead of all these windows, one nice table with the information written in summary"): Route | Traffic | Health, a row says it in a line */
-html body #modal .tunwin .tsumbox { margin: 0 0 8px; border: 1px solid var(--line, rgba(255, 255, 255, .1)); border-radius: 14px; background: var(--panel); overflow: hidden; }
+html body #modal .tunwin .tsumbox { margin: 0 0 4px; border: 1px solid var(--line, rgba(255, 255, 255, .1)); border-radius: 14px; background: var(--panel); overflow: hidden; }
 html body #modal .tunwin table.tsum { width: 100%; border-collapse: collapse; table-layout: fixed; }
-html body #modal .tunwin .tsum col.ts-k { width: 118px; }
-html body #modal .tunwin .tsum th { padding: 9px 8px 9px 16px; text-align: left; vertical-align: top; font-size: 13px; font-weight: 500; line-height: 1.5; color: var(--mut); white-space: nowrap; }
-html body #modal .tunwin .tsum td { min-width: 0; padding: 9px 16px 9px 0; text-align: left; vertical-align: top; font-size: 13px; font-weight: 600; line-height: 1.5; overflow-wrap: anywhere; }
+html body #modal .tunwin .tsum col.ts-k { width: 92px; }
+html body #modal .tunwin .tsum th { padding: 5px 8px 5px 14px; text-align: left; vertical-align: top; font-size: 12.5px; font-weight: 500; line-height: 1.45; color: var(--mut); white-space: nowrap; }
+html body #modal .tunwin .tsum td { min-width: 0; padding: 5px 14px 5px 0; text-align: left; vertical-align: top; font-size: 12.5px; font-weight: 600; line-height: 1.45; overflow-wrap: anywhere; }
 html body #modal .tunwin .tsum tr + tr > th, html body #modal .tunwin .tsum tr + tr > td { border-top: 1px solid rgba(128, 140, 170, .16); }
-html body #modal .tunwin .tsum tr.g > th { width: auto; padding: 11px 16px 6px; border-top: 0; font-size: 10.5px; font-weight: 800; letter-spacing: .09em; text-transform: uppercase; color: var(--acc-2, #6ea8ff); background: rgba(128, 140, 170, .07); }
-html body #modal .tunwin .tsum tr.g + tr > th, html body #modal .tunwin .tsum tr.g + tr > td { border-top: 0; }
-html body #modal .tunwin .tsum tr.g:not(:first-child) > th { border-top: 1px solid rgba(128, 140, 170, .16); }
-html body #modal .tunwin .tsum td small { font-size: 12px; font-weight: 500; color: var(--mut); }
+html body #modal .tunwin .tsum td small { font-size: 11.5px; font-weight: 500; color: var(--mut); }
 html body #modal .tunwin .tsum td b { font-weight: 700; }
 html body #modal .tunwin .tsum .ts-sv { display: inline-flex; align-items: baseline; gap: 6px; margin-right: 4px; }
 html body #modal .tunwin .tsum .ts-ar { margin: 0 8px 0 4px; font-style: normal; color: var(--mut); }
-html body #modal .tunwin .tsum .ts-u { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-left: 16px; }
-html body #modal .tunwin .tsum .td-ports { display: inline-flex; flex-wrap: wrap; gap: 6px; margin-left: 12px; vertical-align: middle; }
-html body #modal .tunwin .tsum .ts-err { margin-top: 3px; font-size: 12px; font-weight: 500; }
-html body #modal .tunwin .tsum .ts-stab { display: flex; flex-wrap: wrap; gap: 2px 20px; }
-html body #modal .tunwin .tsum .lab-ups { min-height: 40px; margin-top: 6px; padding-bottom: 2px; }
-html body #modal .tunwin .tsum td.bwbox .bwbig-track { margin: 3px 0 7px; }
-html body #modal .tunwin .tsum td.bwbox .bwbig-n span b { font-size: 16px; }
-html body #modal .tunwin .tsum .us-line { display: flex; align-items: baseline; gap: 8px; min-width: 0; padding-top: 3px; font-size: 12px; font-weight: 500; line-height: 1.35; }
-html body #modal .tunwin .tsum .us-line b { flex: none; max-width: 42%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 700; color: var(--text); }
-html body #modal .tunwin .tsum .us-line span { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--warn, #ffc44d); }
+html body #modal .tunwin .tsum .ts-ty { margin-left: 18px; }
+html body #modal .tunwin .tsum .ts-u { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-left: 14px; }
+html body #modal .tunwin .tsum .td-ports { display: inline-flex; flex-wrap: wrap; gap: 5px; margin-left: 10px; vertical-align: middle; }
+html body #modal .tunwin .tsum .ts-kv { display: inline-flex; align-items: baseline; gap: 6px; margin-right: 22px; }
+html body #modal .tunwin .tsum .ts-kv em { font-style: normal; font-weight: 500; color: var(--mut); }
+html body #modal .tunwin .tsum .ts-err { margin-top: 2px; font-size: 12px; font-weight: 500; }
+html body #modal .tunwin .tsum .ts-stab { display: flex; flex-wrap: wrap; gap: 0 18px; }
+html body #modal .tunwin .tsum .lab-ups { min-height: 0; margin-top: 4px; padding: 0; }
+html body #modal .tunwin .tsum .lab-ups-row { height: 14px; }
+html body #modal .tunwin .tsum .lab-ups-x { margin-top: 2px; font-size: 10px; }
+html body #modal .tunwin .tsum td.bwbox .bwbig { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 18px; }
+html body #modal .tunwin .tsum td.bwbox .bwbig-track { flex: 1 1 200px; min-width: 160px; height: 10px; margin: 0; }
+html body #modal .tunwin .tsum td.bwbox .bwbig-n { flex: 0 1 auto; gap: 2px 16px; }
+html body #modal .tunwin .tsum td.bwbox .bwbig-n span b { font-size: 14px; }
+html body #modal .tunwin .tsum td.bwbox .bwbig-n small { font-size: 10px; }
+html body #modal .tunwin .tsum td.bwbox .bwbig-w { flex: 1 1 100%; margin: 0; }
+html body #modal .tunwin .tsum .us-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 12px; }
+html body #modal .tunwin .tsum .us-line { display: inline-flex; align-items: baseline; gap: 6px; min-width: 0; max-width: 100%; font-size: 12px; font-weight: 500; }
+html body #modal .tunwin .tsum .us-line b { flex: none; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 700; color: var(--text); }
+html body #modal .tunwin .tsum .us-line span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--warn, #ffc44d); }
 html body #modal .tunwin .tsum .us-line.mut { color: var(--mut); }
-html body #modal .tunwin .tsum .us-note { padding: 3px 0 0; font-size: 12px; font-weight: 500; line-height: 1.4; }
-html body #modal .tunwin .tsum .bw-why { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; margin: 3px 0 0; overflow: hidden; font-size: 12px; font-weight: 500; line-height: 1.35; color: var(--mut); }      /* (two lines of a sentence: the whole of it is the tooltip) */
-@media (max-width: 640px) { html body #modal .tunwin .tsum col.ts-k { width: 88px; } html body #modal .tunwin .tsum th { padding-left: 12px; } html body #modal .tunwin .tsum td { padding-right: 12px; } html body #modal .tunwin .tsum .ts-u { margin-left: 6px; } }
+html body #modal .tunwin .tsum .bw-why { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; margin: 2px 0 0; overflow: hidden; font-size: 12px; font-weight: 500; line-height: 1.35; color: var(--mut); }      /* (two lines of a sentence: the whole of it is the tooltip) */
+html body #modal .tunwin .lab-ban { min-height: 34px; margin-bottom: 6px; padding-top: 3px; padding-bottom: 3px; }
+@media (max-width: 640px) { html body #modal .tunwin .tsum col.ts-k { width: 80px; } html body #modal .tunwin .tsum th { padding-left: 12px; } html body #modal .tunwin .tsum td { padding-right: 12px; } html body #modal .tunwin .tsum .ts-u, html body #modal .tunwin .tsum .ts-ty { margin-left: 6px; } }
 
 /* 1.62.0 - the Knowledge tab of the Tunnel Doctor: what it knows about every pair of servers and what it remembers of the cuts */
 html body #page .kn-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 10px; padding: 4px 2px 10px; min-height: 38px; }

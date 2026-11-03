@@ -48,6 +48,17 @@ def test_the_summary_table_wraps_a_long_value():
     assert "html body #modal .tunwin table.tsum { width: 100%; border-collapse: collapse; table-layout: fixed; }" in css
 
 
+def test_the_window_is_squeezed_so_that_it_needs_no_scroll():
+    """The owner, 2026-11-04 (his picture of the window with a scroll bar at its side): "squeeze these so that nobody has to scroll". Measured in a browser: at 1280 x 720 the body of the window is exactly as tall as its content."""
+    js, css = _js(), (WEB / "lab.css").read_text(encoding="utf-8")
+    grid = js.split("function tunGrid(t) {", 1)[1].split("/* the \"times the tunnel was down\" box", 1)[0]
+    assert "Room to spare" not in js and 'util != null ? "Room' not in js          # (nothing is said while there is room: the bar says it)
+    assert grid.count("kv(\"") == 4 and '<span class="ts-kv"><em>${k}</em>${v}</span>' in grid          # (latency, loss, capacity and score are one row of pairs)
+    for sel in (".tsum td.bwbox .bwbig { display: flex;", ".tsum td.bwbox .bwbig-track { flex: 1 1 200px;", ".tsum .ts-kv {", ".tsum .us-row { display: flex;", ".tsum .lab-ups-row { height: 14px; }"):
+        assert "html body #modal .tunwin " + sel in css, sel
+    assert "html body #modal .tunwin .lab-ban { min-height: 34px;" in css and "padding: 5px 14px 5px 0;" in css.split("html body #modal .tunwin .tsum td {", 1)[1].split("}", 1)[0]
+
+
 @pytest.mark.skipif(shutil.which("node") is None, reason="node is not installed")
 def test_a_node_run_of_the_paint_leaves_the_cell_with_one_block():
     """A small fake DOM: the cell has a label with a small.mut and one .bwbig; the paint of 1.69.65 replaced the heading's small, the new one the block."""

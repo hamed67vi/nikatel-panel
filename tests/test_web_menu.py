@@ -1244,7 +1244,7 @@ def test_the_tunnel_table_has_the_lamp_before_the_name_and_the_bandwidth_in_plac
     assert "const bwFmt = v =>" in app and "const bwTip = t =>" in app and "const bwWhy = t =>" in app and "[\"drop\", \"slow\"].includes((t.bw || {}).state)" in app
     assert 'slow = tl.filter(t => t.state === "up" && ["drop", "slow"].includes((t.bw || {}).state) && bwHurts(t) && !lossy.includes(t))' in app and 'bwFelt(t) || b.state === "slow" ? esc(bwWhy(t))' in app and 'slow.map(t => row(t, "slow"))' in app
     assert "kinds=fix,autopilot,balance,underuse,move,speed" in app and 'a.action === "speed" && /Where the problem is/.test' in app and "window.bwMeasure = async id =>" in app and 'api(`/api/tunnels/${id}/bandwidth`, {method: "POST"})' in app
-    assert 'row("Capacity", cap)' in app and 'id="tun-bwbox-${t.id}">${tunBwBoxInner(t)}' in app and 'kv("Traffic", ' not in app and 'onclick="bwMeasure(${t.id})"' in app
+    assert 'kv("Capacity", cap)' in app and 'id="tun-bwbox-${t.id}">${tunBwBoxInner(t)}' in app and 'kv("Traffic", ' not in app and 'onclick="bwMeasure(${t.id})"' in app
     assert "html body #page .tun-tbl td.name .tun-lamp {" in css and "--tun-start: calc(var(--tun-pad) + var(--tun-dot) + var(--tun-gap))" in css and ".tun-tbl .bwcap.drop b" in css and "html body #page .tun-tbl td.bwc" in css
     assert "Speed test…" in lab                                                                   # (the menu of a tunnel is as it was)
 
@@ -1407,7 +1407,7 @@ def test_the_bandwidth_row_is_one_number_each_and_the_breakdown_moved_into_the_t
     grid = app.split("function tunGrid(t) {", 1)[1].split("/* the \"times the tunnel was down\" box", 1)[0]
     big = app.split("const tunBwBoxInner = t => {", 1)[1].split("const capTip", 1)[0]
     assert "const tunUseHtml" not in app and "in use now ↓" in big and "· ↑ ${bwNum(u.up)}" in big and "<small>used</small>" in big and "tunBwBoxInner(t)" in grid      # the tunnel window still has both numbers, with the share of the capacity they use (the big meter of the Bandwidth row)
-    assert 'row("Capacity", cap)' in grid and "usually ${b.ref ?" in grid and "ago</small>" in grid and "bwWhy(t)" in big and "bwMeasure(" in grid              # ... and the capacity, its usual level, when it was last measured; the sentence about a drop is the Bandwidth row's (only when the users feel it)
+    assert 'kv("Capacity", cap)' in grid and "usually ${b.ref ?" in grid and "ago</small>" in grid and "bwWhy(t)" in big and "bwMeasure(" in grid              # ... and the capacity, its usual level, when it was last measured; the sentence about a drop is the Bandwidth row's (only when the users feel it)
 
 
 def test_the_numbers_of_the_bandwidth_cell_are_formatted_and_judged_the_way_the_owner_reads_them(tmp_path):
@@ -1514,23 +1514,22 @@ def test_the_address_cells_of_the_tunnel_table_breathe_and_the_columns_share_the
 
 def test_the_tunnel_window_is_one_summary_table_and_the_list_stays_calm():
     """The owner, 2026-10-17: "show the stability and the quality of the users' internet ... I do not want the cards to be crowded"; 2026-11-03 (his picture of the window with its nine boxes): "instead of all these windows, one nice table with
-    the information written in summary". The banners stay on top; the Route, Traffic and Health rows are ONE table."""
+    the information written in summary"; 2026-11-04 (his picture of the window, a scroll bar at its side): "squeeze these so that nobody has to scroll". The banners stay on top; ONE table of seven rows, several facts to a row."""
     app, css = _web("app.js"), _web("lab.css")
     body = app.split("function tunWinHtml(t) {", 1)[1].split("function tunBanner", 1)[0]
     assert "tunBanner(t) + tunStandby(t) + tunTrident(t) + tunLane(t) + tunGrid(t);" in body and 'class="sgrid"' not in body
     grid = app.split("function tunGrid(t) {", 1)[1].split("/* the \"times the tunnel was down\" box", 1)[0]
     assert '<table class="tsum">' in grid and grid.count("<table") == 1 and 'class="sbox' not in grid and 'class="kv2"' not in grid
-    for g in ("Route", "Traffic", "Health"):
-        assert f'grp("{g}")' in grid, g
-    for k in ("Servers", "Type", "Bandwidth", "Capacity", "Latency", "Quality", "State", "Users' internet", "Stability"):
-        assert f'<th>{k}</th>' in grid or f'row("{k}", ' in grid, k
+    assert "grp(" not in grid and "<tr class=\"g\">" not in grid          # (no heading rows: they cost three rows of height)
+    for k in ('row("Tunnel", route)', 'row(gre ? "Link" : "Engine", link)', "<th>Bandwidth</th>", 'row("Quality", kv("Latency", lat) + kv("Loss", loss) + kv("Capacity", cap) + kv("Score", score))', 'row("State", state)', 'row("Users", tunUsersCell(t))', 'row("Stability", stab, '):
+        assert k in grid, k
     users = app.split("const tunUsersCell = t => {", 1)[1].split("const UP_WORD", 1)[0]
-    assert "Tie the configs to their tunnels in the Doctor page" in users and "-webkit-line-clamp: 2" in css      # (two lines of the problems, two of the Doctor's sentence: a row of the table stays short)
+    assert "Tie the configs to their tunnels in the Doctor page" in users and "-webkit-line-clamp: 2" in css      # (the sentence of the Doctor is the tip of the grade; a long sentence under a row is two lines at most)
     assert '["Answered", "Cuts", "Last cut", "Up for"]' in grid and 'class="lab-ups" id="tun-ov-${t.id}"' in grid and 'id="tun-st-${i}-${t.id}"' in grid and 'id="tun-ov-pct-${t.id}"' in grid
     assert "api(`/api/tunnels/${id}/stability`)" in app and "/checks?hours=24" not in app.split("async function tunStrip(id) {", 1)[1].split("\n}\n", 1)[0]
     row = app.split("const row = t => {", 1)[1].split("const creating = false;", 1)[0]
     assert "t.ux" not in row and "stability" not in row.lower()                                           # (the rows of the list carry neither: they are in the window)
-    for sel in ("table.tsum {", ".tsum th {", ".tsum td {", ".tsum tr.g > th {", ".tsum .us-line {", ".tsum .lab-ups {", ".tsum .us-note {"):
+    for sel in ("table.tsum {", ".tsum th {", ".tsum td {", ".tsum .ts-kv {", ".tsum .us-line {", ".tsum .lab-ups {"):
         assert "html body #modal .tunwin " + sel in css, sel
     assert '.tunwin .sbox[data-b="users"]' not in css and '.tunwin .sbox[data-b="stability"]' not in css
 
@@ -1559,9 +1558,9 @@ def test_the_users_row_counts_what_the_doctor_keeps_of_the_configs_that_ride_the
     r = subprocess.run([node, str(driver)], capture_output=True, text=True, encoding="utf-8", timeout=60, check=False)
     assert r.returncode == 0, r.stderr[-600:]
     res = json.loads(r.stdout)
-    assert '<b class="gw-ok">Good</b> <small class="mut">4 of 4 configs fine · 5m ago</small>' in res["good"] and 'class="us-line"' not in res["good"] and "answers as it usually does" in res["good"]
-    assert '<b class="err">Poor</b>' in res["poor"] and "1 of 5 configs fine" in res["poor"] and "2 slow · 1 unstable · 1 down" in res["poor"]
-    assert res["poor"].count('<div class="us-line"') == 2 and "+2 more" in res["poor"] and "BEYOND it" in res["poor"] and 'class="bw-why" title="The tunnel' in res["poor"]      # two lines, the rest counted, the Doctor's sentence under them (the whole of it in the tooltip)
+    assert '<b class="gw-ok">Good</b> <small class="mut">4 of 4 configs fine · 5m ago</small>' in res["good"] and 'class="us-line"' not in res["good"]
+    assert '<b class="err" title="The tunnel is healthy but the problem is BEYOND it.">Poor</b>' in res["poor"] and "1 of 5 configs fine" in res["poor"] and "2 slow · 1 unstable · 1 down" in res["poor"]
+    assert res["poor"].count('<span class="us-line" title=') == 2 and "+2 more" in res["poor"]      # two problems in a few words each, the rest counted, the Doctor's sentence is the tip of the grade
     assert '<b class="warn">Fair</b>' in res["fair"] and "5 of 6 configs fine" in res["fair"] and "not shown for fair" not in res["fair"]            # (the Doctor's sentence is for a poor or bad grade)
     for k in ("none", "unk"):
         assert "not known yet" in res[k] and "Tie the configs to their tunnels in the Doctor page" in res[k] and 'class="us-line"' not in res[k]      # no config rides it: it says so, never a made-up grade
