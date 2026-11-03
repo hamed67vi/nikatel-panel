@@ -3,7 +3,7 @@ server, with which devices and subscription fetches, and a plain verdict).
 
 It only READS, with what the Users window already has: the account, the usage by hour (by node) and by day, the devices, the last fetches of the subscription and the live addresses.
 The judging is a pure function (`judge`) so its rules are tested without a panel. What no code here can change, and what the answer says so:
-  * the panel keeps no history of the addresses a user connected from (the live list is "right now" only);
+  * the panel keeps no history of the addresses a user connected from (the live list is "right now" only, and exists only while the core has statsUserOnline on);
   * the node of a tunnel sees the entrance server's address, not the customer's;
   * the address of a subscription fetch is the customer's only when the panel sees it (behind a reverse proxy it shows the proxy: 127.0.0.1).
 """
@@ -110,6 +110,20 @@ def app_of(agent: str) -> str:
     return str(agent or "").strip().split("/")[0].split(" ")[0][:40] or "unknown"
 
 
+def _ours() -> dict[str, str]:
+    """{address: name} of the servers of this panel: behind a tunnel the node sees the Iran entrance server's address, not the customer's."""
+    try:
+        from sqlalchemy import select
+
+        from ..db import session
+        from ..models import Server
+
+        with session() as db:
+            return {s.host: s.name for s in db.scalars(select(Server))}
+    except Exception:                                        # noqa: BLE001 - the report works without the names of our servers
+        return {}
+
+
 def judge(f: dict) -> list[dict]:
     """The findings about one user, worst first: {level ok/info/warn/bad, code, title, detail, data}. `f` = {user: {status, used, limit, hwid_limit, age_days}, hours, days [{t, bytes}], devices
     [{last}], fetches [{agent, ip}], by_node_30d [{name, bytes, share}], now}."""
@@ -141,6 +155,17 @@ def judge(f: dict) -> list[dict]:
 
     if fetches and not ips:
         out.append(_f("info", "fetch_hidden", "The address of the fetches is not visible", "The panel sits behind a proxy, so every fetch shows 127.0.0.1: the customer's address and country cannot be told from it."))
+
+    # connected right now
+    live = f.get("online") or []
+    others = {x["ip"] for x in live if not x.get("ours")}
+    entry = sorted({x["ours"] for x in live if x.get("ours")})
+
+    if len(others) >= MANY:
+        out.append(_f("warn", "live_ips", f"Connected from {len(others)} different addresses right now", "One customer is rarely on three networks at the same moment: the link is probably shared.", count=len(others)))
+
+    if entry:
+        out.append(_f("info", "live_tunnel", "Connected right now through our server " + ", ".join(entry), "That address is our entrance server's, not the customer's: the customer's own address is not visible on a tunnel config.", servers=entry))
 
     # usage pattern
     total48 = sum(h["bytes"] for h in hours)
@@ -232,6 +257,9 @@ def customer_text(user: dict, findings: list[dict]) -> str:
     if "fetch_ips" in by or "fetch_apps" in by:
         lines.append("لینک اشتراک از چند شبکه یا برنامهٔ مختلف دریافت شده است؛ اگر لینک را به کسی داده‌اید، پیشنهاد می‌شود لینک جدید بگیرید.")
 
+    if "live_ips" in by:
+        lines.append(f"همین الان از {by['live_ips']['count']} آی‌پی مختلف به این اشتراک وصل شده‌اند؛ اگر لینک را به کسی داده‌اید، پیشنهاد می‌شود لینک جدید بگیرید.")
+
     if "node" in by:
         lines.append(f"بیشتر ترافیک ({round(by['node']['share'] * 100)}٪) از سرور {by['node']['node']} رد شده است.")
 
@@ -299,6 +327,10 @@ def investigate(c: dict, username: str, now: dt.datetime | None = None) -> dict:
 
     try:
         online = pg_users.online_ips(c, username)["online"]
+        ours = _ours()
+
+        for row in online:
+            row["ours"] = ours.get(row["ip"], "")
     except (PanelError, ValueError):
         online = []
 
@@ -306,7 +338,7 @@ def investigate(c: dict, username: str, now: dt.datetime | None = None) -> dict:
     user = {"username": u["username"], "status": u["status"], "admin": u["admin"], "created_at": u["created_at"], "online_at": u["online_at"], "used": used, "limit": limit,
             "pct": round(used * 100 / limit) if limit else None, "left": max(0, limit - used) if limit else None, "expire_day": u["expire_day"], "hwid_limit": u["hwid_limit"],
             "reset": u["reset"], "age_days": age_days, "per_day": round(used / max(age_days, 1 / 24) / GB, 2) if used else 0.0}
-    findings = judge({"user": user, "hours": hours, "days": days, "devices": devs, "fetches": fetch, "by_node_30d": by30, "now": now})
+    findings = judge({"user": user, "hours": hours, "days": days, "devices": devs, "fetches": fetch, "by_node_30d": by30, "online": online, "now": now})
     ips = {x["ip"] for x in fetch if x.get("ip") not in LOCAL_IPS}
     b = busiest(hours)
 
@@ -315,5 +347,5 @@ def investigate(c: dict, username: str, now: dt.datetime | None = None) -> dict:
             "devices": {"limit": u["hwid_limit"] or DEFAULT_DEVICES, "own_limit": u["hwid_limit"], "count": len(devs), "rows": devs},
             "fetches": {"rows": fetch[:SHOWN_FETCHES], "read": len(fetch), "count": fetch_total, "addresses": len(ips), "apps": len({app_of(x.get("agent")) for x in fetch if x.get("agent")}), "hidden": bool(fetch) and not ips},
             "online": online, "findings": findings, "verdict": verdict(findings), "text": customer_text(user, findings), "notes": notes, "at": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
-            "limits": ["The panel keeps no history of connection addresses: only the ones online right now are listed.",
+            "limits": ["The panel keeps no history of connection addresses: only the ones seen in the last minutes are listed.",
                        "On a tunnel config the node sees the entrance server's address, not the customer's. A direct config and a subscription fetch can show the real one."]}

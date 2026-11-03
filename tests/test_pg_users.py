@@ -354,7 +354,7 @@ def test_the_last_fetches_of_the_subscription(fake):
 
 def test_where_a_user_is_connected_from_now(fake):
     o = pg_users.online_ips(C, "alice")
-    assert o["count"] == 3 and {"node": "frankfurt", "ip": "192.0.2.4", "connections": 2} in o["online"] and {"node": "9", "ip": "192.0.2.99", "connections": 1} in o["online"]
+    assert o["count"] == 3 and {"node": "frankfurt", "ip": "192.0.2.4", "connections": 2, "last_seen": None} in o["online"] and {"node": "9", "ip": "192.0.2.99", "connections": 1, "last_seen": None} in o["online"]
 
 
 # ------------------------------------------------------------------ one user

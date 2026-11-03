@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.69.192 - Investigate and the Online list: the live addresses show when they were seen, and a shared link shows up
+
+> **In short:** phase 2 of the owner's request (2026-11-03, "show which IPs he connected with"). Found on the panel host, outside this repo: (1) every fetch of a subscription was logged with the address 127.0.0.1 (PasarGuard ignored the proxy header, and the translator did not pass the customer's address on from behind Cloudflare) - fixed there; (2) the list of the addresses a user is connected from was always empty because the core config had no `policy.levels.0.statsUserOnline` - added to the core. In the panel: `GET .../pg/user/{u}/online` gave the unix time of each address as a "connections" count; it now returns `last_seen` too and the two tables show "Last seen". The Investigate report marks an address that is one of our own servers (a tunnel config shows the entrance server, not the customer) and warns when a user is connected from 3 or more different addresses at the same moment.
+>
+> **به زبان ساده:** آدرس واقعی مشتری حالا در گزارش دفعات گرفتن اشتراک ثبت می‌شود (قبلاً همه ۱۲۷.۰.۰.۱ بود) و لیست آی‌پی‌های متصل در همین لحظه کار می‌کند. در پنل، این لیست زمان آخرین دیده‌شدن را نشان می‌دهد (نه «تعداد»)، و گزارش Investigate آی‌پی‌هایی را که سرور خودمان هستند علامت می‌زند و اگر کسی در یک لحظه از ۳ آی‌پی مختلف وصل باشد هشدار می‌دهد.
+
+- **Where**
+  - `services/pg_users.py` `online_ips`: PasarGuard answers `{ip: unix time last seen}`; the row has `last_seen` (and `connections` 1; an older answer with a count keeps the count). `web/pg_users.js`: the "Online now" table and the Investigate table show the time ("Last seen").
+  - `services/pg_investigate.py`: `_ours()` (addresses of our servers from the Servers table), findings `live_ips` (3+ different addresses at once) and `live_tunnel` (connected through one of our entrance servers), a line for the customer message.
+- **Done on the panel host (not in the repo):** `/root/subproxy/subproxy.py` sends one real address in `X-Forwarded-For` (CF-Connecting-IP believed only from a Cloudflare edge); `UVICORN_PROXY_HEADERS = True` in the panel's `.env` (only from 127.0.0.1); `policy.levels.0.statsUserOnline = true` in core 1, every node reconnected one at a time. Checked with real fetches (the log shows the real address behind Cloudflare and on the direct name) and with a held-open connection on a Turkish and a German node (the live list shows it).
+- **Not done on purpose:** the translator drops the device headers (`x-hwid`, `x-device-os`, `x-ver-os`, `x-device-model`) of the apps, so subscription fetches through it never register a device; forwarding them would start enforcing the device limit for real, which is the owner's call.
+- **Proved:** `tests/test_pg_investigate.py` (3 new tests), `tests/test_pg_users.py` (the changed row), ruff, `node --check`.
+- **Not proved:** the panel's update through the Update button; the "Online now" table with several real users at once.
+
 ## 1.69.191 - Investigate: why a customer's data went fast
 
 > **In short:** the owner (2026-11-03): "a plan for a customer who says his data ended quickly or is consumed by itself: I enter his username in the panel and it shows which IPs he connected with, how much he used, and all the details." The user window of a PasarGuard panel has a new **Investigate** button: usage by hour (Tehran time) and by server, the devices against their limit, the last fetches of the subscription, the addresses connected right now, a plain verdict and a short message for the customer. It only reads.

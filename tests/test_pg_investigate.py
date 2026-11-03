@@ -121,3 +121,39 @@ def test_investigate_reads_the_panel_and_leaves_out_what_it_cannot_read(monkeypa
     assert r["online"] == [] and r["fetches"]["hidden"] is True and r["fetches"]["count"] == 9
     assert r["usage"]["by_node_48h"][0]["name"] == "iran-a" and r["usage"]["total_48h"] == 3 * GB
     assert any(x["code"] == "devices_over" for x in r["findings"]) and r["verdict"]["level"] == "warn" and r["text"] and r["notes"] == []
+
+
+def test_the_live_addresses_are_read_as_last_seen_times(monkeypatch):
+    monkeypatch.setattr(pg_users, "_id_of", lambda c, n: 7)
+    answers = {"/api/node/online_stats/7/ip": {"nodes": {"17": {"ips": {"192.0.2.5": 1793664233, "192.0.2.6": 1793664251}}, "18": {"192.0.2.7": 3}}}, "/api/nodes/simple?all=true": {"nodes": [{"id": 17, "name": "iran-a"}]}}
+    monkeypatch.setattr(pg_users, "_call", lambda c, m, p, *a, **k: answers[p])
+    rows = pg_users.online_ips({"id": 1}, "demo-1")["online"]
+    assert {"node": "iran-a", "ip": "192.0.2.5", "connections": 1, "last_seen": 1793664233} in rows
+    assert {"node": "18", "ip": "192.0.2.7", "connections": 3, "last_seen": None} in rows          # an older answer with a count keeps the count
+
+
+def test_live_addresses_flag_a_shared_link_and_name_the_entrance_server():
+    live = [{"node": "n", "ip": f"192.0.2.{i}", "ours": "", "last_seen": 1} for i in range(10, 13)]
+    got = _codes({"user": _user(), "now": NOW, "online": live})
+    assert "live_ips" in got and "live_tunnel" not in got
+    via = [{"node": "n", "ip": "198.51.100.9", "ours": "iran-a", "last_seen": 1}] * 3                    # three connections of one entrance server are ONE address
+    got = _codes({"user": _user(), "now": NOW, "online": via})
+    assert "live_tunnel" in got and "live_ips" not in got
+    text = inv.customer_text({"username": "demo-1", "used": GB, "limit": 0}, inv.judge({"user": _user(), "now": NOW, "online": live}))
+    assert "3 آی‌پی" in text and "192.0.2" not in text
+
+
+def test_investigate_marks_the_addresses_that_are_our_own_servers(monkeypatch):
+    raw = {"id": 7, "username": "demo-1", "status": "active", "used_traffic": GB, "data_limit": 50 * GB, "created_at": "2026-10-30T10:00:00Z", "online_at": None, "hwid_limit": None}
+    monkeypatch.setattr(pg_users, "_id_of", lambda c, n: 7)
+    monkeypatch.setattr(pg_users, "_call", lambda c, m, p, *a, **k: raw)
+    monkeypatch.setattr(pg_usage, "node_names", lambda c: {})
+    monkeypatch.setattr(pg_usage, "_get", lambda c, path, t=30: {"stats": {}})
+    monkeypatch.setattr(pg_usage, "user_usage", lambda c, n, p, **k: {"series": [], "by_node": []})
+    monkeypatch.setattr(pg_users, "devices", lambda c, n: {"devices": [], "count": 0})
+    monkeypatch.setattr(pg_users, "sub_updates", lambda c, n, o=0, l=10: {"updates": [], "count": 0})
+    monkeypatch.setattr(pg_users, "online_ips", lambda c, n: {"online": [{"node": "n", "ip": "198.51.100.9", "connections": 1, "last_seen": 5}, {"node": "n", "ip": "203.0.113.4", "connections": 1, "last_seen": 6}], "count": 2})
+    monkeypatch.setattr(inv, "_ours", lambda: {"198.51.100.9": "iran-a"})
+    r = inv.investigate({"id": 1, "type": "pasarguard"}, "demo-1", now=NOW)
+    assert [(x["ip"], x["ours"]) for x in r["online"]] == [("198.51.100.9", "iran-a"), ("203.0.113.4", "")]
+    assert any(x["code"] == "live_tunnel" for x in r["findings"])

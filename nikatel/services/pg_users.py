@@ -307,7 +307,8 @@ def sub_updates(c: dict, username: str, offset: int = 0, limit: int = 10) -> dic
 
 
 def online_ips(c: dict, username: str) -> dict:
-    """Where a user is connected from right now, on every node: [{node, ip, connections}] (the node by its name when the panel gives it)."""
+    """Where a user is connected from right now, on every node: [{node, ip, connections, last_seen}] (the node by its name when the panel gives it). PasarGuard answers {ip: unix time it was last seen} -
+    `last_seen` - and only once the core has `policy.levels.0.statsUserOnline` (without it the list is always empty); an older answer with a count per address keeps `connections`."""
     uid = _id_of(c, username)
     r = _dict(_call(c, "GET", f"/api/node/online_stats/{uid}/ip"))
 
@@ -323,7 +324,9 @@ def online_ips(c: dict, username: str) -> dict:
 
         for ip, n in (ips.items() if isinstance(ips, dict) else []):
             nid = int(node) if str(node).isdigit() else node
-            rows.append({"node": names.get(nid) or str(node), "ip": str(ip), "connections": n if isinstance(n, int) and not isinstance(n, bool) else 1})
+            num = n if isinstance(n, int) and not isinstance(n, bool) else None
+            seen = num if num is not None and num > 1_000_000_000 else None
+            rows.append({"node": names.get(nid) or str(node), "ip": str(ip), "connections": num if num is not None and seen is None else 1, "last_seen": seen})
 
     return {"online": rows, "count": len(rows)}
 
