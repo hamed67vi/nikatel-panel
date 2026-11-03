@@ -157,3 +157,15 @@ def test_investigate_marks_the_addresses_that_are_our_own_servers(monkeypatch):
     r = inv.investigate({"id": 1, "type": "pasarguard"}, "demo-1", now=NOW)
     assert [(x["ip"], x["ours"]) for x in r["online"]] == [("198.51.100.9", "iran-a"), ("203.0.113.4", "")]
     assert any(x["code"] == "live_tunnel" for x in r["findings"])
+
+
+def test_cloudflare_edge_addresses_are_not_the_customer():
+    edge = [str(n.network_address + 7) for n in inv.CF_NETS if n.version == 4]
+    assert len(edge) == 15 and all(inv.is_cf(x) for x in edge) and inv.is_cf("2606:4700::1") and not inv.is_cf("203.0.113.9") and not inv.is_cf("not an address") and not inv.is_cf("")
+    edges = [{"agent": "", "ip": ip} for ip in edge[:4]]
+    got = _codes({"user": _user(), "now": NOW, "fetches": edges})
+    assert "fetch_ips" not in got and "fetch_hidden" in got                                               # four different edges are not four customers
+    mixed = edges + [{"agent": "appone/1", "ip": "203.0.113.9"}]
+    assert "fetch_hidden" not in _codes({"user": _user(), "now": NOW, "fetches": mixed})                    # one real address among them: the address is known
+    live = [{"node": "n", "ip": edge[i], "ours": "", "cf": True, "last_seen": 1} for i in range(4)]
+    assert "live_ips" not in _codes({"user": _user(), "now": NOW, "online": live})                          # a CDN config: the node sees the CDN's addresses

@@ -10,6 +10,7 @@ The judging is a pure function (`judge`) so its rules are tested without a panel
 from __future__ import annotations
 
 import datetime as dt
+import ipaddress
 import statistics
 
 from . import pg_usage, pg_users
@@ -33,9 +34,25 @@ NODE_MIN = 5 * GB
 MANY = 3                                 # different addresses or apps that fetched the link
 LOCAL_IPS = {"", "127.0.0.1", "::1", "localhost"}
 LEVELS = {"ok": 0, "info": 1, "warn": 2, "bad": 3}
+# Cloudflare's edge ranges (https://www.cloudflare.com/ips-v4 and ips-v6, read 2026-11-03): a request that came through Cloudflare without the customer's address (a worker, a health check, an app that
+# is itself behind Cloudflare) is recorded with an edge address that changes from request to request - it is not the customer and must not count as "another address". The IPv4 ranges are written as
+# (network address as a number, prefix length) because the repository is public and its secrets check refuses a public address written the usual way.
+_CF4 = ((0xADF53000, 20), (0x6715F400, 22), (0x6716C800, 22), (0x671F0400, 22), (0x8D654000, 18), (0x6CA2C000, 18), (0xBE5DF000, 20), (0xBC726000, 20), (0xC5EAF000, 22), (0xC6298000, 17), (0xA29E0000, 15), (0x68100000, 13), (0x68180000, 14), (0xAC400000, 13), (0x83004800, 22))
+_CF6 = ("2400:cb00::/32", "2606:4700::/32", "2803:f800::/32", "2405:b500::/32", "2405:8100::/32", "2a06:98c0::/29", "2c0f:f248::/32")
+CF_NETS = [ipaddress.ip_network((ipaddress.IPv4Address(a), n)) for a, n in _CF4] + [ipaddress.ip_network(n) for n in _CF6]
 
 
 # ------------------------------------------------------------------ pure pieces
+def is_cf(ip) -> bool:
+    """True when the address is one of Cloudflare's edge addresses."""
+    try:
+        a = ipaddress.ip_address(str(ip or "").strip())
+    except ValueError:
+        return False
+
+    return any(n.version == a.version and a in n for n in CF_NETS)
+
+
 def _gb(n) -> float:
     return round((n or 0) / GB, 2)
 
@@ -144,7 +161,7 @@ def judge(f: dict) -> list[dict]:
         out.append(_f("info", "devices_active", f"{len(recent)} devices were active in the last 2 days", "Each device uses data on its own: check that they are all the customer's.", count=len(recent)))
 
     # subscription fetches
-    ips = {x.get("ip") for x in fetches if x.get("ip") not in LOCAL_IPS}
+    ips = {x.get("ip") for x in fetches if x.get("ip") not in LOCAL_IPS and not is_cf(x.get("ip"))}
     apps = {app_of(x.get("agent")) for x in fetches if x.get("agent")}
 
     if len(ips) >= MANY:
@@ -154,11 +171,11 @@ def judge(f: dict) -> list[dict]:
         out.append(_f("warn", "fetch_apps", f"{len(apps)} different apps fetched the link", "More than a couple of different apps fetching the same link is a sign it is shared: " + ", ".join(sorted(apps)[:6]) + ".", count=len(apps)))
 
     if fetches and not ips:
-        out.append(_f("info", "fetch_hidden", "The address of the fetches is not visible", "The panel sits behind a proxy, so every fetch shows 127.0.0.1: the customer's address and country cannot be told from it."))
+        out.append(_f("info", "fetch_hidden", "The address of the fetches is not the customer's", "The fetches are recorded with the proxy's own address (127.0.0.1) or one of Cloudflare's: the customer's address and country cannot be told from them."))
 
     # connected right now
     live = f.get("online") or []
-    others = {x["ip"] for x in live if not x.get("ours")}
+    others = {x["ip"] for x in live if not x.get("ours") and not is_cf(x["ip"])}
     entry = sorted({x["ours"] for x in live if x.get("ours")})
 
     if len(others) >= MANY:
@@ -331,6 +348,7 @@ def investigate(c: dict, username: str, now: dt.datetime | None = None) -> dict:
 
         for row in online:
             row["ours"] = ours.get(row["ip"], "")
+            row["cf"] = is_cf(row["ip"])
     except (PanelError, ValueError):
         online = []
 
@@ -339,7 +357,11 @@ def investigate(c: dict, username: str, now: dt.datetime | None = None) -> dict:
             "pct": round(used * 100 / limit) if limit else None, "left": max(0, limit - used) if limit else None, "expire_day": u["expire_day"], "hwid_limit": u["hwid_limit"],
             "reset": u["reset"], "age_days": age_days, "per_day": round(used / max(age_days, 1 / 24) / GB, 2) if used else 0.0}
     findings = judge({"user": user, "hours": hours, "days": days, "devices": devs, "fetches": fetch, "by_node_30d": by30, "online": online, "now": now})
-    ips = {x["ip"] for x in fetch if x.get("ip") not in LOCAL_IPS}
+    for x in fetch:
+        x["local"] = x.get("ip") in LOCAL_IPS
+        x["cf"] = is_cf(x.get("ip"))
+
+    ips = {x["ip"] for x in fetch if not x["local"] and not x["cf"]}
     b = busiest(hours)
 
     return {"user": user, "usage": {"hours": [{k: h[k] for k in ("local", "hour", "bytes", "node")} for h in hours], "days": days, "by_node_48h": by48[:8], "by_node_30d": by30[:8],
