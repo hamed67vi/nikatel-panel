@@ -606,6 +606,11 @@ def test_the_card_has_the_switch_under_the_two_buttons_the_job_is_registered_and
     assert "Update automatically every night at ${hh}:00 (Iran time)" in js and 'pgSw(!!au.auto, "pgUpdAuto(this.checked)"' in js and "return hero + go + autoRow;" in js and '<div class="eng-auto pgu-auto">' in js
     assert "window.pgUpdAuto = async on =>" in js and 'api("/api/pg-updates/auto", {method: "POST", body: JSON.stringify({enabled: !!on})})' in js
     assert "window.pgUpdRehearse = async () =>" in js and 'api("/api/pg-updates/auto/rehearse", {method: "POST"})' in js and "Rehearse tonight's run" in js and "Held back: " in js
+    # the row is ONE line: the title, a small (i) that opens the explanation and the rehearsal, the switch - no paragraph on the card (the owner, 2026-11-04)
+    assert '(Iran time)<i class="pgu-i" role="button" tabindex="0" title="${esc(pgUpdAutoTip(au))}" onclick="pgUpdAutoInfo()"' in js and "window.pgUpdAutoInfo = () =>" in js and 'onclick="closeModal(); pgUpdRehearse()"' in js
+    assert '<small class="mut">The nodes one at a time' not in js and "What a night does" in js
+    css = (WEB / "lab.css").read_text(encoding="utf-8")
+    assert "html body #page .abt-pg .pgu-i { display: inline-grid;" in css and "margin-left: 6px; vertical-align: -2px;" in css      # (inline after the last word of the title, so it follows the text when the title wraps)
     src = (Path(__file__).resolve().parent.parent / "nikatel" / "main.py").read_text(encoding="utf-8")
     assert 'jobs.register("pg-auto", 300, pg_auto.run)' in src
     assert cfg.DEFAULTS["pg_auto"] == {"auto": False, "hour": 3, "budget_minutes": 60, "bad": {}, "last": {}}

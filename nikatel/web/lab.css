@@ -1387,3 +1387,8 @@ html body #page .rv-less .rv-why { flex: 1 1 100%; font-size: 11.5px; line-heigh
 textarea.rv-report { width: 100%; box-sizing: border-box; font: 11.5px/1.45 ui-monospace, Menlo, Consolas, monospace; }
 html[data-mode="light"] body #page .rv-row, html[data-mode="light"] body #page .rv-less { background: #fff; }
 html[data-mode="light"] body #page .rv-m, html[data-mode="light"] body #page .rv-fl li.warn { color: #9a6700; } html[data-mode="light"] body #page .rv-fl li.bad { color: #b4232f; }
+
+/* 1.69.199 - the nightly switch of the PasarGuard card is ONE line: the title with a small round (i) after its last word (it opens the explanation and the rehearsal), the switch; the status lines (held back, last night) only when there are any (the owner, 2026-11-04, with a picture of the row: "remove these extra explanations and put a neat little i in a corner instead") */
+html body #page .abt-pg .pgu-i { display: inline-grid; place-items: center; box-sizing: border-box; width: 16px; height: 16px; margin-left: 6px; vertical-align: -2px; border-radius: 50%; border: 1px solid var(--uk-line); background: #1a2036; color: #8f9bbd; font-size: 10.5px; font-weight: 650; font-style: normal; line-height: 1; cursor: pointer; user-select: none; }
+html body #page .abt-pg .pgu-i:hover, html body #page .abt-pg .pgu-i:focus-visible { color: var(--uk-text); border-color: #4a5a8a; outline: none; }
+html[data-mode="light"] body #page .abt-pg .pgu-i { background: #f3f6fc; border-color: rgba(30, 50, 100, .2); color: #5b6888; }
