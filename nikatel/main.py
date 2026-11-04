@@ -52,6 +52,7 @@ from .services import (
     pg_watch,
     probe,
     pulse,
+    purpose,
     report,
     sentinel,
     standby,
@@ -219,6 +220,7 @@ def _register_jobs() -> None:
     jobs.register("carry", carry.EVERY, carry.run)                  # the Doctor asks every port of every tunnel that is up whether it really CARRIES a connection, every 3 minutes, one light command per Iran server; a port that does not (and whose service answers) is repaired by itself: restart, rebuild, another Iran server (services/carry.py)
     jobs.register("test-users", 1800, panels.keep_test_users)       # the test user of the probe on every panel is kept fit (no quota, not expired): without it every full test of every config fails (1.69.215)
     jobs.register("subscriptions", 6 * 3600, configs.sync_all_subscriptions)       # every group follows its saved subscription: new configs come under the probe by themselves (1.69.215)
+    jobs.register("purpose", purpose.EVERY, purpose.run)       # every tunnel says what it is for: the hosts of the economy (ECO) and AI configs are placed on the tunnels they end on (1.69.216)
     jobs.register("janitor", janitor.EVERY, janitor.run)              # the Doctor sweeps duplicate tunnels: two that go to the same foreign server with the same ports - the quiet one nobody is tied to goes to Recently removed (services/janitor.py)
     jobs.register("pg-auto", 300, pg_auto.run)                   # the PasarGuard panel and its nodes updated by themselves once a night (03:00 Tehran by default), when the owner switched it on (services/pg_auto.py): the Safe update with a time budget, the users looked at after every node, the panel kept and put back when it does not hold
     jobs.register("outbound", 180, outbound.check)              # what the outbound pool looks like from each Iran server that carries it (read-only: curl through every exit); nothing runs while no Iran server is chosen

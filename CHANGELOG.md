@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.69.216 - Tunnels that carry an economy (ECO) or an AI config say so on their row
+
+Owner (2026-11-04, Persian), looking at two tunnels of one foreign server (the Netherlands, from two different Iran servers, with different ports) and asking why there were two again: "the tunnels that are for eco or AI - write it on them".
+
+- **They were not duplicates**: one carried the ordinary Netherlands config (the ports of its WS, SS and TLS entries), the other the economy Netherlands config (one TLS entry, port 11443). The duplicate sweeper of 1.69.212 and the warning sign of the list already look at the SAME Iran server, the SAME foreign server and the SAME ports; a foreign server that ends several tunnels is normal. What was missing was the word.
+- **New job `purpose` (every ten minutes, `services/purpose.py`).** The hosts of every PasarGuard panel are placed on the tunnels they end on the way the probe's configs are (`userq.map_configs`: the address of the host - an Iran server, or a name whose A record points at one - and its port against the ports a tunnel forwards), and each tunnel keeps the purposes of its hosts in its record (`purpose`): **eco** for a host whose address starts with `eco` or whose remark carries the traffic coefficient (`ضریب`), **ai** for an address that starts with `ai-` or a remark that names an AI config (`AI-1`, `AI-2`). Nothing is guessed - a host that cannot be placed for sure labels nothing, and a look that reads no host or no DNS record changes nothing; the key goes when a tunnel has none any more.
+- **The Tunnels page** writes a small `ECO` (amber) or `AI` (violet) chip next to the tunnel's name, with a tooltip; a tunnel that carries both shows both.
+- Tests `tests/test_purpose.py` (6): eco / ai / nothing from remark and address, the purposes of the hosts that end on each tunnel, nothing is guessed (unplaced, disabled, no port, no address), both on one tunnel, the labels are written / changed / taken away without touching the rest of the record, the page wires the chip next to the name. Not seen on the live panel yet: the first run of the job.
+
 ## 1.69.215 - An Iran server that is off is replaced in about a minute; the Doctor sees the real configs again: the probe's test user is kept fit, the groups follow their subscriptions, jumps are judged
 
 Owner (2026-11-04, Persian): "check every config's whole path, its tunnel and its server precisely and fix what is wrong - I want us flawless; teach the Doctor to always measure the quality; in every scenario, any kind of cut must be solved faster - the Doctor must know at once that something is cut or disturbed; when it sees a server is off it must replace that server at once".
