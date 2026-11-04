@@ -26,6 +26,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
     # the tunnel cores (services/engines.py): `auto` = the Doctor keeps them up to date by itself (off until the owner switches it on), `hour` = the local hour it starts (panel clock), `bad` = {core: version} that did
     # not hold on a server and was put back (never tried again by itself), `last` = what the last automatic run did
     "janitor": {"done": [], "pointed": {}},                      # (pointed: when the DNS names of a second copy were moved to the keeper, per tunnel id)
+    "retypewatch": {"watch": {}},                                 # the notes of the changes of type the Doctor watches the users after (services/retypewatch.py)
     "orphans": {"seen": {}, "done": []},                          # the Doctor's sweep of leftovers (services/orphans.py): when a unit was first seen unowned and idle, and when it removed one
                                      # when the Doctor last removed an extra copy of a tunnel (services/janitor.py: one every half hour, three a day)
     "engines": {"paused": False, "hour": 5, "bad": {}, "last": {}},

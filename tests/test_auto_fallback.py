@@ -22,14 +22,15 @@ def _pair(kinds, now=NOW):
     return {"kinds": {k: {"full": {"score": v[2], "down_mbps": v[0], "loss_pct": v[1], "latency_ms": v[3] if len(v) > 3 else 80.0, "at": now - 86400}, "last": {"ok": True, "at": now - 86400}} for k, v in kinds.items()}}
 
 
-def test_a_better_type_is_one_that_carried_three_times_as_much_and_100_mbps_more_and_was_stable():
+def test_a_better_type_is_one_that_carried_one_and_a_half_times_as_much_and_50_mbps_more_and_was_stable():
     p = _pair({"tcpmux": (160, 0, 62), "bp:tcpmux": (1293, 0, 95), "tcp": (2218, 0, 94), "bp:wssmux": (1059, 4, 94), "wsmux": (300, 0, 60), "chisel:tls": (700, 0, 50, 230)})
     rows = knowledge.upgrade_kinds(p, NOW, "tcpmux")
-    assert [r["kind"] for r in rows] == ["tcp", "bp:tcpmux"]                      # (the fastest first; 1059 lost 4 %: not stable; 300 is not 3 times; chisel scored worse than the running type)
+    assert [r["kind"] for r in rows] == ["tcp", "bp:tcpmux", "wsmux"]            # (the fastest first; 1059 lost 4 %: not stable; 300 is 1.9 times and 140 Mb/s more: better since 1.69.220; chisel scored worse than the running type)
     assert knowledge.upgrade_kinds(p, NOW, "tcpmux", allowed=lambda k: k != "tcp")[0]["kind"] == "bp:tcpmux"
     assert knowledge.upgrade_kinds(p, NOW, "tcp") == []                           # (the best one has nothing better)
     assert knowledge.upgrade_kinds(p, NOW, "paqet") == []                         # (the running type was never measured on this pair: nothing to compare with)
-    assert knowledge.upgrade_kinds(_pair({"tcpmux": (40, 0, 60), "tcp": (110, 0, 70)}), NOW, "tcpmux") == []      # (110 is 2.75 times and only 70 Mb/s more)
+    assert knowledge.upgrade_kinds(_pair({"tcpmux": (40, 0, 60), "tcp": (80, 0, 70)}), NOW, "tcpmux") == []      # (80 is twice and only 40 Mb/s more)
+    assert [r["kind"] for r in knowledge.upgrade_kinds(_pair({"tcpmux": (40, 0, 60), "tcp": (110, 0, 70)}), NOW, "tcpmux")] == ["tcp"]      # (110 is 2.75 times and 70 Mb/s more)
     assert knowledge.upgrade_kinds(p, NOW + 20 * 86400, "tcpmux") == []           # (a number of three weeks ago says little about today's route)
 
 

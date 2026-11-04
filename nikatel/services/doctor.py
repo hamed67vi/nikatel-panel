@@ -352,10 +352,10 @@ def apply_suggestion(sid: str) -> int:
 
 
 # ------------------------------------------------------------------ a change of the tunnel's type (a "type" suggestion applied)
-def _run_retype(aid: int, tunnel_id: int, kind: str, was: str, why: str, auto: bool = False) -> None:
+def _run_retype(aid: int, tunnel_id: int, kind: str, was: str, why: str, auto: bool = False, revert: bool = False) -> None:
     """The tunnel is built again as `kind` (same name, same ports), the old type is put back when the new one does not build; then it is measured again, and what it gave is told next to what it gave before."""
     from ..ssh import SSHError
-    from . import bandwidth, knowledge
+    from . import bandwidth, knowledge, retypewatch
 
     snap = autopilot._snapshot(tunnel_id)
     cur = autopilot.kind_of(snap["type"], snap["transport"], snap["record"])
@@ -376,7 +376,7 @@ def _run_retype(aid: int, tunnel_id: int, kind: str, was: str, why: str, auto: b
     if auto:                                                                  # (1.69.78: the Doctor's own change never cuts the users - the new type is built BESIDE the old one, the users go over, the old one is removed last: services/swap.py)
         from . import swap
 
-        swap.beside(aid, snap, kind, why, before)
+        swap.beside(aid, snap, kind, why, before, revert)
         return
 
     say(f"{snap['name']}: changing the type {cur} → {kind}. {why}")
@@ -386,11 +386,13 @@ def _run_retype(aid: int, tunnel_id: int, kind: str, was: str, why: str, auto: b
         return
 
     started = int(time.time())
+    pre = retypewatch.snapshot(tunnel_id, started)
 
     if not autopilot._replace(aid, tunnel_id, snap["iran_id"], snap["foreign_id"], kind, "The Doctor suggested it and you asked for it.", snap=snap):
         say(f"The build of {kind} failed; {cur} was put back.", done=True, ok=False)
         return
 
+    retypewatch.begin(snap["name"], cur, kind, pre)          # (1.69.220: the users are watched after a change the owner asked for, too)
     autopilot.taught(snap, kind, started)                             # (a change the owner asked for while the tunnel had dropped is kept in the Doctor's memory, like its own swap)
 
     after, down = "", None

@@ -183,7 +183,7 @@ def _remember(snap: dict, kind: str, healed: bool) -> None:
 
 
 # ------------------------------------------------------------------ the story
-def beside(aid: int, snap: dict, kind: str, why: str, before: float) -> None:
+def beside(aid: int, snap: dict, kind: str, why: str, before: float, revert: bool = False) -> None:
     """Change the type of the tunnel in `snap` to `kind` without a cut (see the module's text). `why`: the sentence of the change; `before`: what the tunnel gives now (Mb/s)."""
     from . import autopilot, standby
 
@@ -196,7 +196,7 @@ def beside(aid: int, snap: dict, kind: str, why: str, before: float) -> None:
         say("The panel is read-only: nothing is changed.", done=True, ok=False)
         return
 
-    if now - _TRIED.get(name, 0) < RETRY_GAP:
+    if not revert and now - _TRIED.get(name, 0) < RETRY_GAP:
         say(f"A swap of {name} was tried {(now - _TRIED[name]) // 60} minutes ago and did not finish: it is not tried again before {RETRY_GAP // 3600} hours have passed.", done=True, ok=False)
         return
 
@@ -223,10 +223,13 @@ def beside(aid: int, snap: dict, kind: str, why: str, before: float) -> None:
 
     _TRIED[name] = now
     say(f"{name}: changing the type {cur} → {kind} WITHOUT a cut - {kind} is built beside {cur}, the users go over to it, and {cur} is removed last. {why}")
+    from . import retypewatch
+
+    pre = retypewatch.snapshot(snap["id"], now)          # (the use of the tunnel and of the fleet BEFORE the change: the watch after it compares with these)
     was = standby.borrow_mark(name)
 
     try:
-        _work(aid, snap, cur, kind, why, before, say)
+        _work(aid, snap, cur, kind, why, before, say, revert, pre)
     finally:
         standby.unwant(name)
 
@@ -235,8 +238,16 @@ def beside(aid: int, snap: dict, kind: str, why: str, before: float) -> None:
             standby.return_mark(name, was)
 
 
-def _work(aid: int, snap: dict, cur: str, kind: str, why: str, before: float, say) -> None:
-    from . import autopilot, bandwidth, doctor, failover, knowledge, standby
+def _work(aid: int, snap: dict, cur: str, kind: str, why: str, before: float, say, revert: bool = False, pre: dict | None = None) -> None:
+    from . import (
+        autopilot,
+        bandwidth,
+        doctor,
+        failover,
+        knowledge,
+        retypewatch,
+        standby,
+    )
 
     name = snap["name"]
     s = standby._view(name)["s"]
@@ -277,7 +288,7 @@ def _work(aid: int, snap: dict, cur: str, kind: str, why: str, before: float, sa
         say(f"The new tunnel could not be measured ({str(e)[:120]}): the users stay on {cur}.", done=True, ok=False)
         return
 
-    bad = confirm_ok(down, before)
+    bad = "" if revert else confirm_ok(down, before)          # (a change BACK to the old type does not have to be faster than the one the users left)
 
     if bad:
         say(f"{kind} is up beside {cur}, but {bad}: the users stay on {cur}.", done=True, ok=False)
@@ -331,6 +342,9 @@ def _work(aid: int, snap: dict, cur: str, kind: str, why: str, before: float, sa
 
         say(f"{name} is quiet: it is built again as {kind} while the users stand on {kind} beside it.")
         ok = autopilot._replace(aid, snap["id"], snap["iran_id"], snap["foreign_id"], kind, "Swap beside the tunnel: the old type dropped.", snap=snap)
+
+        if ok and not revert:
+            retypewatch.begin(name, cur, kind, pre)          # (the users are watched after the change: they leave a type they dislike)
     finally:
         if not state["back"]:
             back("swap beside: the tunnel is built again" if ok else "swap beside: ended")

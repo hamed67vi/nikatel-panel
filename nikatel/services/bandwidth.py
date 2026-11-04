@@ -992,6 +992,7 @@ def _cuts_lately(tunnel_id: int, now: int, hours: int = 24) -> int:
 
 UPGRADE_EVERY = 6 * 3600         # a tunnel is looked at for a better type this often (the look reads the Doctor's memory only: no server is asked)
 _UPGRADE_AT: dict[int, int] = {}
+UPGRADE_FLEET_GAP = 3600          # (1.69.220) one change of type of a working tunnel an hour for the whole panel: an upgrade that goes wrong must not go wrong everywhere at once
 
 
 def _upgrade_check(tunnel_id: int) -> None:
@@ -1020,6 +1021,9 @@ def _upgrade_check(tunnel_id: int) -> None:
         return
 
     if doctor.may_retype(snap["name"], doctor._state().get("retype_done") or {}, now):
+        return
+
+    if any(now - int(v) < UPGRADE_FLEET_GAP for v in (doctor._state().get("retype_done") or {}).values()):
         return
 
     r = rows[0]

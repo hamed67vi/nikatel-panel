@@ -38,7 +38,7 @@ TOOLS_RETRY = 86400             # a kind that was NOT TESTED because a server la
 QUIET_MBPS = 150.0              # the tunnels of the two servers carry less than this together (the night survey only asks a few pings of a temporary tunnel, no speed test: a survey hardly touches the users)
 BUSY_CPU = 60.0                 # a server this busy is not surveyed
 LIMIT = 5                       # the kinds the Doctor tries live at most
-SURVEYS = ("survey", "survey-manual", "survey-cold")      # survey-cold: the first survey of a pair nobody has tested, by day too (see COLD_QUIET_MBPS)
+SURVEYS = ("survey", "survey-manual", "survey-cold", "survey-verify")      # survey-cold: the first survey of a pair nobody has tested, by day too (see COLD_QUIET_MBPS)
 COLD_QUIET_MBPS = 30.0          # a pair that has never been surveyed is surveyed outside the night window as well, when the tunnels of its servers carry less than this: without what the Doctor knows about a pair, a cut on it
                                 # is repaired by trying the tunnel types one by one - the longest part of a repair (the owner, 2026-10-17: "bring the delay down to the minimum")
 GRE_KINDS = ("tcpmux", "tcp", "wsmux", "wssmux")          # the Backhaul kinds: they need GRE (protocol 47) to pass between the two servers
@@ -291,8 +291,8 @@ def faster_kinds(pair: dict | None, now: int, current: str, baseline: float, all
 
 PING_SLACK = 1.3                # a better type may answer this much slower than the running one (times) ...
 PING_SLACK_MS = 15.0            # ... plus this many ms: the ping is what the user feels first (the owner, 2026-10-21)
-UPGRADE_RATIO = 3.0             # a type counts as a better one for a tunnel that WORKS when the pair test gave it this many times what the pair test gave the running type ...
-UPGRADE_MIN_GAIN = 100.0        # ... and at least this many Mb/s more (a few Mb/s of difference is no reason to touch a running tunnel)
+UPGRADE_RATIO = 1.5             # a type counts as a better one for a tunnel that WORKS when the pair test gave it this many times what the pair test gave the running type ...
+UPGRADE_MIN_GAIN = 50.0        # ... and at least this many Mb/s more (a few Mb/s of difference is no reason to touch a running tunnel)
 UPGRADE_MAX_LOSS = 1.0          # ... and it was stable in its test: at most this % of packets lost
 
 
@@ -762,11 +762,12 @@ def survey_start(iran_id: int, foreign_id: int, source: str = "survey-manual", k
         names = (i.name, f.name)
 
     order = [k for k in PRIOR if kinds is None or k in kinds] + [k for k in (kinds or []) if k not in PRIOR]          # (the standard order first; the variants of the third tier after it, in the order given)
-    measure = "full" if source == "survey-manual" else "latency"      # the night survey asks only whether a type connects and what its delay and loss are (a few pings through a temporary tunnel): no speed test on servers that carry users
+    measure = "full" if source in ("survey-manual", "survey-verify") else "latency"      # the night survey asks only whether a type connects and what its delay and loss are (a few pings through a temporary tunnel): no speed test on servers that carry users
     jid = tunnel_test.compare_start(iran_id, foreign_id, order, measure=measure, source=source, install_wg=source == "survey-manual")      # (only a survey the owner asked for may install wireguard-tools; the night one never installs a package)
 
     with session() as db:
-        how = "by hand: with a speed test" if source == "survey-manual" else "the first survey of this pair, on quiet servers: delay and loss only" if source == "survey-cold" else "the night survey: delay and loss only"
+        how = ("by hand: with a speed test" if source == "survey-manual" else "the running type and its best rivals tested again, with a speed test" if source == "survey-verify"
+               else "the first survey of this pair, on quiet servers: delay and loss only" if source == "survey-cold" else "the night survey: delay and loss only")
         emit(db, "info", "tunnels", f"Survey of {names[0]} ⇄ {names[1]} started: {len(order)} tunnel types, one after the other ({how}).", names[0])
 
     return jid
@@ -804,6 +805,78 @@ def _live_pairs(db) -> dict[tuple[int, int], int]:
             out[(t.iran_server_id, t.foreign_server_id)] = out.get((t.iran_server_id, t.foreign_server_id), 0) + 1
 
     return out
+
+
+VERIFY_TESTS = 3                # (1.69.220, the owner: "test which type is the best and the steadiest, always") the running type of a live pair and each of its best rivals get this many FULL tests in a week ...
+VERIFY_EVERY = 6 * 3600         # ... one more of a kind at most this often (spread over the day: steadiness is about different hours) ...
+VERIFY_RIVALS = 3               # ... the rivals are the best kinds of the pair's own survey
+VERIFY_QUIET_MBPS = 400.0       # a verify survey (a few kinds, a short speed test each) runs when the users of the pair's servers carry less than this
+
+
+def _full_tests(e: dict | None, now: int) -> list[dict]:
+    return [x for x in ((e or {}).get("hist") or []) if x.get("m") == "full" and now - int(x.get("at") or 0) <= STEADY_RECENT]
+
+
+def verify_kinds(pair: dict | None, now: int, current: str, allowed=lambda k: True) -> list[str]:
+    """Pure: the kinds of a live pair that must be tested again now with a speed test: the RUNNING type and its VERIFY_RIVALS best rivals (the kinds of the pair's survey that work, best first), each when it has fewer than
+    VERIFY_TESTS full tests in the last week and the last of them is older than VERIFY_EVERY. Without such tests the Doctor can never call a better type "proven steady" and a tunnel is never improved."""
+    kinds = (pair or {}).get("kinds") or {}
+    rivals = [r["kind"] for r in ranked(pair, now) if r["kind"] != current and allowed(r["kind"])][:VERIFY_RIVALS]
+    out = []
+
+    for k in [current, *rivals]:
+        h = _full_tests(kinds.get(k), now)
+
+        if allowed(k) and len(h) < VERIFY_TESTS and (not h or now - max(int(x["at"]) for x in h) >= VERIFY_EVERY):
+            out.append(k)
+
+    return out
+
+
+def verify_pairs(now: int) -> list[tuple[int, int, list[str]]]:
+    """The live pairs whose running types (and their best rivals) are due a full test: (Iran id, foreign id, the kinds), the pair with the fewest full tests first."""
+    from . import autopilot, license
+
+    d = _doc()
+    out = []
+
+    with session() as db:
+        running: dict[tuple[int, int], set[str]] = {}
+
+        for t in db.scalars(select(Tunnel).where(Tunnel.enabled.is_(True), Tunnel.state == "up")):
+            if not is_temp(t.name):
+                running.setdefault((t.iran_server_id, t.foreign_server_id), set()).add(autopilot.kind_of(t.type, t.transport, t.record or {}))
+
+        for (i, f), curs in running.items():
+            if not (_server_state(db, i, now)[0] and _server_state(db, f, now)[0]):
+                continue
+
+            p = d["pairs"].get(pair_key(i, f)) or {}
+            kinds = []
+
+            for cur in sorted(curs):
+                kinds += [k for k in verify_kinds(p, now, cur, license.tunnel_kind_allowed) if k not in kinds]
+
+            if kinds:
+                out.append((min(len(_full_tests((p.get("kinds") or {}).get(k), now)) for k in kinds), i, f, kinds[: VERIFY_RIVALS + 1]))
+
+    return [(i, f, k) for _, i, f, k in sorted(out)]
+
+
+def _start_verify(now: int) -> bool:
+    """Start the verify survey of the first live pair that is due and quiet; True when one started."""
+    for iran_id, foreign_id, kinds in verify_pairs(now):
+        if not_now(iran_id, foreign_id, now, VERIFY_QUIET_MBPS):
+            continue
+
+        try:
+            survey_start(iran_id, foreign_id, "survey-verify", kinds)
+            return True
+        except (ValueError, RuntimeError) as e:
+            log.info("verify survey of %s:%s not started: %s", iran_id, foreign_id, str(e)[:120])
+            return False
+
+    return False
 
 
 def pending_pairs(now: int, cold_only: bool = False) -> list[tuple[int, int, list[str]]]:
@@ -889,12 +962,15 @@ def run() -> None:
     busy = bool(autopilot.repairing_names()) or autopilot.storm_now()
 
     if running:
-        if busy or (running["source"] == "survey" and not (d["on"] and window)) or (running["source"] == "survey-cold" and not d["on"]):
+        if busy or (running["source"] == "survey" and not (d["on"] and window)) or (running["source"] in ("survey-cold", "survey-verify") and not d["on"]):
             tunnel_test.compare_stop(running["id"])            # a repair needs the place, or the night is over
 
         return
 
     if not d["on"] or busy:
+        return
+
+    if not pending_pairs(now, cold_only=True) and _start_verify(now):          # (1.69.220: every pair has been surveyed once: the running types of the live pairs and their best rivals are tested again with a speed test, at any hour)
         return
 
     cold = not window                                          # outside the night window only the pairs nobody has tested yet are surveyed, and only on very quiet servers
