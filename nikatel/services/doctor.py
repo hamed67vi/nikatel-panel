@@ -29,7 +29,7 @@ from sqlalchemy import select
 from ..config import get_settings
 from ..db import session
 from ..log import get_logger
-from ..models import Server, ServerSample, Tunnel
+from ..models import Server, ServerSample, Tunnel, is_protected
 from . import actions, autopilot, detect, failover, license, netwatch
 from . import settings as st
 from .events import emit
@@ -316,6 +316,9 @@ def move_now(tunnel_id: int, iran_id: int, reason: str = "manual", why: str = ""
         if t is None:
             raise ValueError("tunnel not found")
 
+        if is_protected(t):          # (1.69.221: not by a suggestion, not by the owner's click, not for quality - the owner turns the protection off first)
+            raise ValueError(f"{t.name} is protected: it is never moved. Turn the protection off in the tunnel's menu first")
+
         if t.iran_server_id == iran_id:
             raise ValueError("choose another Iran server")
 
@@ -428,6 +431,9 @@ def retype_now(tunnel_id: int, kind: str, was: str = "", why: str = "") -> int:
 
         if t is None:
             raise ValueError("tunnel not found")
+
+        if is_protected(t):          # (1.69.221: the button, a suggestion and the phone assistant are told at once - the swap itself refuses too)
+            raise ValueError(f"{t.name} is protected: its type is not changed. Turn the protection off in the tunnel's menu first")
 
         name = t.name
 

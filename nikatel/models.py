@@ -22,6 +22,13 @@ def is_standby(t) -> bool:
     return bool(rec.get("standby_of") or rec.get("strand_of"))
 
 
+def is_protected(t) -> bool:
+    """(1.69.221) A tunnel the owner marked "protected": something outside the customers' configs stands on it (the L2TP product rides a tunnel's inner link), so the Doctor repairs and restarts it but never moves it, replaces it by
+    another type, rebuilds it or removes it - each of those changes its inner addresses or takes it away. `t` is a row, a record or a snapshot's record; the mark lives in the record, like the standby's."""
+    rec = (getattr(t, "record", None) or {}) if not isinstance(t, dict) else t
+    return bool(rec.get("protected"))
+
+
 def now() -> int:
     return int(time.time())
 

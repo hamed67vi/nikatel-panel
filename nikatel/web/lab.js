@@ -717,6 +717,7 @@ function tunMenuItems(id) {      // the "⋯" menu of a tunnel window (the owner
     labSep, labIt("History", "history", inWin(() => tunHistory(t.id, t.name))), labIt(muted ? "Unmute alerts" : "Mute alerts", "bell", () => muteRef(t.name, !muted)),
     labSep, labIt("Rename…", "edit", () => renameTunnel(t.id, t.name)), ...(["backhaul", "backpack", "paqet", "chisel"].includes(t.type) ? [labIt("Ports…", "ports", () => editPorts(t.id, (t.record || {}).port_mapping || (t.forwarded_ports || []).join(",")))] : []), labIt("Rebuild…", "rebuild", inWin(() => rebuildTunnel(t.id, t.name)), {off: !!offs, tip: tipOff}),
     ...(TUN_MOVE_IN_MENU ? [labSep, labIt("Move to a better server…", "gre", () => tunMoveAway(t.id, t.name), {tip: "Moves this tunnel to the best other Iran server that has room and free ports, and points the DNS records that serve only it at that server"})] : []),
+    labSep, labIt((t.record || {}).protected ? "Remove protection…" : "Protect from the Doctor…", "shield", () => protectTunnel(t.id, t.name, !(t.record || {}).protected), {tip: "A protected tunnel is repaired and restarted by the Doctor but never moved, replaced by another type, rebuilt or removed (for a tunnel something else stands on, like the inner link of the L2TP product)"}),
     labSep, labIt("Remove tunnel…", "trash", () => deleteTunnel(t.id, t.name), {danger: true})];
 }
 function labNodeParts(cur) {      // the actions of a node in short lists: the important ones (Edit, Restart), Monitor, Manage, Update - and its Delete

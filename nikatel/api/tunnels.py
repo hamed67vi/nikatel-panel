@@ -276,6 +276,19 @@ def rename(tunnel_id: int, body: RenameIn):
         raise HTTPException(400, str(e))
 
 
+class ProtectIn(BaseModel):
+    on: bool
+
+
+@router.put("/tunnels/{tunnel_id}/protected")
+def protect(tunnel_id: int, body: ProtectIn):
+    """(1.69.221) Mark a tunnel protected (or not): the Doctor repairs it in place but never moves, replaces, rebuilds or removes it, and the page refuses to remove it until the mark is off."""
+    try:
+        return {"ok": True, "protected": builder.set_protected(tunnel_id, body.on)}
+    except ValueError as e:
+        raise HTTPException(404 if "not found" in str(e) else 400, str(e))
+
+
 class AutoIn(BaseModel):
     foreign_id: int
     ports: str = ""
@@ -470,7 +483,7 @@ def delete(tunnel_id: int):
     try:
         res = builder.delete_tunnel(tunnel_id, trash=True, skip_offline=True)
     except ValueError as e:
-        raise HTTPException(400 if "read-only" in str(e) else 404, str(e))
+        raise HTTPException(409 if "protected" in str(e) else 400 if "read-only" in str(e) else 404, str(e))
 
     if name:
         standby.forget(name)

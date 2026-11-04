@@ -10,7 +10,15 @@ from ..auth import current_user
 from ..config import get_settings
 from ..db import session
 from ..log import get_logger
-from ..models import AlertState, Server, ServerSample, Setting, Tunnel, is_standby
+from ..models import (
+    AlertState,
+    Server,
+    ServerSample,
+    Setting,
+    Tunnel,
+    is_protected,
+    is_standby,
+)
 from ..services import profiles, uptime
 from ..services import settings as st
 from ..services.events import emit
@@ -274,7 +282,12 @@ def delete_server(server_id: int, tunnels: bool = False):
         if s is None:
             raise HTTPException(404, "server not found")
 
-        used = [(t.id, t.name, is_standby(t)) for t in _tunnels_of(db, server_id)]
+        rows = _tunnels_of(db, server_id)
+        used = [(t.id, t.name, is_standby(t)) for t in rows]
+        kept = [t.name for t in rows if is_protected(t)]
+
+        if kept and tunnels:          # (1.69.221: nothing is removed before this is known - a server with a protected tunnel loses its other tunnels only after the owner turned that protection off)
+            raise HTTPException(409, f"the tunnel {', '.join(kept)} on this server is protected: turn the protection off (the tunnel's menu) before the server is taken off with its tunnels")
 
         if used and not tunnels:
             real = [name for _, name, sb in used if not sb] or [name for _, name, _ in used]

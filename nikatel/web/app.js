@@ -1721,7 +1721,7 @@ PAGES.tunnelsList = async () => {
   const pairKey = t => t.iran_name + "\u0001" + t.foreign_name, pcount = {}; all.forEach(t => { pcount[pairKey(t)] = (pcount[pairKey(t)] || 0) + 1; });   // how many tunnels join the same Iran server AND the same foreign server
   const dupMark = t => pcount[pairKey(t)] > 1 ? `<span class="dup" title="Another tunnel joins the same two servers: ${esc(all.filter(x => pairKey(x) === pairKey(t) && x.name !== t.name).map(x => x.name).join(", "))}. Is that on purpose?">⚠</span>` : "";      // (the owner, 2026-10-25: no "×4" and no warning for a foreign server that ends several tunnels - only a tunnel that has the same Iran server AND the same foreign server as another one gets the sign, without a number)
   const PURPOSE = {eco: ["ECO", "Economy: this tunnel carries an economy (traffic coefficient) config"], ai: ["AI", "AI: this tunnel carries an AI config"]};      // (the owner, 2026-11-04: "the tunnels that are for eco or AI - write it on them")
-  const purposeTags = t => ((t.record || {}).purpose || []).map(p => PURPOSE[p] ? `<span class="purpose ${p}" title="${esc(PURPOSE[p][1])}">${PURPOSE[p][0]}</span>` : "").join("");
+  const purposeTags = t => ((t.record || {}).purpose || []).map(p => PURPOSE[p] ? `<span class="purpose ${p}" title="${esc(PURPOSE[p][1])}">${PURPOSE[p][0]}</span>` : "").join("") + ((t.record || {}).protected ? '<span class="purpose lock" title="Protected: the Doctor repairs and restarts this tunnel but never moves, replaces, rebuilds or removes it">PROTECTED</span>' : "");      // (1.69.221)
   const wrench = t => fixing.has(t.name) ? '<span class="wrench" title="the Tunnel Doctor is working on this tunnel right now">🔧</span>' : "";
   const rows = all.filter(t => tmode === "all" || tunSev(t));
   const newest = new Set([...list].filter(t => t.created_at && Date.now() / 1000 - t.created_at < 1800).sort((x, y) => y.created_at - x.created_at).slice(0, 2).map(t => t.id));      // the faint "new" tag: only the two newest tunnels, and only for 30 minutes
@@ -2162,6 +2162,10 @@ window.deleteTunnel = async (id, name) => {
   if (!await gconfirm(`Remove the tunnel ${name} from BOTH servers? Users on it lose their connection. This cannot be undone.`)) return;
   toast("Removing…");
   try { const r = await api(`/api/tunnels/${id}`, {method: "DELETE"}); toast("✓ " + r.results.join(" · ") + " — you can restore it from “Recently removed” above the list", "ok"); state.open = null; refresh(); } catch (e) { toast("✕ " + e.message, "bad"); }
+};
+window.protectTunnel = async (id, name, on) => {      // (1.69.221) the mark that keeps the Doctor from moving, replacing, rebuilding or removing a tunnel something else stands on
+  if (!await gconfirm(on ? `Protect ${name}? The Doctor still repairs and restarts it, but never moves it to another Iran server, replaces it by another type, rebuilds it or removes it - and the page refuses to remove it until you turn this off.` : `Turn the protection of ${name} off? The Doctor may then move, replace or rebuild it again, and it can be removed.`)) return;
+  try { await api(`/api/tunnels/${id}/protected`, {method: "PUT", body: JSON.stringify({on})}); toast(on ? `✓ ${name} is protected` : `✓ ${name} is no longer protected`, "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); }
 };
 window.rebuildTunnel = async (id, name) => {
   if (!await gconfirm(`Rebuild ${name}: remove it from both servers and build it again with the same name and ports? It is down while this runs (about a minute).`)) return;

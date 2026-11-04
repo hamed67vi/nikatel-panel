@@ -25,7 +25,7 @@ from sqlalchemy import select
 from ..config import get_settings
 from ..db import session
 from ..log import get_logger
-from ..models import Tunnel
+from ..models import Tunnel, is_protected
 from ..ssh import SSHError
 from .events import emit
 
@@ -194,6 +194,10 @@ def beside(aid: int, snap: dict, kind: str, why: str, before: float, revert: boo
 
     if get_settings().read_only:
         say("The panel is read-only: nothing is changed.", done=True, ok=False)
+        return
+
+    if is_protected(snap["record"]):          # (1.69.221: the standby is not even built - the swap, and the way back to the old type too, would end in a replacement, which a protected tunnel never gets)
+        say(f"{name} is protected: its type is not changed. Nothing is built or removed.", done=True, ok=False)
         return
 
     if not revert and now - _TRIED.get(name, 0) < RETRY_GAP:

@@ -24,7 +24,7 @@ from sqlalchemy import select
 from ..config import get_settings
 from ..db import session
 from ..log import get_logger
-from ..models import ActionLog, Server, Tunnel, is_standby, is_temp
+from ..models import ActionLog, Server, Tunnel, is_protected, is_standby, is_temp
 from ..ssh import Node, SSHError, ensure_via, run_action, run_script, via_of
 from ..ssh import target as ssh_target
 from . import linkmodels
@@ -1378,7 +1378,9 @@ def _build(b: Build) -> None:
 # ------------------------------------------------------------------ delete / rebuild
 def delete_tunnel(tunnel_id: int, keep_record: bool = False, trash: bool = False, skip_offline: bool = False) -> list[str]:
     """Remove the tunnel from both servers (and the row). Returns per-side results. `trash`: keep a copy first, so that it can be restored.
-    `skip_offline`: a server that is off is not asked over SSH (a 90 s timeout per tunnel would make a failover of ten tunnels wait a quarter of an hour)."""
+    `skip_offline`: a server that is off is not asked over SSH (a 90 s timeout per tunnel would make a failover of ten tunnels wait a quarter of an hour).
+    (1.69.221) A PROTECTED tunnel (`models.is_protected`) is never removed - not by the Doctor, the janitor, a move or a rebuild, and not by the page: the owner turns the protection off first. Every caller already
+    handles the ValueError of a refusal (read-only, not found), and the refusal comes before anything is written or asked of a server."""
     if get_settings().read_only:
         raise ValueError("the panel is read-only; set NIKATEL_READ_ONLY=false on the panel server to delete tunnels")
 
@@ -1387,6 +1389,9 @@ def delete_tunnel(tunnel_id: int, keep_record: bool = False, trash: bool = False
 
         if t is None:
             raise ValueError("tunnel not found")
+
+        if is_protected(t):
+            raise ValueError(f"{t.name} is protected: something stands on this tunnel, so it is never removed, moved or rebuilt by itself - turn the protection off (the tunnel's menu) first if you really want it gone")
 
         name, port, tr, label = t.name, int(t.port or 0), (t.transport or "tcpmux"), f"{t.name} ({t.iran.name} ⇄ {t.foreign.name})"
         on_server = sname(t)           # what the servers know it as
@@ -1603,6 +1608,36 @@ def rename_tunnel(tunnel_id: int, new_name: str) -> str:
         emit(db, "info", "tunnels", f"Tunnel {old} renamed to {new}.", new)
 
     return new
+
+
+def set_protected(tunnel_id: int, on: bool) -> bool:
+    """(1.69.221) The owner marks a tunnel PROTECTED, or takes the mark off (the tunnel's menu). Something stands on a protected tunnel - the inner link of the L2TP product, for one - so the Doctor still repairs it in place
+    (checks, restarts) but never moves it to another Iran server, replaces it by another type, rebuilds it or removes it (`models.is_protected`; the guards sit in `delete_tunnel`, `autopilot._replace` /
+    `_rebuild_safe` / `_switch_cut`, `swap.beside`, `doctor.move_now` and `failover._make_plan`). The mark is in the record, so it needs no new column and goes with the tunnel's copy in 'Recently removed'.
+    A standby or a strand has no mark of its own: it follows its tunnel. Returns the state now."""
+    with session() as db:
+        t = db.get(Tunnel, tunnel_id)
+
+        if t is None:
+            raise ValueError("tunnel not found")
+
+        if is_standby(t):
+            raise ValueError("a standby or a strand follows its tunnel: protect the tunnel itself")
+
+        if is_protected(t) == bool(on):
+            return bool(on)
+
+        rec = dict(t.record or {})
+
+        if on:
+            rec["protected"] = True
+        else:
+            rec.pop("protected", None)
+
+        t.record = rec
+        emit(db, "info", "tunnels", f"Tunnel {t.name} is protected: the Doctor repairs and restarts it, but never moves, replaces, rebuilds or removes it." if on else f"Tunnel {t.name} is no longer protected: the Doctor may move or replace it again.", t.name)
+
+    return bool(on)
 
 
 def follow_server_rename(db, server: Server, old_name: str) -> list[str]:

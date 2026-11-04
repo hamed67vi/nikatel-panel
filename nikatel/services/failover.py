@@ -29,7 +29,7 @@ from sqlalchemy import select
 from ..config import get_settings
 from ..db import session
 from ..log import get_logger
-from ..models import Config, Panel, Server, Tunnel
+from ..models import Config, Panel, Server, Tunnel, is_protected
 from . import arvan, autopilot, dnsprov, telegram
 from . import settings as st
 from .events import emit
@@ -196,7 +196,7 @@ def closure(move: set[int], recs: list[dict]) -> set[int]:
 
 def _tunnels_of(server_id: int) -> list[dict]:
     with session() as db:
-        return [{"id": t.id, "name": t.name, "state": t.state, "ports": {int(x) for x in (t.forwarded_ports or []) if str(x).isdigit()}}
+        return [{"id": t.id, "name": t.name, "state": t.state, "ports": {int(x) for x in (t.forwarded_ports or []) if str(x).isdigit()}, "protected": is_protected(t)}
                 for t in db.scalars(select(Tunnel).where(Tunnel.iran_server_id == server_id, Tunnel.enabled.is_(True)))]
 
 
@@ -354,9 +354,11 @@ def _make_plan(server_id: int, move: set[int] | None, reason: str, target_id: in
     tunnels = _tunnels_of(server_id)
     recs, dns_error = _records(info["ip"], tunnels, hosts=move is not None)       # (a whole-server move takes every record: the panels are not asked)
     all_ids = {t["id"] for t in tunnels}
-    asked = all_ids if move is None else set(move) & all_ids
-    moved = all_ids if move is None else closure(asked, recs)
+    fixed = {t["id"] for t in tunnels if t.get("protected")}          # (1.69.221: a protected tunnel stays where it is, whatever the plan - and a DNS record it shares with a moved tunnel is left alone, as one that serves a tunnel that stays)
+    asked = (all_ids if move is None else set(move) & all_ids) - fixed
+    moved = all_ids - fixed if move is None else closure(asked, recs) - fixed
     whole = moved == all_ids
+    kept = [t["name"] for t in tunnels if t["id"] in fixed and (move is None or t["id"] in move)]
     moving = [t for t in tunnels if t["id"] in moved]
     dns = [r for r in recs if whole or (r["tunnels"] and set(r["tunnels"]) <= moved)]
     left = [] if whole else [{"fqdn": r["fqdn"], "configs": r["configs"], "tunnels": r["tunnels"]} for r in recs if r not in dns]
@@ -436,6 +438,9 @@ def _make_plan(server_id: int, move: set[int] | None, reason: str, target_id: in
            "dns": [{k: v for k, v in r.items() if k != "tunnels"} for r in dns], "left_alone": left,
            "dns_error": dns_error, "problems": problems, "made_at": int(time.time())}
 
+    if kept:
+        out["protected"] = kept
+
     if strict:
         out["candidates"] = [{"id": c["id"], "name": c["name"], "ip": hosts.get(c["id"]), "reason": c.get("reason", ""), "quality": c.get("quality"), "resources": c.get("resources"), "tunnels": c.get("tunnels")} for c in candidates]
         out["skipped"] = list(skipped.values())
@@ -513,6 +518,9 @@ def move_server(server_id: int, target_id: int, expect: list[int] | None = None,
     p = move_plan(server_id, target_id, tunnels)
 
     if not p["tunnels"]:
+        if p.get("protected"):
+            raise ValueError(f"{', '.join(p['protected'])} {'is' if len(p['protected']) == 1 else 'are'} protected: never moved. Turn the protection off in the tunnel's menu first")
+
         raise ValueError(f"{p['server']} carries no tunnel: nothing to move" if not tunnels else f"this tunnel is not an enabled tunnel of {p['server']}: nothing to move")
 
     if not p["target"]:
@@ -965,6 +973,11 @@ def quality_move(aid: int, tunnel_id: int, reason: str, now_mbps: float, rtt: fl
         return False
 
     snap = autopilot._snapshot(tunnel_id)
+
+    if is_protected(snap["record"]):
+        say(f"No move for quality: {snap['name']} is protected, it is never moved.")
+        return False
+
     now = int(time.time())
     moves = doctor._state()["moves"]
     block = doctor.may_move(snap["name"], moves, now)
@@ -1037,6 +1050,14 @@ def after_ladder(aid: int, tunnel_id: int, cause: str) -> bool:
 
     if not ENABLED:
         autopilot._say(aid, "The move to another Iran server is switched off: the tunnel stays where it is.")
+        return False
+
+    with session() as db:
+        t = db.get(Tunnel, tunnel_id)
+        fixed = t is not None and is_protected(t)
+
+    if fixed:          # (1.69.220: no move, and no suggestion of one either)
+        autopilot._say(aid, "This tunnel is protected: it is never moved by the Doctor, and no move is suggested. Repairs in place (restarts) are all it gets.")
         return False
 
     try:

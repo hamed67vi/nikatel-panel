@@ -33,7 +33,7 @@ from .. import jobs
 from ..config import get_settings
 from ..db import session
 from ..log import get_logger
-from ..models import ActionLog, Profile, Server, Tunnel, TunnelCheck
+from ..models import ActionLog, Profile, Server, Tunnel, TunnelCheck, is_protected
 from ..ssh import Node, SSHError, run_script
 from . import (
     actions,
@@ -636,6 +636,10 @@ def _replace(aid: int, tunnel_id: int, iran_id: int, foreign_id: int, kind: str,
     snap = snap or _snapshot(tunnel_id)
     old_kind = kind_of(snap["type"], snap["transport"], snap["record"])
 
+    if first and is_protected(snap["record"]):          # (1.69.221: every swap, move, failover, capacity swap and "back to the old type" ends here - a protected tunnel keeps its type and its inner addresses; nothing is written or removed)
+        _say(aid, f"{snap['label']} is protected: the Doctor does not replace it by another type or move it. It is repaired in place (restarts) only.")
+        return False
+
     if first and not skip_offline and (off := servers_off_of(iran_id, foreign_id)):          # (a server of the pair that will carry it is off: nothing can be built, so nothing is removed - a failover has `skip_offline`: its old Iran server is off on purpose)
         _say(aid, f"{why} {off_note(off)}")
 
@@ -773,6 +777,10 @@ def _switch_cut(aid: int, snap: dict, kinds: list[str]) -> str:
     nothing to build the tunnel is not touched - the owner, 2026-10-21: "the UA tunnel was deleted by itself": twenty types failed on the same missing python3 and nothing was left to retry."""
     from . import license
 
+    if is_protected(snap["record"]):          # (1.69.221: a cut protected tunnel is not switched to other types - each one would change its inner addresses)
+        _say(aid, f"{snap['label']} is protected: no other type is tried, nothing is removed. It stays as it is and is repaired in place only.")
+        return ""
+
     old_kind = kind_of(snap["type"], snap["transport"], snap["record"])
     first = True
     allowed = _probe_links(aid, snap, [k for k in kinds if license.tunnel_kind_allowed(k)])
@@ -855,6 +863,11 @@ def _rebuild_safe(aid: int, tunnel_id: int, fresh_link: bool = False, check: boo
     `check`: a server of the pair that is off stops it before anything is removed, and after a failed build keeps it from trying the old type on a server that is off (`builder.follow_server_host` passes False)."""
     snap = _snapshot(tunnel_id)
     old_kind = kind_of(snap["type"], snap["transport"], snap["record"])
+
+    if is_protected(snap["record"]):          # (1.69.221: a rebuild gives the tunnel new inner addresses, and the page that the owner protects it for stands on the old ones)
+        note = f"{snap['label']} is protected: it is not rebuilt. Restarts are tried; a rebuild is the owner's call (turn the protection off first)."
+        _say(aid, note)
+        return False, [note]
 
     if check and (off := servers_off_of(snap["iran_id"], snap["foreign_id"])):          # (nothing can be built while a server is off: the tunnel is not removed)
         _say(aid, off_note(off))

@@ -117,7 +117,7 @@ nav a.on::before { opacity: 1; top: 8px; bottom: 8px; } nav a.on .ic { opacity: 
 .pill { font-size: 10.5px; padding: 1px 8px; border-radius: 999px; border: 1px solid var(--line); color: var(--mut); margin-left: 6px; background: rgba(255,255,255,.04); }
 .pill.ok { color: var(--ok); border-color: rgba(61,220,151,.45); } .pill.err { color: var(--bad); border-color: rgba(255,107,139,.45); }
 .purpose { font-size: 10px; font-weight: 700; letter-spacing: .04em; padding: 0 6px; margin-left: 6px; border-radius: 4px; border: 1px solid var(--line); vertical-align: 1px; }
-.purpose.eco { color: var(--warn); border-color: rgba(245,185,66,.45); background: rgba(245,185,66,.08); } .purpose.ai { color: #a78bfa; border-color: rgba(167,139,250,.45); background: rgba(167,139,250,.08); }
+.purpose.lock { color: var(--ok); border-color: rgba(52,211,153,.45); background: rgba(52,211,153,.08); } .purpose.eco { color: var(--warn); border-color: rgba(245,185,66,.45); background: rgba(245,185,66,.08); } .purpose.ai { color: #a78bfa; border-color: rgba(167,139,250,.45); background: rgba(167,139,250,.08); }
 .detail td { background: rgba(10,14,32,.55) !important; height: auto; padding: 12px 16px; white-space: normal; border-left: 3px solid var(--line) !important; border-radius: 13px !important; box-shadow: none; }
 .kv { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 4px 16px; font-size: 12px; } .kv span { color: var(--mut); } .kv b.err { color: var(--bad); }
 
