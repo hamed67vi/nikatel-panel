@@ -303,6 +303,7 @@ class Panel(Base):
     nodes: Mapped[list] = mapped_column(JSON, default=list)              # [{id, name, address, status, xray, message, fails}]
     last_error: Mapped[str] = mapped_column(String(300), default="")
     created_at: Mapped[int] = mapped_column(Integer, default=now)
+    host_server_id: Mapped[int | None] = mapped_column(Integer, nullable=True)      # the server of ours that RUNS this panel, chosen by the owner and proved over SSH (services/pg_update.prove_host); None = found by the address of the URL, when it can be
 
 
 class OutboundConfig(Base):

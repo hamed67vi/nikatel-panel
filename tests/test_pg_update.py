@@ -272,6 +272,54 @@ def test_a_dns_name_in_the_url_finds_the_server_that_has_the_address(world, monk
     assert pg_update.host_server("https://elsewhere.example.test") is None and pg_update.host_server("") is None
 
 
+def _info(container="pasarguard-pasarguard-1", version="5.4.0"):
+    return f"CLI no\nBACKUP no\nDIR none\nDOCKER 3\nDF 50000000\nCONTAINER {container}\nREF pasarguard/panel:latest\nID sha256:abc\nSERVICE pasarguard\nPROJECT pasarguard\nWDIR /opt/pasarguard\nVERSION {version}\nDB postgres\nOVERRIDES 2\n"
+
+
+def test_the_server_the_owner_chose_runs_the_panel_is_proved_over_ssh_and_wins_over_the_dns(world, client, monkeypatch):
+    """The owner's panel sits behind Cloudflare (2026-11-04): its name resolves to Cloudflare, never to box B, so "its server is not in the Servers list" was said while box B was in it. The profile now
+    holds the server that runs the panel; a choice is kept only after the server showed, over SSH, a PasarGuard panel container at this panel's version."""
+    pid = add_panel(url="https://panel.behind-cloudflare.test:443")
+    sid = add_server("boxB", "203.0.113.9")
+    other = add_server("elsewhere", "203.0.113.10")
+    asked = []
+    answers = {"203.0.113.9": _info(), "203.0.113.10": _info(container="none", version="")}
+    monkeypatch.setattr(pg_update, "run_script", lambda node, name, params=None, timeout=0: asked.append((node.host, name)) or answers[node.host])
+    assert pg_update.panel_plan(pid)["host"] is None and "not in the Servers list" in pg_update.panel_plan(pid)["problems"][0] and "Choose the server in the panel's profile" in pg_update.panel_plan(pid)["problems"][0]
+    # a server that runs no panel container, a server that is not in the list, a version that is another panel's: refused, nothing kept
+    r = client.patch(f"/api/panels/{pid}", json={"host_server_id": other})
+    assert r.status_code == 400 and "elsewhere runs no PasarGuard panel container" in r.text and asked == [("203.0.113.10", "pgpanel_info")]
+    assert client.patch(f"/api/panels/{pid}", json={"host_server_id": 9999}).status_code == 400 and "not in the Servers list" in client.patch(f"/api/panels/{pid}", json={"host_server_id": 9999}).text
+    answers["203.0.113.9"] = _info(version="5.3.0")
+    r = client.patch(f"/api/panels/{pid}", json={"host_server_id": sid})
+    assert r.status_code == 400 and "boxB runs a PasarGuard panel at version 5.3.0, this panel reports 5.4.0: it is not the same panel" in r.text
+    answers["203.0.113.9"] = _info(version="")
+    assert "its version could not be read" in client.patch(f"/api/panels/{pid}", json={"host_server_id": sid}).text
+    assert client.get("/api/panels").json()["panels"][0]["host_server_id"] == 0 and pg_update.panel_plan(pid)["host"] is None
+    # the right server: proved and kept, and from then on the plan, the overview and the Safe update plan know it (the DNS is only the fallback)
+    answers["203.0.113.9"] = _info()
+    r = client.patch(f"/api/panels/{pid}", json={"host_server_id": sid})
+    assert r.status_code == 200 and r.json()["panel"]["host_server_id"] == sid, r.text
+    assert pg_update.panel_plan(pid)["host"] == {"id": sid, "name": "boxB"} and pg_update.panel_plan(pid)["ok"] is True
+    assert pg_update.overview()["panels"][0]["host"]["name"] == "boxB" and pg_update.host_server("https://panel.behind-cloudflare.test:443", host_id=sid)["name"] == "boxB"
+    n = len(asked)
+    assert client.patch(f"/api/panels/{pid}", json={"host_server_id": sid, "name": "alpha"}).status_code == 200 and len(asked) == n      # (the same choice again: not proved again)
+    assert pg_update.prove_host(pid, sid) == {"server": {"id": sid, "name": "boxB"}, "container": "pasarguard-pasarguard-1", "version": "5.4.0"}
+    # the choice is forgotten with 0; a chosen server that left the list falls back to the address
+    assert client.patch(f"/api/panels/{pid}", json={"host_server_id": 0}).json()["panel"]["host_server_id"] == 0 and pg_update.panel_plan(pid)["host"] is None
+    client.patch(f"/api/panels/{pid}", json={"host_server_id": sid})
+
+    with session() as db:
+        db.delete(db.get(Server, sid))
+
+    assert pg_update.panel_plan(pid)["host"] is None
+    # a panel whose version is not known yet cannot be proved
+    with session() as db:
+        db.get(Panel, pid).version = ""
+
+    assert "the version of this panel is not known yet" in client.patch(f"/api/panels/{pid}", json={"host_server_id": other}).text
+
+
 def test_the_panel_update_needs_the_name_typed_back_and_starts_nothing_otherwise(world, client):
     pid = add_panel()
     add_server("pg-host", "203.0.113.5")

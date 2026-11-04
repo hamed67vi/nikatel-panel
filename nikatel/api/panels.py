@@ -44,6 +44,7 @@ class PanelPatch(BaseModel):
     keep_login: bool | None = None
     verify_tls: bool | None = None
     enabled: bool | None = None
+    host_server_id: int | None = Field(default=None, ge=0)      # the server of ours that runs this PasarGuard panel (proved over SSH before it is kept); 0 = forget it, the address of the URL is used again
 
 
 class ForgetIn(BaseModel):
@@ -66,7 +67,8 @@ def add_panel(body: PanelIn):
 
 @router.patch("/panels/{panel_id}")
 def patch_panel(panel_id: int, body: PanelPatch):
-    """Change a panel's name, address, TLS check, whether it is checked, or its API key / token (a new one is tried on the panel before it replaces the old)."""
+    """Change a panel's name, address, TLS check, whether it is checked, its API key / token (a new one is tried on the panel before it replaces the old), or - a PasarGuard panel - the server of ours that
+    runs it (`host_server_id`: proved over SSH first - a PasarGuard panel container at this panel's version must run there; 0 forgets the choice)."""
     return {"ok": True, "panel": _wrap(panels.update, panel_id, body.model_dump(exclude_none=True))}
 
 

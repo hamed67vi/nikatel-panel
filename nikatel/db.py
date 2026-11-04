@@ -53,6 +53,7 @@ MIGRATIONS: list[tuple[int, str, list[str] | Callable[[Session], None]]] = [
     (19, "the category PasarGuard Nodes is called PasarGuard again (one PasarGuard profile)", lambda db: _rename_nodes_tag(db)),
     (20, "cfg_meters, cfg_buckets tables (created by create_all)", []),
     (21, "user_watches, user_watch_samples tables (created by create_all)", []),
+    (22, "panels.host_server_id column (the server that runs a PasarGuard panel, chosen by the owner)", lambda db: _add_column(db, "panels", "host_server_id", "INTEGER")),
 ]
 
 

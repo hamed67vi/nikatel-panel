@@ -5,9 +5,10 @@ What there is to update, and how each is done:
     restarts, and the users on it drop - so several nodes are updated ROLLING (`nodes_start`): one at a time, each until it is connected again with the new version; one that does not come back
     stops the run, and the nodes after it are left as they were.
   * the PANEL itself: PasarGuard has no route for it. The official command on the panel's own server is `pasarguard update` (pull the new images, restart), so this panel does what the owner
-    would type over SSH: on the server that runs the panel (found by the address of its URL among our servers) one reviewed, detached action (`install_pgpanel_update`: a backup first when the
-    command has one, then the update) that the panel follows, and then waits until the panel answers with the new version. It is refused when the server that runs the panel is not in the
-    Servers list (nothing can be done over SSH to a machine the panel has no login for), when the name of the panel is not typed back, and in read-only mode.
+    would type over SSH: on the server that runs the panel (the one the owner chose in the panel's profile - proved over SSH when he chose it (`prove_host`) - or, without a choice, the one whose
+    address the URL resolves to; a panel behind Cloudflare can only be found by the choice) one reviewed, detached action (`install_pgpanel_update`: a backup first when the command has one, then
+    the update) that the panel follows, and then waits until the panel answers with the new version. It is refused when the server that runs the panel is not known (nothing can be done over SSH
+    to a machine the panel has no login for), when the name of the panel is not typed back, and in read-only mode.
   * what is the newest: the releases of PasarGuard/panel, PasarGuard/node and XTLS/Xray-core on GitHub, kept for an hour (`latest_tags`).
 Nothing here is automatic: a version that is behind is only shown; every update is a click and a question."""
 from __future__ import annotations
@@ -85,8 +86,15 @@ def latest_tags(force: bool = False) -> dict[str, dict]:
 
 
 # ------------------------------------------------------------------ what is installed
-def host_server(url: str, resolver=None) -> dict | None:
-    """The server of ours that runs the panel at `url` (its host name or address is the host of a server, or the DNS says so), None when there is none."""
+def host_server(url: str, resolver=None, host_id: int = 0) -> dict | None:
+    """The server of ours that runs the panel at `url`: the one the owner chose (`host_id`, proved over SSH when he chose it) when it is still in the list; otherwise the one whose host name or address
+    is the host of the URL, or the DNS says so. None when there is none (the owner's panel sits behind Cloudflare: its name resolves to Cloudflare, never to the server - only the choice finds it)."""
+    if host_id:
+        chosen = next((s for s in pg_nodes._servers() if s["id"] == int(host_id)), None)
+
+        if chosen is not None:
+            return chosen
+
     host = (urlparse(url or "").hostname or "").strip()
 
     if not host:
@@ -99,9 +107,44 @@ def host_server(url: str, resolver=None) -> dict | None:
     return pairs[0]["server"]
 
 
+def prove_host(panel_id: int, server_id: int) -> dict:
+    """Before a server is kept as the one that runs a PasarGuard panel: over SSH it must show a PasarGuard panel container, and the version inside that container must be the version the panel reports to
+    us - so a wrong pick can never send the update to another machine. Read-only on the server. Returns {server, container, version}; ValueError says why it is not proved."""
+    p = next((x for x in _panels() if x["id"] == int(panel_id)), None)
+
+    if p is None:
+        raise ValueError("no such PasarGuard panel")
+
+    try:
+        node, sname, _ip = extras._node(int(server_id))
+    except ValueError:
+        raise ValueError("that server is not in the Servers list")
+
+    if not p["version"]:
+        raise ValueError("the version of this panel is not known yet (it has not been read from the panel): wait for its next check, then choose its server again")
+
+    try:
+        info = parse_info(run_script(node, "pgpanel_info", timeout=40))
+    except (SSHError, ValueError) as e:
+        raise ValueError(f"{sname} did not answer over SSH ({str(e)[:120]}): not proved, nothing kept")
+
+    if info.get("container", "none") in ("", "none"):
+        raise ValueError(f"{sname} runs no PasarGuard panel container (docker shows none there): it is not the server of this panel")
+
+    ver = info.get("version", "")
+
+    if not ver:
+        raise ValueError(f"{sname} runs a PasarGuard panel container ({info['container']}) but its version could not be read inside it: not proved, nothing kept")
+
+    if ver.strip().lstrip("v") != p["version"].strip().lstrip("v"):
+        raise ValueError(f"{sname} runs a PasarGuard panel at version {ver}, this panel reports {p['version']}: it is not the same panel")
+
+    return {"server": {"id": int(server_id), "name": sname}, "container": info["container"], "version": ver}
+
+
 def _panels() -> list[dict]:
     with session() as db:
-        return [{"id": p.id, "name": p.name, "url": p.url, "version": p.version or "", "status": p.status, "enabled": bool(p.enabled)}
+        return [{"id": p.id, "name": p.name, "url": p.url, "version": p.version or "", "status": p.status, "enabled": bool(p.enabled), "host_id": int(p.host_server_id or 0)}
                 for p in db.scalars(select(Panel).where(Panel.type == "pasarguard").order_by(Panel.id))]
 
 
@@ -113,7 +156,7 @@ def overview(force: bool = False, resolver=None) -> dict:
     out_panels, out_nodes = [], []
 
     for p in _panels():
-        host = host_server(p["url"], resolver)
+        host = host_server(p["url"], resolver, p["host_id"])
         row = {**p, "latest": tag("panel"), "behind": newer(tag("panel"), p["version"]), "host": {"id": host["id"], "name": host["name"], "online": host["online"], "enabled": host["enabled"]} if host else None,
                "host_name": (urlparse(p["url"]).hostname or ""), "error": ""}
         out_panels.append(row)
@@ -264,7 +307,7 @@ def parse_info(out: str) -> dict:
     for ln in str(out).splitlines():
         p = ln.strip().split(None, 1)
 
-        if len(p) == 2 and p[0] in ("CLI", "BACKUP", "DIR", "DOCKER", "DF"):
+        if len(p) == 2 and p[0] in ("CLI", "BACKUP", "DIR", "DOCKER", "DF", "CONTAINER", "VERSION"):
             d[p[0].lower()] = p[1].strip()
 
     return d
@@ -277,7 +320,7 @@ def panel_plan(panel_id: int, resolver=None) -> dict:
     if p is None:
         raise ValueError("no such PasarGuard panel")
 
-    tags, host, problems = latest_tags(), host_server(p["url"], resolver), []
+    tags, host, problems = latest_tags(), host_server(p["url"], resolver, p["host_id"]), []
     latest = (tags.get("panel") or {}).get("version", "")
 
     if get_settings().read_only:
@@ -287,7 +330,8 @@ def panel_plan(panel_id: int, resolver=None) -> dict:
         problems.append("This panel is switched off in the list of panels.")
 
     if host is None:
-        problems.append(f"The server that runs this panel ({urlparse(p['url']).hostname or p['url']}) is not in the Servers list: add it (Servers → Add server, with its SSH login) and this panel can update it over SSH.")
+        problems.append(f"The server that runs this panel is not known: its address ({urlparse(p['url']).hostname or p['url']}) is not in the Servers list and the DNS does not point it at one of ours (a name behind Cloudflare never does). "
+                        "Choose the server in the panel's profile (Panels → the panel → Edit → Server that runs this panel): it is proved over SSH, then this panel can update it.")
     elif not host["enabled"]:
         problems.append(f"The server {host['name']} is switched off in the Servers list.")
     elif host["online"] is False:

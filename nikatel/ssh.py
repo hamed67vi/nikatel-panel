@@ -339,6 +339,7 @@ if [ -n "$N" ]; then
   P=$(docker inspect --format '{{ index .Config.Labels "com.docker.compose.project" }}' "$N" 2>/dev/null | head -1); W=$(docker inspect --format '{{ index .Config.Labels "com.docker.compose.project.working_dir" }}' "$N" 2>/dev/null | head -1)
   echo "SERVICE $(docker inspect --format '{{ index .Config.Labels "com.docker.compose.service" }}' "$N" 2>/dev/null | head -1)"
   echo "PROJECT $P"; echo "WDIR $W"
+  echo "VERSION $(docker exec "$N" sh -c 'cat /code/app/version.py /code/app/__init__.py 2>/dev/null' 2>/dev/null | sed -n 's/^__version__ *= *"\([^"]*\)".*/\1/p' | head -n 1)"
   if docker ps --filter "label=com.docker.compose.project=$P" --format '{{.Image}}' 2>/dev/null | grep -q '^postgres'; then echo "DB postgres"; elif [ -f /var/lib/pasarguard/db.sqlite3 ]; then echo "DB sqlite"; else echo "DB unknown"; fi
   echo "OVERRIDES $( { grep -c ':/code/' "$W/docker-compose.override.yml" 2>/dev/null || true; } )"
 fi

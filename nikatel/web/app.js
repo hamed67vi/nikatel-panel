@@ -2905,9 +2905,11 @@ window.pnEditWin = () => {
       <label>Name<input name="name" value="${esc(p.name)}" autocomplete="off"></label><label>Address<input name="url" value="${esc(p.url)}" autocomplete="off"></label>
       <div class="pn-wide pn-conn">${pnConnHtml(p)}</div>
       ${pnCredHtml(true)}
+      ${p.type === "pasarguard" ? `<label class="pn-wide" title="The server of ours that runs this panel: the Safe update and the nightly update reach it over SSH. Without a choice it is looked for by the address of the panel - a name behind Cloudflare is never found that way. A new choice is proved over SSH before it is kept: a PasarGuard panel container at this panel's version must run there.">Server that runs this panel<select name="host_server_id"><option value="0">— not chosen: found by its address —</option>${(state.serversCache || []).filter(s => s.enabled !== false).map(s => `<option value="${s.id}" ${s.id === (p.host_server_id || 0) ? "selected" : ""}>${esc(s.name)} (${esc(s.host || "")})</option>`).join("")}</select></label>` : ""}
       <label class="chk"><input name="verify_tls" type="checkbox" ${p.verify_tls ? "checked" : ""}> verify the TLS certificate</label><label class="chk"><input name="enabled" type="checkbox" ${p.enabled ? "checked" : ""}> enabled (checked every 2 min)</label>
       <div class="frm-act"><button class="pri" type="submit">Save</button><button type="button" onclick="closeModal()">Cancel</button><span class="sp"></span><button type="button" class="danger" onclick="closeModal();pnDel(${p.id}, '${esc(p.name)}')">Remove from the list</button></div></form>`, "narrow");
   const f = document.querySelector("#modal .pn-win"); if (f) { pnHint(f); if (f.elements.username) f.elements.username.value = p.username || ""; }
+  if (p.type === "pasarguard" && !(state.serversCache || []).length) api("/api/servers").then(list => { state.serversCache = list; const sel = document.querySelector("#modal .pn-win select[name=host_server_id]"); if (sel) sel.innerHTML = '<option value="0">— not chosen: found by its address —</option>' + list.filter(s => s.enabled !== false).map(s => `<option value="${s.id}" ${s.id === (p.host_server_id || 0) ? "selected" : ""}>${esc(s.name)} (${esc(s.host || "")})</option>`).join(""); }).catch(() => {});      // (the Panels page may not have read the servers yet)
 };
 window.pnAdd = async e => {
   e.preventDefault(); const f = new FormData(e.target), mode = e.target.dataset.mode || "key", body = {name: f.get("name").trim(), type: f.get("type"), url: f.get("url").trim(), verify_tls: !!f.get("verify_tls")};
@@ -2927,6 +2929,7 @@ window.pnEdit = async (e, id) => {
   let again = false;      // a new key / token / sign-in: it is tried on the panel first and replaces the old one only when the panel accepts it
   if (mode === "key" && (f.get("token") || "").trim()) { body.token = f.get("token").trim(); again = true; }
   if (mode === "login" && f.get("password")) { body.username = (f.get("username") || "").trim(); body.password = f.get("password"); body.keep_login = false; again = true; }
+  if (f.get("host_server_id") != null) { body.host_server_id = parseInt(f.get("host_server_id") || "0", 10); const was = ((state.panelsCache || []).find(x => String(x.id) === String(id)) || {}).host_server_id || 0; if (body.host_server_id && body.host_server_id !== was) toast("Asking the chosen server over SSH… (a few seconds)"); }      // (a PasarGuard panel: the server that runs it; a new choice is proved over SSH first)
   if (again) toast("Trying it on the panel…");
   try { const r = await api(`/api/panels/${id}`, {method: "PATCH", body: JSON.stringify(body)}); toast(again ? `✓ Saved — connected with the new ${r.panel.auth.kind === "api_key" ? "API key" : "token"}` : "✓ Saved", "ok"); closeModal(); refresh(); } catch (err) { toast("✕ " + err.message, "bad"); }
   return false;

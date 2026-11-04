@@ -119,7 +119,7 @@ def _fake_docker(tmp_path, running=True, pg=True, same=False):
         f'  "compose pull") [ -n "{"1" if same else ""}" ] || echo sha256:NEWPANEL > $S/tag;;\n'
         '  "compose up") cp $S/tag $S/running 2>/dev/null || echo sha256:OLDPANEL > $S/running;;\n'
         '  "compose restart") ;;\n'
-        '  "exec "*) echo PGDUMPDATA;;\n'
+        '  "exec "*) case "$*" in *version.py*) echo \'__version__ = "5.5.1"\';; *) echo PGDUMPDATA;; esac;;\n'
         "esac\nexit 0\n")
     (bindir / "docker").chmod((bindir / "docker").stat().st_mode | stat.S_IEXEC)
     return bindir, log, opt
@@ -203,7 +203,8 @@ def test_the_look_at_the_panel_server_names_the_container_the_database_and_the_o
     out = subprocess.run(["bash", "-c", ssh.SCRIPTS["pgpanel_info"][0]], capture_output=True, text=True, timeout=30, check=False, env={**os.environ, "PATH": f"{bindir}:{os.environ['PATH']}"}).stdout
     d = pg_auto.parse_panel_info(out)
     assert d["container"] == "pasarguard-pasarguard-1" and d["service"] == "pasarguard" and d["db"] == "postgres" and d["overrides"] == "2" and d["wdir"] == str(opt) and d["id"] == "sha256:OLDPANEL", out
-    assert not any(c.startswith(("docker tag", "docker compose", "docker exec")) for c in log.read_text().splitlines())
+    assert d["version"] == "5.5.1" and pg_update.parse_info(out)["version"] == "5.5.1" and pg_update.parse_info(out)["container"] == "pasarguard-pasarguard-1"      # (the version inside the container: the proof of the server that runs the panel reads it)
+    assert not any(c.startswith(("docker tag", "docker compose")) for c in log.read_text().splitlines()) and [c for c in log.read_text().splitlines() if c.startswith("docker exec")] == ["docker exec pasarguard-pasarguard-1 sh -c cat /code/app/version.py /code/app/__init__.py 2>/dev/null"]
 
 
 # ------------------------------------------------------------------ the night, with a fake panel, fake servers, a fake probe and a fake Telegram

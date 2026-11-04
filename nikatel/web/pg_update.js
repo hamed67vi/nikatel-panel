@@ -62,7 +62,24 @@ window.pgUpdLoad = async force => {
     if (pill) { pill.textContent = left ? `${left} behind` : "Up to date"; pill.className = "abt-pill" + (left ? " warn" : ""); }
   } catch (e) { box.innerHTML = `<div class="err">${esc(e.message)}</div>`; }
 };
-window.pgUpdAddHost = pid => { const p = ((pgu.data || {}).panels || []).find(x => x.id === pid); if (p) pgSrvAddServer(p.name, p.host_name); };      // the Add server form with the address of the panel filled in
+window.pgUpdAddHost = pid => pgUpdHostWin(pid);      // "choose its server" in the Safe update dialog
+const pgUpdHostWin = async pid => {      // the server of ours that runs this panel, picked from the Servers list and PROVED over SSH before it is kept (the owner, 2026-11-04: box B was in the list, yet the panel's name resolves to Cloudflare, so it could never be matched by its address)
+  const p = ((pgu.data || {}).panels || []).find(x => x.id === pid), name = p ? p.name : "the panel";
+  showModal(`<b>Server that runs ${esc(name)}</b>`, '<div class="loading"><i class="spin"></i><span>Reading the Servers list…</span></div>', "narrow");
+  let list = []; try { list = (await api("/api/servers")).filter(s => s.enabled !== false); } catch (e) { showModal(`<b>Server that runs ${esc(name)}</b>`, `<div class="err">${esc(e.message)}</div>`, "narrow"); return; }
+  const cur = p ? p.host_id || 0 : 0;
+  showModal(`<b>Server that runs ${esc(name)}</b>`, `<form class="frm pn-win" onsubmit="return pgUpdPickHost(event, ${pid})">
+      <p class="mut pn-wide">The address of this panel${p && p.host_name ? ` (${esc(p.host_name)})` : ""} does not say which of your servers runs it (a name behind Cloudflare never does). Pick the server; before it is kept it is asked over SSH: a PasarGuard panel container must run there at this panel's version, so a wrong pick cannot send the update to another machine.</p>
+      <label class="pn-wide">Server that runs this panel<select name="host_server_id"><option value="0">— not chosen: found by its address —</option>${list.map(s => `<option value="${s.id}" ${s.id === cur ? "selected" : ""}>${esc(s.name)} (${esc(s.host || "")}${s.online === false ? ", off" : ""})</option>`).join("")}</select></label>
+      <div class="frm-act"><button class="pri" type="submit">Prove and keep</button><button type="button" onclick="closeModal()">Cancel</button></div></form>`, "narrow");
+};
+window.pgUpdPickHost = async (e, pid) => {
+  e.preventDefault(); const sid = parseInt(new FormData(e.target).get("host_server_id") || "0", 10), b = e.target.querySelector("button[type=submit]"); if (b) b.disabled = true;
+  toast(sid ? "Asking the server over SSH… (a few seconds)" : "Saving…");
+  try { await api(`/api/panels/${pid}`, {method: "PATCH", body: JSON.stringify({host_server_id: sid})}); toast(sid ? "✓ Proved and kept: that server runs this panel" : "✓ The choice is forgotten", "ok"); closeModal(); pgUpdLoad(true); pgUpdSafe("panel"); }
+  catch (err) { toast("✕ " + err.message, "bad"); if (b) b.disabled = false; }
+  return false;
+};
 
 /* ---- the story of an update: a window that follows the action until it is done (it keeps running when the window is closed) */
 const pgUpdFollow = async (title, aid, polls) => {
@@ -81,7 +98,7 @@ window.pgUpdSafe = async scope => {
   try {
     const r = await api(`/api/pg-updates/safe/plan?scope=${scope}`);
     const nodes = r.nodes.map((n, i) => `<li><b>${i + 1}. ${esc(n.name)}</b> <small class="mut">on ${esc(n.server.name)} · ${esc(n.usage_text)} now</small> - ${n.do.map(esc).join(" + ")}</li>`).join("");
-    const pans = r.panels.map(p => `<li><b>Panel ${esc(p.name)}</b> <small class="mut">${esc(pguShort(p.version))} → ${esc(pguShort(p.latest))}</small> - ${p.skip ? `<span class="err">will NOT be updated: ${esc(p.skip)}</span>${p.host ? "" : ` <a class="ue-link" onclick="closeModal(); pgUpdAddHost(${p.id})">add its server</a>`}` : "a backup first, then the official update"}</li>`).join("");
+    const pans = r.panels.map(p => `<li><b>Panel ${esc(p.name)}</b> <small class="mut">${esc(pguShort(p.version))} → ${esc(pguShort(p.latest))}</small> - ${p.skip ? `<span class="err">will NOT be updated: ${esc(p.skip)}</span>${p.host ? "" : ` <a class="ue-link" onclick="closeModal(); pgUpdAddHost(${p.id})">choose its server</a>`}` : "a backup first, then the official update"}</li>`).join("");
     const skipped = r.skipped.map(s => `<li><b>${esc(s.name)}</b> - ${esc(s.why)}</li>`).join("");
     const need = (r.panels.find(p => !p.skip) || {}).name;
     showModal(`<b>${title}</b>`, `

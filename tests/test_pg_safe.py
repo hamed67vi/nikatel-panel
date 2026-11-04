@@ -546,7 +546,7 @@ def test_the_buttons_and_their_window():
     js = (WEB / "pg_update.js").read_text(encoding="utf-8")
     assert 'onclick="pgUpdSafe(\'${scope}\')"' in js and '"Safe update panel…"' in js and '"Safe update nodes…"' in js
     assert "window.pgUpdSafe = async scope =>" in js and "api(`/api/pg-updates/safe/plan?scope=${scope}`)" in js and 'api("/api/pg-updates/safe", {method: "POST"' in js and "Start Safe update" in js
-    assert "Type the name of the panel to confirm" in js and "Order - the quietest first" in js and "add its server</a>" in js
+    assert "Type the name of the panel to confirm" in js and "Order - the quietest first" in js and "choose its server</a>" in js and "add its server</a>" not in js      # (2026-11-04: the server that runs the panel is chosen and proved, not found by its address)
 
 
 # ------------------------------------------------------------------ the two buttons: the panel, the nodes

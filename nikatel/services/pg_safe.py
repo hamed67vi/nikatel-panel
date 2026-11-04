@@ -205,7 +205,7 @@ def plan(resolver=None, force: bool = False, scope: str = "all") -> dict:
         if p.get("error"):
             skip = p["error"]
         elif not p["host"]:
-            skip = "its server is not in the Servers list: add it first (Servers → Add server), then the panel can be updated over SSH"
+            skip = "the server that runs it is not known: its address is not in the Servers list and the DNS does not point it at one of ours (a name behind Cloudflare never does) - choose its server in the panel's profile (proved over SSH), then the panel can be updated"
         elif p["host"].get("online") is False:
             skip = f"its server {p['host']['name']} does not answer"
         elif ka:

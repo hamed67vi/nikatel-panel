@@ -699,7 +699,7 @@ def sync_nodes(tag: str = "") -> dict:
 def public(p: Panel) -> dict:
     return {"id": p.id, "name": p.name, "type": p.type, "url": p.url, "username": p.username, "verify_tls": p.verify_tls, "enabled": p.enabled,
             "status": p.status, "status_since": p.status_since, "fails": p.fails, "checked_at": p.checked_at, "latency_ms": p.latency_ms,
-            "version": p.version, "stats": p.stats or {}, "nodes": p.nodes or [], "last_error": p.last_error, "auth": _auth(p)}
+            "version": p.version, "stats": p.stats or {}, "nodes": p.nodes or [], "last_error": p.last_error, "auth": _auth(p), "host_server_id": p.host_server_id or 0}
 
 
 def _credentials(c: dict, token: str, username: str, password: str, keep_login: bool) -> tuple[dict, dict]:
@@ -778,9 +778,23 @@ def add(name: str, typ: str, url: str, *, token: str = "", username: str = "", p
 def update(panel_id: int, changes: dict) -> dict:
     """Name, address, TLS check, enabled; and the credentials: a new `token`, or a `password` (a login that is kept unless keep_login is false).
 
-    New credentials are tried on the panel first; nothing is replaced when the panel does not accept them."""
+    New credentials are tried on the panel first; nothing is replaced when the panel does not accept them. `host_server_id` (a PasarGuard panel): the server of ours that runs it - a new choice is
+    PROVED over SSH first (services/pg_update.prove_host: a PasarGuard panel container runs there at this panel's version), so a wrong pick can never send the update to another machine; 0 forgets it."""
     token, password = str(changes.get("token") or "").strip(), str(changes.get("password") or "")
     sec, admin = None, ""
+    host_id = None
+
+    if "host_server_id" in changes:
+        host_id = int(changes.get("host_server_id") or 0)
+
+        with session() as db:
+            cur = db.get(Panel, panel_id)
+            was = int(cur.host_server_id or 0) if cur is not None else 0
+
+        if host_id and host_id != was:
+            from . import pg_update
+
+            pg_update.prove_host(panel_id, host_id)
 
     if changes.get("url") and not (token or password):          # the saved key / login is never sent to ANOTHER machine: a new host or port needs the credential typed again (it is tried there first)
         with session() as db:
@@ -834,6 +848,9 @@ def update(panel_id: int, changes: dict) -> dict:
 
         if "enabled" in changes:
             p.enabled = bool(changes["enabled"])
+
+        if host_id is not None:
+            p.host_server_id = host_id or None
 
         if changes.get("name"):
             n = str(changes["name"]).strip()[:40]
