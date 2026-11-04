@@ -43,10 +43,12 @@ def test_a_fault_is_sure_after_two_looks_over_enough_seconds_and_a_repair_waits_
 
 
 # ------------------------------------------------------------------ the job
-def _world(monkeypatch, mode="fix"):
+def _world(monkeypatch, mode="fix", heal=True):
     from nikatel.config import get_settings
 
     monkeypatch.setattr(get_settings(), "read_only", False)
+    monkeypatch.setattr(carry, "HEAL", heal)                                                                # (the repair by itself is off in production: the tests of the repair switch it on)
+    monkeypatch.setattr(carry, "_MASS_TOLD", [0.0])
     monkeypatch.setattr(carry.jobs, "stopping", lambda: False)                                              # (an earlier test that shut the app down leaves the flag set)
     st.put("repair", {"mode": mode})
     ids = _servers_and_tunnels()
@@ -106,6 +108,31 @@ def test_a_port_that_carries_nothing_is_seen_twice_told_once_and_repaired_by_its
     _answers(monkeypatch, {8075: "CARRIES", 443: "CARRIES"}, {2096: "CARRIES"})
     carry.run()
     assert _state() == {} and [(lvl, n) for lvl, n, _ in told] == [("warn", "t2"), ("ok", "t2")]
+
+
+def test_the_repair_by_itself_is_off_the_watch_only_looks_and_tells_once(monkeypatch):      # (2026-11-04: it restarted, then rebuilt, ten healthy tunnels at once)
+    assert carry.HEAL is False                                                                              # (what production has)
+    _ids, started, told = _world(monkeypatch, heal=False)
+    _answers(monkeypatch, {8075: "CLOSED", 443: "CARRIES"}, {2096: "CARRIES"})
+    carry.run()
+    _age("t2", 300)
+    carry.run()
+    carry.run()
+    assert _state()["confirmed"] is True and _state()["told"] is True and "runs" not in _state()           # (confirmed and told, never started)
+    assert not started and len(told) == 1 and "Only reported" in told[0][2] and "repairs it by itself" not in told[0][2]
+
+
+def test_many_tunnels_flagged_in_one_look_are_the_test_or_the_network_nothing_is_kept_told_or_repaired(monkeypatch):
+    _ids, started, told = _world(monkeypatch)
+    monkeypatch.setattr(carry, "MASS_FLAGGED", 2)
+    _answers(monkeypatch, {8075: "CLOSED", 443: "CLOSED"}, {2096: "CARRIES", 443: "CARRIES"})
+    carry.run()
+    carry.run()
+    assert _state() == {} and _state("t3") == {} and not started                                           # (both flagged at once: no state)
+    assert [(lvl, n) for lvl, n, _ in told] == [("info", "")] and "2 tunnels were flagged in one look" in told[0][2]      # (one event, not one per look)
+    _answers(monkeypatch, {8075: "CLOSED", 443: "CARRIES"}, {2096: "CARRIES"})
+    carry.run()
+    assert _state()["fails"] == 1                                                                           # (one tunnel alone is still a fault to watch)
 
 
 def test_a_service_that_does_not_answer_either_and_a_server_that_does_not_answer_are_not_a_fault_of_the_tunnel(monkeypatch):

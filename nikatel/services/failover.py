@@ -582,6 +582,16 @@ def _busy(s: dict, sid: int, now: int) -> bool:
 
 
 RETRY_NO_TARGET = 600     # a dead server whose tunnels found no target is looked at again after this long
+CUT_WAIT = 90             # an Iran server that is ON but cut from abroad (the pulse: "the panel's host cannot connect to it, but it is on") whose tunnels are half down or more is replaced after this many seconds ...
+CUT_SHARE = 0.5           # ... (the owner, 2026-11-04: "when the routes of the Iran servers are closed the Doctor must replace one quickly - uptime matters to us"; a server that is off waits `server_minutes`)
+CUT_WHY = "the server is cut from abroad (it is on, only Iran sees it) and its tunnels are down"
+
+
+def is_cut(server) -> bool:
+    """An Iran server that is on but cut from abroad: the pulse's note says the panel's host cannot connect to it although somebody inside Iran sees it. Its tunnels that the foreign servers dial into are down."""
+    from . import pulse
+
+    return getattr(server, "online", None) is True and str(getattr(server, "last_error", "") or "").startswith(pulse.IRAN_ONLY)
 
 
 # ------------------------------------------------------------------ the job: dead servers (run by the Doctor in mode "move")
@@ -597,10 +607,17 @@ def check() -> None:
 
     with session() as db:
         down = {x.id: x.name for x in db.scalars(select(Server).where(Server.role == "iran", Server.enabled.is_(True), Server.online.is_(False)))}
-        load = {}
+        load, bad = {}, {}
 
         for t in db.scalars(select(Tunnel).where(Tunnel.enabled.is_(True))):
             load[t.iran_server_id] = load.get(t.iran_server_id, 0) + 1
+
+            if t.state != "up":
+                bad[t.iran_server_id] = bad.get(t.iran_server_id, 0) + 1
+
+        cut = {x.id: x.name for x in db.scalars(select(Server).where(Server.role == "iran", Server.enabled.is_(True), Server.online.is_(True)))
+               if is_cut(x) and load.get(x.id) and bad.get(x.id, 0) / load[x.id] >= CUT_SHARE}          # (on, cut from abroad AND its tunnels are down: a server only the panel cannot reach, whose tunnels carry, is left alone)
+        down.update(cut)
 
     stale = [sid for sid in s["seen"] if int(sid) not in down]
 
@@ -614,7 +631,7 @@ def check() -> None:
         since = s["seen"].setdefault(str(sid), now)
         changed = changed or since == now
 
-        if now - since < wait or _busy(s, sid, now) or not load.get(sid) or now - int(s.setdefault("tried", {}).get(str(sid), 0)) < RETRY_NO_TARGET:
+        if now - since < (CUT_WAIT if sid in cut else wait) or _busy(s, sid, now) or not load.get(sid) or now - int(s.setdefault("tried", {}).get(str(sid), 0)) < RETRY_NO_TARGET:
             continue
 
         try:
@@ -625,11 +642,15 @@ def check() -> None:
 
         p["id"] = f"{sid}-{now}"
         p["down_since"] = since
+        lead = f"is cut from abroad (on, but only Iran sees it) and its tunnels have been down for {(now - since) // 60} min" if sid in cut else f"has been off for {(now - since) // 60} min"
+
+        if sid in cut:
+            p["why"] = CUT_WHY
         s["tried"][str(sid)] = now
         changed = True
 
         if not p["target"]:
-            _notice(f"⚠ Iran server {name} has been off for {(now - since) // 60} min, but no healthy Iran server can carry its {len(p['tunnels'])} tunnel(s) right now" + (f" ({'; '.join(p['problems'])})" if p["problems"] else "") + ". The Doctor tries again in 10 minutes.")
+            _notice(f"⚠ Iran server {name} {lead}, but no healthy Iran server can carry its {len(p['tunnels'])} tunnel(s) right now" + (f" ({'; '.join(p['problems'])})" if p["problems"] else "") + ". The Doctor tries again in 10 minutes.")
 
             with session() as db:
                 emit(db, "bad", "actions", f"Doctor: {name} is off, no Iran server can take its tunnels yet; trying again in 10 minutes.", name)
@@ -637,7 +658,7 @@ def check() -> None:
             continue
 
         _save(s)
-        _notice(f"🔶 Iran server {name} has been off for {(now - since) // 60} min: " + _describe(p) + "." + (f" Also moved to keep the DNS consistent: {', '.join(p['pulled'])}." if p.get("pulled") else ""))
+        _notice(f"🔶 Iran server {name} {lead}: " + _describe(p) + "." + (f" Also moved to keep the DNS consistent: {', '.join(p['pulled'])}." if p.get("pulled") else ""))
         run_plan(p)                            # one server per tick; the story writes the state itself when it is done
         return
 
@@ -773,7 +794,7 @@ def _work(aid: int, p: dict, finish: bool = True) -> bool:
 
     with session() as db:
         src = db.get(Server, p["server_id"])
-        src_on = src is not None and src.online is True
+        src_on = src is not None and src.online is True and not is_cut(src)          # (a server that is cut from abroad cannot be reached to wait for its old tunnels: the failover way, like a dead one)
 
     autopilot._say(aid, f"{'Move' if src_on else 'Failover'} of {p['server']} ({p['why']}): {len(p['tunnels'])} tunnel(s) → {p['target']['name']}, {len(p['dns'])} DNS record(s) → {p['target']['ip']}"
                    + (" - the server is on: the new tunnels are built first, the old ones stay until the DNS has settled." if src_on and p["tunnels"] else ""))
@@ -802,7 +823,7 @@ def _work(aid: int, p: dict, finish: bool = True) -> bool:
                 with session() as db:
                     row = db.get(Tunnel, t["id"])
 
-                    if row is not None and row.iran is not None and row.iran.online is False:
+                    if row is not None and row.iran is not None and (row.iran.online is False or is_cut(row.iran)):
                         leftover.append(_leftover({**snap, "port": row.port}, p["server_id"]))
 
                 kind = _best_kind(aid, snap, p["target"], pairs, first_ok=True)      # (a dead server: the first type that connects, in the Doctor's order - no time for a full comparison)

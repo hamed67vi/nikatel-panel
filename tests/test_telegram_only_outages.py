@@ -26,5 +26,5 @@ def test_no_dns_or_pool_switch_message_goes_through_the_telegram_senders_any_mor
 def test_the_outages_still_go_out():
     f = (SRC / "failover.py").read_text(encoding="utf-8")
     o = (SRC / "outbound.py").read_text(encoding="utf-8")
-    assert '_notice(f"⚠ Iran server {name} has been off for' in f and '_notice(f"🔶 Iran server {name} has been off for' in f          # (the Iran server that is off and the move the Doctor made)
+    assert '_notice(f"⚠ Iran server {name} {lead}' in f and '_notice(f"🔶 Iran server {name} {lead}' in f          # (the Iran server that is off and the move the Doctor made)
     assert '_tell(("✅ " if active else "🔴 ") + f"Outbound relay on {name} {say}")' in o and 'telegram.send_text({"ok": "✅ ", "degraded": "⚠ ", "down": "🔴 "}[new]' in o

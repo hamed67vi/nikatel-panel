@@ -35,6 +35,10 @@ HEAL_SLOW_GAP = 1800         # ... and after HEAL_FAST_RUNS repairs that did not
 HEAL_FAST_RUNS = 3
 UP_FOR = 120                 # a tunnel that has been up for less than this is not asked yet (its services are still starting)
 RECHECK_WAIT = 20            # seconds after a repair step before the ports are asked again
+HEAL = False                 # the repair by itself is OFF (2026-11-04: in its first hours the watch restarted, then rebuilt, ten healthy tunnels at once - see CHANGELOG 1.69.211): it only looks and tells until its verdict is proved
+MASS_FLAGGED = 3             # this many tunnels flagged in ONE look are the test or the network, never the tunnels: nothing is kept, told or repaired
+MASS_TELL_EVERY = 1800       # ... and that is told at most this often
+_MASS_TOLD = [0.0]
 
 
 # ------------------------------------------------------------------ pure helpers (tested)
@@ -216,6 +220,8 @@ def run() -> None:
     with ThreadPoolExecutor(4) as ex:
         answers = dict(zip(by_iran, ex.map(look_server, by_iran.values()), strict=True))
 
+    judged: list[tuple[dict, list[int]]] = []
+
     for iran_id, group in by_iran.items():
         if answers[iran_id] is None:
             continue
@@ -228,7 +234,27 @@ def run() -> None:
                 continue
 
             if res is not None:
-                _apply(r, res[0], now)
+                judged.append((r, res[0]))
+
+    flagged = [r["name"] for r, bad in judged if bad]
+
+    if len(flagged) >= MASS_FLAGGED:
+        _mass(flagged)
+        judged = [(r, []) for r, _bad in judged]               # (every state goes: nothing is kept, told or repaired)
+
+    for r, bad in judged:
+        _apply(r, bad, now)
+
+
+def _mass(names: list[str]) -> None:
+    """Many tunnels flagged in one look: the test or the network, never the tunnels (2026-11-04: ten at once were restarted and rebuilt). One event, at most every MASS_TELL_EVERY seconds."""
+    log.info("carry: %s tunnels flagged in one look (%s): not told, not repaired", len(names), ", ".join(names[:8]))
+
+    if time.time() - _MASS_TOLD[0] < MASS_TELL_EVERY:
+        return
+
+    _MASS_TOLD[0] = time.time()
+    _tell("info", "", f"{len(names)} tunnels were flagged in one look ({', '.join(names[:6])}{'...' if len(names) > 6 else ''}): that is the test or the network, not the tunnels - nothing is kept, told or repaired.")
 
 
 def _apply(r: dict, bad: list[int], now: int) -> None:
@@ -239,7 +265,7 @@ def _apply(r: dict, bad: list[int], now: int) -> None:
     if state.get("confirmed") and not state.get("told"):
         state["told"] = True
         _tell("warn", name, f"Tunnel {name}: port {', '.join(str(p) for p in state['ports'])} accepts connections but carries nothing - a connection to it is closed at once, although the service behind it answers. "
-                            "The Doctor repairs it by itself (restart, rebuild, another Iran server).")
+                            + ("The Doctor repairs it by itself (restart, rebuild, another Iran server)." if HEAL else "Only reported: the repair by itself is off until this check is proved."))
     elif prev.get("told") and not state:
         _tell("ok", name, f"Tunnel {name}: its ports carry connections again.")
 
@@ -258,7 +284,7 @@ def _may_heal(r: dict) -> bool:
     from . import actions, autopilot, bandwidth
     from .tunnels import servers_off_of
 
-    if not bandwidth.actions_mode_allows_fix() or autopilot.storm_now():
+    if not HEAL or not bandwidth.actions_mode_allows_fix() or autopilot.storm_now():
         return False
 
     if r["name"] in autopilot._BUSY or r["name"] in actions._RUNNING or r["name"] in set(st.get("alerts").get("muted") or []):
@@ -323,7 +349,7 @@ def heal(aid: int, tunnel_id: int) -> None:
 
     for kind in ("restart", "rebuild", "move"):
         if off := servers_off_of(snap["iran_id"], snap["foreign_id"]):
-            say(f"Before the step â€œ{kind}â€: {'; '.join(off)}. It is looked at again when the server answers.")
+            say(f"Before the step “{kind}”: {'; '.join(off)}. It is looked at again when the server answers.")
             autopilot._say(aid, f"{name}: stopped.", done=True, ok=False)
             return
 
@@ -344,7 +370,7 @@ def heal(aid: int, tunnel_id: int) -> None:
                 continue
         else:
             if actions.doctor_mode() != "move":
-                say("Another Iran server is tried only in the Doctor's mode â€œmoveâ€: nothing is moved.")
+                say("Another Iran server is tried only in the Doctor's mode “move”: nothing is moved.")
                 break
 
             if failover.quality_move(aid, tunnel_id, "quality", 0.0, None, say):

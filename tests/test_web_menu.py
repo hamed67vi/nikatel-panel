@@ -371,7 +371,7 @@ def test_the_usage_tab_is_round_stats_in_sections_with_a_nodes_only_view():
     assert "pgUsageFit" not in js and "pg-ukpi" not in js and "pg-usage-pair" not in js and "#pg-usage-cards" not in js
     assert ".main:has(.pg-usage) { overflow-y: auto; }" in css and ".pg-rcs {" in css and ".pg-ns {" in css and ".pg-useg button.on {" in css
     lab, labcss = _web("lab.js"), _web("lab.css")          # (the same day: the lamp of a server ignores a filtered address and the faults of the way to it)
-    assert "const labLampTone = s =>" in lab and "labIssues(s).some(i => !i.path)" in lab and lab.count(", false, true);") == 3 and "true, true);" in lab and lab.count('data-lamp="') == 3
+    assert "const labLampTone = s =>" in lab and "labIssues(s).some(i => !i.path)" in lab and lab.count(", false, true);") == 4 and "true, true);" in lab and lab.count('data-lamp="') == 3
     assert 'tr[data-lamp="bad"] { --lamp: #ff6b8b; }' in labcss and 'tr[data-lamp="warn"] { --lamp: #ffc44d; }' in labcss
 
 

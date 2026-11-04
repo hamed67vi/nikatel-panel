@@ -33,7 +33,7 @@ from .. import jobs
 from ..config import get_settings
 from ..db import session
 from ..log import get_logger
-from ..models import ActionLog, Server, Tunnel, TunnelCheck
+from ..models import ActionLog, Profile, Server, Tunnel, TunnelCheck
 from ..ssh import Node, SSHError, run_script
 from . import (
     actions,
@@ -1469,10 +1469,18 @@ def recommend_start(iran_id: int, foreign_id: int, kinds: list[str] | None = Non
     return tunnel_test.compare_start(iran_id, foreign_id, kinds, measure="latency")
 
 
+def pool_of(server_id: int) -> str:
+    """The folder of an Iran server on the Servers page (the tag of its profile; "" = Any). The Iran servers of one folder are one pool: a tunnel is moved only inside its pool (1.69.211, the owner, 2026-11-04: "the Iran
+    servers used for these must be separate from the ones used for the other tunnels"). While every server is in one folder - as now - nothing changes."""
+    with session() as db:
+        return str(db.scalar(select(Profile.tag).where(Profile.kind == "iran", Profile.server_id == server_id).limit(1)) or "")
+
+
 def ranking(tunnel_id: int) -> list[dict]:
-    """The Iran servers that could carry this tunnel, best first (the current one is left out)."""
+    """The Iran servers that could carry this tunnel, best first (the current one is left out, and so is every server of another folder)."""
     snap = _snapshot(tunnel_id)
-    return [r for r in detect.auto_iran(snap["foreign_id"], snap["ports"]) if r["id"] != snap["iran_id"]]
+    mine = pool_of(snap["iran_id"])
+    return [r for r in detect.auto_iran(snap["foreign_id"], snap["ports"]) if r["id"] != snap["iran_id"] and pool_of(r["id"]) == mine]
 
 
 # ------------------------------------------------------------------ mass disruption

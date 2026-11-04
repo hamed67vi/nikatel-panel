@@ -33,6 +33,7 @@ function labIssues(s) {
   if (noLogin(s)) add("warn", "No login", x.nologin ? "The panel's SSH key is not accepted on this server: Access → Connect SSH… puts it on with the SSH password" : s.last_error);
   else if (s.online === false) add("bad", "Offline", s.last_error || "The server does not answer");
   else if (s.online && /^SSH does not answer/.test(s.last_error || "")) add("warn", "SSH ✕", s.last_error);
+  if (s.online && /^the panel's host cannot connect to it, but it is on/.test(s.last_error || "")) add("bad", "Iran only", "On, but the panel's host abroad cannot connect to it - only Iran sees it, its links to the foreign servers are cut. When its tunnels go down the Doctor moves them to another Iran server of the same folder.", false, true);
   const mine = (state.tunnelsCache || []).filter(t => (t.iran_name === s.name || t.foreign_name === s.name) && !labPeerRebooting(s, t)), gre = mine.filter(t => (t.type === "backhaul" || t.type === "gre") && t.state === "down");
   if (gre.length) add("bad", gre.length === mine.length ? "GRE ✕" : "GRE ✓/✕", gre.map(t => t.name + ": " + t.state).join(", "), true, true);
   /* (a server that no tunnel uses has no GRE to lose: its GRE links not answering is no fault - the owner: such servers are green) */
