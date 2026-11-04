@@ -103,9 +103,22 @@ def parse_net(out: str) -> dict:
 def parse_probe(out: str) -> dict:
     for line in str(out).splitlines():
         if line.startswith("NKPROBE "):
-            return json.loads(line[8:])
+            d = json.loads(line[8:])
+            _note_volume(d)
+            return d
 
     raise RuntimeError("the test door did not answer: " + str(out)[-160:])
+
+
+def _note_volume(d: dict) -> None:
+    """(1.69.223) What the streams of a speed test moved is counted against the Doctor's daily volume of tests (testbudget), and the readings of the card give the wire cost of the type (overhead.wire_ratio)."""
+    from . import overhead, testbudget
+
+    testbudget.spend(d.get("w_moved"), "probe")
+    ratio = overhead.wire_ratio(d)
+
+    if ratio is not None:
+        d["wire_ratio"] = ratio
 
 
 DEAD_MBPS = 0.5          # a download under this moved NOTHING (the Doctor's own line, bandwidth.STALL_MBPS)

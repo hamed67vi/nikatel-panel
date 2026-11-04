@@ -2,7 +2,7 @@
    the tunnels (why, and what healed them) and the night survey that keeps it up to date - read from /api/doctor/knowledge. Loaded after app.js and uses its helpers ($, api, esc, toast, ago, when,
    apName, bwFmt, refresh). */
 
-const knKind = r => `<span class="kn-k${r.measure === "full" ? " full" : ""}" title="${esc(apName(r.kind) + " - " + (r.score != null ? "score " + r.score : "it connects") + (r.latency_ms != null ? ", " + Math.round(r.latency_ms) + " ms" : "") + (r.loss_pct ? ", " + r.loss_pct + " % loss" : "") + (r.down_mbps != null ? ", download " + bwFmt(r.down_mbps) : "") + " (tested " + ago(r.at) + " ago)")}">${esc(apName(r.kind))} <b>${r.down_mbps != null ? bwFmt(r.down_mbps) : r.latency_ms != null ? Math.round(r.latency_ms) + " ms" : "works"}</b></span>`;
+const knKind = r => `<span class="kn-k${r.measure === "full" ? " full" : ""}" title="${esc(apName(r.kind) + " - " + (r.score != null ? "score " + r.score : "it connects") + (r.latency_ms != null ? ", " + Math.round(r.latency_ms) + " ms" : "") + (r.loss_pct ? ", " + r.loss_pct + " % loss" : "") + (r.down_mbps != null ? ", download " + bwFmt(r.down_mbps) : "") + (r.wire != null ? ", " + r.wire.toFixed(2) + " bytes on the wire for every byte moved" + (r.wire_src === "measured" ? " (measured)" : " (by its design)") : "") + " (tested " + ago(r.at) + " ago)")}">${esc(apName(r.kind))} <b>${r.down_mbps != null ? bwFmt(r.down_mbps) : r.latency_ms != null ? Math.round(r.latency_ms) + " ms" : "works"}</b>${r.wire >= 1.35 ? ` <small class="mut" title="Heavy: it puts ${r.wire.toFixed(2)} bytes on the wire for every byte the users move">${r.wire.toFixed(1)}×</small>` : ""}</span>`;
 
 /* what the Doctor has READY if this pair is cut: the Iran server cut from abroad, the foreign server filtered from Iran, both (read from ready_for of /api/doctor/knowledge) */
 const KN_CUTS = {iran_cut: ["Iran cut", "the Iran server is cut from abroad (the foreign server cannot open a connection to it)"], foreign_cut: ["Foreign filtered", "the foreign server is filtered from Iran (the Iran server cannot open a connection to it)"], both_cut: ["Both cut", "neither server can open a connection to the other"]};
@@ -16,6 +16,9 @@ const knReady = p => {
     return `<span class="kn-r ${esc(r.level)}" title="${esc(tip)}">${icon} ${esc(label)}${r.kind ? ` <b>${esc(apName(r.kind))}</b>` : ""}</span>`;
   }).join("")}</span>`;
 };
+
+/* the volume of the Doctor's own tests today against its daily budget (services/testbudget.py) */
+const knVolume = v => v ? `<small class="mut kn-vol" title="${esc("The speed tests and the surveys of the Doctor are traffic too. The routine ones slow down from half of the daily budget and stop at 80 %; a tunnel that dropped is still tested until the budget is used. " + (v.stretch > 1 ? "The routine tests are " + v.stretch + " times as far apart today. " : "") + Object.entries(v.by || {}).map(([k, g]) => k + " " + g + " GB").join(", "))}">tests today ${v.used_gb} of ${v.daily_gb} GB</small>` : "";
 
 window.knLoad = async () => {
   const box = $("#kn-box"); if (!box) return;
@@ -40,7 +43,7 @@ function knMarkup(k) {
   const run = k.running, pairName = id => { const p = k.pairs.find(x => x.iran_id === id); return p ? `${p.iran} ⇄ ${p.foreign}` : "a pair"; };
   const hour = (nm, v) => `<input class="kn-hour" name="${nm}" type="number" min="0" max="23" step="1" value="${v}" onchange="knSet({${nm}: +this.value})">`;
   const bar = `<div class="kn-bar"><label class="chk" title="On: the pairs of servers that carry a tunnel are tested at night - one pair at a time, only on quiet servers, never while a repair needs them - so that the Doctor already knows what connects when a route is cut."><input type="checkbox" ${k.on ? "checked" : ""} onchange="knSet({on: this.checked})"> Test the pairs at night</label>
-    <span class="mut">from</span>${hour("from_hour", k.from_hour)}<span class="mut">to</span>${hour("to_hour", k.to_hour)}<span class="mut" title="Equal hours mean any time. The clock is the panel's report time zone.">${k.window_open ? "· it is that time now" : "· not now"}</span><span class="sp"></span>
+    <span class="mut">from</span>${hour("from_hour", k.from_hour)}<span class="mut">to</span>${hour("to_hour", k.to_hour)}<span class="mut" title="Equal hours mean any time. The clock is the panel's report time zone.">${k.window_open ? "· it is that time now" : "· not now"}</span><span class="sp"></span>${knVolume(k.volume)}
     ${run ? `<span class="busy-chip"><i class="spin"></i>${esc(pairName(run.iran_id))} · ${esc(apName(run.kind || "…"))} · ${run.done} of ${run.total}</span><button class="sm" onclick="knStop()">Stop</button>` : `<small class="mut">${k.ready.length} tunnel types per pair at night (${k.kinds} by hand)</small>`}</div>`;
   const rows = k.pairs.map(p => `<div class="ap-row kn-row"><b>${esc(p.iran)} ⇄ ${esc(p.foreign)}</b><span class="mut kn-n" title="Tunnels that run on this pair now">${p.tunnels ? p.tunnels + " tunnel" + (p.tunnels === 1 ? "" : "s") : "no tunnel"}</span>
       <span class="kn-best">${p.best.slice(0, 4).map(knKind).join("") || '<span class="mut">nothing tested yet</span>'}${p.best.length > 4 ? `<small class="mut">+${p.best.length - 4}</small>` : ""}</span>

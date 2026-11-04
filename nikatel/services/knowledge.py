@@ -25,7 +25,7 @@ from ..config import get_settings
 from ..db import session
 from ..log import get_logger
 from ..models import Server, ServerSample, Tunnel, is_temp
-from . import linkmodels
+from . import linkmodels, overhead, testbudget
 from . import settings as st
 from .events import emit
 from .userscore import has_speed, user_score
@@ -64,7 +64,7 @@ VARIANT_TRANSPORTS = ("tcp", "wsmux", "wssmux")
 # Backhaul over a WireGuard link CARRIED inside Chisel (one TCP port; services/linkmodels.py): not in PRIOR / READY / CUT_LINKS - the Doctor does not walk them in its standard order and the night survey does not build them. They are the
 # LAST RESORT of a cut (`autopilot._carrier_last_resort`): after every kind failed, when the link probe SEES one pass. The owner can test them in Compare (the grid has them) and build them from Create tunnel.
 CARRIER_KINDS = tuple(f"{k}:tcpmux" for k in linkmodels.CARRIER_LINKS)
-NUMS = ("score", "latency_ms", "jitter_ms", "loss_pct", "down_mbps", "up_mbps", "down1_mbps", "up1_mbps")
+NUMS = ("score", "latency_ms", "jitter_ms", "loss_pct", "down_mbps", "up_mbps", "down1_mbps", "up1_mbps", "wire_ratio")
 HIST = 12                   # the tests of one kind that are kept (the newest): what a type did over time, not only what it did once
 STEADY_MIN_TESTS = 3        # fewer tests than this: the stability of a type is NOT KNOWN (never "steady" on one good day)
 STEADY_OK = 75              # a type whose stability is under this (percent) is unsteady: it is put behind the steady ones
@@ -106,6 +106,9 @@ def merge(entry: dict | None, r: dict, measure: str, now: int) -> dict:
 
     if measured:
         e["full" if measure == "full" else "lat"] = {**{k: r.get(k) for k in NUMS}, "at": now}
+
+    if measured and measure == "full" and r.get("wire_ratio") is not None:          # (1.69.223: what the type cost on the wire in this test - the last overhead.KEEP are kept, their median counts)
+        e["wire"] = (list(e.get("wire") or []) + [round(float(r["wire_ratio"]), 2)])[-overhead.KEEP:]
 
     item = {"at": now, "ok": ok, "m": measure}               # (one line per test: a type that passed once and failed the next time must not look the same as one that passed every time)
 
@@ -192,7 +195,8 @@ def ranked(pair: dict | None, now: int, include_poor: bool = False) -> list[dict
         row["tests"] = len([x for x in (e.get("hist") or []) if now - int(x.get("at") or 0) <= FULL_FRESH])
         row["passed"] = None if st_ is None else st_["passed"]
         factor = STEADY_UNKNOWN if st_ is None else (1.0 if st_["pct"] >= STEADY_OK else 0.7 * st_["pct"] / 100.0)
-        row["rank"] = float(row["user"] or 0) * factor          # (what the user gets, times how far the type can be trusted to give it again)
+        row["wire"], row["wire_src"] = overhead.cost(kind, e.get("wire"), wire_raw(kind))          # (1.69.223: bytes on the wire for every byte the users move - measured by the speed test, else by the design of the type)
+        row["rank"] = float(row["user"] or 0) * factor * overhead.lightness(row["wire"])          # (what the user gets, times how far the type can be trusted to give it again, times how little it costs on the wire)
         out.append(row)
 
     return sorted(out, key=lambda r: (r["measure"] != "full", -r["rank"], PRIOR.index(r["kind"]) if r["kind"] in PRIOR else 99))
@@ -308,8 +312,10 @@ def upgrade_kinds(pair: dict | None, now: int, current: str, allowed=lambda k: T
 
     base = float(full["down_mbps"])
     need = max(base * UPGRADE_RATIO, base + UPGRADE_MIN_GAIN)
+    c_cur, _ = overhead.cost(current, (((pair or {}).get("kinds") or {}).get(current) or {}).get("wire"), wire_raw(current))          # (1.69.223: a HEAVY type is no upgrade for a lighter one - the look for a lighter type would take the tunnel back)
     rows = [r for r in ranked(pair, now) if r["kind"] != current and r.get("measure") == "full" and r.get("down_mbps") is not None and float(r["down_mbps"]) >= need
             and now - int(r.get("at") or 0) <= FASTER_FRESH and float(r.get("loss_pct") or 0) <= UPGRADE_MAX_LOSS and allowed(r["kind"]) and _ping_ok(r, full)
+            and (r["wire"] < overhead.HEAVY or r["wire"] <= c_cur)
             and (r.get("steady") is None or r["steady"] >= STEADY_OK)          # (a type that fell or failed in some of its tests is no upgrade, however fast its best test was)
             and (r.get("user") or 0) >= (user_score(full) if has_speed(full) else (full.get("score") or 0))]
     return sorted(rows, key=lambda r: (r.get("steady") is None, -(r.get("user") or 0), -float(r["down_mbps"])))          # (the ones that passed all their tests first)
@@ -326,6 +332,38 @@ def steadier_kinds(pair: dict | None, now: int, current: str, allowed=lambda k: 
     rows = [r for r in ranked(pair, now) if r["kind"] != current and r.get("measure") == "full" and r.get("steady") is not None and r["steady"] >= STEADY_OK and allowed(r["kind"])
             and now - int(r.get("at") or 0) <= FASTER_FRESH and (r.get("user") or 0) >= STEADIER_KEEP * base and _ping_ok(r, cur)]
     return sorted(rows, key=lambda r: (-r["steady"], -(r.get("user") or 0)))
+
+
+LIGHTER_KEEP = 0.8              # a lighter type must give the user at least this much of what the heavy running type gave in its test (volume is not saved with a slow tunnel)
+
+
+def wire_raw(kind: str) -> bool:
+    """Pure: is the type tested over a LINK only (Backhaul over GRE or over a kernel link, or carried inside Chisel)? Its speed test sees the first layer of it, so the model of its cost decides (overhead.cost)."""
+    return kind in RAW_KINDS or kind in CARRIER_KINDS or kind.split(":", 1)[0] in linkmodels.CARRIER_LINKS
+
+
+def lighter_kinds(pair: dict | None, now: int, current: str, allowed=lambda k: True) -> list[dict]:
+    """Pure: the types the memory of the pair knows to cost far less on the wire than the RUNNING one, for a running type that is HEAVY (overhead.HEAVY: KCP, xDi ...; the owner, 2026-11-05: "a tunnel that is proven to
+    carry a lot of overhead, like KCP, must have its type changed - but the quality still counts"). Not the running type, a fresh full test (FASTER_FRESH), PROVEN steady (STEADY_OK over STEADY_MIN_TESTS tests), at most
+    UPGRADE_MAX_LOSS % lost, a ping about the same (`_ping_ok`), the user score at least LIGHTER_KEEP of the running type's, a cost of at most LIGHTER_BY of the running type's, the licence allows it. Empty when the running
+    type has no fresh full test or is not heavy. The best rank first (the quality times the lightness)."""
+    entries = (pair or {}).get("kinds") or {}
+    cur = entries.get(current) or {}
+    full = cur.get("full") or {}
+
+    if now - int(full.get("at") or 0) > FASTER_FRESH or not (has_speed(full) or full.get("score") is not None):
+        return []
+
+    c_cur, _ = overhead.cost(current, cur.get("wire"), wire_raw(current))
+
+    if c_cur < overhead.HEAVY:
+        return []
+
+    base = (user_score(full) if has_speed(full) else (full.get("score") or 0)) or 0
+    rows = [r for r in ranked(pair, now) if r["kind"] != current and r.get("measure") == "full" and allowed(r["kind"]) and now - int(r.get("at") or 0) <= FASTER_FRESH
+            and r["wire"] <= c_cur * overhead.LIGHTER_BY and r.get("steady") is not None and r["steady"] >= STEADY_OK and float(r.get("loss_pct") or 0) <= UPGRADE_MAX_LOSS
+            and _ping_ok(r, full) and (r.get("user") or 0) >= LIGHTER_KEEP * base]
+    return sorted(rows, key=lambda r: -r["rank"])
 
 
 def blocked(pair: dict | None, now: int) -> list[str]:
@@ -653,7 +691,7 @@ def sibling_kinds(iran_id: int, foreign_id: int, now: int | None = None) -> list
     return sorted(count, key=lambda k: (-count[k], PRIOR.index(k) if k in PRIOR else 99))
 
 
-def configure(on: bool | None = None, from_hour: int | None = None, to_hour: int | None = None) -> dict:
+def configure(on: bool | None = None, from_hour: int | None = None, to_hour: int | None = None, test_gb: float | None = None) -> dict:
     changes: dict = {}
 
     if on is not None:
@@ -665,6 +703,12 @@ def configure(on: bool | None = None, from_hour: int | None = None, to_hour: int
                 raise ValueError("an hour is from 0 to 23")
 
             changes[key] = int(v)
+
+    if test_gb is not None:
+        if not 1 <= float(test_gb) <= 5000:
+            raise ValueError("the daily volume of the Doctor's own tests is from 1 to 5000 GB")
+
+        st.put("testbudget", {"daily_gb": float(test_gb)})
 
     if changes:
         st.put("knowledge", changes)
@@ -970,11 +1014,18 @@ def run() -> None:
     if not d["on"] or busy:
         return
 
-    if not pending_pairs(now, cold_only=True) and _start_verify(now):          # (1.69.220: every pair has been surveyed once: the running types of the live pairs and their best rivals are tested again with a speed test, at any hour)
+    if not testbudget.allow("urgent", now):
+        log.info("no survey now: the tests of the Doctor have used the whole volume of today (%s GB)", testbudget.state(now)["used_gb"])
+        return
+
+    if testbudget.allow("routine", now) and not pending_pairs(now, cold_only=True) and _start_verify(now):          # (1.69.220: every pair has been surveyed once: the running types of the live pairs and their best rivals are tested again with a speed test, at any hour)
         return
 
     cold = not window                                          # outside the night window only the pairs nobody has tested yet are surveyed, and only on very quiet servers
     source = "survey-cold" if cold else "survey"
+
+    if not cold and not testbudget.allow("routine", now):          # (1.69.223: the night survey is a routine test; the first look at a pair nobody has surveyed is not)
+        return
 
     for iran_id, foreign_id, kinds in pending_pairs(now, cold_only=cold):
         why = not_now(iran_id, foreign_id, now, COLD_QUIET_MBPS if cold else QUIET_MBPS)
@@ -1018,5 +1069,5 @@ def state(now: int | None = None) -> dict:
 
     rows.sort(key=lambda r: (r["iran"].lower(), r["foreign"].lower()))
     return {"on": bool(d["on"]), "from_hour": int(d["from_hour"]), "to_hour": int(d["to_hour"]), "tz_minutes": tz, "window_open": in_window(now, tz, int(d["from_hour"]), int(d["to_hour"])),
-            "running": _running(), "kinds": len(PRIOR), "ready": list(READY), "pairs": rows,
+            "running": _running(), "volume": testbudget.state(now), "kinds": len(PRIOR), "ready": list(READY), "pairs": rows,
             "incidents": [{**e, "pair_name": " ⇄ ".join(names.get(int(x), "?") for x in str(e.get("pair", "0:0")).split(":"))} for e in list(reversed(d.get("incidents") or []))[:30]]}

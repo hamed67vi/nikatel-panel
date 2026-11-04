@@ -25,7 +25,7 @@ from ..db import session
 from ..log import get_logger
 from ..models import ServerSample, Tunnel, TunnelCheck, is_standby, is_temp
 from ..ssh import Node, SSHError, run_action, run_script
-from . import livebw
+from . import livebw, testbudget
 from .events import emit
 from .tunnels import link_of
 
@@ -497,6 +497,7 @@ def remove_sink(tunnel_id: int, foreign: Node, rec: dict) -> None:
 def _due(now: int) -> list[int]:
     """The tunnels to measure, the one that waited longest first: up, with a GRE link, not measured for INTERVAL (or asked for sooner by `next_at`)."""
     out = []
+    stretch = testbudget.stretch(now)          # (1.69.223: once the Doctor's tests have used half of the day's volume the interval is 2 times as long, from 80 % 4 times)
 
     with session() as db:
         for t in db.scalars(select(Tunnel).where(Tunnel.enabled.is_(True), Tunnel.state.in_(("up", "degraded")))):         # (a tunnel that is only unstable carries its users: its bandwidth is the thing to see)
@@ -506,7 +507,7 @@ def _due(now: int) -> list[int]:
                 continue
 
             bw = (t.record or {}).get("bw") or {}
-            nxt = int(bw.get("next_at") or 0) or (int(bw.get("at") or 0) + INTERVAL + (t.id * 97) % 600)
+            nxt = int(bw.get("next_at") or 0) or (int(bw.get("at") or 0) + INTERVAL * stretch + (t.id * 97) % 600)
             at = int(bw.get("at") or 0)
 
             if at:
@@ -527,6 +528,13 @@ def _no_sample(tunnel_id: int) -> bool:
     with session() as db:
         t = db.get(Tunnel, tunnel_id)
         return t is not None and not ((t.record or {}).get("bw") or {}).get("down") and not ((t.record or {}).get("bw") or {}).get("at")
+
+
+def _in_trouble(tunnel_id: int) -> bool:
+    """Is the tunnel in a drop, or very slow? Its measurement is not routine: the Doctor watches it to see the trouble end."""
+    with session() as db:
+        t = db.get(Tunnel, tunnel_id)
+        return t is not None and ((t.record or {}).get("bw") or {}).get("state") in ("drop", "slow")
 
 
 def _server_busy_for(tunnel_id: int, now: int) -> bool:
@@ -566,6 +574,9 @@ def run() -> None:
 
     now = int(time.time())
     ids = _due(now)
+
+    if ids and not testbudget.allow("routine", now):          # (1.69.223: the day's volume of the Doctor's own tests is used: only a tunnel with no number yet, or one that dropped, is still measured - until the whole budget is used)
+        ids = [i for i in ids if testbudget.allow("urgent", now) and (_no_sample(i) or _in_trouble(i))]
 
     if not ids:
         return
@@ -1000,7 +1011,7 @@ def _upgrade_check(tunnel_id: int) -> None:
     tunnel with better quality it does it by itself"): when the Doctor's memory of the pair knows a type that carried clearly more in the same pair test, was clean and is PROVEN steady, the Doctor changes the tunnel to it
     by itself (modes fix and move; once in 24 hours per tunnel, at a quiet moment, the old type put back when the new one does not build or gives less). A type that is not proven steady is left alone - nothing is put on
     the Doctor's page. The memory is kept fresh by the night survey and by "Test this pair"."""
-    from . import actions, autopilot, doctor, knowledge, license
+    from . import actions, autopilot, doctor, knowledge, license, overhead
 
     now = int(time.time())
 
@@ -1015,6 +1026,8 @@ def _upgrade_check(tunnel_id: int) -> None:
     steadier = cuts >= knowledge.STEADY_CUTS
     rows = knowledge.steadier_kinds(p, now, cur, license.tunnel_kind_allowed) if steadier else []
     rows = rows or knowledge.upgrade_kinds(p, now, cur, license.tunnel_kind_allowed)
+    lighter = not rows
+    rows = rows or knowledge.lighter_kinds(p, now, cur, license.tunnel_kind_allowed)          # (1.69.223: nothing faster is known - is there a type that costs far less on the wire and is nearly as good?)
     rows = [r for r in rows if r.get("steady") is not None and r["steady"] >= knowledge.STEADY_OK]          # (not proven steady: not by itself, and nothing is suggested)
 
     if not rows or any(x.get("tunnel") == snap["name"] for x in doctor._state()["suggestions"]):          # (a move suggestion of the tunnel is more urgent)
@@ -1028,9 +1041,14 @@ def _upgrade_check(tunnel_id: int) -> None:
 
     r = rows[0]
 
-    if steadier:
+    if steadier and not lighter:
         why = (f"{snap['name']} was cut {cuts} times in the last day. In the tests of {snap['iran_name']} ⇄ {snap['foreign_name']} {r['kind']} was steady: {r['passed']} of {r['tests']} tests passed, stability "
                f"{r['steady']} %, {float(r['down_mbps']):.0f} Mb/s, {float(r.get('latency_ms') or 0):.0f} ms. Many users need a type that does not drop.")
+    elif lighter:
+        c_cur, s_cur = overhead.cost(cur, (((p or {}).get("kinds") or {}).get(cur) or {}).get("wire"), knowledge.wire_raw(cur))
+        why = (f"On {snap['iran_name']} ⇄ {snap['foreign_name']} {cur} costs {overhead.note(c_cur, s_cur)}; {r['kind']} costs {overhead.note(r['wire'], r['wire_src'])} and in the tests it carried "
+               f"{float(r['down_mbps']):.0f} Mb/s with {float(r.get('latency_ms') or 0):.0f} ms, lost {float(r.get('loss_pct') or 0):g} % ({knowledge.steady_note(r)}). The users cost the Iran server much less volume "
+               "and the quality is nearly the same.")
     else:
         base = float((((p or {}).get("kinds") or {}).get(cur) or {}).get("full", {}).get("down_mbps") or 0)
         age = max(0, (now - int(r.get("at") or now)) // 3600)

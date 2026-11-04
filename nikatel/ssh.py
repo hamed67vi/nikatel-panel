@@ -198,6 +198,19 @@ H = (sys.argv[7] if len(sys.argv) > 7 else "") or "127.0.0.1"
 LIM = int(sys.argv[8] or 0) if len(sys.argv) > 8 else 0
 DIRS = (sys.argv[9] if len(sys.argv) > 9 else "") or "du"
 UDPN = int(sys.argv[10] or 0) if len(sys.argv) > 10 else 0          # UDP packets to echo through the link (0 = none): the loss of a link that drops ICMP
+def card():
+    # bytes in + out of the card of the default route since boot - the wire the tunnel really uses (1.69.223); None when this machine cannot say
+    try:
+        for ln in open("/proc/net/route").read().splitlines()[1:]:
+            f = ln.split()
+            if len(f) > 7 and f[1] == "00000000" and int(f[7], 16) == 0:
+                q = "/sys/class/net/" + f[0] + "/statistics/"
+                return int(open(q + "rx_bytes").read()) + int(open(q + "tx_bytes").read())
+    except Exception:
+        pass
+    return None
+MOVED = []
+CS = card(); TS = time.time()
 out = {"port": P}
 rtts = []; lost = 0
 try:
@@ -251,7 +264,7 @@ if UDPN > 0 and "error" not in out:
     except Exception:
         pass
 def run(mode, results, i):
-    rate = 0.0
+    rate = 0.0; got = 0
     try:
         s = socket.create_connection((H, P), timeout=6)
         s.sendall(KEY + mode)
@@ -265,12 +278,13 @@ def run(mode, results, i):
                 now = time.time(); n += len(d)
                 if warm is None and now - t0 >= 0.7:
                     warm = now; nw = n
-            end = time.time()
+            end = time.time(); got = n
             rate = (n - nw) * 8 / (end - warm) / 1e6 if (warm and end > warm) else n * 8 / max(end - t0, 0.2) / 1e6
         else:
             sent = 0
             while time.time() - t0 < SECS and (not LIM or sent < LIM):
                 s.sendall(os.urandom(65536)); sent += 65536
+            got = sent
             s.settimeout(30)
             buf = b""
             while b"\n" not in buf:
@@ -285,7 +299,9 @@ def run(mode, results, i):
         s.close()
     except Exception:
         pass
+    MOVED.append(got)
     results[i] = rate
+C0 = card(); T0 = time.time()
 if SECS > 0 and "error" not in out:
     for mode, key in ((b"D", "down_mbps"), (b"U", "up_mbps")):
         if (mode == b"D" and "d" not in DIRS) or (mode == b"U" and "u" not in DIRS):
@@ -295,6 +311,18 @@ if SECS > 0 and "error" not in out:
         [x.start() for x in th]; [x.join() for x in th]
         out[key] = round(sum(res), 1)
         out[key.replace("mbps", "streams")] = [round(x, 1) for x in res]
+if SECS > 0 and "error" not in out and MOVED:
+    # the wire (1.69.223): what crossed the card while the streams ran, and the rate it ran at just before and just after; the panel works out what the tunnel costs (overhead.wire_ratio)
+    C1 = card(); T1 = time.time()
+    time.sleep(1.0)
+    C2 = card(); T2 = time.time()
+    out["w_moved"] = sum(MOVED)
+    if C0 is not None and C1 is not None:
+        out["w_nic"] = C1 - C0; out["w_dur"] = round(T1 - T0, 2)
+        if CS is not None and T0 - TS >= 0.8:
+            out["w_pre"] = round((C0 - CS) / (T0 - TS))
+        if C2 is not None:
+            out["w_post"] = round((C2 - C1) / max(T2 - T1, 0.1))
 print("NKPROBE " + json.dumps(out))
 __NK_PY__
 """, {"PORT": r"^\d{1,5}$", "SECS": r"^\d{1,2}(\.\d)?$", "STREAMS": r"^\d{1,2}$", "PINGS": r"^\d{1,3}$", "KEY": r"^[a-z0-9]{1,32}$", "TO": r"^\d{1,2}(\.\d)?$",

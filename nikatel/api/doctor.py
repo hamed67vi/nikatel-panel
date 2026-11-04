@@ -72,6 +72,7 @@ class KnowledgeIn(BaseModel):
     on: bool | None = None
     from_hour: int | None = Field(None, ge=0, le=23)
     to_hour: int | None = Field(None, ge=0, le=23)
+    test_gb: float | None = Field(None, ge=1, le=5000)          # the daily volume of the Doctor's own tests, in GB
 
 
 class SurveyIn(BaseModel):
@@ -89,7 +90,7 @@ def doctor_knowledge():
 def doctor_knowledge_set(body: KnowledgeIn):
     """Switch the night survey on or off and set the local hours it may run in (equal hours = any time)."""
     try:
-        return {"ok": True, **knowledge.configure(body.on, body.from_hour, body.to_hour)}
+        return {"ok": True, **knowledge.configure(body.on, body.from_hour, body.to_hour, body.test_gb)}
     except ValueError as e:
         raise HTTPException(400, str(e))
 
