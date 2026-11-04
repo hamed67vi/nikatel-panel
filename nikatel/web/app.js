@@ -1027,7 +1027,7 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden && st
 setInterval(() => { if (state.page === "tunnels" && !document.hidden && !tunLiveT && document.querySelector(".tun-tbl")) tunLiveStart(); }, 2000);      // (the list is on screen: the live reading starts by itself)
 /* the panel is connecting to a server or installing something on it: the list says so instead of a dash (and looks again every 3 s) */
 const srvBusy = s => { const b = (s.extra || {}).busy; return b && b.what && Date.now() / 1000 - b.at < 900 ? b : null; };
-const noLogin = s => s.enabled && s.online !== true && /permission denied|publickey|login failed|authentication|wrong user|password/i.test(s.last_error || "");
+const noLogin = s => !!s.enabled && (!!(s.extra || {}).nologin || s.online !== true && /permission denied|publickey|login failed|authentication|wrong user|password/i.test(s.last_error || ""));      // (extra.nologin: the sampler's mark - the panel's key is not accepted; the pulse rewrites online / last_error of an Iran server that is on but cut from abroad, so the text alone lost it)
 /* a server added in the last hour is marked "new" (Nodes, and the server lists of Create tunnel / Tunnel test) */
 const isNew = s => s && s.created_at && Date.now() / 1000 - s.created_at < 900;      // "new" stays 15 minutes (the owner, 2026-10-15)
 const srvProblem = s => { const f = s.facts || {}; return s.enabled && (s.online === false || (f.cpu || 0) > 85 || (f.ram || 0) > 90 || (f.disk || 0) > 85); };

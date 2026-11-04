@@ -343,6 +343,7 @@ console.log(JSON.stringify({off: names(labIssueChips({iss: off})), up: names(lab
 
 
 MENU_HARNESS = r"""
+const noLogin = () => false;
 const labSep = {sep: 1}, labGrp = t => ({grp: t}), labIt = (t, k, fn, o) => ({t}), labSubItem = (t, k, items) => ({t, sub: items});
 const labOpen = () => 0, labCheckOne = () => 0, checkServer = () => 0, srvConsole = () => 0, liveOpen = () => 0, editServer = () => 0, srvReboot = () => 0, srvConnect = () => 0, srvPassword = () => 0, forgetKey = () => 0, glassChoice = () => 0, srvOpen = () => 0;
 const greCheck = () => 0, srvSpoof = () => 0, srvFilter = () => 0, srvAbuse = () => 0, srvCores = () => 0, srvWg = () => 0, srvInstall = () => 0, wtab = () => 0, labRemove = () => 0, labAdopt = () => 0, deleteServer = () => 0, labMakeNode = () => 0;

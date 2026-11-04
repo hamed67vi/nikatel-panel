@@ -188,7 +188,7 @@ def _connect(server_id: int, password: str) -> dict:
 
     out = run_script(node, "ping", timeout=25)
     hostname = out.replace("HOST=", "").strip()[:80]
-    _set_extra(server_id, hostname=hostname, connected_at=int(time.time()))
+    _set_extra(server_id, hostname=hostname, connected_at=int(time.time()), nologin=None)
 
     with session() as db:
         emit(db, "ok", "nodes", f"SSH key installed on {name} ({hostname})" + (f" through {jump.host}: this server is reached from Iran, not from abroad" if jump else "") + ".", name)

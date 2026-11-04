@@ -214,6 +214,11 @@ def sample_server(server_id: int) -> None:
             log.warning("sample failed name=%s host=%s err=%s", name, host, e)
             from . import pulse
 
+            if "key is not accepted" in str(e):          # [no-login] the panel has no SSH login to this server. Kept in extra: the pulse rewrites `online` and `last_error` of an Iran server that is on but cut from abroad, and the row looked healthy (the owner, 2026-11-04)
+                ex = dict(srv.extra or {})
+                ex["nologin"] = int(time.time())
+                srv.extra = ex
+
             if pulse.tcp_ok_recently(srv.id) and "key is not accepted" not in str(e) and "host key" not in str(e):
                 # the SSH port answers: the server is ON. Only the SSH session fails (a stalled path, a busy sshd) - it is not "offline"; the reason stays visible
                 srv.last_error = ((pulse.REFUSAL + ": " if pulse.refusing(srv.id) else "SSH does not answer, the server is up (its SSH port answers): ") + str(e))[:300]
@@ -258,6 +263,12 @@ def sample_server(server_id: int) -> None:
         srv.last_seen_at = facts["ts"]
         srv.last_error = srv.last_error if (srv.last_error or "").startswith(_pulse.IRAN_ONLY) and (_pulse.proven(srv.id) or _pulse.carried(srv.id, facts["ts"])) else ""
         srv.facts = facts
+
+        if (srv.extra or {}).get("nologin"):          # [no-login] it answered with the panel's key: there is a login now
+            ex = dict(srv.extra or {})
+            ex.pop("nologin", None)
+            srv.extra = ex
+
         _reboot_done(srv, facts)
         _peak(srv, facts)
         db.add(ServerSample(server_id=srv.id, ts=facts["ts"], cpu=facts["cpu"], ram=facts["ram"], disk=facts["disk"],

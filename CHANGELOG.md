@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.69.207 - A server the panel has no SSH login to keeps its "No login" tag, and its menu shows what needs SSH as disabled
+
+Owner (2026-11-04, Persian), with the menu of a server that was added but not connected: "when the server is not connected, the other options that are not needed must be shown disabled" - and, a moment before, "why is it like this?" for a row with a green dot, no tag and empty Load / Traffic / Bandwidth.
+
+- **The mark.** The sampler now writes `extra.nologin` when the panel's key is refused (`the panel's key is not accepted`), and removes it on the first good sample or when *Connect SSH…* with the password succeeds. Reason: for an Iran server that is on but cut from abroad the pulse rewrote `online` and `last_error` every two minutes ("on, but the panel's host cannot connect to it"), so the row showed a green dot and no tag while the panel still had no login and sampled nothing. `noLogin()` is now the mark OR the old text check; the **No login** tag stays, its tip says the key is not accepted and where to put it (Access → Connect SSH…).
+- **The menu (row ⋯ and window ⋯).** Without a login: Console, Live traffic…, Reboot…, Tests, Install, Make a PasarGuard node… and, in Access, Change SSH password… and Open in an SSH program… are disabled with a hint ("The panel has no SSH login to this server yet: Access → Connect SSH… first"). Overview, Check now, Edit…, Connect SSH…, Forget host key…, Move to profile, Off the page and Delete stay open. A server that is off (not a server without a login) keeps the menu it had.
+- Tests `tests/test_no_login_menu.py` (9; the browser side runs `labServerItems` and `noLogin` with node): the mark is set by a refused key, survives the pulse's rewrite, is not set by a time-out, is cleared by a good sample and by Connect; the menu of a server without a login, a healthy one, an off one, and the window's menu. Proved with fakes; not yet seen on the real server.
+
 ## 1.69.206 - Connect SSH reaches a cut Iran server through another Iran server; a wrong password asks again
 
 Owner (2026-11-04, Persian): "I added the server; when the password is wrong, ask me for a new one" - with a screenshot of *does not answer on SSH (Connection timed out)* for a new Iran server that is on (the pulse saw it from Iran) but cut from the panel's host abroad.
