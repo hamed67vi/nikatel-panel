@@ -12,6 +12,7 @@ from concurrent.futures import ThreadPoolExecutor
 import httpx
 from sqlalchemy import func, select
 
+from .. import ssh as _ssh
 from ..config import get_settings
 from ..db import session
 from ..log import get_logger
@@ -128,12 +129,14 @@ def connect(server_id: int, password: str) -> dict:
 
 
 def _connect(server_id: int, password: str) -> dict:
-    """Put the panel's public key on the server using the SSH password once (sshpass); the password is not kept."""
+    """Put the panel's public key on the server using the SSH password once (sshpass); the password is not kept. An Iran server the panel's host cannot reach
+    directly (cut from abroad: the pulse sees it on from Iran, or a jump is already known) is reached through another Iran server, as every job does - so a wrong
+    password is told as a wrong password and not as a time-out (the owner, 2026-11-04: "I added the server; when the password is wrong, ask me for a new one")."""
     if not password:
         raise ValueError("enter the SSH password of the server")
 
     s = get_settings()
-    node, name, _role, host = _srv(server_id)
+    node, name, role, host = _srv(server_id)
     pub = _pubkey()
 
     if s.read_only:          # (this logs in with sshpass itself, not through ssh.run_action: the read-only rule has to be kept here)
@@ -142,15 +145,28 @@ def _connect(server_id: int, password: str) -> dict:
     script = ("umask 077; mkdir -p ~/.ssh; touch ~/.ssh/authorized_keys; chmod 700 ~/.ssh; chmod 600 ~/.ssh/authorized_keys; "
               f"grep -qxF '{pub}' ~/.ssh/authorized_keys || echo '{pub}' >> ~/.ssh/authorized_keys; echo KEY_INSTALLED")
     env = dict(os.environ, SSHPASS=password)
+    target = Node(host, node.user, node.port)
+    jump = _ssh.jump_node(host) if role == "iran" else None          # [connect-jump] a jump already known (the pulse or a build primed it)
+    r, why = None, ""
 
-    try:
-        r = subprocess.run(["sshpass", "-e", "ssh", "-p", str(node.port), "-o", "StrictHostKeyChecking=accept-new", "-o", f"UserKnownHostsFile={s.known_hosts}",
-                            "-o", "ConnectTimeout=12", "-o", "PreferredAuthentications=password", "-o", "PubkeyAuthentication=no", "-o", "LogLevel=ERROR",
-                            "--", ssh_target(Node(host, node.user, node.port)), script], check=False, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, timeout=30, env=env)
-    except FileNotFoundError:
-        raise RuntimeError("sshpass is not installed on the panel server (apt install sshpass)")
-    except subprocess.TimeoutExpired:
-        raise RuntimeError("SSH password connection timed out")
+    if jump is None and not (role == "iran" and _cut_from_abroad(server_id)):
+        r, why = _sshpass(target, script, env, s)
+
+        if r is not None and not why:          # it answered (a wrong password, a closed port... is answered below)
+            jump = None
+        elif role != "iran":
+            raise RuntimeError(why or "SSH password connection timed out")
+
+    if r is None or why:                       # no direct answer: through another Iran server, primed the way a build primes it
+        jump = jump or (_ssh.jump_node(host) if _ssh.ensure_via(target) else None)
+
+        if jump is None:
+            raise RuntimeError((why or "SSH password connection timed out") + " - and no other Iran server of the panel reaches it either; check its address and port")
+
+        r, why = _sshpass(target, script, env, s, jump)
+
+        if r is None or why:
+            raise RuntimeError((why or "SSH password connection timed out") + f" (through {jump.host} too)")
 
     low = r.stdout.lower()
 
@@ -175,10 +191,46 @@ def _connect(server_id: int, password: str) -> dict:
     _set_extra(server_id, hostname=hostname, connected_at=int(time.time()))
 
     with session() as db:
-        emit(db, "ok", "nodes", f"SSH key installed on {name} ({hostname}).", name)
+        emit(db, "ok", "nodes", f"SSH key installed on {name} ({hostname})" + (f" through {jump.host}: this server is reached from Iran, not from abroad" if jump else "") + ".", name)
 
     return {"hostname": hostname}
 
+
+_LINK_FAIL = ("timed out", "no route to host", "connection refused", "network is unreachable", "could not resolve", "name or service not known", "connection reset", "connection closed by")
+
+
+def _sshpass(target: Node, script: str, env: dict, s, jump: Node | None = None) -> tuple:
+    """One password login (sshpass), direct or through a jump: (the finished process, '') when the server answered - a wrong password is an answer -, (None or the process, why)
+    when the link itself failed (no route, time-out, refused...)."""
+    cmd = ["sshpass", "-e", "ssh", "-p", str(target.port), "-o", "StrictHostKeyChecking=accept-new", "-o", f"UserKnownHostsFile={s.known_hosts}",
+           "-o", "ConnectTimeout=12", "-o", "PreferredAuthentications=password", "-o", "PubkeyAuthentication=no", "-o", "LogLevel=ERROR"]
+
+    if jump is not None:
+        cmd += _ssh._proxy_option(jump)
+
+    try:
+        r = subprocess.run(cmd + ["--", ssh_target(target), script], check=False, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, timeout=45 if jump else 30, env=env)
+    except FileNotFoundError:
+        raise RuntimeError("sshpass is not installed on the panel server (apt install sshpass)")
+    except subprocess.TimeoutExpired:
+        return None, "SSH password connection timed out"
+
+    low = r.stdout.lower()
+
+    if r.returncode == 255 and "permission denied" not in low and any(k in low for k in _LINK_FAIL):
+        why = (r.stdout.strip().splitlines() or ["no answer"])[-1]
+        return r, "does not answer on SSH (" + re.sub(r"^.*?(Connection timed out|No route to host|Connection refused|Network is unreachable|Connection reset|Connection closed by[^\n]*)", r"\1", why, flags=re.IGNORECASE)[:100] + ")"
+
+    return r, ""
+
+
+def _cut_from_abroad(server_id: int) -> bool:
+    """Does the pulse say this server is on but cut from the panel's host (its note starts with pulse.IRAN_ONLY)? Then the direct try is skipped: it would only wait."""
+    from .pulse import IRAN_ONLY
+
+    with session() as db:
+        srv = db.get(Server, server_id)
+        return bool(srv is not None and (srv.last_error or "").startswith(IRAN_ONLY))
 
 def set_password(server_id: int, password: str) -> dict:
     """Change the login password of the server's SSH user (after the server was added). The panel itself logs in with its key."""

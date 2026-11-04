@@ -1311,7 +1311,17 @@ window.srvInstall = async (id, item) => {
   catch (e) { toast("✕ " + e.message, "bad"); }
 };window.srvConsole = id => { state.con = id; if (state.open === id && $("#modal .modal-body")) { wtab("console"); return; } state.open = id; state.wtab = "console"; refresh(); };
 window.srvRun = async id => { const cmd = $(`#con-cmd-${id}`).value.trim(); if (!cmd) return; const out = $(`#con-out-${id}`); out.textContent = "running…"; try { const r = await api(`/api/servers/${id}/console`, {method: "POST", body: JSON.stringify({command: cmd})}); state.conOut[id] = `$ ${cmd}\n${r.output}${r.code ? "\n[exit " + r.code + "]" : ""}\n(${r.ms} ms)`; } catch (e) { state.conOut[id] = "✕ " + e.message; } out.textContent = state.conOut[id]; };
-window.srvConnect = async (id, name) => { const pw = await gprompt(`SSH password of ${name} (used once to install the panel's key, not stored):`); if (!pw) return; toast("Connecting…"); try { const r = await api(`/api/servers/${id}/connect`, {method: "POST", body: JSON.stringify({password: pw})}); toast("✓ Key installed on " + r.hostname, "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };
+window.srvConnect = async (id, name) => {      // [connect-retry] a wrong password asks again, three tries, as the Add-server flow does (the owner, 2026-11-04); a server that does not answer gets the reason once
+  let why = "";
+  for (let i = 0; i < 3; i++) {
+    const pw = await gprompt(why ? `${String(why).slice(0, 100)} - the SSH password of ${name} again? (${3 - i} ${3 - i === 1 ? "try" : "tries"} left)` : `SSH password of ${name} (used once to install the panel's key, not stored):`, "", {password: true, generate: false});
+    if (pw == null || pw === "") return;
+    toast("Connecting…");
+    try { const r = await api(`/api/servers/${id}/connect`, {method: "POST", body: JSON.stringify({password: pw})}); toast("✓ Key installed on " + r.hostname, "ok"); refresh(); return; }
+    catch (e) { why = e.message; if (!/password|user|denied/i.test(why)) { toast("✕ " + why, "bad"); refresh(); return; } }
+  }
+  toast("✕ " + String(why).slice(0, 100) + " - three tries; the server keeps its old password", "bad"); refresh();
+};
 window.srvOpen = (id, app) => { toast("Preparing… your key is installed on the server first"); const a = document.createElement("a"); a.href = `/api/servers/${id}/launcher?app=${app}`; a.download = ""; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => toast("✓ Launcher downloaded. Once: put your key from Servers → 'Download my SSH key' at %USERPROFILE%\\.ssh\\nikatel_user", "ok"), 1500); };
 window.srvAbuse = async (id, action) => { if (!await gconfirm(action === "install" ? "Install Abuse-Defender on this foreign server? Outgoing traffic to a public list of abused ranges is dropped; your own servers, tunnel links, DNS and gateway stay allowed. Takes a minute." : "Remove Abuse-Defender from this server?")) return; const s = (state.serversCache || []).find(x => x.id === id);
   try { const r = await api(`/api/servers/${id}/abuse`, {method: "POST", body: JSON.stringify({action, stream: true})}); showModal(`<b>🛡 Abuse-Defender: ${action === "install" ? "install" : "remove"} on ${esc(s ? s.name : "the server")}</b>`, '<div id="ap-story" class="fix"><div class="fx-line run"><i></i>Starting…</div></div>', "wide"); followStory(r.id, $("#ap-story"), 400).then(() => refresh()); }      // (the owner, 2026-10-19: what is installed shows its log in a box - the steps, and what it failed with - not a toast that goes by)

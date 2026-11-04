@@ -703,6 +703,12 @@ def via_of(host: str) -> str:
     return v[0].host if v and v[1] > time.time() else ""
 
 
+def jump_node(host: str) -> Node | None:
+    """The jump server a host is reached through now, as a Node (for a command line of one's own, such as the password login of Connect SSH), or None."""
+    v = _VIA.get(host)
+    return v[0] if v and v[1] > time.time() else None
+
+
 def _link_error(e: SSHError) -> bool:
     return e.code == 255 and "key is not accepted" not in str(e) and "host key" not in str(e) or str(e).startswith("timeout after")
 
