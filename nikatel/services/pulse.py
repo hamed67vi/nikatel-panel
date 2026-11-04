@@ -36,6 +36,10 @@ VIA_MEMORY = 900          # ...and it counts as such for this long after the pan
 _via_seen: dict[int, float] = {}          # server id -> when the panel last reached it through a jump server
 PROOF_GRACE = 200          # an Iran server the panel's host cannot connect to is ON while someone inside Iran saw it answer this recently (services/vantage.py asks every minute)
 IRAN_ONLY = "the panel's host cannot connect to it, but it is on"          # the start of the note in its row (the end says who saw it)
+PORT_BLOCKED = "the panel's host cannot reach its SSH port, but the server answers on other ports"          # the start of the note when only the SSH port is filtered from the panel's host (the owner, 2026-11-05: "check first - maybe only the port is closed - do not tag Iran only for nothing")
+PROBE_PORTS = (443, 80, 8443, 8080, 2222, 2083, 8000, 62050)          # tried at once (1.5 s) when the SSH port does not answer: a connection or a refusal proves the machine itself is reachable from the panel's host
+PROBE_KEEP = 300          # the answer of the probe is kept this long (it is not asked at every pulse)
+_probe: dict[int, tuple[float, list[int]]] = {}
 _missed_at: dict[int, float] = {}          # server id -> when the panel's own connection to it last failed
 _proof: dict[int, tuple[float, str]] = {}          # server id -> (when, who) an Iran server or check-host.net last saw it answer
 _miss: dict[int, int] = {}
@@ -53,6 +57,34 @@ def tcp_open(host: str, port: int, timeout: float = TIMEOUT):
         return REFUSED
     except OSError:
         return False
+
+
+def answering_ports(sid: int, host: str, ssh_port: int) -> list[int]:
+    """The ports other than SSH on which the machine answers the panel's host (a connection or a refusal; a machine that is really cut from abroad answers none). Kept PROBE_KEEP seconds."""
+    hit = _probe.get(sid)
+
+    if hit and time.time() - hit[0] < PROBE_KEEP:
+        return hit[1]
+
+    ports = [p for p in PROBE_PORTS if p != ssh_port]
+
+    with ThreadPoolExecutor(len(ports)) as ex:
+        res = list(ex.map(lambda p: tcp_open(host, p, 1.5), ports))
+
+    found = [p for p, ok in zip(ports, res) if ok]
+    _probe[sid] = (time.time(), found)
+    return found
+
+
+def needs_jump(note) -> bool:
+    """Does this row note say the panel's host has no way in to the SSH port (cut from abroad, or only that port blocked)? Then jobs go through another Iran server from the first call."""
+    n = str(note or "")
+    return n.startswith((IRAN_ONLY, PORT_BLOCKED))
+
+
+def cut_prefix(sid: int, host: str, ssh_port: int) -> str:
+    """The start of the note for a server the panel cannot open an SSH session to although somebody inside Iran sees it: the mild one when it answers on other ports, "Iran only" when nothing does."""
+    return PORT_BLOCKED if answering_ports(sid, host, ssh_port) else IRAN_ONLY
 
 
 def tcp_ok_recently(sid: int, seconds: float = 30.0) -> bool:
@@ -196,7 +228,7 @@ def run() -> None:
                     _refusing.pop(sid, None)
                     _slow_until.pop(sid, None)
 
-                    if s.online is not False and (s.last_error or "").startswith((REFUSAL, IRAN_ONLY)):
+                    if s.online is not False and (s.last_error or "").startswith((REFUSAL, IRAN_ONLY, PORT_BLOCKED)):
                         s.last_error = ""          # (it takes connections again)
 
                 if s.online is False:
@@ -219,7 +251,9 @@ def run() -> None:
             if proven(sid) or carried(sid, s.last_seen_at):          # (the panel's own way in is cut, but somebody inside Iran sees it or the way through another Iran server works: it is ON - and not asked again every 3 s)
                 _miss[sid] = 0
                 _slow_until[sid] = time.time() + SLOW_SECONDS
-                note = f"{IRAN_ONLY} ({proof_how(sid) if proven(sid) else 'its SSH answers through another Iran server'})"
+                how = proof_how(sid) if proven(sid) else "its SSH answers through another Iran server"
+                ports = answering_ports(sid, s.host, s.ssh_port)          # [port-only] other ports answer: only the SSH port is blocked, the machine is NOT cut from abroad
+                note = f"{PORT_BLOCKED} (it answers on {', '.join(str(p) for p in ports)}; {how})" if ports else f"{IRAN_ONLY} ({how})"
 
                 if s.online is False:
                     s.online, s.last_error = True, note[:300]
@@ -230,7 +264,7 @@ def run() -> None:
 
                     if s.role == "iran":
                         _wake_doctor()
-                elif not s.last_error or s.last_error.startswith(IRAN_ONLY):
+                elif not s.last_error or s.last_error.startswith((IRAN_ONLY, PORT_BLOCKED)):
                     s.last_error = note[:300]
 
                 continue

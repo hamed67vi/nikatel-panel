@@ -228,11 +228,11 @@ def _sshpass(target: Node, script: str, env: dict, s, jump: Node | None = None) 
 
 def _cut_from_abroad(server_id: int) -> bool:
     """Does the pulse say this server is on but cut from the panel's host (its note starts with pulse.IRAN_ONLY)? Then the direct try is skipped: it would only wait."""
-    from .pulse import IRAN_ONLY
+    from .pulse import needs_jump
 
     with session() as db:
         srv = db.get(Server, server_id)
-        return bool(srv is not None and (srv.last_error or "").startswith(IRAN_ONLY))
+        return bool(srv is not None and needs_jump(srv.last_error))
 
 def set_password(server_id: int, password: str) -> dict:
     """Change the login password of the server's SSH user (after the server was added). The panel itself logs in with its key."""

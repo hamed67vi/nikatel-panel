@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.69.222 - A server whose SSH port alone is blocked from the panel's host is no longer tagged "Iran only"
+
+Owner (2026-11-05, Persian): an Iran server that no foreign address could SSH to looked "cut from abroad" (the row said "Iran only"), but only port 22 was filtered - every other port answered. "When a server is not reachable from abroad, check whether only the port is closed; do not put the Iran-only tag on it for nothing."
+
+- **The check.** When the pulse cannot open the SSH port but somebody inside Iran sees the server, it now tries a few other ports from the panel's host at once (443, 80, 8443, 8080, 2222, 2083, 8000, 62050; 1.5 s each; a connection or a refusal counts as an answer; the result is kept 5 minutes, so it is not repeated at every pulse). The full SSH sample writes the same split.
+- **Two notes, two tags.** Other ports answer: the row says *the panel's host cannot reach its SSH port, but the server answers on other ports (…)* and wears the tag **SSH port blocked** with the way out (move SSH to another port, e.g. 2222, in Edit; or ask the host to open it); the Doctor does **not** call it a cut server and does not move its tunnels. Nothing answers: it stays *Iran only*, as before.
+- **Jobs are unchanged for both.** The password connect, tunnel builds and the sampler still go through another Iran server from the first call (`pulse.needs_jump`), so nothing waits on a direct time-out.
+- Tests `tests/test_port_only_blocked.py` (7; the tag runs with node): only-SSH-blocked is not Iran-only (and not a cut for the Doctor, but a jump for jobs), nothing-answers stays Iran-only, the probe is kept, a working SSH clears the note, the full sample writes the split, the helpers, the two tags. Proved with fakes; not yet seen on a real server.
+
 ## 1.69.221 - Protected tunnels: the Doctor repairs and restarts them, but never moves, replaces, rebuilds or removes one that something else stands on
 
 Owner (2026-11-04/05, Persian), testing a service that rides the inner link of a tunnel's standby lane, which the Doctor had taken off meanwhile: "Why was the standby link deleted?" - and, offered a mark that keeps the Doctor's hands off such a tunnel: "Yes, protect first".

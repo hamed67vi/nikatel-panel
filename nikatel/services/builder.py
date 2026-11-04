@@ -1161,7 +1161,7 @@ def _build(b: Build) -> None:
     # way (a jump is already cached, or its row says so); a build to a normal server is untouched. Priming that finds no jump leaves the build to behave exactly as before (direct, then the usual fall-back).
     from . import pulse
 
-    if via_of(ihost) or str(b.iran.last_error or "").startswith(pulse.IRAN_ONLY):
+    if via_of(ihost) or pulse.needs_jump(b.iran.last_error):
         j = ensure_via(iran)
 
         if j:
