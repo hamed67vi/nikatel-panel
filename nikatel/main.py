@@ -29,6 +29,7 @@ from .services import (
     bandwidth,
     besttoday,
     builder,
+    carry,
     cfgstats,
     comeback,
     configs,
@@ -214,6 +215,7 @@ def _register_jobs() -> None:
     jobs.register("housekeeping", 6 * 3600, housekeeping.run)   # old events and finished repair stories go; the write-ahead log is folded back
     jobs.register("engine-cache", 6 * 3600, _engine_cache)      # the tunnel cores the panel's cache lacks are downloaded (verified), so a server added later gets them at once (the owner, 2026-10-16: "they must install by themselves"); nothing is changed on any server
     jobs.register("engines-auto", 600, engines.auto_run)         # the Doctor keeps the tunnel cores up to date, once a night, ALWAYS (the owner, 2026-11-04; services/engines.py auto_run): one server at a time, the quietest first, the old build put back when a new one does not hold
+    jobs.register("carry", carry.EVERY, carry.run)                  # the Doctor asks every port of every tunnel that is up whether it really CARRIES a connection, every 3 minutes, one light command per Iran server; a port that does not (and whose service answers) is repaired by itself: restart, rebuild, another Iran server (services/carry.py)
     jobs.register("pg-auto", 300, pg_auto.run)                   # the PasarGuard panel and its nodes updated by themselves once a night (03:00 Tehran by default), when the owner switched it on (services/pg_auto.py): the Safe update with a time budget, the users looked at after every node, the panel kept and put back when it does not hold
     jobs.register("outbound", 180, outbound.check)              # what the outbound pool looks like from each Iran server that carries it (read-only: curl through every exit); nothing runs while no Iran server is chosen
     jobs.register("outbound-users", 60, outbound.auto_users)    # the automatic switch of CDN records: OFF for now (AUTO_USERS in services/outbound.py), the job returns at once; when it is on, the records of a tunnel that stays down are pointed at the pool, and back when it is healthy
