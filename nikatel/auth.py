@@ -92,6 +92,7 @@ def set_password(password: str, logout_others: bool = True) -> None:
 
         if logout_others:
             d["sessions"] = {}
+            d["phones"] = {}
 
         save(d)
 
@@ -123,6 +124,7 @@ def bump_epoch() -> None:
         d = load()
         d["epoch"] = int(d.get("epoch", 0)) + 1
         d["sessions"] = {}
+        d["phones"] = {}
         save(d)
 
 
@@ -184,8 +186,131 @@ def revoke_session(token: str | None) -> bool:
     return True
 
 
+# ------------------------------------------------------------------ phones (the phone assistant, services/commander.py)
+PHONE_COOKIE = "nikatel_phone"
+PHONE_PATH = "/api/commander"        # the cookie is sent to these routes ONLY (the browser keeps it from every other address of the panel) and `current_user` accepts it for these routes only
+PHONE_DAYS = 30                      # how long the key stays in the phone
+PHONE_IDLE_DAYS = 14                 # a phone that was not used this long is forgotten (the key is dead on the server, whatever the cookie says)
+PHONE_CAP = 6
+_PHONE_SEEN: dict[str, float] = {}
+
+
+def phone_label(user_agent: str) -> str:
+    """A short name for the list of phones: the kind of device and the day it signed in."""
+    ua = (user_agent or "").lower()
+    kind = "iPhone" if "iphone" in ua else "iPad" if "ipad" in ua else "Android" if "android" in ua else "Browser"
+    return f"{kind} {time.strftime('%m-%d', time.gmtime())}"
+
+
+def phone_public_id(jti: str) -> str:
+    """What the page knows of a phone: a short hash of its id (the id itself is only in the registry and inside the signed cookie)."""
+    return hashlib.sha256(jti.encode()).hexdigest()[:10]
+
+
+def make_phone_session(label: str, ip: str = "") -> str:
+    """The key of one phone: a signed cookie with an id that is also written into the registry (auth.json) - the key is good only while its id is there, and only for the phone assistant."""
+    jti = secrets.token_urlsafe(12)
+    now = int(time.time())
+
+    with _LOCK:
+        d = load()
+        phones = {k: v for k, v in (d.get("phones") or {}).items() if isinstance(v, dict) and now - int(v.get("seen", 0)) < PHONE_IDLE_DAYS * 86400}
+        phones[jti] = {"label": str(label)[:40], "at": now, "seen": now, "ip": str(ip)[:64]}
+
+        if len(phones) > PHONE_CAP:
+            phones = dict(sorted(phones.items(), key=lambda kv: int(kv[1].get("seen", 0)))[-PHONE_CAP:])
+
+        d["phones"] = phones
+        save(d)
+        e = int(d.get("epoch", 0))
+
+    return _serializer("phone").dumps({"j": jti, "e": e})
+
+
+def _phone_row(token: str | None) -> tuple[str, dict] | None:
+    """(id, registry row) of the phone behind a key cookie, or None: the cookie must be signed by us, not older than PHONE_DAYS, of this epoch, and its id still in the registry and not idle."""
+    if not token:
+        return None
+
+    try:
+        data = _serializer("phone").loads(token, max_age=PHONE_DAYS * 86400)
+    except (BadSignature, SignatureExpired):
+        return None
+
+    d = load()
+    row = (d.get("phones") or {}).get(data.get("j"))
+
+    if int(data.get("e", 0)) != int(d.get("epoch", 0)) or not isinstance(row, dict) or time.time() - int(row.get("seen", 0)) >= PHONE_IDLE_DAYS * 86400:
+        return None
+
+    return str(data["j"]), row
+
+
+def phone_user(request: Request) -> str | None:
+    """"phone:<label>" for a request that carries a live phone key, else None. The time the phone was last used moves at most every five minutes."""
+    hit = _phone_row(request.cookies.get(PHONE_COOKIE))
+
+    if hit is None:
+        return None
+
+    jti, row = hit
+    now = time.time()
+
+    if now - _PHONE_SEEN.get(jti, 0) > 300 and now - int(row.get("seen", 0)) > 300:
+        _PHONE_SEEN[jti] = now
+
+        with _LOCK:
+            d = load()
+            r = (d.get("phones") or {}).get(jti)
+
+            if isinstance(r, dict):
+                r["seen"] = int(now)
+                save(d)
+
+    return "phone:" + str(row.get("label") or "phone")
+
+
+def phone_id(request: Request) -> str:
+    """The public id of the phone behind this request's key ('' when it comes with the panel's own session)."""
+    hit = _phone_row(request.cookies.get(PHONE_COOKIE))
+    return phone_public_id(hit[0]) if hit else ""
+
+
+def phones() -> list[dict]:
+    """The phones that hold a key, newest use first (public ids only)."""
+    now = int(time.time())
+    rows = [{"id": phone_public_id(k), "label": str(v.get("label") or "phone"), "at": int(v.get("at", 0)), "seen": int(v.get("seen", 0)), "ip": str(v.get("ip") or "")}
+            for k, v in (load().get("phones") or {}).items() if isinstance(v, dict) and now - int(v.get("seen", 0)) < PHONE_IDLE_DAYS * 86400]
+    return sorted(rows, key=lambda r: -r["seen"])
+
+
+def revoke_phone(pid: str) -> bool:
+    """Take one phone's key away by its public id: the cookie in the phone is dead from this moment. True when there was such a phone."""
+    with _LOCK:
+        d = load()
+        left = {k: v for k, v in (d.get("phones") or {}).items() if phone_public_id(k) != pid}
+
+        if len(left) == len(d.get("phones") or {}):
+            return False
+
+        d["phones"] = left
+        save(d)
+
+    return True
+
+
+def revoke_all_phones() -> int:
+    with _LOCK:
+        d = load()
+        n = len(d.get("phones") or {})
+        d["phones"] = {}
+        save(d)
+
+    return n
+
+
 def current_user(request: Request, nikatel_session: str | None = Cookie(default=None), authorization: str | None = Header(default=None)) -> str:
-    """FastAPI dependency: the signed-in user ("admin" from the browser, "token:<name>" from a machine), or 401."""
+    """FastAPI dependency: the signed-in user ("admin" from the browser, "token:<name>" from a machine, "phone:<label>" from a phone's key - for the phone assistant's routes only), or 401."""
     if get_settings().demo:
         return "demo"           # the public demo shows itself without a sign-in (it holds invented data and refuses every change)
 
@@ -202,6 +327,9 @@ def current_user(request: Request, nikatel_session: str | None = Cookie(default=
 
         request.state.token = row
         return "token:" + row["name"]
+
+    if request.url.path.startswith(PHONE_PATH + "/") and (who := phone_user(request)):          # a phone's key counts for the phone assistant's routes and for nothing else
+        return who
 
     if not nikatel_session:
         raise HTTPException(401, "not logged in")

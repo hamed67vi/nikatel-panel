@@ -424,3 +424,19 @@ class Job(Base):
     failures: Mapped[int] = mapped_column(Integer, default=0)
     last_failure: Mapped[str] = mapped_column(String(300), default="")      # the last failure is kept even after later runs succeed (last_error is cleared by a success)
     last_failure_at: Mapped[int] = mapped_column(Integer, default=0)
+
+
+class CommanderRun(Base):
+    """One order of the phone assistant (services/commander.py): what the owner typed, every step the AI took, every tap he made, how it ended. Kept 90 days; the audit of the page."""
+    __tablename__ = "commander_runs"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    ts: Mapped[int] = mapped_column(Integer, default=now)
+    who: Mapped[str] = mapped_column(String(64), default="")                  # admin | phone:<label>
+    ip: Mapped[str] = mapped_column(String(64), default="")
+    command: Mapped[str] = mapped_column(Text, default="")                    # the order as typed, secrets already masked
+    status: Mapped[str] = mapped_column(String(12), default="running")        # running | waiting (for his tap) | done | failed | stopped
+    steps: Mapped[list] = mapped_column(JSON, default=list)                   # what the page shows, in order: say / tool / proposal / ask / final
+    memo: Mapped[dict] = mapped_column(JSON, default=dict)                    # what the AI loop needs to go on (the log it reads, the tunnels it has seen, the turns used)
+    ai_calls: Mapped[int] = mapped_column(Integer, default=0)
+    finished_at: Mapped[int] = mapped_column(Integer, default=0)

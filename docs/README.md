@@ -9,6 +9,7 @@
 | install, upgrade, back up, read logs, run the bot server | [`operations.md`](operations.md) |
 | understand the code and its rules | [`../ARCHITECTURE.md`](../ARCHITECTURE.md) |
 | know how it is protected, what to do when something is wrong | [`../SECURITY.md`](../SECURITY.md) |
+| give the panel's AI an order from my phone (what it does alone, what needs my tap, how it is kept safe) | [`commander.md`](commander.md) |
 | run / extend the shop bot from the panel | [`shop-bot.md`](shop-bot.md) |
 | deploy or change the Telegram Mini App | [`../bot/miniapp/README.md`](../bot/miniapp/README.md) |
 | change the panel, test it, ship it | [`development.md`](development.md) |

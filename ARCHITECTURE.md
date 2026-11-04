@@ -75,6 +75,7 @@ nikatel/
                      GRE link beside the tunnel first; storm detection; observe (lossy tunnels); repair_cycle (one job);
                      fix_all, explain (the AI reads the whole situation), config diagnosis (SNI, reachability)
     comeback.py      back to the better tunnel type (1.69.5): a cut tunnel swapped to an emergency type is tested again for the type it had, with growing waits, and swapped back at a quiet moment when that type is clearly better - pure rules + the job (every minute) + the look
+    commander.py     the phone assistant (docs/commander.md): the owner types one order on his phone, the panel's own AI (ai.py) works it out one JSON step at a time with a closed list of tools that call the Doctor's own functions; the code, not the AI, decides what runs alone (looking, the Doctor's repair of a tunnel that is down) and what waits for his tap (a move, another type, the repair of all); limits, a Stop button, every order and tap kept 90 days
     doctor.py        the Tunnel Doctor's three modes (off / fix / move) and its moves: a dead Iran server (server by server in a
                      provider-wide outage), an exhausted server (one tunnel), never for packet loss (suggested instead), the return
                      after three healthy hours; the ledger of moves, the suggestions, the rails (pure: is_saturated, may_move, ready_to_return)
@@ -151,7 +152,7 @@ nikatel/
     events.py        the sentences the operator reads
   api/             FastAPI routers, one file per resource; thin: validate, call a service, answer
                    (auth, tokens, servers, tunnels, nodes, gateway, engines, actions, autopilot, ai, configs, panels, accounts, outbound, radar, shopbot, bale,
-                    alerts, events, jobs, failover, doctor, dns, license, balance, analyst, reviewer, checkall, best, setup, system = health, logs, update of the panel itself)
+                    alerts, events, jobs, failover, doctor, dns, license, balance, analyst, reviewer, commander, checkall, best, setup, system = health, logs, update of the panel itself)
   web/             plain JS and CSS, no build step. index.html loads everything; app.js: PAGES.<name> per page, SUB tabs, glass modal windows (showModal), themes (LOOK),
                    a loading box on every page change and automatic retry when a load fails, a status bar for messages; pg_*.js: one file per PasarGuard tab, each
                    registers itself in pgTabs (pg_common.js) and is drawn by the pages of the PasarGuard group (see 2b); app.css + pg_*.css: the looks.

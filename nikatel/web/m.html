@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>دستیار پنل</title>
+<meta name="theme-color" content="#0b0e24">
+<meta name="color-scheme" content="dark light">
+<meta name="referrer" content="no-referrer">
+<meta name="robots" content="noindex, nofollow">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="دستیار پنل">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<link rel="manifest" href="/m.webmanifest">
+<link rel="apple-touch-icon" href="/static/m-icon-180.png">
+<link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+<link rel="stylesheet" href="/static/m.css">
+</head>
+<body>
+<div id="app">
+  <div id="boot" class="boot"><div class="spin" aria-hidden="true"></div><p>در حال باز شدن…</p></div>
+
+  <section id="login" class="login hidden" aria-label="ورود">
+    <form id="login-form" class="lcard" autocomplete="on" novalidate>
+      <img class="lmark" src="/static/favicon.svg" width="64" height="64" alt="">
+      <h1>دستیار پنل</h1>
+      <p class="lsub">برای باز کردن، رمز پنل را بزن. این گوشی یک «کلید» می‌گیرد که فقط برای همین صفحه کار می‌کند.</p>
+      <p id="login-err" class="lerr" role="alert" aria-live="polite"></p>
+      <div id="step-pass">
+        <label class="fld"><span>نام کاربری</span><input name="user" value="admin" autocomplete="username" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="next"></label>
+        <label class="fld"><span>رمز پنل</span><input name="password" type="password" autocomplete="current-password" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="go"></label>
+        <button class="btn pri big" type="submit">ورود</button>
+      </div>
+      <div id="step-code" class="hidden">
+        <p class="lsub">کد ۶ رقمی برنامه‌ی احراز هویت (Authenticator) را بزن، یا یکی از کدهای بازیابی را.</p>
+        <label class="fld"><span>کد</span><input name="code" inputmode="numeric" autocomplete="one-time-code" autocapitalize="off" autocorrect="off" spellcheck="false" maxlength="20" enterkeyhint="go" dir="ltr"></label>
+        <button class="btn pri big" type="submit">تایید کد</button>
+        <button class="btn link" type="button" id="code-back">بازگشت</button>
+      </div>
+    </form>
+  </section>
+
+  <section id="main" class="main hidden" aria-label="دستیار">
+    <header class="top">
+      <button class="icon" id="btn-menu" type="button" aria-label="تنظیمات و تاریخچه"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+      <div class="ttl"><b>دستیار پنل</b><small id="ai-line">…</small></div>
+      <button class="stop hidden" id="btn-stop" type="button">توقف</button>
+    </header>
+    <div id="banner" class="banner hidden" role="status"></div>
+    <div id="feed" class="feed" aria-live="polite"></div>
+    <div id="hello" class="hello">
+      <p class="big">چه کاری انجام بدهم؟</p>
+      <p class="small">مثلاً بنویس: «تونل … قطع است، مشکلش را پیدا کن و درست کن». برای دیکته، روی کیبورد آیفون میکروفون را بزن.</p>
+      <div class="chips" id="chips"></div>
+    </div>
+    <form id="composer" class="composer" autocomplete="off">
+      <textarea id="order" rows="1" maxlength="1000" placeholder="دستورت را اینجا بنویس…" enterkeyhint="send" autocomplete="off" autocorrect="on" aria-label="دستور"></textarea>
+      <button class="send" id="btn-send" type="submit" aria-label="بفرست"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 3L10 14M21 3l-7 18-4-7-7-4z"/></svg></button>
+    </form>
+  </section>
+
+  <div id="sheet" class="sheet hidden" role="dialog" aria-modal="true" aria-label="تنظیمات">
+    <div class="sheet-bg" id="sheet-bg"></div>
+    <div class="sheet-box">
+      <div class="sheet-head"><b id="sheet-title"></b><button class="icon" id="sheet-x" type="button" aria-label="بستن"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+      <div id="sheet-body" class="sheet-body"></div>
+    </div>
+  </div>
+</div>
+<noscript><p style="padding:24px;font:16px system-ui">این صفحه به جاوااسکریپت نیاز دارد.</p></noscript>
+<script src="/static/m.js"></script>
+</body>
+</html>

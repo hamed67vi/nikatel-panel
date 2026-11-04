@@ -53,9 +53,8 @@ class PwCodeIn(BaseModel):
     code: str = Field("", max_length=40)
 
 
-@router.post("/auth/login")
-def login(body: LoginIn, request: Request, response: Response):
-    """Sign in with the admin password; with two-step sign-in on, the answer carries a ticket for the code step."""
+def _password_step(body: LoginIn, request: Request) -> tuple[str, str]:
+    """The first step of every sign-in (the panel's own and a phone's): the throttle, then the password. Returns (the client address, a ticket for the code step) when two-step sign-in is on, (address, "") when the password was enough."""
     ip = auth.client_ip(request)
     auth.throttle_check(ip)
 
@@ -66,17 +65,14 @@ def login(body: LoginIn, request: Request, response: Response):
         raise HTTPException(401, "wrong user or password")
 
     if auth.totp_enabled():            # password right: the second step decides
-        return {"ok": True, "need_2fa": True, "ticket": auth.make_ticket(body.user)}
+        return ip, auth.make_ticket(body.user)
 
     auth.throttle_ok(ip)
-    _cookie(request, response, body.user)
-    _audit("info", f"Signed in from {ip}.")
-    return {"ok": True, "user": body.user}
+    return ip, ""
 
 
-@router.post("/auth/login/2fa")
-def login_2fa(body: CodeIn, request: Request, response: Response):
-    """The second step: the authenticator code (or a recovery code) with the ticket of the first step."""
+def _code_step(body: CodeIn, request: Request) -> tuple[str, str, str]:
+    """The second step of every sign-in: the authenticator code (or a recovery code) with the ticket of the first step. Returns (address, user, how it was proved)."""
     ip = auth.client_ip(request)
     auth.throttle_check(ip)
     user = auth.read_ticket(body.ticket)
@@ -92,9 +88,55 @@ def login_2fa(body: CodeIn, request: Request, response: Response):
         raise HTTPException(401, "wrong code")
 
     auth.throttle_ok(ip)
+    return ip, user, how
+
+
+@router.post("/auth/login")
+def login(body: LoginIn, request: Request, response: Response):
+    """Sign in with the admin password; with two-step sign-in on, the answer carries a ticket for the code step."""
+    ip, ticket = _password_step(body, request)
+
+    if ticket:
+        return {"ok": True, "need_2fa": True, "ticket": ticket}
+
+    _cookie(request, response, body.user)
+    _audit("info", f"Signed in from {ip}.")
+    return {"ok": True, "user": body.user}
+
+
+@router.post("/auth/login/2fa")
+def login_2fa(body: CodeIn, request: Request, response: Response):
+    """The second step: the authenticator code (or a recovery code) with the ticket of the first step."""
+    ip, user, how = _code_step(body, request)
     _cookie(request, response, user)
     _audit("info", f"Signed in from {ip} with a {how}.")
     return {"ok": True, "user": user}
+
+
+def _phone_key(request: Request, response: Response, ip: str, how: str) -> str:
+    """Give this phone its key: a cookie for the phone assistant's routes only, 30 days, forgotten after 14 idle days, written into the registry so it can be taken away from the page."""
+    label = auth.phone_label(request.headers.get("user-agent", ""))
+    response.set_cookie(auth.PHONE_COOKIE, auth.make_phone_session(label, ip), httponly=True, samesite="strict", secure=auth.is_https(request), max_age=auth.PHONE_DAYS * 86400, path=auth.PHONE_PATH)
+    _audit("info", f"A phone ({label}) was signed in to the phone assistant from {ip}{how}.")
+    return "phone:" + label
+
+
+@router.post("/auth/phone/login")
+def phone_login(body: LoginIn, request: Request, response: Response):
+    """Sign a phone in to the phone assistant: the same password and second step as the panel, but the phone gets a key that works for the assistant's routes only."""
+    ip, ticket = _password_step(body, request)
+
+    if ticket:
+        return {"ok": True, "need_2fa": True, "ticket": ticket}
+
+    return {"ok": True, "user": _phone_key(request, response, ip, "")}
+
+
+@router.post("/auth/phone/login/2fa")
+def phone_login_2fa(body: CodeIn, request: Request, response: Response):
+    """The second step of a phone's sign-in: the authenticator code (or a recovery code) with the ticket of the first step."""
+    ip, _user, how = _code_step(body, request)
+    return {"ok": True, "user": _phone_key(request, response, ip, f" with a {how}")}
 
 
 @router.post("/auth/logout")

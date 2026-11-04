@@ -32,6 +32,7 @@ from .services import (
     carry,
     cfgstats,
     comeback,
+    commander,
     configs,
     costs,
     demo,
@@ -123,9 +124,31 @@ def _index_html() -> str:
     return html
 
 
+def _m_html() -> str:
+    """The phone assistant's page (/m); its script and stylesheet carry their change time like the panel's."""
+    html = (WEB / "m.html").read_text(encoding="utf-8")
+
+    for name in ("m.js", "m.css"):
+        try:
+            stamp = int((WEB / name).stat().st_mtime)
+        except OSError:
+            stamp = 0
+
+        html = html.replace(f"/static/{name}", f"/static/{name}?v={stamp}")
+
+    return html
+
+
+def _m_manifest(entry: str) -> dict:
+    """The web-app manifest of the phone assistant: the icon on the home screen opens /m (behind the secret entry path when there is one), without the browser's bars."""
+    start = (f"/{entry}" if entry else "") + "/m"
+    return {"name": "Nikatel assistant", "short_name": "Assistant", "start_url": start, "scope": "/", "display": "standalone", "orientation": "portrait", "background_color": "#0b0e24", "theme_color": "#0b0e24", "lang": "fa", "dir": "rtl",
+            "icons": [{"src": "/static/m-icon-180.png", "sizes": "180x180", "type": "image/png", "purpose": "any"}, {"src": "/static/favicon.svg", "sizes": "any", "type": "image/svg+xml"}]}
+
+
 # the public demo: what it never serves (a key pair is made on the first read, the API description and the log are for the operator, the rest reach out of the machine - the diagnose and the
 # PasarGuard certificate are GETs that open SSH sessions: a visitor must not be able to start those, one per request, toward the invented servers)
-_DEMO_BLOCK = ("/api/nodes/user-key", "/api/system/", "/api/arvan", "/api/radar", "/api/logs", "/api/openapi.json", "/api/docs", "/launcher", "/api/backup/download", "/api/tokens", "/api/auth/security", "/api/servers/where", "/api/shopbot", "/api/autopilot/diagnose", "/pasarguard-cert")
+_DEMO_BLOCK = ("/api/nodes/user-key", "/api/system/", "/api/arvan", "/api/radar", "/api/logs", "/api/openapi.json", "/api/docs", "/launcher", "/api/backup/download", "/api/tokens", "/api/auth/security", "/api/servers/where", "/api/shopbot", "/api/autopilot/diagnose", "/pasarguard-cert", "/api/commander")
 _DEMO_HITS: dict[str, list[float]] = {}
 _DEMO_LIMIT, _DEMO_WINDOW = 300, 60.0         # requests per client address per minute: a page load is a few dozen, a group of people looking is fine, a script hammering is not
 
@@ -263,6 +286,7 @@ async def _lifespan(app: FastAPI):
     else:
         probe.bootstrap()
         panels.bootstrap()
+        commander.recover()                  # an order of the phone assistant that a restart cut short is closed; one that waits for the owner's tap stays
 
     if app.state.run_jobs and not s.demo:
         _register_jobs()
@@ -320,6 +344,15 @@ def create_app(run_jobs: bool = True) -> FastAPI:
                 _harden(resp)
                 return resp
 
+            if entry and p.rstrip("/") == "/" + entry + "/m" and request.method == "GET" and (WEB / "m.html").exists():
+                # the same door for the phone assistant: the icon on the home screen opens /<entry_path>/m (a home-screen app keeps its own cookies, so it must be able to pass the door itself)
+                resp = HTMLResponse(_m_html())
+                resp.set_cookie(auth.GATE_COOKIE, gate.make_cookie(entry), httponly=True, samesite="strict", secure=auth.is_https(request), max_age=30 * 86400, path="/")
+                resp.headers["X-Request-Id"] = rid
+                resp.headers["Cache-Control"] = "no-cache"
+                _harden(resp)
+                return resp
+
             if get_settings().demo:
                 refused = _demo_refuse(request)
 
@@ -353,7 +386,7 @@ def create_app(run_jobs: bool = True) -> FastAPI:
             response.headers["Cache-Control"] = "public, max-age=31536000, immutable"   # the page links its files with their change time (?v=): a deploy changes the link, so a reload asks for nothing
         elif request.url.path.startswith("/static/fonts/"):
             response.headers["Cache-Control"] = "public, max-age=2592000, immutable"
-        elif request.url.path == "/" or request.url.path.startswith("/static/"):
+        elif request.url.path in ("/", "/m", "/m.webmanifest") or request.url.path.startswith("/static/"):
             response.headers["Cache-Control"] = "no-cache"   # the browser revalidates (ETag), so a deploy shows at once
         elif request.url.path.startswith("/api/"):
             response.headers["Cache-Control"] = "no-store"
@@ -461,6 +494,17 @@ def create_app(run_jobs: bool = True) -> FastAPI:
         @app.get("/", include_in_schema=False)
         def index():
             return HTMLResponse(_index_html())
+
+        @app.get("/m", include_in_schema=False)
+        def phone_page():
+            """The phone assistant's page. It holds no data: it asks for the phone's key, and every route it uses is guarded."""
+            return HTMLResponse(_m_html())
+
+        @app.get("/m.webmanifest", include_in_schema=False)
+        def phone_manifest():
+            from . import gate
+
+            return JSONResponse(_m_manifest(gate.entry_path()), media_type="application/manifest+json")
 
     return app
 

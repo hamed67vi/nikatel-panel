@@ -58,6 +58,9 @@ def checkpoint() -> None:
 
 
 def run() -> None:
+    from . import commander
+
     r = trim()
+    commander.trim()          # the phone assistant's orders, 90 days
     checkpoint()
     log.info("trimmed: %s events, %s repair stories removed, %s open stories of a stopped run closed; %s events, %s stories kept", r["events_removed"], r["actions_removed"], r["orphans_closed"], r["events"], r["actions"])

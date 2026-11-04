@@ -43,7 +43,7 @@ def test_every_route_but_the_listed_ones_needs_a_session(client):
     """The ones that are open on purpose: the login steps, the health check (versionless for a stranger), the secret-token subscription link and the front page."""
     import fastapi.routing as fr
 
-    open_on_purpose = {"/", "/api/auth/login", "/api/auth/login/2fa", "/api/auth/logout", "/api/auth/recover", "/api/auth/recover/telegram", "/api/auth/recovery-options", "/api/health", "/sub/{token}"}
+    open_on_purpose = {"/", "/api/auth/login", "/api/auth/login/2fa", "/api/auth/logout", "/api/auth/recover", "/api/auth/recover/telegram", "/api/auth/recovery-options", "/api/auth/phone/login", "/api/auth/phone/login/2fa", "/api/health", "/sub/{token}", "/m", "/m.webmanifest"}
     routes = []
 
     for r in client.app.routes:

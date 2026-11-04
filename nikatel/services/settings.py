@@ -88,6 +88,8 @@ DEFAULTS: dict[str, dict[str, Any]] = {
     # the Reviewer (services/reviewer.py), the teacher of the Doctor: ai = the AI may write the reviews (when a key is saved); reviews = what it found about the repairs that went badly (newest last); lessons = what it proposes to
     # teach the Doctor (proposed -> approved / dismissed by the owner); seq = the last lesson number
     "reviewer": {"ai": True, "reviews": [], "lessons": [], "seq": 0},
+    # the phone assistant (services/commander.py): OFF until the owner switches it on from the page itself (/m); `careful` = every change needs his tap, not only the risky ones
+    "commander": {"enabled": False, "careful": False},
 }
 
 SECRET_FIELDS = {"telegram": ("token",), "bale": ("token",), "probe": ("api_token",), "ai": ("api_key",), "arvan": ("api_key",), "license": ("token",)}
