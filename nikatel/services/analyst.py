@@ -16,7 +16,7 @@ from __future__ import annotations
 import re
 import statistics
 import time
-from collections import Counter, defaultdict
+from collections import Counter, defaultdict, namedtuple
 
 from sqlalchemy import select
 
@@ -328,6 +328,7 @@ def server_verdicts(rows: list[dict]) -> list[dict]:
 
 # ------------------------------------------------------------------ database
 _CACHE: dict = {}
+_Smp = namedtuple("_Smp", "ts cpu ram rx_mbps tx_mbps")          # the five columns of a server sample the analysis reads (161,000 rows a week: a whole ORM object each took ~250 MB and 9 s)
 
 
 def _underuse_view(u: dict | None) -> dict | None:
@@ -457,8 +458,8 @@ def overview(days: int = 7) -> dict:
 
         samples: dict[int, list] = defaultdict(list)
 
-        for r in db.scalars(select(ServerSample).where(ServerSample.ts >= since)):
-            samples[r.server_id].append(r)
+        for sid, ts_, cpu_, ram_, rx_, tx_ in db.execute(select(ServerSample.server_id, ServerSample.ts, ServerSample.cpu, ServerSample.ram, ServerSample.rx_mbps, ServerSample.tx_mbps).where(ServerSample.ts >= since)):
+            samples[sid].append(_Smp(ts_, cpu_, ram_, rx_, tx_))
 
         trows = [{"id": t.id, "name": t.name, "iran": t.iran.name, "foreign": t.foreign.name, "kind": _kind_of(t), "state": t.state, "mbps": (t.rx_mbps or 0) + (t.tx_mbps or 0)} for t in tunnels]
         srows = {sid: {"name": s.name, "role": s.role, "online": s.online, "city": (((s.extra or {}).get("geo") or {}).get("city") or "") or "", "cores": (s.facts or {}).get("cores") or 1,

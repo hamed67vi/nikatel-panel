@@ -577,17 +577,57 @@ def refresh_key_meta(panel_id: int, c: dict) -> None:
             p.secrets = {**(p.secrets or {}), "key_meta": meta}
 
 
+def _look(c: dict, old_nodes: dict, rw: bool) -> dict:
+    """`check()` and, for the nodes that stayed disconnected, the reconnect requests - all of it BEFORE the database session of `check_all` opens. A reconnect waits for the panel's answer (20 s when the node is in
+    trouble and the panel slow) and used to run INSIDE that session, so the write lock of SQLite was held that long: 816 times in a week, up to 40 s, every other job 'database is locked' meanwhile (2026-11-04).
+    res["reconnect"]: node id -> (what to say, when it was asked or None)."""
+    res = check(c)
+    res["reconnect"] = {}
+
+    if not res["ok"] or not rw:
+        return res
+
+    now = int(time.time())
+    due = []
+
+    for n in res["nodes"]:
+        prev = old_nodes.get(str(n.get("id")), {})
+        fails = 0 if n["status"] in NODE_OK else int(prev.get("fails", 0)) + 1
+
+        if fails < 2 or n.get("id") is None:
+            continue
+
+        if now - int(prev.get("reconnect_at", 0)) >= RECONNECT_EVERY:          # (the panel is looked at every 15 s; a node that is still connecting is not asked to reconnect again before RECONNECT_EVERY)
+            due.append(n["id"])
+        else:
+            res["reconnect"][str(n["id"])] = ("reconnect requested a moment ago", None)
+
+    def ask(node_id) -> tuple[str, str, int]:
+        try:
+            node_reconnect(c, node_id)
+            return str(node_id), "reconnect requested", now
+        except (PanelError, ValueError) as e:
+            return str(node_id), "reconnect failed: " + str(e)[:80], now
+
+    if due:
+        with ThreadPoolExecutor(max_workers=min(4, len(due))) as ex:          # (the nodes of one panel are asked at the same time too)
+            for nid, how, at in ex.map(ask, due):
+                res["reconnect"][nid] = (how, at)
+
+    return res
+
+
 def check_all() -> None:
     """The job: every enabled panel, nodes that stay disconnected get a reconnect request after two checks."""
     with session() as db:
-        items = [(p.id, _cred(p)) for p in db.scalars(select(Panel).where(Panel.enabled.is_(True)))]
+        items = [(p.id, _cred(p), {str(n.get("id")): n for n in (p.nodes or [])}) for p in db.scalars(select(Panel).where(Panel.enabled.is_(True)))]
 
     rw = not get_settings().read_only
 
     with ThreadPoolExecutor(max_workers=max(1, min(8, len(items)))) as ex:          # every panel is asked at the same time: one that does not answer costs its own 20 s, not 20 s of the others
-        answers = list(ex.map(lambda it: check(it[1]), items))
+        answers = list(ex.map(lambda it: _look(it[1], it[2], rw), items))
 
-    for (pid, c), res in zip(items, answers):
+    for (pid, c, _old), res in zip(items, answers):
         now = int(time.time())
 
         with session() as db:
@@ -618,19 +658,14 @@ def check_all() -> None:
                         emit(db, "ok", "panels", f"Node {n['name']} of {label} is connected again.", p.name)
                     elif fails >= 2 and n.get("id") is not None:
                         how = "reconnect not requested (panel is read-only)"
-                        asked = int(prev.get("reconnect_at", 0))          # (the panel is looked at every 15 s; a node that is still connecting is not asked to reconnect again before RECONNECT_EVERY)
-                        n["reconnect_at"] = asked
+                        n["reconnect_at"] = int(prev.get("reconnect_at", 0))
+                        done = (res.get("reconnect") or {}).get(str(n["id"]))          # (asked in `_look`, before this session opened)
 
-                        if rw and now - asked >= RECONNECT_EVERY:
-                            try:
-                                node_reconnect(c, n["id"])
-                                how = "reconnect requested"
-                            except (PanelError, ValueError) as e:
-                                how = "reconnect failed: " + str(e)[:80]
+                        if done:
+                            how = done[0]
 
-                            n["reconnect_at"] = now
-                        elif rw:
-                            how = "reconnect requested a moment ago"
+                            if done[1]:
+                                n["reconnect_at"] = done[1]
 
                         if fails in (2, 20, 120):
                             emit(db, "bad", "panels", f"Node {n['name']} of {label} is {n['status'] or 'not connected'}" + (f" ({n['message']})" if n["message"] else "") + f" — {how}.", p.name)

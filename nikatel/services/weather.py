@@ -17,6 +17,7 @@ There is no page: the weather shows only as a few words in the Trident's bar and
 The pure helpers (`family_of_link`, `fuse`, `factor`, `usual_blocked`, `pattern_add`, `fleet_evidence`, `probe_due`) carry the decisions and are tested."""
 from __future__ import annotations
 
+import copy
 import re
 import threading
 import time
@@ -270,13 +271,18 @@ def _doc() -> dict:
     return st.get("trident")
 
 
+def _view() -> dict:
+    """The document for READING (settings.peek: parsed once a second, shared - the 'pattern' part alone is 250 KB and every tunnel asks for its own slice many times a turn). Never change it: the readers below hand out a copy of their slice."""
+    return st.peek("trident")
+
+
 def weather_of(iran_id: int, foreign_id: int) -> dict[str, dict]:
     """{family: entry} of a route as kept now (empty when nothing is known)."""
-    return dict((_doc().get("weather") or {}).get(route_key(iran_id, foreign_id)) or {})
+    return copy.deepcopy((_view().get("weather") or {}).get(route_key(iran_id, foreign_id)) or {})
 
 
 def pattern_of(iran_id: int, foreign_id: int, family: str) -> dict:
-    return dict(((_doc().get("pattern") or {}).get(route_key(iran_id, foreign_id)) or {}).get(family) or {})
+    return copy.deepcopy(((_view().get("pattern") or {}).get(route_key(iran_id, foreign_id)) or {}).get(family) or {})
 
 
 def factor_for(iran_id: int, foreign_id: int, kind: str, now: int | None = None) -> tuple[float, str]:

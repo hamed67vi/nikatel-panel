@@ -85,10 +85,20 @@ def _add_column(db: Session, table: str, column: str, ddl: str) -> None:
         db.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}"))
 
 
+_GENERATION = 0          # raised every time an engine is made (a test makes a new database under the same file name): what a cache of database content is keyed on
+
+
+def generation() -> int:
+    """Which engine (database) is open now: a cache of what was read from the database is only good for this number."""
+    engine()
+    return _GENERATION
+
+
 def engine() -> Engine:
-    global _engine, _Session
+    global _engine, _Session, _GENERATION
 
     if _engine is None:
+        _GENERATION += 1
         s = get_settings()
         s.data_dir.mkdir(parents=True, exist_ok=True)
         # the pool: ~20 job threads, the page requests (a pool of 40) and the pools inside the jobs all ask for a connection; SQLAlchemy's default (5 + 10 overflow) made the 16th wait 30 s and then fail

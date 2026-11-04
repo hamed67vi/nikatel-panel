@@ -5,9 +5,10 @@ from __future__ import annotations
 
 import copy
 import threading
+import time
 from typing import Any
 
-from ..db import session
+from ..db import generation, session
 from ..models import Setting
 
 DEFAULTS: dict[str, dict[str, Any]] = {
@@ -126,7 +127,32 @@ def get(key: str) -> dict:
         return merged
 
 
-_PUT_LOCK = threading.Lock()          # put() reads the document, changes some fields and writes ALL of it back: two puts at the same moment (a job and a page) must not lose each other's fields
+PEEK_TTL = 1.0          # seconds a document read with peek() is kept
+_PEEKED: dict[tuple[int, str], tuple[float, dict, int]] = {}          # (which database, key) -> (read at, the document, the version of the key then)
+_VERSION: dict[str, int] = {}          # raised by put() AFTER its commit: a document read before that is never served again
+
+
+def peek(key: str) -> dict:
+    """`get()` for code that only READS the document. One turn of a job reads a settings document hundreds of times (every tunnel asks for its own slice) and the Trident one is 270 KB, 11 ms to parse:
+    a third of the panel's CPU was spent there (py-spy on the live panel, 2026-11-04). The same merged document, parsed once and kept for PEEK_TTL seconds; `put()` drops it at once.
+    The result is SHARED between callers: change nothing in it - copy the small part you hand on (`copy.deepcopy(doc.get("applied", {}).get(name))`)."""
+    ck = (generation(), key)
+    ver = _VERSION.get(key, 0)
+    hit = _PEEKED.get(ck)
+    now = time.monotonic()
+
+    if hit is not None and hit[2] == ver and now - hit[0] < PEEK_TTL:
+        return hit[1]
+
+    doc = get(key)
+
+    if _VERSION.get(key, 0) == ver:          # (a put that ran while this was read has raised the version: this document may be older than the stored one)
+        _PEEKED[ck] = (now, doc, ver)
+
+    return doc
+
+
+_PUT_LOCK = threading.Lock()         # put() reads the document, changes some fields and writes ALL of it back: two puts at the same moment (a job and a page) must not lose each other's fields
 
 
 def put(key: str, changes: dict) -> dict:
@@ -134,29 +160,33 @@ def put(key: str, changes: dict) -> dict:
     if key not in DEFAULTS:
         raise ValueError(f"unknown settings key {key!r}")
 
-    with _PUT_LOCK, session() as db:
-        row = db.get(Setting, key)
-        current = copy.deepcopy(DEFAULTS[key])
+    with _PUT_LOCK:
+        with session() as db:
+            row = db.get(Setting, key)
+            current = copy.deepcopy(DEFAULTS[key])
 
-        if row is not None and isinstance(row.value, dict):
-            current.update(_stored(key, row.value))
+            if row is not None and isinstance(row.value, dict):
+                current.update(_stored(key, row.value))
 
-        for k, v in changes.items():
-            if k not in DEFAULTS[key]:
-                raise ValueError(f"unknown field {k!r} for {key}")
+            for k, v in changes.items():
+                if k not in DEFAULTS[key]:
+                    raise ValueError(f"unknown field {k!r} for {key}")
 
-            if k in SECRET_FIELDS.get(key, ()) and v == "":
-                continue
+                if k in SECRET_FIELDS.get(key, ()) and v == "":
+                    continue
 
-            current[k] = v
+                current[k] = v
 
-        if row is None:
-            row = Setting(key=key, value=current)
-            db.add(row)
-        else:
-            row.value = current
+            if row is None:
+                row = Setting(key=key, value=current)
+                db.add(row)
+            else:
+                row.value = current
 
-        return copy.deepcopy(current)
+            result = copy.deepcopy(current)
+
+        _VERSION[key] = _VERSION.get(key, 0) + 1          # (after the commit: peek() reads the new document from now on)
+        return result
 
 
 def public(key: str) -> dict:

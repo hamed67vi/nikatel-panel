@@ -17,6 +17,7 @@ the panel - combine them into a strong multi-layer tunnel that gives the best co
 The pure helpers (`traits`, `pick_kind`, `quality`, `target_weights`, `advance`, `should_apply`, `chain_probs`, `plan_text`, `parse_list`) carry the decisions and are tested."""
 from __future__ import annotations
 
+import copy
 import re
 import threading
 import time
@@ -421,12 +422,17 @@ def _doc() -> dict:
     return st.get("trident")
 
 
+def _view() -> dict:
+    """The document for READING (settings.peek: parsed once a second and shared; the list of tunnels asks for the marks and the record of every tunnel and a parse is 11 ms). Never change it: the readers below hand out a copy of their slice."""
+    return st.peek("trident")
+
+
 def marks() -> dict:
-    return dict(_doc().get("tunnels") or {})
+    return copy.deepcopy(_view().get("tunnels") or {})
 
 
 def _applied(name: str) -> dict:
-    return dict((_doc().get("applied") or {}).get(name) or {})
+    return copy.deepcopy((_view().get("applied") or {}).get(name) or {})
 
 
 def _set_applied(name: str, data: dict | None) -> None:
@@ -480,7 +486,7 @@ def _touch(server_id: int) -> None:
 
 
 def _failed(name: str) -> dict:
-    return dict((_doc().get("failed") or {}).get(name) or {})
+    return copy.deepcopy((_view().get("failed") or {}).get(name) or {})
 
 
 def _set_failed(name: str, data: dict | None) -> None:

@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.69.213 - The panel uses a third less CPU: a settings document is parsed once a second, not hundreds of times a turn; a reconnect no longer waits inside the database session; the analysis holds light rows
+
+Owner (2026-11-04, Persian): "look at the monitor panel from zero to a hundred; if there is a dead config, an extra file, a leftover test or anything that makes the tunnels or the panel heavy or disturbs them, fix it; do the parallelizing completely and fix all the bugs".
+
+What the look found (py-spy on the live panel for 40 s, the panel log of a week, the job table, the host):
+- **A third of the panel's CPU was one thing.** `settings.get` read and parsed the whole JSON document on every call. The Trident document is 270 KB (the hourly `pattern` alone is 250 KB, 11 ms to parse) and `trident.summaries` / `weather.factor_for` asked for a small slice of it once per tunnel, per kind, per page poll: 550 of the 1,660 busy samples sat in `settings.get`, 420 of them in `json` decode.
+- **The database session of the panel check held the write lock for 20-40 s.** `panels.check_all` asked the PasarGuard panel to reconnect a node INSIDE its session; with a node in trouble the answer takes 20 s (`ReadTimeout`), every 15 s: 816 sessions held over 8 s in a week (98 an hour on 2026-11-03 while `de-test` was in error), the cause of the `database is locked` failures of the other jobs.
+- **The analysis read a week of server samples as objects** (161,000 rows, 290 MB and 5 s each 30 minutes, and again when the Analytics page opens).
+
+- **`settings.peek(key)` (new).** The same merged document as `get()`, parsed once and kept for one second (`PEEK_TTL`); `put()` raises the version of the key after its commit, so a read after a write never sees the old document; a new database (the tests, a restore) is a new generation. Shared and read-only by contract: the readers copy their slice. `trident.marks / _applied / _failed` and `weather.weather_of / pattern_of` read through it and hand out a deep copy of their small slice.
+- **`panels.check_all`.** The reconnect requests are made in `_look`, before the session opens, for all due nodes of a panel at the same time (up to four); the session only writes the answers. The 30 s rule between two requests and the texts of the events are unchanged.
+- **`analyst.overview`** reads five columns of the samples into light rows (`_Smp`), and `bandwidth` reads one column (`rtt_ms`) instead of a whole `TunnelCheck` object per check.
+- Tests `tests/test_hot_reads.py` (6): a peek is one parse and a put is seen at once; the time-out; what a reader changes in its copy never reaches the next reader (trident marks, applied, weather, pattern); a write is read back; the reconnect is asked with no database session open (and its time is kept for the 30 s rule); the analysis figures from the light rows.
+- Proved on a COPY of the live database (53 tunnels), the old code against the new: `trident.summaries` 1,129 -> 62 ms; `weather.factor_for` for every tunnel 1,296 -> 6 ms; `analyst.overview` 4.7 -> 1.7 s and +221 -> +77 MB of memory. The 230 tests of the touched areas (panels, trident, weather, analyst, bandwidth, settings, Doctor) pass. Not proved: the CPU of the live panel after the Update (a second py-spy run will show it).
+
 ## 1.69.212 - The Doctor sweeps duplicate tunnels: the extra copy nobody uses goes to Recently removed
 
 Owner (2026-11-04, Persian), with a picture of `de1-...-mv` and `de1-...` - two tunnels with the same ports to the same foreign server from two Iran servers, one carrying 43 Mb/s and the other 0.05: "look at the duplicate or extra tunnels - they must not stay for ever; a temporary or a test one is fine, an extra one is not".

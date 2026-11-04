@@ -618,7 +618,7 @@ def _facts(tunnel_id: int) -> dict:
         loss = d.get("loss_pct")
         rx = sorted(c.rx_mbps for c in db.scalars(select(TunnelCheck).where(TunnelCheck.tunnel_id == t.id, TunnelCheck.ts >= now - 900).order_by(TunnelCheck.ts.desc()).limit(10)) if c.rx_mbps is not None)
         live = rx[len(rx) // 2] if len(rx) >= 5 else None       # what comes to the Iran server through the link: the MIDDLE of the last ten minutes (one minute that holds a test of the panel itself, a few seconds of 500 Mb/s, must not make the tunnel look full of users)
-        rtts = sorted(c.rtt_ms for c in db.scalars(select(TunnelCheck).where(TunnelCheck.tunnel_id == t.id, TunnelCheck.ts >= now - 7 * 86400, TunnelCheck.ok.is_(True))) if c.rtt_ms is not None)
+        rtts = sorted(x for x in db.scalars(select(TunnelCheck.rtt_ms).where(TunnelCheck.tunnel_id == t.id, TunnelCheck.ts >= now - 7 * 86400, TunnelCheck.ok.is_(True))) if x is not None)          # (one column, not a whole row object per check)
         sides = {}
 
         for side, srv in (("iran", t.iran), ("foreign", t.foreign)):
@@ -1113,7 +1113,7 @@ def _usual_ping(tunnel_id: int) -> float | None:
     now = int(time.time())
 
     with session() as db:
-        rtts = sorted(c.rtt_ms for c in db.scalars(select(TunnelCheck).where(TunnelCheck.tunnel_id == tunnel_id, TunnelCheck.ts >= now - 7 * 86400, TunnelCheck.ok.is_(True))) if c.rtt_ms is not None)
+        rtts = sorted(x for x in db.scalars(select(TunnelCheck.rtt_ms).where(TunnelCheck.tunnel_id == tunnel_id, TunnelCheck.ts >= now - 7 * 86400, TunnelCheck.ok.is_(True))) if x is not None)
 
     return rtts[len(rtts) // 2] if len(rtts) >= 20 else None
 
