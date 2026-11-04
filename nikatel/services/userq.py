@@ -316,12 +316,30 @@ def run() -> None:
         for tid in looked:
             _investigate_later(tid)
 
+        _forget(set(grades))                                 # (a tunnel whose configs are gone keeps no grade: 1.69.210)
+
         from . import dnsheal
 
         dnsheal.look(grades)                                 # (a config that is down while its tunnel is up: is its name pointed at a server that carries the port? 1.69.196)
     finally:
         with _LOCK:
             _RUNNING[0] = False
+
+
+def _forget(keep: set[int]) -> int:
+    """(1.69.210, the owner, 2026-11-04) A tunnel that no config rides any more keeps no grade. The job only wrote the grade of the tunnels that HAVE configs, so when the dead configs were deleted from Configs monitoring
+    six tunnels kept "the users get a bad connection - the config does not connect for 25 000 minutes" for good, and told it to the Doctor and the page. Returns how many were cleared."""
+    n = 0
+
+    with session() as db:
+        for t in db.scalars(select(Tunnel)):
+            rec = t.record or {}
+
+            if t.id not in keep and rec.get("ux"):
+                t.record = {k: v for k, v in rec.items() if k != "ux"}
+                n += 1
+
+    return n
 
 
 def _store(tunnel_id: int, ux: dict, now: int) -> tuple[str, str] | None:

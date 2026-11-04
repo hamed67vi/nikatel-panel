@@ -259,6 +259,39 @@ def test_the_job_keeps_the_grade_with_two_looks_and_writes_the_events_and_starts
         assert any("get a good connection again" in e.text for e in db.scalars(select(Event).where(Event.ref == "nl1-ir-alpha")))
 
 
+def test_a_tunnel_whose_configs_are_gone_keeps_no_grade(monkeypatch):      # (1.69.210, the owner, 2026-11-04: the dead configs were deleted and six tunnels still said "bad" for 25 000 minutes)
+    w = world()
+    monkeypatch.setitem(dnscache.CACHE, "rows", [{"fqdn": "gt.cdn.example.com", "type": "A", "ips": ["203.0.113.10"], "port": None}])
+    monkeypatch.setitem(dnscache.CACHE, "at", time.time())
+    monkeypatch.setattr(userq.jobs, "stopping", lambda: False)
+    monkeypatch.setattr(userq, "_investigate_later", lambda tid: None)
+
+    for name in ("France", "Italy", "Direct"):
+        add_samples(w["configs"][name], "1" * 60, 520.0)
+
+    userq.run()
+
+    with session() as db:
+        db.add(Tunnel(name="empty-ir-alpha", type="backhaul", transport="tcpmux", port=9902, iran_server_id=w["iran"], foreign_server_id=w["foreign"], state="up", forwarded_ports=[8999],
+                      record={"ux": {"grade": "bad", "n": 1, "known": 1, "bad": [{"config": "Gone", "issue": "down", "text": "does not connect (for 25679 minutes)"}], "at": 1, "since": 1}, "bw": {"state": "ok"}}))
+        assert db.get(Tunnel, w["tunnel"]).record["ux"]["grade"] == "good"
+
+    userq.run()
+
+    with session() as db:
+        gone = db.scalar(select(Tunnel).where(Tunnel.name == "empty-ir-alpha"))
+        assert "ux" not in gone.record and gone.record["bw"] == {"state": "ok"}                              # (only the grade goes; the rest of the record stays)
+        assert db.get(Tunnel, w["tunnel"]).record["ux"]["grade"] == "good"                                   # (a tunnel that has configs keeps its grade)
+        db.query(ConfigSample).delete()
+        db.query(Config).delete()
+
+    userq.run()
+
+    with session() as db:
+        assert "ux" not in db.get(Tunnel, w["tunnel"]).record                                                # (all its configs deleted from Configs monitoring: no grade)
+    assert userq._forget(set()) == 0
+
+
 def test_the_look_at_suffering_users_says_the_tunnel_is_fine_and_the_problem_is_beyond_it(monkeypatch):
     w = world()
     now = int(time.time())

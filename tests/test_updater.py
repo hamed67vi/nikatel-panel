@@ -163,6 +163,53 @@ def test_the_status_route_has_what_the_card_reads(client, files, monkeypatch):
     assert {"version", "installed", "newest", "checked", "up_to_date", "latest", "newer", "notes_url", "progress", "last_log"} <= set(r) and r["progress"]["state"] == "idle"
 
 
+@pytest.mark.parametrize("origin,expected", [("git@github.com:o/r.git", "https://github.com/o/r.git"), ("ssh://git@github.com/o/r", "https://github.com/o/r.git"), ("git@github.com:o/r", "https://github.com/o/r.git"),
+                                              ("https://github.com/o/r.git", ""), ("git@gitlab.com:o/r.git", ""), ("", "")])
+def test_the_https_address_of_a_github_origin_written_as_an_ssh_address(origin, expected):
+    assert updater.https_of(origin) == expected
+
+
+def test_the_newest_version_is_read_over_https_first_and_over_the_origin_when_https_gives_nothing(files, monkeypatch):      # (2026-11-04: GitHub's SSH login said "Permission denied (publickey)" every other time)
+    monkeypatch.setattr(updater, "_origin_url", lambda: "git@github.com:example/panel.git")
+    asked = []
+
+    def git(*args, timeout=40):
+        asked.append(args[1] if args[0] == "ls-remote" else args[0])
+        return "abc1234fff\tHEAD\n" if args[:2] == ("ls-remote", "origin") else ""
+
+    monkeypatch.setattr(updater, "_git", git)
+    assert updater.remote()["head"] == "abc1234fff" and asked == ["https://github.com/example/panel.git", "origin"]
+    monkeypatch.setattr(updater, "_remote", {"at": 0.0, "head": "", "tag": "", "ok": False})
+    asked.clear()
+    monkeypatch.setattr(updater, "_git", lambda *a, timeout=40: asked.append(a[1]) or "bbb\tHEAD\n")
+    assert updater.remote()["head"] == "bbb" and asked == ["https://github.com/example/panel.git"]                        # (https answered: the origin is not asked)
+
+
+def test_a_download_that_fails_like_a_connection_is_tried_the_other_way_and_a_real_conflict_is_not(files, monkeypatch):
+    monkeypatch.setattr(updater, "_origin_url", lambda: "git@github.com:example/panel.git")
+    targets, answers = [], []
+
+    def fake_run(cmd, **_kw):
+        targets.append(cmd[-2])
+        rc, err = answers[len(targets) - 1]
+        return subprocess.CompletedProcess(cmd, rc, stdout="", stderr=err)
+
+    monkeypatch.setattr(updater.subprocess, "run", fake_run)
+    answers[:] = [(1, "fatal: unable to access 'https://github.com/example/panel.git/': Could not resolve host: github.com"), (0, "")]
+    assert updater.download().returncode == 0 and targets == ["https://github.com/example/panel.git", "origin"]
+    targets.clear()
+    answers[:] = [(1, "fatal: Not possible to fast-forward, aborting."), (0, "")]
+    assert updater.download().returncode == 1 and targets == ["https://github.com/example/panel.git"]                       # (a conflict is the same over any address)
+    targets.clear()
+    answers[:] = [(1, "fatal: unable to access: Connection timed out"), (1, "git@github.com: Permission denied (publickey).")]
+    out = updater.download()
+    assert out.returncode == 1 and "Permission denied" in out.stderr and len(targets) == 2                                  # (both failed: the answer of the origin is told)
+    monkeypatch.setattr(updater, "_origin_url", lambda: "https://github.com/example/panel.git")
+    targets.clear()
+    answers[:] = [(1, "fatal: unable to access: Connection timed out")]
+    assert updater.download().returncode == 1 and targets == ["origin"]                                                      # (an https origin: nothing to fall back to)
+
+
 def test_a_second_run_is_refused_and_a_failed_download_is_told_at_once(files, monkeypatch):
     ran = []
 

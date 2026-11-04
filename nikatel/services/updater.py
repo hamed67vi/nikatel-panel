@@ -96,11 +96,47 @@ def write_progress(rec: dict) -> None:
         log.warning("the progress of the update could not be written: %s", e)
 
 
+def _env() -> dict:
+    """git never asks a question here (a password prompt in a service would wait for nobody)."""
+    return {**os.environ, "GIT_TERMINAL_PROMPT": "0"}
+
+
 def _git(*args: str, timeout: int = 40) -> str:
     try:
-        return subprocess.run(["git", "-C", str(SRC), *args], check=False, capture_output=True, text=True, timeout=timeout).stdout.strip()
+        return subprocess.run(["git", "-C", str(SRC), *args], check=False, capture_output=True, text=True, timeout=timeout, env=_env()).stdout.strip()
     except (OSError, subprocess.SubprocessError):
         return ""
+
+
+def https_of(origin: str) -> str:
+    """Pure: the https address of a GitHub origin that is written as an SSH address ("" for anything else: another host, or already https). The repository is public, so a read over https needs no key; GitHub's SSH login
+    answered "Permission denied (publickey)" about every other time from the panel's host (2026-11-04: "the panel does not update", the card said "Could not reach GitHub")."""
+    m = re.match(r"^(?:git@github\.com:|ssh://git@github\.com/)([\w.-]+/[\w.-]+?)(?:\.git)?/?$", origin.strip())
+    return f"https://github.com/{m.group(1)}.git" if m else ""
+
+
+def _origin_url() -> str:
+    """The address of `origin` as the repository's own config file holds it (read from the file: no git process, the rewrite rules of git are not applied)."""
+    try:
+        text = (SRC / ".git" / "config").read_text(errors="replace")
+    except OSError:
+        return ""
+
+    m = re.search(r'\[remote "origin"\][^\[]*?^\s*url\s*=\s*(\S+)', text, re.MULTILINE | re.DOTALL)
+    return m.group(1) if m else ""
+
+
+def _ls_remote(*refs: str, timeout: int = 10) -> str:
+    """`git ls-remote` of GitHub: over https first when the origin is written as an SSH address (a public repository, no key, answers in a second), over the origin itself when that gives nothing."""
+    alt = https_of(_origin_url())
+
+    for target in ([alt] if alt else []) + ["origin"]:
+        out = _git("ls-remote", target, *refs, timeout=timeout)
+
+        if out:
+            return out
+
+    return ""
 
 
 def _repo_url() -> str:
@@ -118,7 +154,7 @@ def remote() -> dict:
 
     head, best = "", ()
 
-    for ln in _git("ls-remote", "origin", "HEAD", "refs/tags/v*", timeout=10).splitlines():
+    for ln in _ls_remote("HEAD", "refs/tags/v*").splitlines():
         sha, _, ref = ln.partition("\t")
         m = re.fullmatch(r"refs/tags/v(\d+)\.(\d+)\.(\d+)", ref.strip())
 
@@ -157,6 +193,26 @@ def status() -> dict:
             "latest": gh["tag"], "newer": newer, "notes_url": f"{repo}/releases/tag/v{gh['tag']}" if repo and gh["tag"] and newer else ""}
 
 
+_NET_FAULT = re.compile(r"permission denied|could not read from remote|connection (?:timed out|refused|reset|closed)|could not resolve|unable to access|hung up|repository exists|timed out", re.IGNORECASE)
+
+
+def _pull(target: str) -> subprocess.CompletedProcess:
+    return subprocess.run(["git", "-C", str(SRC), "pull", "-q", "--ff-only", target, "main"], check=False, capture_output=True, text=True, timeout=90, env=_env())
+
+
+def download() -> subprocess.CompletedProcess:
+    """git pull of the new version. An origin written as an SSH address is pulled over https first (see `https_of`); when that fails the way a connection fails (not a real conflict) the origin itself is tried, and when
+    both fail the answer of the origin is the one told."""
+    alt = https_of(_origin_url())
+    first = _pull(alt or "origin")
+
+    if first.returncode == 0 or not alt or not _NET_FAULT.search(f"{first.stderr or ''}\n{first.stdout or ''}"):
+        return first
+
+    second = _pull("origin")
+    return second
+
+
 def _failed(rec: dict, why: str) -> dict:
     write_progress({**rec, "step": "failed", "at": time.time(), "reason": why})
     return {"ok": False, "error": why, "code": "upstream_failed"}
@@ -183,7 +239,7 @@ def start() -> dict:
         write_progress(rec)
 
     try:
-        pull = subprocess.run(["git", "-C", str(SRC), "pull", "-q", "--ff-only", "origin", "main"], check=False, capture_output=True, text=True, timeout=90)
+        pull = download()
     except (OSError, subprocess.SubprocessError) as e:
         return _failed(rec, "could not download the new version: " + str(e)[:160])
 
