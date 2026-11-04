@@ -26,6 +26,7 @@ from urllib.parse import urlsplit
 import httpx
 from sqlalchemy import select
 
+from .. import tls
 from ..config import get_settings
 from ..db import session
 from ..log import get_logger
@@ -361,7 +362,7 @@ def _send(c: dict, method: str, path: str, token: str | None = None, form: dict 
 
     try:
         r = httpx.request(method, c["url"] + path, headers=headers, data=form, json=body if form is None else None,
-                          timeout=timeout, verify=bool(c.get("verify_tls", True)))
+                          timeout=timeout, verify=tls.shared() if c.get("verify_tls", True) else False)          # (the shared context: building one reads the CA bundle, 20 ms each request)
     except httpx.HTTPError as e:
         raise PanelError(no_answer(e))
 

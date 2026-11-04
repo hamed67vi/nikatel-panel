@@ -11,6 +11,7 @@ from pathlib import Path
 
 import httpx
 
+from .. import tls
 from ..log import get_logger
 from . import settings as st
 
@@ -54,7 +55,7 @@ def candidates() -> list[dict]:
 
 def _call(p: dict, method: str, path: str, body: dict | None = None, timeout: float = 30) -> dict:
     headers = {"Authorization": "Bearer " + p["api_token"], "Accept": "application/json", "Accept-Encoding": "gzip"}
-    r = httpx.request(method, p["api_url"] + path, json=body, headers=headers, timeout=timeout)
+    r = httpx.request(method, p["api_url"] + path, json=body, headers=headers, timeout=timeout, verify=tls.shared())
     raw = r.content
 
     if r.headers.get("content-encoding") == "gzip" and raw[:2] == b"\x1f\x8b":

@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.69.217 - A TLS context is built once, not for every request to a panel, a DNS provider or the probe
+
+Owner (2026-11-04, Persian), after the measurement of 1.69.213 on the live panel (busy samples 1,663 -> 1,329, `settings.get` 549 -> 92): "do it" - the next round of what the profile still showed.
+
+The second profile of the live panel: `ssl.create_default_context` was 57 of the 1,329 busy samples (4 %). Every `httpx.request(...)` without a client builds a new SSL context, and building one reads and parses the whole CA bundle: 35 ms of CPU each time on the build server (measured), for every call to a PasarGuard or Marzban panel (every 15 s and for every page that reads one), to ArvanCloud and Cloudflare (the DNS page) and to the Iran probe (every config sync).
+
+- **`nikatel/tls.py` (new): `shared()`** is the context httpx itself would make (`httpx.create_ssl_context()`), made once and shared by the threads (a context is safe to share). `panels._send` uses it whenever the panel is verified; `verify_tls` off still gives httpx's own unverified context. The same in the ArvanCloud and Cloudflare clients and the probe call.
+- Tests (in `tests/test_hot_reads.py`, 7): a verifying request takes the one shared context, an unset `verify_tls` verifies, and `verify_tls` off gets `False`.
+- Measured: a new context 35 ms, the shared one 0 (1.5 ms averaged with its first making). The 24 test files of panels, DNS, probe, standby, lanes, trident, weather, Doctor and the API contract pass.
+- Tried and NOT shipped: reading only the standbys of the asked names in `standby._views` (a JSON filter and `selectinload` of the servers) measured 30 % SLOWER on a copy of the live database (95 -> 125 ms for every tunnel): the old reads were already cheap; the code stays as it was.
+
 ## 1.69.216 - Tunnels that carry an economy (ECO) or an AI config say so on their row
 
 Owner (2026-11-04, Persian), looking at two tunnels of one foreign server (the Netherlands, from two different Iran servers, with different ports) and asking why there were two again: "the tunnels that are for eco or AI - write it on them".

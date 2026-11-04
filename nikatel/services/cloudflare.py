@@ -9,6 +9,7 @@ import re
 
 import httpx
 
+from .. import tls
 from ..log import get_logger
 
 log = get_logger("cloudflare")
@@ -28,7 +29,7 @@ def req(token: str, method: str, path: str, body: dict | None = None, params: di
         raise RuntimeError("the token has a character that is not a letter, a digit, - or _ (a Persian letter or a symbol from the copy?): copy it again from Cloudflare")
 
     try:
-        r = httpx.request(method, BASE + path, params=params, json=body, timeout=20, headers={"Authorization": "Bearer " + t, "Accept": "application/json"})
+        r = httpx.request(method, BASE + path, params=params, json=body, timeout=20, headers={"Authorization": "Bearer " + t, "Accept": "application/json"}, verify=tls.shared())
     except httpx.HTTPError as e:
         raise RuntimeError("Cloudflare does not answer: " + str(e)[:120])
 

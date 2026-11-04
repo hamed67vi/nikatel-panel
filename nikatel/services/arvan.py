@@ -17,6 +17,7 @@ import re
 
 import httpx
 
+from .. import tls
 from ..log import get_logger
 from . import settings as st
 
@@ -55,7 +56,7 @@ def _req(method: str, path: str, body: dict | None = None, params: dict | None =
         raise RuntimeError("the ArvanCloud key has a character that is not a letter, a digit or a sign (a hidden or non-English character from the copy?): copy it again from ArvanCloud")
 
     try:
-        r = httpx.request(method, BASE + path, params=params, json=body, timeout=20, headers={"Authorization": "Apikey " + k, "Accept": "application/json"})
+        r = httpx.request(method, BASE + path, params=params, json=body, timeout=20, headers={"Authorization": "Apikey " + k, "Accept": "application/json"}, verify=tls.shared())
     except httpx.HTTPError as e:
         raise RuntimeError("ArvanCloud does not answer: " + str(e)[:120])
 
