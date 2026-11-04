@@ -1634,6 +1634,33 @@ echo "SINK_DOWN $(journalctl -u nikatel-sink-@NAME@.service -n 3 --no-pager -o c
 rm -f "/etc/systemd/system/nikatel-sink-$n.service" "/usr/local/sbin/nikatel-sink-$n.py"; systemctl daemon-reload; echo "REMOVED $n"
 """, {"NAME": r"^bw\d{1,7}$"}),
 
+    # the Doctor's sweep of leftovers (services/orphans.py): every unit of the tunnel engines on the server with its state and the connections of its process, and the traffic of every GRE link in six seconds. Read only.
+    "orphan_look": (r"""tmp=$(mktemp)
+systemctl list-units --all --no-legend --plain 'backpack-*' 'backhaul-*' 'paqet-*' 'chisel-*' 'nikatel-gre-*' 'nikatel-sink-*' 2>/dev/null | awk '{print $1, $3}' | grep -E '^[a-z0-9@._-]+[.](service|timer) ' > $tmp
+ifs=$(sed -n -e 's/^nikatel-gre-check-\([^ ]*\)[.]\(service\|timer\) .*/\1/p' -e 's/^nikatel-gre-\([^ ]*\)[.]service .*/\1/p' $tmp | grep -v '^check-' | sort -u)
+for n in $ifs; do [ -d "/sys/class/net/$n" ] && echo "$n $(( $(cat /sys/class/net/$n/statistics/rx_bytes) + $(cat /sys/class/net/$n/statistics/tx_bytes) ))"; done > $tmp.a
+sleep 6
+while read -r u a; do
+  e="-"
+  case "$u" in
+    backpack-*.service|backhaul-*.service|paqet-*.service|chisel-*.service)
+      pid=$(systemctl show -p MainPID --value "$u" 2>/dev/null); e=0
+      if [ -n "$pid" ] && [ "$pid" != 0 ]; then e=$(ss -Htnp state established 2>/dev/null | grep -c "pid=$pid,"); fi;;
+  esac
+  echo "U $u $a $e"
+done < $tmp
+for n in $ifs; do
+  if [ -d "/sys/class/net/$n" ]; then b=$(( $(cat /sys/class/net/$n/statistics/rx_bytes) + $(cat /sys/class/net/$n/statistics/tx_bytes) )); a0=$(grep "^$n " $tmp.a | cut -d' ' -f2); echo "L $n $(( b - ${a0:-$b} ))"; else echo "L $n -1"; fi
+done
+rm -f $tmp $tmp.a
+""", {}),
+
+    # a copy of what the engines keep on this server, taken before the sweep removes a leftover (the last five stay)
+    "orphan_backup": (r"""d=/var/lib/nikatel-orphans; mkdir -p $d; f=$d/before-$(date +%Y%m%d-%H%M%S).tgz
+tar czf "$f" /etc/backhaul /etc/backpack /etc/paqet /etc/nikatel-chisel /etc/systemd/system/*.service /etc/systemd/system/*.timer /usr/local/sbin/nikatel-* 2>/dev/null
+ls -1t $d/before-*.tgz 2>/dev/null | tail -n +6 | xargs -r rm -f; echo "BACKUP $f"
+""", {}),
+
     # open / close one port in ufw (only when ufw is active; otherwise a no-op)
     "ufw_allow": (r"""command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | head -1 | grep -q active && ufw allow '@PORT@/@PROTO@' >/dev/null 2>&1; echo UFW_DONE
 """, {"PORT": r"^\d{1,5}$", "PROTO": r"^(tcp|udp)$"}),

@@ -33,6 +33,9 @@ MIN_COVER = 0.7             # the checks must cover this share of that time (a t
 JANITOR_GAP = 1800          # between two removals
 MAX_PER_DAY = 3
 TELL_EVERY = 24 * 3600
+POINT_GAP = 6 * 3600        # (1.69.219) the names of a copy are moved to the keeper at most once in this time
+SETTLE = 20 * 60            # ... and the copy goes this long after, when it is quiet in the last minutes (not over the three hours of the window, which still hold the traffic of before)
+SETTLED_MBPS = 0.3
 _TOLD: dict[str, float] = {}
 
 
@@ -96,6 +99,35 @@ def rails(done: list, now: int) -> str:
     return ""
 
 
+def consolidation_target(group: list[dict], keeper: dict | None, age: dict[int, int], referenced: dict[int, bool | None], pointed: dict, now: int) -> dict | None:
+    """Pure: the copy whose DNS names are to be moved to the keeper (1.69.219) - the keeper is up, the copy is not the keeper, is older than QUIET_FOR, DNS names are tied to it (`referenced` True: the case that kept it,
+    the owner, 2026-11-04: the Doctor must remove the duplicates by itself) and its names were not moved in the last POINT_GAP seconds. None when there is no such copy."""
+    if keeper is None or keeper.get("state") != "up":
+        return None
+
+    for t in group:
+        if t["id"] != keeper["id"] and referenced.get(t["id"]) is True and age.get(t["id"], 0) >= QUIET_FOR and now - int(pointed.get(str(t["id"]), 0)) >= POINT_GAP:
+            return t
+
+    return None
+
+
+def pick_after_point(group: list[dict], keeper: dict | None, pointed: dict, recent: dict[int, float | None], referenced: dict[int, bool | None], now: int) -> list[dict]:
+    """Pure: the copies whose names were moved to the keeper at least SETTLE seconds ago, that no DNS record is tied to any more and that carry under SETTLED_MBPS in the last minutes: they are extra now."""
+    if keeper is None:
+        return []
+
+    out = []
+
+    for t in group:
+        at, r = int(pointed.get(str(t["id"]), 0)), recent.get(t["id"])
+
+        if t["id"] != keeper["id"] and at and now - at >= SETTLE and r is not None and float(r) < SETTLED_MBPS and referenced.get(t["id"]) is False:
+            out.append(t)
+
+    return out
+
+
 # ------------------------------------------------------------------ the look
 def _rows() -> list[dict]:
     rows = []
@@ -119,6 +151,16 @@ def _use(tunnel_id: int, now: int) -> float | None:
     vals = [float(rx or 0) + float(tx or 0) for rx, tx in rows if rx is not None or tx is not None]
     expected = QUIET_FOR / max(1, int(get_settings().tunnel_check_interval))
     return sum(vals) / len(vals) if len(vals) >= MIN_COVER * expected else None
+
+
+def _use_recent(tunnel_id: int, now: int, window: int = 900) -> float | None:
+    """The average traffic of the tunnel over the last minutes (the checks must cover half of them); None when they cover too little."""
+    with session() as db:
+        rows = db.execute(select(TunnelCheck.rx_mbps, TunnelCheck.tx_mbps).where(TunnelCheck.tunnel_id == tunnel_id, TunnelCheck.ts >= now - window)).all()
+
+    vals = [float(rx or 0) + float(tx or 0) for rx, tx in rows if rx is not None or tx is not None]
+    expected = window / max(1, int(get_settings().tunnel_check_interval))
+    return sum(vals) / len(vals) if len(vals) >= 0.5 * expected else None
 
 
 def _referenced(row: dict) -> bool | None:
@@ -170,6 +212,13 @@ def run() -> None:
         age = {t["id"]: now - int(t["created_at"]) for t in group}
         referenced = {t["id"]: _referenced(t) for t in group}
         keeper, extras, why = pick_extras(group, use, age, referenced)
+        pointed = dict(st.get("janitor").get("pointed") or {})
+
+        if not extras:          # (1.69.219: a copy whose DNS names moved to the keeper a while ago and that is quiet now goes, though the three hours of its window still hold the traffic of before)
+            extras = pick_after_point(group, keeper, pointed, {t["id"]: _use_recent(t["id"], now) for t in group}, referenced, now)
+
+        if not extras and _consolidate(group, keeper, age, referenced, pointed, now):
+            return
 
         if not extras:
             _tell_once("dup:" + names, f"Two tunnels serve the same ports of the same foreign server: {names}. Nothing is removed: {why or 'both are used'}.")
@@ -228,4 +277,79 @@ def remove_extra(aid: int, tunnel_id: int, keeper: str, mbps: float) -> None:
     with session() as db:
         emit(db, "warn", "tunnels", f"Tunnel {name} was an extra copy of {keeper} (the same ports, quiet, no DNS record tied to it) and was removed; it can be restored from Recently removed.", name)
 
-    say("Removed (kept in Recently removed for 30 days): " + "; ".join(res), done=True, ok=True)
+    helpers = _after_removal(name)
+    say("Removed (kept in Recently removed for 30 days): " + "; ".join(res) + (f"; its standby / strands went with it: {', '.join(helpers)}" if helpers else ""), done=True, ok=True)
+
+
+def _after_removal(name: str) -> list[str]:
+    """What the removal of a tunnel by the page also does and the sweep did not (1.69.219: the standby of the removed copy stayed behind, up, with its units on both servers): the note of its warm standby is forgotten, an old
+    rebuild note is dropped, and the standby and the strands that belonged to it are removed with it. Returns their names."""
+    from . import builder, orphans, standby
+
+    try:
+        standby.forget(name)
+        builder.pending_drop(name)
+        return orphans.drop_helpers_of(name)
+    except Exception:
+        log.exception("the standby of %s could not be cleaned up", name)
+        return []
+
+
+def _consolidate(group: list[dict], keeper: dict | None, age: dict[int, int], referenced: dict[int, bool | None], pointed: dict, now: int) -> bool:
+    """(1.69.219) A copy that cannot go because DNS names are tied to it: when those names serve ONLY that copy (`failover.replace_plan` - a name that also serves another tunnel of its Iran server is left alone) they are
+    pointed at the Iran server of the keeper (the records stay, every change is in the Changes box with Restore), and once the copy has been quiet a while it goes like any extra copy. In the mode move only (it changes DNS).
+    Returns True when it started the move."""
+    from . import actions, autopilot, failover
+
+    cand = consolidation_target(group, keeper, age, referenced, pointed, now)
+
+    if cand is None:
+        return False
+
+    key = "point:" + cand["name"]
+
+    if actions.doctor_mode() != "move":
+        _tell_once(key, f"Tunnel {cand['name']} is a second copy of {keeper['name']} that DNS names are tied to. In the mode move the Doctor points those names at {keeper['name']} and then removes it.")
+        return False
+
+    done = st.get("janitor").get("done") or []
+    blocked = rails(done, now) or ("a repair is running or the system is in a storm" if autopilot.storm_now() or cand["name"] in autopilot._BUSY or keeper["name"] in autopilot._BUSY else "")
+
+    if blocked:
+        _tell_once(key + ":b", f"Tunnel {cand['name']} is a second copy of {keeper['name']}. Its names are not moved now: {blocked}.")
+        return False
+
+    try:
+        plan = failover.replace_plan(cand["id"], keeper["iran_id"])
+    except (ValueError, RuntimeError) as e:
+        log.info("the names of %s could not be planned: %s", cand["name"], str(e)[:100])
+        return False
+
+    if plan.get("dns_error") or plan.get("left_alone") or not plan.get("dns"):
+        why = plan.get("dns_error") or ("a name also serves another tunnel of that Iran server: " + ", ".join(d["fqdn"] for d in plan["left_alone"]) if plan.get("left_alone") else "no name serves only this copy")
+        _tell_once(key + ":s", f"Tunnel {cand['name']} is a second copy of {keeper['name']}. Its names are not moved: {why}.")
+        return False
+
+    names = [d["fqdn"] for d in plan["dns"]]
+    st.put("janitor", {"done": [x for x in done if now - int(x) < 86400] + [now], "pointed": {**pointed, str(cand["id"]): now}})
+
+    try:
+        autopilot._start(cand["name"], consolidate_names, keeper["iran_id"], names, keeper["name"], action="autopilot", source="auto")
+    except ValueError as e:
+        log.info("the move of the names of %s not started: %s", cand["name"], str(e)[:100])
+        return False
+
+    return True
+
+
+def consolidate_names(aid: int, iran_id: int, names: list[str], keeper: str) -> None:
+    """The story of the move: the names that served only the second copy are pointed at the Iran server of the keeper. No record is deleted; every change is in the Changes box with Restore."""
+    from . import autopilot, failover
+
+    autopilot._say(aid, f"The names {', '.join(names)} serve only the second copy: they are pointed at the Iran server of {keeper}. The records stay.")
+    failover.point_names(aid, names, iran_id)
+
+    with session() as db:
+        emit(db, "warn", "tunnels", f"DNS names {', '.join(names)} now point at the Iran server of {keeper}: they were tied to a second copy of it, which is removed once it is quiet. No record was deleted (Restore is in the Changes box).", keeper)
+
+    autopilot._say(aid, "Done.", done=True, ok=True)

@@ -25,7 +25,9 @@ DEFAULTS: dict[str, dict[str, Any]] = {
     "doctor": {"moves": [], "suggestions": [], "back": {}, "tried": {}, "res_at": {}, "retyped": {}, "retype_done": {}, "dns_heal": {}},                  # the Doctor's ledger of moves, its suggestions, who came back when
     # the tunnel cores (services/engines.py): `auto` = the Doctor keeps them up to date by itself (off until the owner switches it on), `hour` = the local hour it starts (panel clock), `bad` = {core: version} that did
     # not hold on a server and was put back (never tried again by itself), `last` = what the last automatic run did
-    "janitor": {"done": []},                                     # when the Doctor last removed an extra copy of a tunnel (services/janitor.py: one every half hour, three a day)
+    "janitor": {"done": [], "pointed": {}},                      # (pointed: when the DNS names of a second copy were moved to the keeper, per tunnel id)
+    "orphans": {"seen": {}, "done": []},                          # the Doctor's sweep of leftovers (services/orphans.py): when a unit was first seen unowned and idle, and when it removed one
+                                     # when the Doctor last removed an extra copy of a tunnel (services/janitor.py: one every half hour, three a day)
     "engines": {"paused": False, "hour": 5, "bad": {}, "last": {}},
     # the PasarGuard panel and its nodes updated by themselves at night (services/pg_auto.py): `auto` = the owner's switch (OFF until he flips it), `hour` = the local hour it starts (panel clock, Tehran by
     # default), `budget_minutes` = no new node or the panel is started after this long, `bad` = {node | xray | panel: {version, why, day}} a release that did not hold and was put back (never tried again by
