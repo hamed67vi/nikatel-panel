@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.69.224 - The build-routing test follows the new helper (test only)
+
+1.69.222 turned the line in `builder._build` that sends a build through a jump server for an Iran server whose SSH way in is cut (`startswith(pulse.IRAN_ONLY)`) into `pulse.needs_jump(...)`, which also covers a server whose SSH port alone is blocked. `tests/test_ssh_jump.py::test_a_build_primes_the_jump_for_a_cut_from_abroad_iran_server` reads the source of `_build` and still wanted the old name; it now wants `pulse.needs_jump`. Found by another session's run; my targeted set for 1.69.222 had left that file out - this version was checked with the whole suite. No behaviour change.
+
 ## 1.69.223 - The Doctor knows what every tunnel type costs on the wire, prefers the lighter one at nearly the same quality, changes a heavy running type (KCP ...) for a lighter proven one, and keeps its own tests under a daily volume
 
 Owner (2026-11-05, Persian): "does the tunnel type matter for the traffic of the Iran servers, and is there a way to save volume? ... build it; and a tunnel that is proven to carry a lot of overhead, like KCP, must have its type changed; the overhead is one of the Doctor's important benchmarks when it chooses a type - but it must still look at the quality".

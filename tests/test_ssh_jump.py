@@ -125,4 +125,4 @@ def test_a_build_primes_the_jump_for_a_cut_from_abroad_iran_server():
     from nikatel.services import builder
 
     src = inspect.getsource(builder._build)
-    assert "ensure_via(iran)" in src and "IRAN_ONLY" in src and "via_of(ihost)" in src              # the build routes through a jump when the Iran server is reached only that way
+    assert "ensure_via(iran)" in src and "pulse.needs_jump" in src and "via_of(ihost)" in src              # the build routes through a jump when the Iran server is reached only that way
