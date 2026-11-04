@@ -5,6 +5,7 @@ Proved here: the three scripts that run on a node (the real text, run by bash ag
 Xray command takes a version), the plan (the quietest node first, what is skipped and why, the panel only when no node would stop its core while it is away), the story with a fake panel and fake servers (in order,
 a node that does not come back or does not stay connected gets its old version back and the run stops, a server that is not ready is not touched, a failed Xray leaves the node as it was, the panel last), the start's
 refusals, the routes and the button. NOT proved: a real PasarGuard node, a real `pg-node`, a real panel, real docker (nothing was updated anywhere)."""
+import json
 import os
 import shutil
 import stat
@@ -314,9 +315,10 @@ def story(aid):
 
 
 @pytest.fixture
-def world(monkeypatch):
+def world(monkeypatch, tmp_path):
     net, clock = Net(), Clock()
     monkeypatch.setattr(pg_safe, "time", clock)
+    monkeypatch.setattr(pg_safe, "STEP_FILE", tmp_path / "pg-node-step.json")
     monkeypatch.setattr(pg_update, "POLL", 5.0)
     monkeypatch.setattr(pg_update, "NODE_LIMIT", 20.0)
     monkeypatch.setattr(pg_safe, "SOAK", 15.0)
@@ -408,6 +410,48 @@ def test_a_node_that_is_the_newest_already_is_skipped(world, monkeypatch):
     aid = _run(monkeypatch, [_row_of(1, "a")])
     lines, ok, _ = story(aid)
     assert ok is True and world.net.actions == [] and "is the newest already - skipped" in "\n".join(lines)
+
+
+def test_the_xray_step_is_skipped_when_the_new_image_brought_it_and_left_when_the_node_does_not_say(world, monkeypatch):
+    """ECO-test, the first real night (2026-11-04): after pg-node update the node reported Xray 26.10.31 - the release wanted - and the Xray command restarted it once more for nothing."""
+    world.net.add(1, "a")
+    world.net.add(2, "b")
+    real = world.net.run_action
+
+    def after_update(node, name, params=None, timeout=0):
+        out = real(node, name, params, timeout)
+
+        if name == "pgnode_update":
+            i = int(node.host.rsplit(".", 1)[1])
+            world.net.nodes[i]["xray"] = "26.11.1" if i == 1 else ""       # (a: the new image carries the Xray wanted; b: the node does not say)
+
+        return out
+
+    monkeypatch.setattr(pg_safe, "run_action", after_update)
+    aid = _run(monkeypatch, [_row_of(1, "a"), _row_of(2, "b")])
+    lines, ok, _ = story(aid)
+    text = "\n".join(lines)
+    assert ok is True and [a[:2] for a in world.net.actions] == [("pgnode_update", "a"), ("pgnode_update", "b")]
+    assert "Xray 26.11.1 came with the new software: the Xray step is skipped, no second restart." in text and "the node does not report its Xray version after the software update: the Xray step is left for another time." in text
+
+
+def test_a_note_says_which_node_and_step_a_command_runs_on_and_goes_when_the_node_is_done(world, monkeypatch):
+    """scripts/deploy.sh (the panel's own Update) reads it before the restart and waits for the command; `mark` tells the night where it is."""
+    world.net.add(1, "a")
+    seen, marks = [], []
+    real = world.net.run_action
+
+    def spy(node, name, params=None, timeout=0):
+        seen.append((name, json.loads(pg_safe.STEP_FILE.read_text()) if pg_safe.STEP_FILE.exists() else None))
+        return real(node, name, params, timeout)
+
+    monkeypatch.setattr(pg_safe, "run_action", spy)
+    ok, _why, _part = pg_safe._update_node(new_action(), 1, 1, _row_of(1, "a"), "v0.5.7", "v26.11.1", mark=marks.append)
+    assert ok and marks == ["software", "xray"] and [s[0] for s in seen] == ["pgnode_update", "pgnode_core"]
+    assert seen[0][1]["node"] == "a" and seen[0][1]["step"] == "software" and seen[0][1]["at"] >= 1000 and seen[1][1] == {**seen[0][1], "step": "xray", "at": seen[1][1]["at"]}
+    assert not pg_safe.STEP_FILE.exists()                                   # (the node is done: the note is gone)
+    world.net.no_cli.add(1)
+    assert pg_safe._update_node(new_action(), 1, 1, _row_of(1, "a"), "v0.5.7", "v26.11.1")[0] is False and not pg_safe.STEP_FILE.exists() and marks == ["software", "xray"]      # (nothing ran: no note, no mark)
 
 
 def test_the_panel_comes_last_and_ends_the_action_with_its_own_story(world, monkeypatch):

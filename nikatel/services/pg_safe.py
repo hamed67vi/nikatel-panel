@@ -17,15 +17,19 @@ What it does, and what it cannot do:
 Nothing here is automatic: it is one click and one question, and the name of the panel typed back when the panel is part of it."""
 from __future__ import annotations
 
+import json
+import os
 import time
 
 from ..db import session
 from ..log import get_logger
 from ..ssh import SSHError, run_action, run_script
-from . import autopilot, extras, panels, pg_nodes, pg_update
+from . import autopilot, extras, panels, pg_nodes, pg_update, updater
 from .events import emit
 
 log = get_logger("pg_safe")
+STEP_FILE = updater.STATE_DIR / "pg-node-step.json"       # while a command runs on a node (the update, the Xray command, the way back): {node, step, at}. scripts/deploy.sh - the Update of the panel itself - waits for it to
+#                                                           go before it restarts the panel, so the command is not cut in the middle (2026-11-04: the owner's Update killed the night's run while a node was updating)
 KEEP_ALIVE_SAFE = 900                 # seconds: a node whose keep-alive is on and shorter than this stops its core when the panel is away that long
 FREE_KB = 400_000                     # free space on /var/lib a node needs for a new image (about 400 MB)
 SOAK = 45.0                           # seconds a node is watched after it came back
@@ -328,10 +332,46 @@ def _core(node, version: str) -> str:
         return "ERROR " + str(e)[:120]
 
 
-def _update_node(aid: int, i: int, total: int, row: dict, node_tag: str, xray_tag: str) -> tuple[bool, str, str]:
+def step_note(name: str, step: str) -> None:
+    """A command is about to run on a node: the note (STEP_FILE) says which node and which step, so that the panel's own Update waits for it before the restart. Replaced in one move; a disk that refuses is logged."""
+    try:
+        STEP_FILE.parent.mkdir(parents=True, exist_ok=True)
+        tmp = STEP_FILE.with_name(STEP_FILE.name + ".tmp")
+        tmp.write_text(json.dumps({"node": name, "step": step, "at": int(time.time())}))
+        os.replace(tmp, STEP_FILE)
+    except OSError as e:
+        log.warning("the note of the node step could not be written: %s", e)
+
+
+def step_done() -> None:
+    """The node is done (or given up): the note goes."""
+    try:
+        STEP_FILE.unlink()
+    except FileNotFoundError:
+        pass
+    except OSError as e:
+        log.warning("the note of the node step could not be removed: %s", e)
+
+
+def _begin(mark, name: str, step: str) -> None:
+    step_note(name, step)
+
+    if mark is not None:
+        mark(step)
+
+
+def _update_node(aid: int, i: int, total: int, row: dict, node_tag: str, xray_tag: str, mark=None) -> tuple[bool, str, str]:
     """Update one node (its software, then its Xray): (done, why, part). done = True when it is done (or there was nothing to do); False when it went wrong - `why` is the sentence (the way back was tried; the caller ends
     the story with `stop_line`) and `part` the step that failed ("software" / "xray" / "" when nothing was changed). Two known fixes are tried before the way back: the panel is asked ONCE more to connect to a node that
-    did not come back, and the Xray command is run ONCE more when it did not finish (its download can fail once)."""
+    did not come back, and the Xray command is run ONCE more when it did not finish (its download can fail once). `mark(step)` is called right before each command on the node (the night writes down where it is, so a
+    restart of the panel in the middle can pick the node up); the note for the panel's own Update (STEP_FILE) is written there too and removed when the node is done."""
+    try:
+        return _node_steps(aid, i, total, row, node_tag, xray_tag, mark)
+    finally:
+        step_done()
+
+
+def _node_steps(aid: int, i: int, total: int, row: dict, node_tag: str, xray_tag: str, mark) -> tuple[bool, str, str]:
     say = autopilot._say
     name = row["name"]
 
@@ -362,6 +402,7 @@ def _update_node(aid: int, i: int, total: int, row: dict, node_tag: str, xray_ta
 
     if do_sw:
         say(aid, f"    software {before.get('version') or '?'} → {node_tag}: its old image is kept, then pg-node update (the node restarts: its users drop for 10-20 s)…")
+        _begin(mark, name, "software")
 
         try:
             out = run_action(node, "pgnode_update", {}, timeout=RUN_TIMEOUT)
@@ -395,8 +436,19 @@ def _update_node(aid: int, i: int, total: int, row: dict, node_tag: str, xray_ta
         say(aid, f"    {name} is connected again: software {last.get('version')}, watched for {int(SOAK)} s.")
         before = last
 
+        if do_core:                                                     # the new image may carry the Xray wanted already (ECO-test, 2026-11-04: it reported 26.10.31 after pg-node update and the Xray command restarted it once more for nothing)
+            again = pg_update.newer(xray_tag, before.get("xray"))
+
+            if again is False:
+                say(aid, f"    Xray {before.get('xray')} came with the new software: the Xray step is skipped, no second restart.")
+                do_core = False
+            elif again is None:
+                say(aid, "    the node does not report its Xray version after the software update: the Xray step is left for another time.")
+                do_core = False
+
     if do_core:
         say(aid, f"    Xray {before.get('xray') or '?'} → {xray_tag}: pg-node core-update (Xray restarts: its users drop for 10-20 s)…")
+        _begin(mark, name, "xray")
         out = _core(node, xray_tag)
 
         if "CORE_UPDATED" not in out:                                   # the known fix, once: the same command again (the download of the core can fail once)

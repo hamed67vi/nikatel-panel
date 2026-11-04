@@ -7,7 +7,10 @@ Telegram); a node whose users do not pass gets both old versions back, the relea
 budget; the panel's window; the panel put back when its sign-in fails after the update, restarted once when it does not answer, the owner called when the way back fails; the rehearsal walks every step and changes
 nothing; the scripts of the panel run by bash against a fake docker (the image kept with a note, the compose files and a database dump copied, the panel service alone pulled and recreated, SAME_IMAGE, the old
 image back under its name, a stale note never used, the restart); the routes, the switch on the card, the job and the settings.
-NOT proved: a real PasarGuard panel or node, real docker, a real probe, a real night."""
+After the first real night (2026-11-04: the owner's own Update of the panel cut the run after one node, and nothing ran again): a run cut by a restart is closed on the first tick after it and goes on in a new action
+while the window is open (the nodes done before are never started twice; the node whose step was cut is looked at first - finished on its own, left for the next night, or put back), the window over means the rest
+waits with a word to the owner; the Xray step is skipped when the new software brought the Xray wanted; the panel's own Update warns while a run goes and deploy.sh waits for a command on a node before the restart.
+NOT proved: a real PasarGuard panel or node, real docker, a real probe, a real night, a real restart of the panel."""
 import os
 import shutil
 import stat
@@ -345,7 +348,7 @@ def events():
 
 
 @pytest.fixture
-def world(monkeypatch):
+def world(monkeypatch, tmp_path):
     clock = Clock(at_local(3, 2))
     w = World(clock)
 
@@ -375,15 +378,21 @@ def world(monkeypatch):
     monkeypatch.setattr(pg_auto, "configs_of_server", lambda sid: [{"name": n, "status": "up"} for n in w.cfgs.get(sid, [])])
     monkeypatch.setattr(probe, "health", w.health)
     monkeypatch.setattr(telegram, "send_text", lambda text, require_enabled=True: w.tg.append(text) or (True, "sent"))
+    monkeypatch.setattr(pg_safe, "STEP_FILE", tmp_path / "pg-node-step.json")
+    monkeypatch.setattr(pg_auto.updater, "read_progress", lambda now=None: {"state": "idle", "percent": 0})
     cfg.put("pg_auto", {"auto": True})
     return w
 
 
-def _night(w, monkeypatch, nodes, panels_=None, dry=False):
+def _plan(monkeypatch, nodes, panels_=None):
     pl = {"scope": "all", "can_start": True, "nothing": False, "problems": [], "nodes": nodes, "skipped": [], "panels": panels_ or [], "steps": [], "note": "", "latest": {"node": "v0.5.7", "xray": "v26.11.1", "panel": "v5.6.0"}}
     monkeypatch.setattr(pg_safe, "plan", lambda resolver=None, force=False, scope="all": pl)
+
+
+def _night(w, monkeypatch, nodes, panels_=None, dry=False, resume=None):
+    _plan(monkeypatch, nodes, panels_)
     aid = new_action()
-    pg_auto._night_story(aid, dry)
+    pg_auto._night_story(aid, dry, resume)
     return aid
 
 
@@ -454,7 +463,7 @@ def test_no_node_and_not_the_panel_is_started_after_the_time_budget(world, monke
         world.add(i, n)
 
     cfg.put("pg_auto", {"budget_minutes": 5})
-    monkeypatch.setattr(pg_safe, "_update_node", lambda aid, i, total, row, nt, xt: world.clock.sleep(200) or (True, "", ""))
+    monkeypatch.setattr(pg_safe, "_update_node", lambda aid, i, total, row, nt, xt, mark=None: world.clock.sleep(200) or (True, "", ""))
     monkeypatch.setattr(pg_auto, "users_check", lambda watch, base: (True, "fake"))
     aid = _night(world, monkeypatch, [_row_of(1, "a"), _row_of(2, "b"), _row_of(3, "c")], [dict(PANEL)])
     lines, ok, done = story(aid)
@@ -548,6 +557,233 @@ def test_the_rehearsal_walks_every_step_and_changes_nothing(world, monkeypatch):
     assert done and ok is True and world.actions == [] and world.tg == [] and cfg.get("pg_auto")["last"] == {} and world.nodes[1]["version"] == "0.5.6"
     assert "1/1 a (on S1, 1.0 Mbit/s now): would get software + Xray; 1 of 1 config that ride it is up now and would be checked after (c1)." in text
     assert "would keep the image that runs, the compose files and a dump of the postgres database" in text and lines[-1] == "Rehearsal done: would update a (software, Xray), the panel main (5.5.1 → 5.6.0)"
+    assert pg_auto.running() is None                                   # (a rehearsal is marked as one: the panel's own Update does not warn about it)
+
+
+# ------------------------------------------------------------------ a restart of the panel in the middle of the night (2026-11-04: the owner's own Update cut the first real night after one node)
+def test_where_the_run_is_goes_into_the_settings_as_it_goes_and_the_step_note_is_there_only_during_a_command(world, monkeypatch):
+    world.add(1, "a")
+    world.add(2, "b")
+    seen = []
+    real = world.run_action
+
+    def spy(node, name, params=None, timeout=0):
+        seen.append((name, cfg.get("pg_auto")["last"].get("node"), pg_safe.STEP_FILE.exists()))
+        return real(node, name, params, timeout)
+
+    monkeypatch.setattr(pg_safe, "run_action", spy)
+    aid = _night(world, monkeypatch, [_row_of(1, "a"), _row_of(2, "b")])
+    assert story(aid)[1] is True
+    assert seen[0][0] == "pgnode_update" and seen[0][1]["name"] == "a" and seen[0][1]["step"] == "software" and seen[0][1]["version"] == "0.5.6" and seen[0][1]["node_id"] == 1 and seen[0][2] is True
+    assert seen[1][0] == "pgnode_core" and seen[1][1] == {**seen[0][1], "step": "xray"} and seen[2][1]["name"] == "b"
+    assert not pg_safe.STEP_FILE.exists() and cfg.get("pg_auto")["last"]["action_id"] == aid and "node" not in cfg.get("pg_auto")["last"]      # (the night is over: the note is gone, `last` is the summary)
+
+
+def _cut_night(world, monkeypatch, node, done=("a",), at=None, restarts=0):
+    """`last` as a night left it when the panel was restarted: started at 03:02 (`at`), the nodes in `done` done, `node` in the middle of its step, an open story."""
+    aid0 = new_action()
+    cfg.put("pg_auto", {"last": {"day": DAY, "at": int(at if at is not None else at_local(3, 2)), "text": "running", "ok": None, "action_id": aid0, "total": 3, "done": list(done), "node": node, "restarts": restarts}})
+    monkeypatch.setattr(pg_auto, "get_settings", lambda: types.SimpleNamespace(read_only=False))
+    monkeypatch.setattr(pg_auto, "_BOOT", at_local(3, 4))
+    return aid0
+
+
+def _cut_node(name="b", i=2, step="software"):
+    return {"name": name, "panel_id": 1, "node_id": i, "server_id": i, "step": step, "version": "0.5.6", "xray": "26.10.29"}
+
+
+def _run_now(fn, a):
+    """In place of autopilot._start: the story runs here and now (no thread), as the action it would be."""
+    aid = new_action()
+    fn(aid, *a)
+    return aid
+
+
+def test_a_run_cut_by_a_restart_is_closed_and_goes_on_with_the_next_node_never_twice(world, monkeypatch):
+    world.add(1, "a", version="0.5.7", xray="26.11.1")                 # done before the restart
+    world.add(2, "b", version="0.5.7")                                 # was in its software step: the command finished on its own
+    world.add(3, "c")
+    world.clock.t = at_local(3, 6)
+    aid0 = _cut_night(world, monkeypatch, _cut_node("b", 2, "software"))
+    _plan(monkeypatch, [_row_of(3, "c"), {**_row_of(2, "b"), "do": ["Xray"]}, _row_of(1, "a")])         # (the panel still lists a as behind: it is never started twice)
+    started = []
+    monkeypatch.setattr(autopilot, "_start", lambda label, fn, *a, **k: started.append(a) or _run_now(fn, a))
+    aid = pg_auto.run(at_local(3, 6))
+    lines0, ok0, done0 = story(aid0)
+    assert done0 and ok0 is False and lines0[-1] == "Stopped: the panel was restarted while b was being updated (software) (it came up again at 03:04, panel clock). The run goes on in a new action with the next node (1 node done before: a)."
+    assert aid and started == [(False, {"t0": int(at_local(3, 2)), "done": ["a"], "node": _cut_node("b", 2, "software"), "prev": aid0, "when": "03:04", "restarts": 1})]
+    lines, ok, done = story(aid)
+    text = "\n".join(lines)
+    assert done and ok is True, text
+    assert lines[1].startswith(f"Nightly update of PasarGuard, continued after the restart of the panel at 03:04 (restart 1 of at most 3 tonight; the first part is action #{aid0}: 1 node done before - a).")
+    assert "b was being updated (software) when the panel restarted at 03:04: looking at it first…" in text and "it is connected with software 0.5.7: the command finished on its own after the restart (it had 0.5.6); the rest of it goes on as usual." in text
+    assert [a[:2] for a in world.actions] == [("pgnode_core", "203.0.113.2"), ("pgnode_update", "203.0.113.3"), ("pgnode_core", "203.0.113.3")]          # (b first - only its Xray - then c; a never again)
+    assert "1/2 b" in text and "2/2 c" in text and lines[-1] == "Done: updated a (before the restart), b (Xray), c (software, Xray). not touched: a: updated before the restart, not started twice"
+    last = cfg.get("pg_auto")["last"]
+    assert last["ok"] is True and last["action_id"] == aid and last["updated"] == ["a (before the restart)", "b (Xray)", "c (software, Xray)"] and world.nodes[1]["version"] == "0.5.7"
+    assert len(world.tg) == 1 and "Updated: a (before the restart), b (Xray), c (software, Xray)" in world.tg[0]
+    assert pg_auto.run(at_local(3, 20)) is None                                                                   # (the night is over: nothing starts again)
+
+
+def test_a_cut_step_that_did_not_take_is_left_for_the_next_night_and_the_rest_goes_on(world, monkeypatch):
+    world.add(2, "b")                                                  # still 0.5.6 after the cut: the update did not take
+    world.add(3, "c")
+    world.clock.t = at_local(3, 6)
+    aid0 = _cut_night(world, monkeypatch, _cut_node("b", 2, "software"), done=())
+    _plan(monkeypatch, [_row_of(2, "b"), _row_of(3, "c")])
+    monkeypatch.setattr(autopilot, "_start", lambda label, fn, *a, **k: _run_now(fn, a))
+    aid = pg_auto.run(at_local(3, 6))
+    lines, ok, done = story(aid)
+    text = "\n".join(lines)
+    assert done and ok is True, text
+    assert "it is connected and still reports software 0.5.6: the update did not take. A node is not started twice in one night - it waits for the next night." in text
+    assert [a[:2] for a in world.actions] == [("pgnode_update", "203.0.113.3"), ("pgnode_core", "203.0.113.3")] and world.nodes[2]["version"] == "0.5.6"
+    assert "left for the next night: b: its software update was cut by the restart of the panel at 03:04 and did not take (it reports 0.5.6); a node is not started twice in one night" in lines[-1] and "updated c (software, Xray)" in lines[-1]
+    assert story(aid0)[2] and "0 nodes done before: -" in story(aid0)[0][-1]
+
+
+def test_a_cut_node_that_does_not_come_back_gets_its_old_version_back_and_the_run_stops(world, monkeypatch):
+    world.add(2, "b", version="0.5.7")
+    world.nodes[2]["status"] = "connecting"
+    world.prev[2] = ("0.5.6", "26.10.29")
+    world.add(3, "c")
+    world.clock.t = at_local(3, 6)
+    _cut_night(world, monkeypatch, _cut_node("b", 2, "software"), done=())
+    _plan(monkeypatch, [_row_of(3, "c")], [dict(PANEL)])
+    monkeypatch.setattr(autopilot, "_start", lambda label, fn, *a, **k: _run_now(fn, a))
+    aid = pg_auto.run(at_local(3, 6))
+    lines, ok, done = story(aid)
+    text = "\n".join(lines)
+    assert done and ok is False, text
+    assert "asking the panel once more to connect to it" in text and "Stopped: b did not come back after the restart of the panel at 03:04 cut its software update - the old version 0.5.6 is back and connected. The nodes after it were not touched." in text
+    assert [a[:2] for a in world.actions] == [("pgnode_rollback", "203.0.113.2")] and world.nodes[2]["version"] == "0.5.6" and world.nodes[3]["version"] == "0.5.6" and world.asked == [2, 2]
+    assert lines[-1].startswith("Done: put back b: did not come back") and "the panel main: the run stopped at a node before the panel" in lines[-1] and cfg.get("pg_auto")["bad"] == {}      # (the restart did it, not the release: nothing is held back)
+
+
+def test_a_cut_node_whose_steps_all_finished_on_their_own_is_counted_and_the_run_goes_on(world, monkeypatch):
+    world.add(2, "b", version="0.5.7", xray="26.11.1")
+    world.add(3, "c")
+    world.clock.t = at_local(3, 6)
+    _cut_night(world, monkeypatch, _cut_node("b", 2, "xray"), done=())
+    _plan(monkeypatch, [_row_of(3, "c")])
+    monkeypatch.setattr(autopilot, "_start", lambda label, fn, *a, **k: _run_now(fn, a))
+    lines, ok, _ = story(pg_auto.run(at_local(3, 6)))
+    assert ok is True and "it is connected with xray 26.11.1: the command finished on its own after the restart (it had 26.10.29); nothing is left to do for it. The users were not compared" in "\n".join(lines)
+    assert lines[-1] == "Done: updated b (xray, finished after the restart), c (software, Xray)" and [a[1] for a in world.actions] == ["203.0.113.3", "203.0.113.3"]
+
+
+def test_outside_the_window_the_cut_run_is_closed_and_the_rest_waits_for_the_next_night(world, monkeypatch):
+    world.add(2, "b")
+    world.clock.t = at_local(4, 10)                                    # (68 minutes after the start: the budget of 60 is over)
+    aid0 = _cut_night(world, monkeypatch, _cut_node("b", 2, "software"))
+    started = []
+    monkeypatch.setattr(autopilot, "_start", lambda label, fn, *a, **k: started.append(a) or 9)
+    assert pg_auto.run(at_local(4, 10)) is None and started == []
+    lines0, ok0, done0 = story(aid0)
+    assert done0 and ok0 is False and lines0[-1] == "Stopped: the panel was restarted while b was being updated (software) (it came up again at 03:04, panel clock). The window of tonight is over: the rest waits for the next night (1 node done before: a)."
+    last = cfg.get("pg_auto")["last"]
+    assert last["text"] == "cut short by a restart of the panel at 03:04: 1 node done before: a; the window of tonight is over; the rest waits for the next night" and last["ok"] is False and last["node"] is None and last["restarts"] == 1
+    assert len(world.tg) == 1 and "cut short by a restart of the panel at 03:04" in world.tg[0] and f"action #{aid0}" in world.tg[0]
+    assert any(lvl == "warn" and t.startswith("Nightly PasarGuard update: cut short by a restart") for lvl, t in events())
+    assert pg_auto.run(at_local(4, 15)) is None and len(world.tg) == 1                                            # (said once)
+    # the next day the night starts fresh
+    world.clock.t = at_local(3, 2) + 86400
+    assert pg_auto.run(at_local(3, 2) + 86400) == 9 and started == [(False,)]
+
+
+def test_too_many_restarts_in_one_night_end_it_and_a_story_that_ended_by_itself_only_mends_the_settings(world, monkeypatch):
+    world.clock.t = at_local(3, 20)
+    aid0 = _cut_night(world, monkeypatch, None, restarts=3)
+    monkeypatch.setattr(autopilot, "_start", lambda label, fn, *a, **k: pytest.fail("not started again"))
+    assert pg_auto.run(at_local(3, 20)) is None
+    assert story(aid0)[0][-1] == "Stopped: the panel was restarted while this was running (it came up again at 03:04, panel clock). The panel restarted 4 times tonight: the rest waits for the next night (1 node done before: a)."
+    assert "the panel restarted 4 times tonight" in cfg.get("pg_auto")["last"]["text"]
+    # a story that ended by itself (a crash the wrapper caught) while `last` still says running: no restart, nothing started, the settings get its last line
+    aid1 = new_action()
+    autopilot._say(aid1, "Stopped: something broke", done=True, ok=False)
+    cfg.put("pg_auto", {"last": {"day": DAY, "at": int(at_local(3, 2)), "text": "running", "ok": None, "action_id": aid1}})
+    world.tg.clear()
+    assert pg_auto.run(at_local(3, 25)) is None and cfg.get("pg_auto")["last"]["text"] == "stopped: Stopped: something broke" and world.tg == []
+
+
+def test_an_old_run_without_an_action_id_is_found_by_its_open_story(world, monkeypatch):
+    """The live panel after 1.69.198-.202: `last` says running since 03:02 with no action id (the id was only written at the end), the story is open."""
+    world.clock.t = at_local(14, 0)
+    aid0 = new_action()
+    cfg.put("pg_auto", {"last": {"day": DAY, "at": int(at_local(3, 2)), "text": "running", "ok": None}})
+    monkeypatch.setattr(pg_auto, "get_settings", lambda: types.SimpleNamespace(read_only=False))
+    monkeypatch.setattr(pg_auto, "_BOOT", at_local(13, 58))
+    monkeypatch.setattr(autopilot, "_start", lambda label, fn, *a, **k: pytest.fail("not started again"))
+
+    with session() as db:
+        db.get(ActionLog, aid0).ref = pg_safe.LABEL
+
+    assert pg_auto.run(at_local(14, 0)) is None
+    lines0, ok0, done0 = story(aid0)
+    assert done0 and ok0 is False and lines0[-1] == "Stopped: the panel was restarted while this was running (it came up again at 13:58, panel clock). The window of tonight is over: the rest waits for the next night (0 nodes done before: -)."
+    assert cfg.get("pg_auto")["last"]["ok"] is False and "cut short by a restart" in cfg.get("pg_auto")["last"]["text"]
+
+
+def test_no_node_is_started_while_the_panels_own_update_runs(world, monkeypatch):
+    world.add(1, "a")
+    world.add(2, "b")
+    monkeypatch.setattr(pg_auto, "OWN_UPDATE_WAIT", 30.0)
+    monkeypatch.setattr(pg_auto.updater, "read_progress", lambda now=None: {"state": "running", "percent": 40})
+    aid = _night(world, monkeypatch, [_row_of(1, "a"), _row_of(2, "b")], [dict(PANEL)])
+    lines, ok, done = story(aid)
+    text = "\n".join(lines)
+    assert done and ok is True and world.actions == [] and "The panel's own update is running: no node is started while it runs" in text and "still running after 0 minutes: a, b wait for the next night." in text
+    assert "left for the next night: 2 nodes (a, b): the panel's own update was still running; the panel main: the panel's own update was still running" in lines[-1]
+
+
+# ------------------------------------------------------------------ the Xray that came with the new software
+def test_the_xray_step_is_skipped_when_the_new_software_brought_the_xray_wanted(world, monkeypatch):
+    world.add(1, "a")
+    real = world.run_action
+
+    def with_xray(node, name, params=None, timeout=0):
+        out = real(node, name, params, timeout)
+
+        if name == "pgnode_update":
+            world.nodes[1]["xray"] = "26.11.1"                      # (the new image carries the Xray of the release: ECO-test, 2026-11-04, reported 26.10.31 right after pg-node update)
+
+        return out
+
+    monkeypatch.setattr(pg_safe, "run_action", with_xray)
+    aid = _night(world, monkeypatch, [_row_of(1, "a")])
+    lines, ok, _ = story(aid)
+    assert ok is True and [a[0] for a in world.actions] == ["pgnode_update"] and "Xray 26.11.1 came with the new software: the Xray step is skipped, no second restart." in "\n".join(lines)
+    assert lines[-1] == "Done: updated a (software, Xray)"
+
+
+# ------------------------------------------------------------------ the panel's own Update while a run goes
+def test_the_panels_own_update_warns_while_a_run_goes_and_force_goes_on(client, monkeypatch):
+    from nikatel.services import updater
+
+    assert pg_auto.running() is None and client.get("/api/pg-updates/auto").json()["running"] is None
+    aid = new_action()
+    cfg.put("pg_auto", {"last": {"day": DAY, "at": 1, "text": "running", "ok": None, "action_id": aid, "total": 18, "done": ["a", "b", "c"], "node": {"name": "ECO-test", "step": "xray"}}})
+    monkeypatch.setitem(autopilot._BUSY, pg_safe.LABEL, aid)
+    r = pg_auto.running()
+    assert r == {"kind": "night", "action_id": aid, "done": 3, "total": 18, "node": "ECO-test"} and client.get("/api/pg-updates/auto").json()["running"] == r
+    assert pg_auto.cut_warning(r) == "A PasarGuard night update is running: 3 of 18 nodes done, now ECO-test. The panel's update waits for the node that is being updated (up to 10 minutes) and then restarts the panel; the night run goes on after the restart with the next node."
+    started = []
+    monkeypatch.setattr(updater, "start", lambda: started.append(1) or {"ok": True, "started": True, "to": "9.9.9"})
+    res = client.post("/api/system/update").json()
+    assert res["ok"] is False and res["code"] == "conflict" and res["error"].startswith("A PasarGuard night update is running: 3 of 18 nodes done, now ECO-test.") and res["running"] == r and started == []
+    assert client.post("/api/system/update?force=true").json() == {"ok": True, "started": True, "to": "9.9.9"} and started == [1]
+    # a run started by hand (the Safe update button) is named too; the older buttons as well
+    with session() as db:
+        db.get(ActionLog, aid).source = "manual"
+
+    assert pg_auto.running() == {"kind": "other", "action_id": aid} and pg_auto.cut_warning({"kind": "other", "action_id": aid}).startswith(f"A PasarGuard update started by hand is running (action #{aid}).")
+    autopilot._BUSY.pop(pg_safe.LABEL)
+    monkeypatch.setitem(autopilot._BUSY, "pg node updates", 77)
+    assert pg_auto.running() == {"kind": "other", "action_id": 77}
+    autopilot._BUSY.pop("pg node updates")
+    assert client.post("/api/system/update").json()["ok"] is True and started == [1, 1]
+    app = (WEB / "app.js").read_text(encoding="utf-8")
+    assert 'run = (await api("/api/pg-updates/auto")).running || null' in app and "A PasarGuard night update is running: ${run.done} of ${run.total} nodes done" in app and "Update the panel anyway?" in app and '"/api/system/update" + (warn ? "?force=true" : "")' in app
 
 
 # ------------------------------------------------------------------ the switch and the clock
@@ -561,7 +797,10 @@ def test_nothing_runs_while_the_switch_is_off_or_it_is_not_the_hour_and_only_onc
     assert pg_auto.due(at_local(2, 59)) is False and pg_auto.due(at_local(4, 0)) is False and pg_auto.run(at_local(5, 0)) is None
     assert pg_auto.due(at) is True and pg_auto.run(at) == 7
     assert started == [(pg_safe.LABEL, pg_auto._night_story, (False,), {"action": "pgupdate", "source": "auto"})]
-    assert cfg.get("pg_auto")["last"]["text"] == "running" and pg_auto.due(at) is False and pg_auto.run(at_local(3, 40)) is None       # (once a night: the day is marked first)
+    monkeypatch.setitem(autopilot._BUSY, pg_safe.LABEL, 7)                                                               # (the run's thread is at work)
+    last = cfg.get("pg_auto")["last"]
+    assert {k: v for k, v in last.items() if k != "at"} == {"day": DAY, "text": "running", "ok": None, "restarts": 0, "done": [], "node": None} and pg_auto.due(at) is False and pg_auto.run(at_local(3, 40)) is None       # (once a night: the day is marked first)
+    autopilot._BUSY.pop(pg_safe.LABEL)
     cfg.put("pg_auto", {"last": {}})
     monkeypatch.setitem(autopilot._BUSY, "pg node updates", 3)
     assert pg_auto.run(at) is None and len(started) == 1                                                                  # (never over a manual update)

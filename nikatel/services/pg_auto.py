@@ -15,6 +15,12 @@ panel clock, Tehran by default - the clock of the daily report), with what a nig
   * what is remembered: a release that did not hold is held back (settings `pg_auto.bad`) and never tried again by itself - the Safe update buttons still try it. What a night did is the story of an action in
     the history of the Tunnel Doctor, one event in the feed, and one message on the Telegram channel of the alerts: what was updated, what came back, what was left for the next night, what needs the owner.
   * the fixes it tries are only the known, safe ones (the panel asked once more to connect to a node, the Xray command run once more, the panel service restarted once). Anything else is the way back and the report.
+  * a restart of the panel in the middle (the first real night, 2026-11-04: the owner pressed the panel's own Update at 03:03, systemd stopped the panel and its ssh children, and nothing ran again that night): where the
+    run is - which nodes are done, which node is in which step - is written in the settings as it goes. The first tick after the restart closes the cut story ("cut short by a restart of the panel at 03:04") and, while the
+    window of the night is still open (the same day, inside the time budget from the first start, at most RESUME_MAX restarts), goes on in a new action with the next node. A node that was done is never started twice;
+    the node whose step was cut is looked at first: connected with the new version, the command finished on its own and the rest of it goes on; still the old version, it is left for the next night (an update command
+    is not run twice on a node in one night - the second run would keep the NEW image as the old one); not connected, its old version comes back and the run stops. The panel's own Update warns while a run goes (the
+    About card, `running`) and scripts/deploy.sh waits for a command on a node to finish before the restart (pg_safe.STEP_FILE); no node is started while the panel's own update runs.
 OFF until the owner switches it on (Settings → About & update, the PasarGuard card). A rehearsal (`rehearse`, the link under the switch) walks the same steps now, reading everything and changing nothing."""
 from __future__ import annotations
 
@@ -26,7 +32,7 @@ from sqlalchemy import select
 from ..config import get_settings
 from ..db import session
 from ..log import get_logger
-from ..models import Tunnel
+from ..models import ActionLog, Tunnel
 from ..ssh import SSHError, run_action, run_script
 from . import (
     autopilot,
@@ -38,6 +44,7 @@ from . import (
     pg_update,
     probe,
     telegram,
+    updater,
     userq,
 )
 from . import settings as cfg
@@ -47,6 +54,9 @@ from .events import emit
 log = get_logger("pg_auto")
 LABEL = pg_safe.LABEL                 # one lock with the Safe update buttons: never two PasarGuard updates at once
 PANEL_BY = 45                         # minutes after the hour before which the panel step must START, so that it is over inside the hour
+RESUME_MAX = 3                        # restarts of the panel after which the night gives up (a panel that restarts over and over must not restart the update over and over)
+OWN_UPDATE_WAIT = 180.0               # seconds the night waits before a node while the panel's own update (scripts/deploy.sh) runs: the restart comes, the run goes on after it
+_BOOT = time.time()                   # when this process started: the time of the restart that cut a run
 USERS_LIMIT = 150.0                   # seconds the probe gets to test the configs of a node twice after the node came back
 USERS_POLL = 15.0
 USERS_TESTS = 2                       # fresh tests of the probe that must say down before a config counts as not passing (one test from a data centre is noisy)
@@ -84,14 +94,31 @@ def _busy() -> bool:
     return LABEL in autopilot._BUSY or "pg node updates" in autopilot._BUSY or any(k.startswith("pgpanel ") for k in autopilot._BUSY)
 
 
+def _remember(got: dict, **fields) -> None:
+    """Where the run is, in the settings (`last`): the action, how many nodes there are, which are done, which node is in which step - what a restart of the panel needs to go on. A rehearsal writes nothing."""
+    if got["dry"]:
+        return
+
+    cfg.put("pg_auto", {"last": {**state()["last"], **fields}})
+
+
 def run(now: float | None = None) -> int | None:
     """The job (every 5 minutes): at the hour, with the switch on and no PasarGuard update running, tonight's run starts as an action of the panel (its story is in the history of the Tunnel Doctor). Returns the id
-    of the action, None when it was not the time. The day is marked FIRST: a run cut short by a restart of the panel is not started over the same night."""
-    if get_settings().read_only or not due(now) or _busy():
+    of the action, None when it was not the time. The day is marked FIRST (one run a night); a run that a restart of the panel cut is found on the first tick after it (`last` says "running" and no thread runs it):
+    its story is closed and, while the window is open, the night goes on in a new action (`_after_restart`)."""
+    if get_settings().read_only:
+        return None
+
+    s = state()
+
+    if s["last"].get("text") == "running" and not _busy():
+        return _after_restart(s, now)
+
+    if not due(now) or _busy():
         return None
 
     day = _day(now)
-    cfg.put("pg_auto", {"last": {"day": day, "at": int(time.time()), "text": "running", "ok": None}})
+    cfg.put("pg_auto", {"last": {"day": day, "at": int(time.time()), "text": "running", "ok": None, "restarts": 0, "done": [], "node": None}})
 
     try:
         return autopilot._start(LABEL, _night_story, False, action="pgupdate", source="auto")
@@ -99,6 +126,100 @@ def run(now: float | None = None) -> int | None:
         log.warning("nightly PasarGuard update not started: %s", e)
         cfg.put("pg_auto", {"last": {"day": day, "at": int(time.time()), "text": f"not started: {str(e)[:160]}", "ok": False}})
         return None
+
+
+def _open_story(aid: int) -> tuple[int, bool, str]:
+    """The story of the run `last` points at (or, without an id, the newest open night story): (its id, is it still open, its last line)."""
+    with session() as db:
+        e = db.get(ActionLog, aid) if aid else None
+
+        if e is None:
+            e = db.scalar(select(ActionLog).where(ActionLog.ref == LABEL, ActionLog.action == "pgupdate", ActionLog.source == "auto", ActionLog.finished_at == 0).order_by(ActionLog.id.desc()))
+
+        if e is None:
+            return aid, False, ""
+
+        return e.id, not e.finished_at, str((e.story or [""])[-1])
+
+
+def _after_restart(s: dict, now: float | None = None) -> int | None:
+    """`last` says "running" but no thread of this process runs it: the panel was restarted in the middle of the night (its own Update, a reboot). The cut story is closed with that, and the night goes on in a new
+    action while its window is open - the same day, inside the time budget counted from the first start, not more than RESUME_MAX restarts - with the next node (the nodes that are done are never started twice; the
+    node whose step was cut is looked at first, see `_after_cut`). Otherwise the rest waits for the next night, and the owner is told (the settings, one event, Telegram)."""
+    last = dict(s["last"])
+    aid0, open_, last_line = _open_story(int(last.get("action_id") or 0))
+
+    if not open_:                                                   # the story ended by itself (the wrapper of the action caught a crash): only the settings are behind
+        cfg.put("pg_auto", {"last": {**last, "text": f"stopped: {last_line[:300]}", "ok": False, "node": None}})
+        return None
+
+    boot = engines._local(_BOOT)
+    when = f"{boot.tm_hour:02d}:{boot.tm_min:02d}"
+    node = last.get("node") or {}
+    done = [str(x) for x in (last.get("done") or [])]
+    restarts = int(last.get("restarts") or 0) + 1
+    budget = max(5, s["budget_minutes"]) * 60
+    cut = "the panel was restarted while " + (f"{node.get('name')} was being updated ({node.get('step') or '?'})" if node.get("name") else "this was running") + f" (it came up again at {when}, panel clock)"
+    before = f"{len(done)} node{'s' if len(done) != 1 else ''} done before: {', '.join(done) or '-'}"
+    inside = last.get("day") == _day(now) and time.time() - int(last.get("at") or 0) < budget and restarts <= RESUME_MAX
+
+    if not inside:
+        why = f"the panel restarted {restarts} times tonight" if restarts > RESUME_MAX else "the window of tonight is over"
+        autopilot._say(aid0, f"Stopped: {cut}. {why[0].upper() + why[1:]}: the rest waits for the next night ({before}).", done=True, ok=False)
+        text = f"cut short by a restart of the panel at {when}: {before}; {why}; the rest waits for the next night"
+        cfg.put("pg_auto", {"last": {**last, "text": text[:400], "ok": False, "node": None, "restarts": restarts}})
+
+        with session() as db:
+            emit(db, "warn", "panels", "Nightly PasarGuard update: " + text[:600], "auto")
+
+        telegram.send_text(f"PasarGuard nightly update - {last.get('day') or '?'}\n{text}\nThe whole story: Tunnel Doctor → history, action #{aid0}")
+        return None
+
+    autopilot._say(aid0, f"Stopped: {cut}. The run goes on in a new action with the next node ({before}).", done=True, ok=False)
+    cfg.put("pg_auto", {"last": {**last, "restarts": restarts, "node": None}})
+    resume = {"t0": int(last.get("at") or 0), "done": done, "node": node if node.get("name") else None, "prev": aid0, "when": when, "restarts": restarts}
+
+    try:
+        return autopilot._start(LABEL, _night_story, False, resume, action="pgupdate", source="auto")
+    except ValueError as e:
+        log.warning("nightly PasarGuard update not started again after the restart: %s", e)
+        cfg.put("pg_auto", {"last": {**last, "text": f"cut short by a restart of the panel at {when}; not started again: {str(e)[:160]}", "ok": False, "node": None, "restarts": restarts}})
+        return None
+
+
+def running() -> dict | None:
+    """What a restart of the panel would cut right now: the night run ({kind: night, action_id, done, total, node}) or a PasarGuard update started by hand ({kind: other, action_id}); None when nothing runs (a
+    rehearsal only reads: nothing to cut). The About card asks before the panel's own Update."""
+    aid = autopilot._BUSY.get(LABEL)
+    other = next((v for k, v in autopilot._BUSY.items() if k == "pg node updates" or k.startswith("pgpanel ")), None)
+
+    if aid is None:
+        return {"kind": "other", "action_id": int(other)} if other else None
+
+    with session() as db:
+        e = db.get(ActionLog, int(aid))
+
+        if e is not None and e.dry_run:
+            return None
+
+        night = e is not None and e.source == "auto"
+
+    if not night:
+        return {"kind": "other", "action_id": int(aid)}
+
+    last = state()["last"]
+    return {"kind": "night", "action_id": int(aid), "done": len(last.get("done") or []), "total": int(last.get("total") or 0), "node": str((last.get("node") or {}).get("name") or "")}
+
+
+def cut_warning(r: dict) -> str:
+    """Pure: the sentence the About card shows before the panel's own Update while a PasarGuard update runs."""
+    wait = "The panel's update waits for the node that is being updated (up to 10 minutes) and then restarts the panel; "
+
+    if r.get("kind") == "night":
+        return (f"A PasarGuard night update is running: {r.get('done', 0)} of {r.get('total', 0)} nodes done" + (f", now {r['node']}" if r.get("node") else "") + ". " + wait
+                + "the night run goes on after the restart with the next node.")
+
+    return f"A PasarGuard update started by hand is running (action #{r.get('action_id')}). " + wait + "the rest of that update is NOT continued after the restart - start it again from the PasarGuard card."
 
 
 def rehearse() -> int:
@@ -287,14 +408,102 @@ def _back_both(row: dict, sw: str, xr: str) -> str:
 
     before = {"version": row.get("version", ""), "xray": row.get("xray", "")}
     parts = []
+    pg_safe.step_note(row["name"], "back")                           # (the way back is a command on the node too: the panel's own Update waits for it)
 
-    if xr:
-        parts.append(pg_safe._back_core(node, c, row["node_id"], before))
+    try:
+        if xr:
+            parts.append(pg_safe._back_core(node, c, row["node_id"], before))
 
-    if sw:
-        parts.append(pg_safe._back_software(node, c, row["node_id"], before))
+        if sw:
+            parts.append(pg_safe._back_software(node, c, row["node_id"], before))
+    finally:
+        pg_safe.step_done()
 
     return "; ".join(parts) or "nothing to put back"
+
+
+# ------------------------------------------------------------------ after a restart of the panel
+def _wait_connected(c: dict, node_id: int, limit: float) -> tuple[bool, dict]:
+    """Look at the node until the panel says it is connected (whatever version it reports), or the time is up: (it is, the last row)."""
+    end, last = time.time() + limit, {}
+
+    while True:
+        try:
+            last = pg_safe._row(c, node_id)
+        except (panels.PanelError, ValueError):
+            last = last or {}
+
+        if last.get("status") == "connected":
+            return True, last
+
+        if time.time() >= end:
+            return False, last
+
+        time.sleep(pg_update.POLL)
+
+
+def _after_cut(aid: int, cut: dict, hit: dict | None, got: dict, when: str) -> str:
+    """The node whose step the restart of the panel cut: looked at before anything else. Connected with the new version of that step: the command finished on its own, the step counts and the rest of the node goes on
+    as usual ("go"). Connected and still the old version: the step did not take, and an update command is not run twice on a node in one night (the second run would keep the NEW image as the old one) - the node is
+    left for the next night ("left"). Not connected, not after one more connect request: its old version comes back, as for any node that does not come back, and the run stops here ("stop")."""
+    say = autopilot._say
+    name, step = cut["name"], str(cut.get("step") or "software")
+    key = "version" if step == "software" else "xray"
+    old = str(cut.get(key) or "")
+    say(aid, f"{name} was being updated ({step}) when the panel restarted at {when}: looking at it first…")
+
+    try:
+        c = panels.cred_for(cut["panel_id"])
+    except (panels.PanelError, ValueError) as e:
+        got["needs"].append(f"{name}: its {step} update was cut by the restart of the panel at {when} and its panel could not be read after ({str(e)[:100]}) - look at the node by hand")
+        say(aid, f"    its panel could not be read ({str(e)[:120]}): look at the node by hand.")
+        return "stop"
+
+    ok, row = _wait_connected(c, cut["node_id"], pg_update.NODE_LIMIT)
+
+    if not ok:
+        say(aid, f"    it is {row.get('status') or 'not answering'}; asking the panel once more to connect to it…")
+        pg_safe._reconnect(c, cut["node_id"])
+        ok, row = _wait_connected(c, cut["node_id"], pg_safe.AGAIN)
+
+    if not ok:
+        say(aid, f"    it is {row.get('status') or 'not answering'} after one more connect request; putting the old version back…")
+        back = _back_both({"panel_id": cut["panel_id"], "node_id": cut["node_id"], "name": name, "server": {"id": cut.get("server_id")}, "version": cut.get("version", ""), "xray": cut.get("xray", "")}, step == "software", step == "xray")
+        why = f"did not come back after the restart of the panel at {when} cut its {step} update - {back}"
+        say(aid, f"Stopped: {name} {why}. The nodes after it were not touched.")
+        (got["needs"] if "by hand" in back else got["back"]).append(f"{name}: {why}")
+        return "stop"
+
+    now_v = str(row.get(key) or "")
+
+    if now_v and old and pg_safe.short(now_v) != pg_safe.short(old):
+        say(aid, f"    it is connected with {step} {now_v}: the command finished on its own after the restart (it had {old})" + ("; the rest of it goes on as usual." if hit is not None else "; nothing is left to do for it. The users were not compared: the probe's answer from before the update went with the restart."))
+
+        if hit is None:
+            got["updated"].append(f"{name} ({step}, finished after the restart)")
+
+        return "go"
+
+    say(aid, f"    it is connected and still reports {step} {now_v or '?'}: the update did not take. A node is not started twice in one night - it waits for the next night.")
+    got["left"].append(f"{name}: its {step} update was cut by the restart of the panel at {when} and did not take (it reports {now_v or '?'}); a node is not started twice in one night")
+    return "left"
+
+
+def _own_update_wait(aid: int) -> bool:
+    """Before a node: while the panel's own update (scripts/deploy.sh) runs, no node is started - the restart is coming and the run goes on after it. True when the update is still running after OWN_UPDATE_WAIT."""
+    if updater.read_progress().get("state") != "running":
+        return False
+
+    autopilot._say(aid, f"The panel's own update is running: no node is started while it runs (up to {int(OWN_UPDATE_WAIT // 60)} minutes); the run goes on after the restart.")
+    end = time.time() + OWN_UPDATE_WAIT
+
+    while time.time() < end:
+        time.sleep(pg_update.POLL)
+
+        if updater.read_progress().get("state") != "running":
+            return False
+
+    return True
 
 
 def _after_failure(got: dict, name: str, parts: list[str], why: str, latest: dict, day: str) -> None:
@@ -567,16 +776,35 @@ def _end(aid: int, got: dict, text: str | None, ok: bool) -> None:
         log.info("nightly summary not sent to Telegram: %s", why)
 
 
-def _night_story(aid: int, dry: bool = False) -> None:
+def _night_story(aid: int, dry: bool = False, resume: dict | None = None) -> None:
+    """The night (or its rehearsal). `resume`: the run goes on after a restart of the panel - {t0: when the night started, done: the nodes done before, node: the node whose step was cut (or None), prev: the cut
+    story, when: the time of the restart, restarts}."""
     say = autopilot._say
     s = state()
-    t0 = time.time()
-    local = engines._local(t0)
+    now0 = time.time()
+    t0 = float(resume["t0"]) if resume else now0
+    local = engines._local(now0)
     day = time.strftime("%Y-%m-%d", local)
     budget = max(5, s["budget_minutes"]) * 60
-    got: dict = {"updated": [], "back": [], "left": [], "needs": [], "skipped": [], "dry": dry, "day": day, "aid": aid}
-    say(aid, ("Rehearsal of the nightly update: every step is walked, nothing is changed" if dry else f"Nightly update of PasarGuard ({day} {local.tm_hour:02d}:{local.tm_min:02d}, panel clock)")
-        + f". The panel and its nodes are looked at first; no node is started after {budget // 60} minutes and the panel only in the first {PANEL_BY} minutes of its hour - the rest waits for the next night.")
+    done = list(resume["done"]) if resume else []
+    got: dict = {"updated": [f"{n} (before the restart)" for n in done], "back": [], "left": [], "needs": [], "skipped": [], "dry": dry, "day": day, "aid": aid}
+
+    if dry:
+        with session() as db:                                       # (marked as a rehearsal: the panel's own Update does not warn about it - it only reads)
+            e = db.get(ActionLog, aid)
+
+            if e is not None:
+                e.dry_run = True
+
+    if resume:
+        say(aid, f"Nightly update of PasarGuard, continued after the restart of the panel at {resume['when']} (restart {resume['restarts']} of at most {RESUME_MAX} tonight; the first part is action #{resume['prev']}: "
+            f"{len(done)} node{'s' if len(done) != 1 else ''} done before - {', '.join(done) or '-'}). It is {local.tm_hour:02d}:{local.tm_min:02d} on the panel clock; the time budget of {budget // 60} minutes "
+            f"counts from the first start, the panel only in the first {PANEL_BY} minutes of its hour.")
+    else:
+        say(aid, ("Rehearsal of the nightly update: every step is walked, nothing is changed" if dry else f"Nightly update of PasarGuard ({day} {local.tm_hour:02d}:{local.tm_min:02d}, panel clock)")
+            + f". The panel and its nodes are looked at first; no node is started after {budget // 60} minutes and the panel only in the first {PANEL_BY} minutes of its hour - the rest waits for the next night.")
+
+    _remember(got, action_id=aid)
 
     try:
         pl = pg_safe.plan(force=True, scope="all")
@@ -601,7 +829,9 @@ def _night_story(aid: int, dry: bool = False) -> None:
     for n in pl["nodes"]:
         do = [d for d in n["do"] if not ((d.startswith("software") and held_sw) or (d.startswith("Xray") and held_xr))]
 
-        if do:
+        if n["name"] in done:                                       # (done before the restart: never started twice, whatever the panel reports about it now)
+            got["skipped"].append(f"{n['name']}: updated before the restart, not started twice")
+        elif do:
             todo.append({**n, "do": do})
         else:
             got["skipped"].append(f"{n['name']}: only a release that is held back")
@@ -619,23 +849,47 @@ def _night_story(aid: int, dry: bool = False) -> None:
         else:
             panel_todo.append(p)
 
-    if not todo and not panel_todo:
-        _end(aid, got, None if got["skipped"] or got["left"] or got["needs"] else "everything is up to date, nothing to do tonight", ok=True)
+    stopped = False
+
+    if resume and resume.get("node") and not dry:                     # the node whose step the restart cut comes first: finished on its own, left for the next night, or put back (then the run stops)
+        cut = resume["node"]
+        hit = next((n for n in todo if n["name"] == cut["name"]), None)
+        verdict = _after_cut(aid, cut, hit, got, resume["when"])
+
+        if verdict == "stop":
+            stopped = True
+            todo = []
+        elif verdict == "left" and hit is not None:
+            todo = [n for n in todo if n is not hit]
+        elif verdict == "go" and hit is not None:
+            todo = [hit] + [n for n in todo if n is not hit]
+
+    if not todo and not panel_todo and not stopped:
+        _end(aid, got, None if got["skipped"] or got["left"] or got["needs"] or got["updated"] else "everything is up to date, nothing to do tonight", ok=True)
         return
+
+    _remember(got, total=len(done) + len(todo))
 
     if todo:
         say(aid, f"{len(todo)} node{'s' if len(todo) != 1 else ''}, the quietest first: " + ", ".join(f"{n['name']} ({n['usage_text']}: {' + '.join(n['do'])})" for n in todo[:20]) + ("…" if len(todo) > 20 else "") + ".")
 
-    if panel_todo:
+    if panel_todo and not stopped:
         say(aid, f"Then the panel {panel_todo[0]['name']} ({pg_safe.short(panel_todo[0]['version'])} → {pg_safe.short(panel_todo[0]['latest'])}) on {panel_todo[0]['host']['name']}.")
 
-    stopped = False
+    own_busy = False
 
     for i, row in enumerate(todo, 1):
         if time.time() - t0 > budget:
             names = [r["name"] for r in todo[i - 1:]]
             got["left"].append(f"{len(names)} node{'s' if len(names) != 1 else ''} ({', '.join(names[:12])}{'…' if len(names) > 12 else ''}): the time budget of {budget // 60} minutes was used up")
             say(aid, f"The time budget of {budget // 60} minutes is used up: {', '.join(names)} wait{'s' if len(names) == 1 else ''} for the next night.")
+            break
+
+        if not dry and _own_update_wait(aid):
+            names = [r["name"] for r in todo[i - 1:]]
+            got["left"].append(f"{len(names)} node{'s' if len(names) != 1 else ''} ({', '.join(names[:12])}{'…' if len(names) > 12 else ''}): the panel's own update was still running")
+            say(aid, f"The panel's own update is still running after {int(OWN_UPDATE_WAIT // 60)} minutes: {', '.join(names)} wait{'s' if len(names) == 1 else ''} for the next night.")
+            own_busy = True
             break
 
         watch = configs_of_server(row["server"]["id"])
@@ -649,7 +903,8 @@ def _night_story(aid: int, dry: bool = False) -> None:
             continue
 
         base = _probe_base()
-        ok, why, part = pg_safe._update_node(aid, i, len(todo), row, sw_tag, xr_tag)
+        where = {"name": row["name"], "panel_id": row["panel_id"], "node_id": row["node_id"], "server_id": row["server"]["id"], "version": row.get("version", ""), "xray": row.get("xray", "")}
+        ok, why, part = pg_safe._update_node(aid, i, len(todo), row, sw_tag, xr_tag, mark=lambda step, w=where: _remember(got, node={**w, "step": step}))
 
         if not ok:
             say(aid, pg_safe.stop_line(i, len(todo), row["name"], why))
@@ -658,6 +913,7 @@ def _night_story(aid: int, dry: bool = False) -> None:
                 got["updated"].append(f"{row['name']} (software only)")
 
             _after_failure(got, row["name"], [part] if part else [], why, latest, day)
+            _remember(got, node=None)
             stopped = True
             break
 
@@ -669,10 +925,13 @@ def _night_story(aid: int, dry: bool = False) -> None:
             back = _back_both(row, sw_tag, xr_tag)
             say(aid, pg_safe.stop_line(i, len(todo), row["name"], back + "."))
             _after_failure(got, row["name"], [p_ for p_, t in (("software", sw_tag), ("xray", xr_tag)) if t], text_u.rstrip(".") + " - " + back, latest, day)
+            _remember(got, node=None)
             stopped = True
             break
 
         got["updated"].append(f"{row['name']} ({', '.join(row['do'])})")
+        done.append(row["name"])
+        _remember(got, node=None, done=list(done))
 
     if stopped:
         for p in panel_todo:
@@ -691,6 +950,9 @@ def _night_story(aid: int, dry: bool = False) -> None:
         if not dry and (time.time() - t0 > budget or loc.tm_hour != s["hour"] or loc.tm_min >= PANEL_BY):
             got["left"].append(f"the panel {p['name']}: it is only started in the first {PANEL_BY} minutes of its hour and inside the time budget (it was {loc.tm_hour:02d}:{loc.tm_min:02d} on the panel clock)")
             say(aid, f"The panel {p['name']} is not started now ({loc.tm_hour:02d}:{loc.tm_min:02d} on the panel clock): it waits for the next night.")
+        elif not dry and (own_busy or _own_update_wait(aid)):
+            got["left"].append(f"the panel {p['name']}: the panel's own update was still running")
+            say(aid, f"The panel {p['name']} is not started now: this panel's own update is running; it waits for the next night.")
         else:
             _panel_step(aid, p, got, dry)
 

@@ -7,13 +7,16 @@
 # server took ten minutes of two cores that also watch the tunnels. What only THIS machine can answer is checked: the new code compiles, imports with the libraries installed here and migrates a COPY of the live
 # database, and the panel answers after the restart (if not, the last good commit comes back). About fifteen seconds in all.
 # `step` keeps $PROGRESS - one small file - up to date: the Update button of the panel shows it (nikatel/services/updater.py), so a page that is refreshed, or the restart of the panel itself, loses nothing.
-# The environment variables VENV, STATE_DIR, ENV_FILE, UNIT, SYSTEMCTL, HEALTH_TRIES and HEALTH_SLEEP are for the tests of this script (tests/test_deploy_script.py).
+# Before the restart: a PasarGuard update of the panel (the night run, the Safe update buttons) may have a command running on a node right now - the panel writes $STEP_FILE while one does (services/pg_safe.py); the
+# restart would kill it in the middle (2026-11-04: the owner's Update cut the first real night while a node was updating). The restart waits until the note is gone, up to NODE_WAIT seconds (a note older than 20 minutes is stale).
+# The environment variables VENV, STATE_DIR, ENV_FILE, UNIT, SYSTEMCTL, HEALTH_TRIES, HEALTH_SLEEP, NODE_WAIT and NODE_POLL are for the tests of this script (tests/test_deploy_script.py).
 set -euo pipefail
 SRC="$(cd "$(dirname "$0")/.." && pwd)"
 VENV=${VENV:-/opt/nikatel/venv}
 STATE_DIR=${STATE_DIR:-/var/lib/nikatel}
 STATE=$STATE_DIR/last-good-commit
 PROGRESS=$STATE_DIR/update-progress.json
+STEP_FILE=$STATE_DIR/pg-node-step.json
 ENV_FILE=${ENV_FILE:-/etc/nikatel/nikatel.env}
 UNIT=${UNIT:-/etc/systemd/system/nikatel.service}
 SYSTEMCTL=${SYSTEMCTL:-systemctl}
@@ -28,6 +31,20 @@ step() {      # step <name> [reason]: where the run is, for the page (GET /api/s
     { printf '{"run":%s,"step":"%s","at":%s,"from":"%s","to":"%s","reason":"%s"}\n' "$RUN" "$1" "$(date +%s)" "$FROM" "$TO" "${2:-}" > "$PROGRESS.tmp" && mv -f "$PROGRESS.tmp" "$PROGRESS"; } 2>/dev/null || true
 }
 health() { for _ in $(seq 1 "${HEALTH_TRIES:-45}"); do sleep "${HEALTH_SLEEP:-2}"; curl -sk -m 5 "https://127.0.0.1:$PORT/api/health" 2>/dev/null | grep -q '"ok":true' && return 0; done; return 1; }      # a graceful stop waits up to 40 s for running checks: the answer may take a minute
+node_step() {      # the node and the step of the PasarGuard command that runs right now ("" when none, or the note is stale)
+    [ -f "$STEP_FILE" ] || { echo ""; return 0; }
+    local at; at=$(sed -n 's/.*"at": *\([0-9]*\).*/\1/p' "$STEP_FILE" 2>/dev/null | head -n 1); at=${at:-0}
+    if [ $(( $(date +%s) - at )) -gt 1200 ]; then echo ""; return 0; fi
+    sed -n 's/.*"node": *"\([^"]*\)".*"step": *"\([^"]*\)".*/\1 (\2)/p' "$STEP_FILE" 2>/dev/null | head -n 1
+}
+wait_node_step() {      # the restart waits for a command on a node to finish (up to NODE_WAIT seconds), so the PasarGuard update it belongs to is not cut in the middle
+    local who; who=$(node_step); [ -n "$who" ] || return 0
+    echo "== a PasarGuard update has a command running on a node: $who - waiting for it before the restart (up to ${NODE_WAIT:-600} s)"
+    step wait "a PasarGuard update is working on the node $who: the restart waits for it"
+    local end=$(( $(date +%s) + ${NODE_WAIT:-600} ))
+    while [ -n "$who" ] && [ "$(date +%s)" -lt "$end" ]; do sleep "${NODE_POLL:-5}"; who=$(node_step); done
+    if [ -n "$who" ]; then echo "still working on $who after ${NODE_WAIT:-600} s: restarting anyway (the night run goes on after the restart)"; else echo "the node is done"; fi
+}
 deps_changed() { [ -z "${1:-}" ] || ! git diff --quiet "$1" "$2" -- pyproject.toml 2>/dev/null; }      # true when the last good commit is not known, or pyproject.toml is not the same in the two commits
 deps() { echo "== libraries: pyproject.toml changed, installing"; "$VENV/bin/pip" install -q -e "$SRC[dev]"; }
 unit_file() {      # the unit file travels with the source: install it when it changed
@@ -80,6 +97,7 @@ WHY="the new version does not start with the live data (an import or a migration
 echo "== migrations on a copy of the live database"; PYTHONPATH="$SRC${PYTHONPATH:+:$PYTHONPATH}" "$VENV/bin/python" scripts/migrate_check.py "$STATE_DIR/data"
 WHY="the unit file could not be installed"
 echo "== install $(git rev-parse --short HEAD)"; unit_file
+wait_node_step
 step restart
 if "$SYSTEMCTL" restart nikatel && { step health; health; }; then
     git rev-parse HEAD > "$STATE"; step done; echo "DEPLOY OK $(git rev-parse --short HEAD)"

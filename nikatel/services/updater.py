@@ -33,8 +33,8 @@ SRC = Path(__file__).resolve().parent.parent.parent
 STALE_AFTER = 420            # seconds a step may stay the last one written: a restart waits up to 60 s and the health check 90 s, and every step writes its own time
 REMOTE_KEEP = 30             # seconds the answer of GitHub is kept
 STEPS = {                    # step: (percent where it starts, percent where the next one starts, seconds it usually takes) - the percentage creeps from the first towards the second and stops short of it
-    "download": (2, 12, 3), "checks": (12, 30, 4), "install": (30, 55, 6), "restart": (55, 85, 8), "health": (85, 99, 6), "rollback": (90, 98, 20),
-}
+    "download": (2, 12, 3), "checks": (12, 30, 4), "install": (30, 52, 6), "wait": (52, 55, 90), "restart": (55, 85, 8), "health": (85, 99, 6), "rollback": (90, 98, 20),
+}                            # wait: only while a command of a PasarGuard update runs on a node (services/pg_safe.py STEP_FILE) - deploy.sh lets it finish before the restart
 _remote: dict = {"at": 0.0, "head": "", "tag": "", "ok": False}
 _START_LOCK = threading.Lock()
 

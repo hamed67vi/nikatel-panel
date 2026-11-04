@@ -46,7 +46,7 @@ def fake_git(monkeypatch, cur="abc1234", head="abc1234fff", tag="v" + __version_
 
 
 def test_the_percentage_creeps_inside_a_step_and_never_reaches_the_next_one():
-    order = ["download", "checks", "install", "restart", "health"]
+    order = ["download", "checks", "install", "wait", "restart", "health"]      # (wait: only while a PasarGuard command runs on a node - deploy.sh lets it finish before the restart)
 
     for step, nxt in zip(order, order[1:] + [""]):
         a, b, _ = updater.STEPS[step]

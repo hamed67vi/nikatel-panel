@@ -133,6 +133,46 @@ def test_a_version_that_does_not_answer_is_rolled_back(box):
     assert (box.state / "last-good-commit").read_text().strip() == box.good
 
 
+def test_the_restart_waits_for_a_command_on_a_node_and_a_stale_note_does_not_hold_it(box):
+    """A PasarGuard update (the night run, the Safe update buttons) has a command running on a node: the panel wrote $STATE_DIR/pg-node-step.json (services/pg_safe.py). The restart waits until the note is gone
+    (up to NODE_WAIT), so the command is not cut in the middle (2026-11-04: the owner's Update cut the first real night while a node was updating); a note older than 20 minutes is stale and holds nothing."""
+    import threading
+    import time
+
+    box.commit({"nikatel/__init__.py": VERSION_FILE.format(note="")})
+    note, seen = box.state / "pg-node-step.json", []
+    note.write_text(json.dumps({"node": "ECO-test", "step": "software", "at": int(time.time())}))
+
+    def node_done():      # (the node's command ends a moment after the script began to wait for it)
+        for _ in range(240):
+            time.sleep(0.5)
+
+            try:
+                p = box.progress()
+            except (OSError, ValueError):
+                continue
+
+            if p.get("step") == "wait":
+                seen.append(p)
+                time.sleep(1.5)
+                note.unlink()
+                return
+
+    threading.Thread(target=node_done, daemon=True).start()
+    r = box.deploy(NODE_POLL="1", NODE_WAIT="30")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "a PasarGuard update has a command running on a node: ECO-test (software) - waiting for it before the restart (up to 30 s)" in r.stdout and "the node is done" in r.stdout and "restarting anyway" not in r.stdout
+    assert seen and seen[0]["step"] == "wait" and "ECO-test (software)" in seen[0]["reason"] and box.progress()["step"] == "done"      # (the page saw the wait; the restart came after the node)
+    assert r.stdout.index("waiting for it") < r.stdout.index("DEPLOY OK")
+    note.write_text(json.dumps({"node": "old", "step": "xray", "at": int(time.time()) - 1300}))
+    r = box.deploy(NODE_POLL="1", NODE_WAIT="5")
+    assert r.returncode == 0 and "waiting for it" not in r.stdout and "DEPLOY OK" in r.stdout
+    note.write_text(json.dumps({"node": "slow", "step": "software", "at": int(time.time())}))
+    r = box.deploy(NODE_POLL="1", NODE_WAIT="2")
+    assert r.returncode == 0 and "still working on slow (software) after 2 s: restarting anyway (the night run goes on after the restart)" in r.stdout and "DEPLOY OK" in r.stdout
+    note.unlink()
+
+
 def test_the_manual_rollback_moves_the_branch_back_and_leaves_no_detached_head(box):
     box.commit({"nikatel/__init__.py": VERSION_FILE.format(note="")})
     assert box.deploy().returncode == 0

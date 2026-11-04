@@ -225,8 +225,17 @@ def update_progress():
 
 
 @router.post("/system/update", dependencies=[Depends(current_user)])
-def update_now():
-    """Download the newest version and run scripts/deploy.sh (checks, restart, health check, rollback) in its own unit, so the panel can restart under it. Watch /system/update/progress."""
+def update_now(force: bool = False):
+    """Download the newest version and run scripts/deploy.sh (checks, restart, health check, rollback) in its own unit, so the panel can restart under it. Watch /system/update/progress.
+    Refused (ok false, code conflict, `running`) while a PasarGuard update runs - the restart would cut it; with `force` it runs anyway: deploy.sh waits for the command on the node that is being updated, the night
+    run goes on after the restart with the next node, an update started by hand does not."""
+    from ..services import pg_auto
+
+    r = pg_auto.running()
+
+    if r and not force:
+        return {"ok": False, "error": pg_auto.cut_warning(r), "code": "conflict", "running": r}
+
     return updater.start()
 
 

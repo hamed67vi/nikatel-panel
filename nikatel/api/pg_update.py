@@ -40,7 +40,7 @@ class PanelIn(BaseModel):
 def pg_updates(force: bool = False):
     """The newest releases of PasarGuard (panel and node) and Xray on GitHub (asked once an hour, `force` asks now), every PasarGuard panel with its installed version and the server of ours that runs it, and
     every node of them with its software and Xray version - each marked behind or not (null when a version is not known). One read of each panel. `auto`: the nightly update switch and what the last night did."""
-    return {"ok": True, **_wrap(pg_update.overview, force), "auto": pg_auto.state()}
+    return {"ok": True, **_wrap(pg_update.overview, force), "auto": {**pg_auto.state(), "running": pg_auto.running()}}
 
 
 class AutoIn(BaseModel):
@@ -50,8 +50,9 @@ class AutoIn(BaseModel):
 
 @router.get("/pg-updates/auto")
 def pg_auto_get():
-    """The nightly update of PasarGuard: on or off, the hour (panel clock), the time budget, the releases held back after they did not hold, what the last night did."""
-    return {"ok": True, **pg_auto.state()}
+    """The nightly update of PasarGuard: on or off, the hour (panel clock), the time budget, the releases held back after they did not hold, what the last night did - and `running`: the PasarGuard update a restart
+    of the panel would cut right now (the night run with how many nodes are done and which one is in work, or one started by hand), null when none runs."""
+    return {"ok": True, **pg_auto.state(), "running": pg_auto.running()}
 
 
 @router.post("/pg-updates/auto")
