@@ -585,6 +585,9 @@ RETRY_NO_TARGET = 600     # a dead server whose tunnels found no target is looke
 CUT_WAIT = 90             # an Iran server that is ON but cut from abroad (the pulse: "the panel's host cannot connect to it, but it is on") whose tunnels are half down or more is replaced after this many seconds ...
 CUT_SHARE = 0.5           # ... (the owner, 2026-11-04: "when the routes of the Iran servers are closed the Doctor must replace one quickly - uptime matters to us"; a server that is off waits `server_minutes`)
 CUT_WHY = "the server is cut from abroad (it is on, only Iran sees it) and its tunnels are down"
+OFF_WAIT = 60             # an Iran server that is OFF (the pulse: two misses in a row, and nobody inside Iran sees it) is replaced after this many seconds (the owner, 2026-11-04: "when the Doctor sees a server is off it must replace it at once"); `server_minutes` now only counts when the panel cannot be sure ...
+BLIND_MIN = 4             # ... that is, when this many servers - and BLIND_SHARE of all of them - are off at the same moment: that is the panel's own network, not their fault, and the old waiting time stands
+BLIND_SHARE = 0.6
 
 
 def is_cut(server) -> bool:
@@ -594,19 +597,31 @@ def is_cut(server) -> bool:
     return getattr(server, "online", None) is True and str(getattr(server, "last_error", "") or "").startswith(pulse.IRAN_ONLY)
 
 
+def panel_blind(total: int, off: int) -> bool:
+    """Pure: is the panel itself the one that cannot see? `off` of the `total` servers are off at the same moment - when that is most of them (and at least BLIND_MIN) it is the panel's own network."""
+    return total > 0 and off >= BLIND_MIN and off / total >= BLIND_SHARE
+
+
+def off_wait(configured: int, blind: bool) -> int:
+    """Pure: how long an Iran server that is off waits for its tunnels to be moved: OFF_WAIT at most (a smaller `server_minutes` of the owner still counts), the full `server_minutes` when the panel is blind."""
+    return int(configured) if blind else min(int(configured), OFF_WAIT)
+
+
 # ------------------------------------------------------------------ the job: dead servers (run by the Doctor in mode "move")
 def check() -> None:
-    """Every Iran server that has been off for `server_minutes` gets its tunnels moved - one server per tick, the one with the most tunnels first.
+    """Every Iran server that has been off for OFF_WAIT seconds (`server_minutes` when the panel is blind: most servers off at once) gets its tunnels moved - one server per tick, the one with the most tunnels first.
     Several servers off at once (a provider-wide outage) are handled one after the other, as long as a healthy Iran server is left to carry them."""
     if not enabled() or get_settings().read_only:
         return
 
     now = int(time.time())
     s = _state()
-    wait = int(st.get("repair").get("server_minutes", 10)) * 60
+    configured = int(st.get("repair").get("server_minutes", 10)) * 60
 
     with session() as db:
         down = {x.id: x.name for x in db.scalars(select(Server).where(Server.role == "iran", Server.enabled.is_(True), Server.online.is_(False)))}
+        everyone = [x.online for x in db.scalars(select(Server).where(Server.enabled.is_(True)))]
+        blind = panel_blind(len(everyone), sum(1 for o in everyone if o is False))
         load, bad = {}, {}
 
         for t in db.scalars(select(Tunnel).where(Tunnel.enabled.is_(True))):
@@ -619,6 +634,7 @@ def check() -> None:
                if is_cut(x) and load.get(x.id) and bad.get(x.id, 0) / load[x.id] >= CUT_SHARE}          # (on, cut from abroad AND its tunnels are down: a server only the panel cannot reach, whose tunnels carry, is left alone)
         down.update(cut)
 
+    wait = off_wait(configured, blind)
     stale = [sid for sid in s["seen"] if int(sid) not in down]
 
     for sid in stale:

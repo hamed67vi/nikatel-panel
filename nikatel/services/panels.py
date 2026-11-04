@@ -1322,9 +1322,29 @@ def users_bulk(c: dict, usernames: list, action: str, value=None) -> dict:
 TEST_USER_PREFIX = "nikatel-test-"
 
 
-def test_user(c: dict, panel_name: str, gb: int = 5, days: int = 30) -> dict:
-    """A small test user on the panel (created once, renewed when expired); returns {username, sub}."""
-    uname = (TEST_USER_PREFIX + re.sub(r"[^a-z0-9]+", "-", panel_name.lower()).strip("-"))[:32]
+def test_user_needs(u: dict, now: float | None = None) -> str:
+    """Pure: why the probe's test user must be renewed - "" when it is fine. Not active (limited: its quota ran out; expired; disabled), a data quota at all (the probe's own speed tests spend it: the user of the
+    probe was `limited` from 2026-10-17 and every full test of every config failed for 18 days), or less than two weeks left."""
+    now = now or time.time()
+    status = str(u.get("status") or "")
+
+    if status and status != "active":
+        return f"it is {status}"
+
+    if u.get("data_limit"):
+        return "it has a data quota that the probe's own tests spend"
+
+    exp, soon = u.get("expire"), now + 14 * 86400
+
+    if isinstance(exp, (int, float)) and 0 < exp < soon or isinstance(exp, str) and exp[:10] and exp[:10] < time.strftime("%Y-%m-%d", time.gmtime(soon)):
+        return "it expires within two weeks"
+
+    return ""
+
+
+def test_user(c: dict, panel_name: str, gb: int = 0, days: int = 365, uname: str = "") -> dict:
+    """The test user of the probe on the panel (created once with NO data quota - gb 0 - and a year to live; renewed when it is not fit, `test_user_needs`); returns {username, sub}. `uname`: the user that is already kept."""
+    uname = uname or (TEST_USER_PREFIX + re.sub(r"[^a-z0-9]+", "-", panel_name.lower()).strip("-"))[:32]
     expire = int(time.time()) + days * 86400
     u = None
 
@@ -1351,10 +1371,9 @@ def test_user(c: dict, panel_name: str, gb: int = 5, days: int = 30) -> dict:
         u = call(c, "POST", "/api/user", body=body) or {}
     else:
         exp = u.get("expire")
-        expired = (isinstance(exp, (int, float)) and 0 < exp < time.time()) or (isinstance(exp, str) and exp[:10] < time.strftime("%Y-%m-%d"))
 
-        if u.get("status") != "active" or expired:
-            call(c, "PUT", _upath(uname), body={"status": "active", "expire": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(expire)) if isinstance(exp, str) else expire})
+        if test_user_needs(u):
+            call(c, "PUT", _upath(uname), body={"status": "active", "data_limit": 0, "expire": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(expire)) if isinstance(exp, str) else expire})
             u = call(c, "GET", _upath(uname)) or u
 
     sub = str(u.get("subscription_url") or "")
@@ -1366,6 +1385,39 @@ def test_user(c: dict, panel_name: str, gb: int = 5, days: int = 30) -> dict:
         raise PanelError("the panel gave no subscription link for the test user")
 
     return {"username": uname, "sub": sub}
+
+
+def keep_test_users() -> None:
+    """Job (every half hour, 1.69.215): the test user of the probe on every panel that has one is looked at; when it is not fit (limited, expired, a quota, nearly out of time) it is renewed and one event says so.
+    Without it the probe cannot test a config end to end and the Doctor is blind to what the users get."""
+    from .. import jobs
+
+    if jobs.stopping():
+        return
+
+    with session() as db:
+        found = [(p.id, p.name, str((p.stats or {}).get("test_user"))) for p in db.scalars(select(Panel).where(Panel.enabled.is_(True))) if (p.stats or {}).get("test_user")]
+
+    for pid, name, uname in found:
+        try:
+            with session() as db:
+                p = db.get(Panel, pid)
+                c = _cred(p) if p is not None else None
+
+            if c is None:
+                continue
+
+            why = test_user_needs(call(c, "GET", _upath(uname)) or {})
+
+            if not why:
+                continue
+
+            test_user(c, name, uname=uname)
+
+            with session() as db:
+                emit(db, "warn", "panels", f"Panel {name}: the test user {uname} of the probe was not fit ({why}); it is renewed (no quota, a year). Without it the Doctor cannot see what the users get.", name)
+        except (PanelError, ValueError, OSError) as e:
+            log.warning("the test user of panel %s could not be looked at: %s", name, str(e)[:120])
 
 
 def group_of_panel(base_url: str, name: str, subs: list[tuple[str, str]], groups: set[str]) -> str:

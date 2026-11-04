@@ -97,6 +97,13 @@ def _wake_vantage() -> None:
         return          # not registered (tests)
 
 
+def _wake_doctor() -> None:
+    try:
+        jobs.trigger("doctor")          # (1.69.215: the waiting time of a replacement starts now, not at the next minute)
+    except KeyError:
+        return          # not registered (tests)
+
+
 def refusing(sid: int, seconds: float = 60.0) -> bool:
     """Did this server answer the pulse with a refusal lately? (It is on; its SSH port turns the panel's connections away.)"""
     return time.time() - _refusing.get(sid, 0.0) <= seconds
@@ -220,6 +227,9 @@ def run() -> None:
                     log.info("pulse: %s is cut from the panel's host but is on", s.name)
                     changed = True
                     moved.append(sid)
+
+                    if s.role == "iran":
+                        _wake_doctor()
                 elif not s.last_error or s.last_error.startswith(IRAN_ONLY):
                     s.last_error = note[:300]
 
@@ -244,6 +254,9 @@ def run() -> None:
                 log.warning("pulse: %s does not answer on port %s", s.name, s.ssh_port)
                 changed = True
                 moved.append(sid)
+
+                if s.role == "iran":
+                    _wake_doctor()
 
     for sid in ask:
         _asked[sid] = time.time()

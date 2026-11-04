@@ -40,6 +40,14 @@ SPEED_FRESH = 12 * 3600      # a speed test older than this says nothing about n
 MIN_SPEEDS = 4               # speed tests needed before the usual speed is known
 DNS_FRESH = 600              # the copy of the DNS records is renewed (in the background) when older than this
 CONFIRM = 2                  # the grade of a tunnel changes after this many looks in a row that agree (the job runs every five minutes)
+STALL_FACTOR = 3.0           # (1.69.215) an answer that took this many times the middle of the config's own answers ...
+STALL_EXTRA_MS = 500         # ... and at least this much more is a stall: a jump the user feels
+STALL_SHARE = 0.10           # a config with this share of stalls among its answers is "jumpy"
+MIN_STALL_ANSWERS = 20       # the answers needed before stalls are counted
+PROBE_NOISE = 0.5            # when this share of the configs are jumpy at once the probe's own line is noisy: nobody is called jumpy then
+BUCKET = 120                 # the tests of the probe are grouped in buckets of this many seconds ...
+MASS_MIN = 6                 # ... and a bucket in which this many configs were tested and half of them failed was the probe's fault (its test user out of quota for 18 days, its server overloaded, its line), not theirs: its tests are left out
+MASS_SHARE = 0.5
 _LOCK = threading.Lock()
 _RUNNING = [False]
 
@@ -101,18 +109,50 @@ def map_configs(configs: list[dict], tunnels: list[dict], servers: list[dict], r
     return out
 
 
-def config_stats(samples: list[tuple], now: int, ref: float | None = None) -> dict:
+def mass_failures(rows: list[tuple]) -> set[int]:
+    """Pure: the buckets (ts // BUCKET) in which the probe itself failed. rows: [(ts, config id, up)] of every config over the window. A bucket in which at least MASS_MIN configs were tested and MASS_SHARE of them
+    failed says nothing about any one config: the tests of such a bucket are not counted for or against it (2026-11-04: the probe's test user had been out of quota since 10-17 and every full test failed)."""
+    per: dict[int, dict[int, bool]] = {}
+
+    for ts, cid, up in rows:
+        b = per.setdefault(int(ts) // BUCKET, {})
+        b[cid] = b.get(cid, False) or bool(up)
+
+    return {k for k, b in per.items() if len(b) >= MASS_MIN and sum(1 for ok in b.values() if not ok) / len(b) >= MASS_SHARE}
+
+
+def stall_share(answers: list[float]) -> tuple[float | None, int]:
+    """Pure: (the share of the answers that were stalls, how many) of one config - None when there are fewer than MIN_STALL_ANSWERS answers. A stall is an answer that took STALL_FACTOR times the middle of the answers
+    and STALL_EXTRA_MS more: the user's page that waits seconds for one connection."""
+    if len(answers) < MIN_STALL_ANSWERS:
+        return None, 0
+
+    mid = statistics.median(answers)
+    stalls = sum(1 for a in answers if a >= max(STALL_FACTOR * mid, mid + STALL_EXTRA_MS))
+    return stalls / len(answers), stalls
+
+
+def probe_noisy(shares: list[float | None]) -> bool:
+    """Pure: is the probe's own line noisy - at least three configs have enough answers to judge and PROBE_NOISE of them are jumpy at once? Then nobody is called jumpy: it is the probe, not the configs."""
+    known = [s for s in shares if s is not None]
+    return len(known) >= 3 and sum(1 for s in known if s >= STALL_SHARE) / len(known) >= PROBE_NOISE
+
+
+def config_stats(samples: list[tuple], now: int, ref: float | None = None, skip: frozenset | set = frozenset()) -> dict:
     """Pure: what the tests of one config say. samples: [(ts, up, ping_ms)] of the last two hours (any order); `ref`: its usual ping (None when not known).
-    -> {"n", "up_share" (None under MIN_RECENT tests), "ping" (the middle of the last six answered pings), "ref", "ratio"}."""
-    recent = sorted((s for s in samples if now - int(s[0]) <= RECENT), key=lambda s: s[0])
+    -> {"n", "up_share" (None under MIN_RECENT tests), "ping" (the middle of the last six answered pings), "ref", "ratio", "stall_share" (None under MIN_STALL_ANSWERS answers), "stalls", "answers"}.
+    `skip`: the buckets of the probe's own bad minutes (`mass_failures`): their tests are left out."""
+    recent = sorted((s for s in samples if now - int(s[0]) <= RECENT and int(s[0]) // BUCKET not in skip), key=lambda s: s[0])
     up_share = sum(1 for s in recent if s[1]) / len(recent) if len(recent) >= MIN_RECENT else None
     pings = [float(s[2]) for s in recent if s[1] and s[2] is not None][-6:]
     ping = statistics.median(pings) if len(pings) >= 3 else None
-    return {"n": len(recent), "up_share": up_share, "ping": ping, "ref": ref, "ratio": round(ping / ref, 2) if ping and ref else None}
+    share, stalls = stall_share([float(s[2]) for s in recent if s[1] and s[2] is not None])
+    return {"n": len(recent), "up_share": up_share, "ping": ping, "ref": ref, "ratio": round(ping / ref, 2) if ping and ref else None, "stall_share": share, "stalls": stalls,
+            "answers": sum(1 for s in recent if s[1] and s[2] is not None)}
 
 
 def config_issue(status: str, status_for: int, stats: dict, speed: dict | None = None) -> tuple[str, str]:
-    """Pure: (issue, one sentence) of one config - good · down · unstable · slow_ping · slow_speed · unknown. `speed`: {"down", "ref", "age"} (the last speed test, the usual one, seconds since)."""
+    """Pure: (issue, one sentence) of one config - good · down · unstable · slow_ping · jumpy · slow_speed · unknown. `speed`: {"down", "ref", "age"} (the last speed test, the usual one, seconds since)."""
     if status == "down" and status_for >= DOWN_AFTER:
         return "down", f"does not connect (for {max(1, status_for // 60)} minutes)"
 
@@ -128,6 +168,9 @@ def config_issue(status: str, status_for: int, stats: dict, speed: dict | None =
 
     if ping and ref and ping >= PING_RATIO * ref and ping - ref >= PING_EXTRA_MS:
         return "slow_ping", f"ping {ping:.0f} ms (usually {ref:.0f})"
+
+    if stats.get("stall_share") is not None and stats["stall_share"] >= STALL_SHARE and not stats.get("noisy"):
+        return "jumpy", f"its answers jump: {stats.get('stalls', 0)} of its last {stats.get('answers', 0)} took seconds longer than usual"
 
     if speed and speed.get("down") is not None and speed.get("ref") and speed["ref"] >= 5 and speed.get("age", 1e9) <= SPEED_FRESH and speed["down"] < SPEED_RATIO * speed["ref"]:
         return "slow_speed", f"speed {speed['down']:.0f} Mb/s (usually {speed['ref']:.0f})"
@@ -263,6 +306,8 @@ def read_all(now: int | None = None) -> dict[int, dict]:
     with session() as db:
         cfgs, placed = _placement(db)
         out: dict[int, list] = {}
+        skip = mass_failures([(r[0], r[1], bool(r[2])) for r in db.execute(select(ConfigSample.ts, ConfigSample.config_id, ConfigSample.up).where(ConfigSample.ts >= now - RECENT))])
+        looked = []
 
         for c in cfgs:
             p = placed.get(c.name)
@@ -271,7 +316,12 @@ def read_all(now: int | None = None) -> dict[int, dict]:
                 continue
 
             samples = [(r[0], bool(r[1]), r[2]) for r in db.execute(select(ConfigSample.ts, ConfigSample.up, ConfigSample.ping_ms).where(ConfigSample.config_id == c.id, ConfigSample.ts >= now - RECENT))]
-            stats = config_stats(samples, now, _ref_ping(db, c, now))
+            looked.append((c, p, config_stats(samples, now, _ref_ping(db, c, now), skip)))
+
+        noisy = probe_noisy([s["stall_share"] for _, _, s in looked])
+
+        for c, p, stats in looked:
+            stats["noisy"] = noisy
             issue, text = config_issue(c.status, now - int(c.status_since or now), stats, _speed_of(c, now))
             out.setdefault(p["tunnel"], []).append((c.name, issue, text))
 

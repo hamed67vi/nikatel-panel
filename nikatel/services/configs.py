@@ -611,6 +611,12 @@ def _probe_delete(names: list[str]) -> None:
             emit(db, "bad", "configs", f"{len(failed)} configs could not be deleted on the probe (for example {first}: {failed[first]}); they come back with the next sync.", first)
 
 # ------------------------------------------------------------------ subscriptions
+def is_info_node(name: str) -> bool:
+    """Pure: the first line of a panel's subscription is the usage of the user ("nikatel-test-nikatel-bot 3.95 GB", "... 366 D"), a vmess link to nowhere: it is no config and its name changes with every use.
+    The panel's own test user (`panels.TEST_USER_PREFIX`) is the one it can be sure about."""
+    return str(name or "").lower().startswith("nikatel-test-")
+
+
 def fetch_subscription(url: str) -> list[dict]:
     """Download and decode; returns [{name, uri, proto}] - nothing is added yet."""
     if not re.match(r"^https?://", url or ""):
@@ -641,7 +647,8 @@ def fetch_subscription(url: str) -> list[dict]:
     if not links:
         raise RuntimeError("no vless / vmess / trojan / ss links in this subscription")
 
-    return [{"name": clean_name(link_name(u)) or f"node{i + 1}", "uri": u, "proto": u.split("://", 1)[0]} for i, u in enumerate(links)]
+    nodes = [{"name": clean_name(link_name(u)) or f"node{i + 1}", "uri": u, "proto": u.split("://", 1)[0]} for i, u in enumerate(links)]
+    return [n for n in nodes if not is_info_node(n["name"])]
 
 
 def endpoint_sig(meta: dict | None) -> tuple | None:
@@ -801,6 +808,24 @@ def _link_key(uri: str) -> tuple:
         return (uri,)
 
 
+def sync_all_subscriptions() -> None:
+    """Job (every six hours, 1.69.215): every group that has a saved subscription link follows it again - a config the owner adds to the subscription is under the probe's eyes within hours, one that left is forgotten.
+    Without it the Configs monitoring was a snapshot of the day the link was pasted (10-11): twenty configs of the real subscription were never watched."""
+    from .. import jobs
+
+    with session() as db:
+        names = [s.name for s in db.scalars(select(Subscription)) if s.url]
+
+    for n in names:
+        if jobs.stopping():
+            return
+
+        try:
+            sync_subscription(n)
+        except (ValueError, RuntimeError) as e:
+            log.warning("subscription %s could not be followed: %s", n, str(e)[:120])
+
+
 def sync_subscription(name: str) -> dict:
     """Make the group equal to its subscription: nodes that are new are added, nodes whose link changed get the new link, nodes that left the subscription
     or that the operator unticked are removed. The list then follows the order of the subscription."""
@@ -867,7 +892,8 @@ def sync_subscription(name: str) -> dict:
     imp = import_subscription(name, url)
     failed += imp["failed"]
 
-    with session() as db:
-        emit(db, "info", "configs", f"Group {name} follows its subscription: {len(imp['added'])} added, {len(updated)} updated, {removed} removed.", name)
+    if imp["added"] or updated or removed:          # (1.69.215: the job runs every few hours - a look that changed nothing writes nothing)
+        with session() as db:
+            emit(db, "info", "configs", f"Group {name} follows its subscription: {len(imp['added'])} added, {len(updated)} updated, {removed} removed.", name)
 
     return {"added": imp["added"], "updated": updated, "removed": removed, "failed": failed, "total": len(nodes) - len(excluded & node_names)}
