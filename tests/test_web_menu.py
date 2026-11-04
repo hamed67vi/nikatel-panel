@@ -842,7 +842,7 @@ def test_about_and_update_after_the_picture_four_fixed_boxes_and_the_security_bu
     assert '`<div class="abt-wrap"><div class="abt-grid${LICENSE_UI ? "" : " abt-nolic"}">`' in app and 'id="about-hero"' in app and 'id="about-pill"' in app and 'id="lic-head"' in app and 'id="eng-box"' in app and "${window.pgUpdBody ? pgUpdBody() : \"\"}</div>`" in app and '<div class="abt-foot"' in app and 'id="abt-env"' not in app and '"Works by", "API based"' in app and "Parallel SSH" not in app
     assert 'pgupd: ["🧩 PasarGuard"' not in app and "pgUpdCard" not in app and 'if (state.stab === "update") { aboutLoad(); enginesLoad(); if (LICENSE_UI) licLoad(); if (window.pgUpdLoad) pgUpdLoad(); }' in app and "pgupd: SI.box" not in app
     assert 'window.pgUpdBody = () => `<div class="abt-card abt-pg">' in upd and "window.pgUpdCard" not in upd and 'id="pgu-pill"' in upd and 'id="pgu-box"' in upd
-    assert "grid-template-rows: 156px 316px;" in css and "html body #page .abt-foot {" in css and 'html body #page .sf[data-name="About & update"] > h3 { display: none; }' in css and "html body #page .abt-card .eng-row {" in css
+    assert "grid-template-rows: 156px 316px;" in css and "html body #page .abt-foot {" in css and 'html body #page .sf[data-name="About & update"] > h3 { display: none; }' in css and "html body #page .tcr-list {" in css
     assert 'void m.offsetWidth; m.classList.add("open");' in app and 'const hd = $("#lic-head"); if (hd) hd.innerHTML = head;' in app
     assert 'onclick="pwOutToggle(this)"' in app and 'window.pwOutToggle = b =>' in app and 'name="logout_others"' not in app and 'logout_others: out' in app and "html body #page .pwf-btns {" in css and 'class="pwf-out on" aria-pressed="true"' in app and "html body #page .pwf-btns .pwf-out {" in css and '<small>at least 10 characters</small></div><div class="pwf-f">' in app and "html body #page .si.pw .pwf-f .pwi, html body #page .si.pw .pwf-f .pwi .si-f { width: 100%;" in css and "html body #page .si.pw { grid-template-columns: 38px minmax(0, 1fr); }" in css and "html body #page .abt-foot { flex: none; display: flex; flex-wrap: nowrap; justify-content: space-between;" in css and "html[data-fluid] body #page .si.pw { grid-template-columns: 38px minmax(0, 1fr); }" in _web("fluid.css") and "html body #page .si.pw .si-b { padding-right: 46px; }" in css
 
@@ -959,7 +959,7 @@ def test_the_settings_frame_is_one_taller_height_and_about_has_room_for_its_boxe
     app, css = _web("app.js"), _web("lab.css")
     assert '<div class="abt-wrap">' in app and 'fx-box' not in app.split('const about = sFrame')[1].split('/* security: filled by secLoad */')[0]
     assert "grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: 156px 316px; gap: 12px; }" in css and "html body #page .set-wrap > .card.sf { min-height: 760px !important; }" in css and '<small class="abt-ds">' not in app and "html body #page .abt-ds, html body #page .abt-note { display: none; }" in css and '<small class="mut abt-note">' not in app and 'disabled title="Looking for a newer version…"' in app and 'aboutBtn(!!u.up_to_date, ' in app and "Manage the panels and their nodes" not in _web("pg_update.js")
-    assert "grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr) auto; gap: 6px; padding: 5px 10px; }" in css and '<span>Installed</span>' not in app and "!have.length ? '<span class=\"mut\">not installed</span>'" in app and ".abt-card .eng-row > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }" in css
+    assert "html body #page .tcr-row { display: grid; grid-template-columns: minmax(0, 1fr) auto 132px;" in css and '<span>Installed</span>' not in app and '!have.length ? ["", "not installed", ""]' in app and "html body #page .tcr-v { max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" in css
 
 
 def test_the_add_form_starts_the_plain_websocket_at_80():
@@ -971,7 +971,7 @@ def test_the_add_form_starts_the_plain_websocket_at_80():
 def test_the_cores_and_the_pasarguard_lists_sit_in_one_fixed_box_that_scrolls():
     """The owner, 2026-10-16: the panels and nodes of PasarGuard (and the cores) in ONE box of a fixed size that scrolls inside."""
     app, upd, css = _web("app.js"), _web("pg_update.js"), _web("lab.css")
-    assert '<div class="eng-list"><div class="eng-head" title=' in app and 'onclick="engineCheck()"' not in app and 'Date.now() / 1000 - d.checked_at > 600' in app and 'class="pgu-list"' not in upd and "nodesHtml" not in upd
+    assert '<div class="tcr-list">' in app and 'onclick="engineCheck()"' not in app and 'Date.now() / 1000 - d.checked_at > 600' in app and 'class="pgu-list"' not in upd and "nodesHtml" not in upd
     assert "html body #page :is(.eng-list, .pgu-list) { flex: 1 1 auto; min-height: 0;" in css and "overflow-y: auto;" in css
 
 
@@ -1121,17 +1121,15 @@ def test_adding_a_server_moves_nothing_and_says_what_is_being_done_from_the_firs
     assert 'name="x_cores" type="checkbox"' in app and 'name="x_cores" type="checkbox" checked' not in app and "Put the tunnel cores on it now" in app      # the tick of the Add form is NOT ticked (1.69.23, the owner: "the cores come with the first tunnel, not with the adding of the server")
 
 
-def test_the_cores_box_has_no_install_button_the_update_button_takes_the_place_of_up_to_date_and_a_server_has_tunnel_cores_in_its_menu():
+def test_the_cores_box_has_no_button_one_word_of_state_per_core_and_a_server_has_tunnel_cores_in_its_menu():
     """The owner, 2026-10-16: "why are Paqet, Chisel and Xray not installed? They should install by themselves": a new server gets them at once; one added before gets them from the menu of the server ("Tunnel cores...").
-    2026-10-17 (his picture of the box: "Up to date" and an Install button on every row): "remove Install here too, and when a core has an update show the Update button instead of Up to date"."""
+    2026-10-17: no Install button, an Update button instead of "Up to date"; 2026-11-04 (his picture of the card): "neat, MacBook-like, no extra information - the Doctor always updates by itself, remove the buttons": ONE word per core."""
     app, lab, css = _web("app.js"), _web("lab.js"), _web("lab.css")
     row = app.split("const row = (k, e) => {", 1)[1].split("box.innerHTML", 1)[0]
-    assert "⬇ Install" not in app and "?missing=true" not in app and "engineUpdate('${k}', true)" not in app and "window.engineUpdate = async k =>" in app and "enginesLoad.last" not in app
-    assert 'class="pri sm eng-upd"' in row and "outdated ? upd + held(e) :" in row and "✓ Up to date" in row and '<span class="eng-act">' not in row            # (one cell for the state: "Up to date", or the Update button in its place)
-    assert "<span>Core</span><span>Newest</span><span>Status${d.checking" in app and "grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr) auto; gap: 6px;" in css
-    assert "html body #page .abt-card .eng-row > .eng-st { display: flex; align-items: center; gap: 8px; overflow: visible; justify-content: flex-end; }" in css and "html body #page .abt-card .eng-head > span:last-child { text-align: right; }" in css      # (Status at the right edge, the empty space filled by Newest)
-    assert "html body #page .abt-card .eng-row .eng-st button:not(.eye):not(.mini), html body #page .abt-pg .pgu-a button:not(.eye):not(.mini)" in css and "height: 22px !important; min-height: 22px !important;" in css       # (the Settings rule gives every button 32 px with !important: the small buttons of this card must say !important too)
-    assert "html body #page .abt-card .eng-row, html body #page .abt-pg .pgu-row:not(.pgu-hd) { min-height: 36px; }" in css and "html body #page .abt-pg .pgu-prow { min-height: 38px; padding-top: 5px; padding-bottom: 5px; }" in css      # (7 px of air above and below a button: the owner, 2026-10-17)
+    assert "⬇ Install" not in app and "?missing=true" not in app and "engineUpdate" not in app and "enginesLoad.last" not in app and "<button" not in row
+    assert '["ok", "✓ Up to date", ""]' in row and '"tonight"' in row and '"held back"' in row and '<span class="eng-act">' not in row            # (one word: "Up to date", "tonight", "held back", "updating…")
+    assert "<span>Core</span><span>Newest</span>" not in app and "unreachable" in row                                                                 # (no header row: "1 unreachable" is the tip of the row, not a line of text)
+    assert "html body #page .tcr-s { display: inline-flex; align-items: center; justify-content: flex-end;" in css and "html body #page .abt-pg .pgu-row:not(.pgu-hd) { min-height: 36px; }" in css and "html body #page .abt-pg .pgu-prow { min-height: 38px; padding-top: 5px; padding-bottom: 5px; }" in css      # (the PasarGuard card keeps its own buttons)
     assert 'labIt("Tunnel cores…", "box", () => srvCores(s.id, nm))' in lab and "window.srvCores = async (id, name) =>" in lab and 'steps: ["cores"]' in lab
     install = (WEB.parent.parent / "install.sh").read_text(encoding="utf-8")
     assert "downloads the tunnel cores" in install and "engines" in install

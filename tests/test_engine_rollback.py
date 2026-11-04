@@ -250,19 +250,20 @@ def _hour_of(ts):
     return engines._local(ts).tm_hour
 
 
-def test_nothing_runs_while_the_switch_is_off_or_it_is_not_the_hour(client, monkeypatch, tmp_path):
+def test_nothing_runs_while_it_is_paused_or_it_is_not_the_hour(client, monkeypatch, tmp_path):
     monkeypatch.setattr(engines, "get_settings", lambda: types.SimpleNamespace(data_dir=tmp_path / "data", read_only=False))
     monkeypatch.setattr(engines, "check", lambda: pytest.fail("must not look"))
-    assert engines.auto_due(NIGHT) is False and engines.auto_run(NIGHT) is None                                           # (off by default)
-    cfg.put("engines", {"auto": True, "hour": (_hour_of(NIGHT) + 3) % 24})
-    assert engines.auto_due(NIGHT) is False and engines.auto_run(NIGHT) is None
-    cfg.put("engines", {"hour": _hour_of(NIGHT)})
-    assert engines.auto_due(NIGHT) is True
+    cfg.put("engines", {"hour": (_hour_of(NIGHT) + 3) % 24})
+    assert engines.auto_due(NIGHT) is False and engines.auto_run(NIGHT) is None                                           # (not the hour)
+    cfg.put("engines", {"hour": _hour_of(NIGHT), "paused": True})
+    assert engines.auto_due(NIGHT) is False and engines.auto_run(NIGHT) is None                                           # (paused: the API-only stop)
+    cfg.put("engines", {"paused": False})
+    assert engines.auto_due(NIGHT) is True                                                                                # (ON by itself: the owner, 2026-11-04 - nobody switches it on)
 
 
 def test_the_nightly_run_updates_what_is_behind_leaves_a_release_that_was_put_back_and_runs_once_a_day(client, monkeypatch, tmp_path):
     monkeypatch.setattr(engines, "get_settings", lambda: types.SimpleNamespace(data_dir=tmp_path / "data", read_only=False))
-    cfg.put("engines", {"auto": True, "hour": _hour_of(NIGHT), "bad": {"paqet": "v2.0.0"}})
+    cfg.put("engines", {"hour": _hour_of(NIGHT), "bad": {"paqet": "v2.0.0"}})
     info = {"backhaul": {"title": "Backhaul", "latest": "v1.0.0", "outdated": 2, "held_back": False, "nodes": []}, "paqet": {"title": "Paqet", "latest": "v2.0.0", "outdated": 3, "held_back": True, "nodes": []},
             "chisel": {"title": "Chisel", "latest": "v3.0.0", "outdated": 0, "held_back": False, "nodes": []}, "xray": {"title": "Xray", "latest": "v4.0.0", "outdated": 1, "held_back": False, "nodes": []}}
     monkeypatch.setattr(engines, "check", lambda: {"engines": info})
@@ -277,7 +278,7 @@ def test_the_nightly_run_updates_what_is_behind_leaves_a_release_that_was_put_ba
 
 def test_the_nightly_run_stops_at_the_first_core_that_fails(client, monkeypatch, tmp_path):
     monkeypatch.setattr(engines, "get_settings", lambda: types.SimpleNamespace(data_dir=tmp_path / "data", read_only=False))
-    cfg.put("engines", {"auto": True, "hour": _hour_of(NIGHT)})
+    cfg.put("engines", {"hour": _hour_of(NIGHT)})
     info = {k: {"title": k, "latest": "v1", "outdated": 1, "held_back": False, "nodes": []} for k in ("backhaul", "backpack")}
     monkeypatch.setattr(engines, "check", lambda: {"engines": info})
     engines._STATE["job"] = None
@@ -297,11 +298,11 @@ def test_the_check_marks_a_release_that_was_put_back(client, monkeypatch):
     assert res["backhaul"]["held_back"] is True and res["backhaul"]["outdated"] == 1
 
 
-def test_the_switch_is_an_api_route_and_off_by_default(client):
-    assert client.get("/api/engines").json()["auto"]["auto"] is False
-    r = client.post("/api/engines/auto", json={"enabled": True, "hour": 4})
-    assert r.status_code == 200 and r.json()["auto"]["auto"] is True and r.json()["auto"]["hour"] == 4
-    assert client.post("/api/engines/auto", json={"enabled": False}).json()["auto"]["auto"] is False
+def test_the_update_is_always_on_and_the_api_route_is_only_a_pause(client):
+    assert client.get("/api/engines").json()["auto"]["paused"] is False and "auto" not in client.get("/api/engines").json()["auto"]
+    r = client.post("/api/engines/auto", json={"enabled": False, "hour": 4})
+    assert r.status_code == 200 and r.json()["auto"]["paused"] is True and r.json()["auto"]["hour"] == 4
+    assert client.post("/api/engines/auto", json={"enabled": True}).json()["auto"]["paused"] is False
     assert client.post("/api/engines/auto", json={"enabled": True, "hour": 30}).status_code == 422
 
 
@@ -311,10 +312,15 @@ def test_the_job_is_registered():
 
 
 # ------------------------------------------------------------------ the card
-def test_the_card_has_the_switch_the_held_back_word_and_tells_what_the_update_does():
+def test_the_card_has_no_switch_and_no_button_and_says_tonight_or_held_back():
+    """The owner, 2026-11-04 (his picture of the card): "neat, MacBook-like, very compact, no extra information - always safe-update by yourself, we must never need to press update: remove the buttons"."""
     app = (WEB / "app.js").read_text(encoding="utf-8")
     css = (WEB / "lab.css").read_text(encoding="utf-8")
-    assert 'pgSw(!!au.auto, "engineAuto(this.checked)"' in app and "window.engineAuto = async on =>" in app and 'api("/api/engines/auto", {method: "POST", body: JSON.stringify({enabled: !!on})})' in app
-    assert ": outdated ? upd + held(e) :" in app and ">held back</small>" in app and "${autoRow}" in app
-    assert "the old build is put back on that server and the other servers are not touched" in app and "The quietest servers go first" in app
-    assert "html body #page .eng-auto {" in css
+    assert "engineAuto" not in app and "engineUpdate" not in app and "wgCard" not in app and 'api("/api/engines/auto"' not in app and "eng-upd" not in app
+    assert "window.engineWgInstall = async () =>" in app and 'class="tcr-b" onclick="engineWgInstall()"' in app and "<b class=\"tcr-n\">WireGuard tools</b>" in app          # (the one button that stays: a package goes onto a server only when the owner says so; the owner, 2026-11-04, asked why it was removed)
+    row = app.split("async function enginesLoad() {", 1)[1].split("async function engineFollow", 1)[0]
+    assert '"held back"' in row and "put back there" in row and '"tonight"' in row and "updated by itself at ${hh}:00 (Tehran time)" in row and '["ok", "✓ Up to date", ""]' in row and "<button" not in row.split("const row = (k, e) => {", 1)[1].split("box.innerHTML", 1)[0]          # (no button in the line of a core: the one button of the card is the WireGuard row's)
+    assert "<small>Updates itself every night</small>" in app
+    for sel in (".tcr-list {", ".tcr-row {", ".tcr-s.ok {"):
+        assert "html body #page " + sel in css, sel
+    assert "html body #page .eng-auto {" in css          # (the PasarGuard card still uses it)

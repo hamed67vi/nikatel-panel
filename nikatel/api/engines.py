@@ -26,9 +26,9 @@ class AutoIn(BaseModel):
 
 @router.post("/engines/auto")
 def auto(body: AutoIn):
-    """The switch of the Doctor that keeps the tunnel cores up to date by itself (once a night at `hour`, panel clock = Tehran by default): one server at a time, the quietest first, the old build put back when a
-    new one does not hold. Off until it is switched on."""
-    changes = {"auto": body.enabled}
+    """The Doctor keeps the tunnel cores up to date by itself, ALWAYS (once a night at `hour`, panel clock = Tehran by default): one server at a time, the quietest first, the old build put back when a new one does
+    not hold. This route is only the stop for a bad release: `enabled: false` pauses the nightly update, `true` lets it run again; the page has no switch (the owner, 2026-11-04)."""
+    changes = {"paused": not body.enabled}
 
     if body.hour is not None:
         changes["hour"] = body.hour

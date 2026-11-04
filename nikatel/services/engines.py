@@ -540,9 +540,10 @@ def update(engine: str, only_missing: bool = False) -> dict:
 
 # ------------------------------------------------------------------ the Doctor keeps the cores up to date (the owner, 2026-10-31: "the Tunnel Doctor must always keep these up to date - and when it sees a problem after an update, it
 # must have the old version backed up and go back to it")
+# (the owner, 2026-11-04: "always safe-update by yourself, we must never need to press update - so remove the buttons": the nightly run is ALWAYS on; the only thing left is `paused`, an API-only stop for a bad release - POST /api/engines/auto)
 def auto_state() -> dict:
     s = cfg.get("engines")
-    return {"auto": bool(s.get("auto")), "hour": int(s.get("hour") or 0), "bad": s.get("bad") or {}, "last": s.get("last") or {}}
+    return {"paused": bool(s.get("paused")), "hour": int(s.get("hour") or 0), "bad": s.get("bad") or {}, "last": s.get("last") or {}}
 
 
 def _local(now: float | None = None) -> time.struct_time:
@@ -552,10 +553,10 @@ def _local(now: float | None = None) -> time.struct_time:
 
 
 def auto_due(now: float | None = None) -> bool:
-    """Pure-ish: is it time? The switch is on, it is the hour, and today's run has not been made."""
+    """Pure-ish: is it time? It is not paused, it is the hour, and today's run has not been made."""
     s = cfg.get("engines")
 
-    if not s.get("auto"):
+    if s.get("paused"):
         return False
 
     t = _local(now)
@@ -563,7 +564,7 @@ def auto_due(now: float | None = None) -> bool:
 
 
 def auto_run(now: float | None = None) -> dict | None:
-    """Once a day at the chosen hour, when the switch is on: look at every server, and for each core that is behind (and whose newest release has not already been put back) run the same update as the button -
+    """Once a day at the chosen hour, unless it is paused: look at every server, and for each core that is behind (and whose newest release has not already been put back) run the same update as the button -
     one server at a time, the quietest first, the old build put back when a new one does not hold. It stops at the first core that fails. Returns what it did (None when it was not the time)."""
     if get_settings().read_only or not auto_due(now):
         return None

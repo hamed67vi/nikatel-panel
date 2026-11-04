@@ -601,12 +601,6 @@ html body #page .abt-copy:hover { color: #fff; background: rgba(255, 255, 255, .
 html body #page .abt-note { display: block; margin-top: 8px; font-size: 12.5px; }
 html body #page .abt-card .lic-form { margin-top: 10px; }
 /* the cores */
-html body #page .abt-card .eng-bar { display: flex; align-items: center; gap: 10px; margin: 0 0 6px; font-size: 12px; } html body #page .abt-card .eng-bar button { margin-left: auto; height: 28px; }
-html body #page .abt-card .eng-head, html body #page .abt-card .eng-row { grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr) auto; gap: 6px; padding: 5px 10px; }      /* 1.64.2 - Status sits at the right edge, Newest takes the slack so the row is not empty on the right (the owner: "move the Status column to the right, fill the empty space") */
-html body #page .abt-card .eng-head > span, html body #page .abt-card .eng-row > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-html body #page .abt-card .eng-head > span:last-child { text-align: right; }      /* the Status header over the right-aligned status */
-html body #page .abt-card .eng-head { font-size: 10.5px; letter-spacing: .6px; text-transform: uppercase; color: var(--mut); }
-html body #page .abt-card .eng-row { margin-bottom: 5px; border-radius: 11px; background: #131b2e; font-size: 12.5px; }
 /* PasarGuard */
 html body #page .abt-pg #pgu-box { display: grid; gap: 10px; }
 html body #page .abt-pg .ss-hero { display: flex; align-items: center; gap: 12px; box-sizing: border-box; width: auto; max-width: none; margin: 0 !important; padding: 10px 12px !important; border-radius: 13px !important; border: 1px solid var(--uk-line) !important; background: #0f1626 !important; }
@@ -679,8 +673,6 @@ html body #page .toolbar.joined button.cta:disabled { opacity: .4; filter: satur
 @media (min-width: 761px), (pointer: fine) { html body #page .set-wrap > .card.sf { min-height: 760px !important; } }
 /* 1.57.50 (2) - About & update: the left boxes are a little wider (the cores table has room for its five columns), the text under the name of this panel runs the whole width of its box, the count of a core (1/1) stays in its tooltip */
 html body #page .abt-ds { display: block; flex: none; margin-top: 8px; font-size: 12.5px; line-height: 1.45; color: var(--mut); }
-html body #page .abt-card .eng-head { font-size: 10px; letter-spacing: .3px; } html body #page .abt-card .eng-row { font-size: 12px; } html body #page .abt-card .eng-ver, html body #page .abt-card .eng-latest { font-size: 11.5px; }
-html body #page .abt-card .eng-ver .mut { font-family: inherit; font-size: 10.5px; }
 /* 1.57.51 - About & update like the owner's picture of 1.57.34: the frame is as wide as it was with eight tabs (880 px: the four boxes are two equal columns again, the top row 232 px), nothing behind the boxes limits them */
 /* 1.57.51 (2) - About & update: no extra descriptions, the cards inside the boxes smaller and closer (the owner, 2026-10-16) */
 html body #page .abt-ds, html body #page .abt-note { display: none; }
@@ -691,8 +683,6 @@ html body #page .abt-cb { margin-top: 8px; }
 html body #page .abt-row { height: 44px; border-radius: 11px; font-size: 13.5px; } html body #page .abt-row .abt-ti.sm { width: 30px; height: 30px; border-radius: 9px; } html body #page .abt-row .abt-ti.sm svg { width: 17px; height: 17px; }
 html body #page .abt-card .lic-feats { gap: 6px; margin: 0 0 8px; } html body #page .abt-card .lic-feats .pill { height: 24px; padding: 0 10px; font-size: 12px; }
 html body #page .abt-iid { padding: 5px 6px 5px 12px; border-radius: 10px; } html body #page .abt-iid code { padding: 3px 8px; font-size: 12.5px; } html body #page .abt-copy { width: 26px; height: 26px; }
-html body #page .abt-card .eng-bar { margin: 0 0 4px; } html body #page .abt-card .eng-bar button { height: 26px; }
-html body #page .abt-card .eng-head, html body #page .abt-card .eng-row { padding: 3px 10px; } html body #page .abt-card .eng-row { min-height: 30px; margin-bottom: 3px; border-radius: 9px; }
 html body #page .abt-pg #pgu-box { display: grid; gap: 6px; align-content: start; }
 html body #page .pgu-top { display: flex; align-items: center; gap: 10px; box-sizing: border-box; min-height: 42px; padding: 5px 8px; border-radius: 11px; border: 1px solid var(--uk-line); background: #131b2e; }
 html body #page .pgu-ti { display: grid; place-items: center; flex: none; width: 28px; height: 28px; border-radius: 8px; background: #1a2036; color: #3ddc97; font-style: normal; } html body #page .pgu-top.warn .pgu-ti { color: #ffb84d; } html body #page .pgu-top.mut .pgu-ti { color: #8f9bbd; } html body #page .pgu-ti svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
@@ -761,7 +751,6 @@ html body #page .abt-pg #pgu-box { display: flex; flex: 1 1 auto; flex-direction
 html body #page :is(.eng-list, .pgu-list) { flex: 1 1 auto; min-height: 0; box-sizing: border-box; padding: 6px; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; border: 1px solid var(--uk-line); border-radius: 12px; background: #0b1220; }
 html body #page .pgu-list { display: grid; align-content: start; gap: 6px; }
 html[data-mode="light"] body #page :is(.eng-list, .pgu-list) { background: #f3f6fc; border-color: rgba(30, 50, 100, .14); }
-html body #page .eng-head .spin { display: inline-block; width: 12px; height: 12px; margin: 0 4px; vertical-align: -2px; }
 /* 1.57.51 (5) - the buttons of the PasarGuard lists have ONE size: Update and Xray of a node are the same 58 x 24 box, Update… of a panel is 66 x 24 (the owner, 2026-10-16: "fix the size of the xray / update buttons") */
 html body #page .abt-pg .pgu-a { display: inline-flex; align-items: center; justify-content: flex-end; gap: 5px; }
 html body #page .abt-pg .pgu-a .sm, html body #page .abt-pg .pgu-a button { flex: none; box-sizing: border-box; width: 58px; height: 24px; padding: 0; border-radius: 8px; font-size: 11.5px; line-height: 1; }
@@ -1100,13 +1089,11 @@ html[data-mode="light"] body #page .ap-tasks .ap-row.kn-row .kn-r.none { border-
 
 /* 1.64.0 - the small buttons of About & update (the owner, 2026-10-17, his picture of the nodes of PasarGuard: "make the buttons smaller, and keep a space above and below them"). The Settings rule of app.css
    (html body #page .sf button, with !important) made EVERY button of the card 32 px tall - as tall as its row - so the 24 px of the rules above never applied. These are 22 px in rows of 36 px: 7 px of air above and below. */
-html body #page .abt-card .eng-row, html body #page .abt-pg .pgu-row:not(.pgu-hd) { min-height: 36px; }
+html body #page .abt-pg .pgu-row:not(.pgu-hd) { min-height: 36px; }
 html body #page .abt-pg .pgu-prow { min-height: 38px; padding-top: 5px; padding-bottom: 5px; }
-html body #page .abt-card .eng-row .eng-st button:not(.eye):not(.mini), html body #page .abt-pg .pgu-a button:not(.eye):not(.mini), html body #page .abt-pg .pgu-prow > button:not(.eye):not(.mini), html body #page .abt-pg .pgu-cap button:not(.eye):not(.mini) { flex: none; box-sizing: border-box; height: 22px !important; min-height: 22px !important; padding: 0 10px !important; border-radius: 7px !important; font-size: 11px !important; line-height: 1 !important; }
+html body #page .abt-pg .pgu-a button:not(.eye):not(.mini), html body #page .abt-pg .pgu-prow > button:not(.eye):not(.mini), html body #page .abt-pg .pgu-cap button:not(.eye):not(.mini) { flex: none; box-sizing: border-box; height: 22px !important; min-height: 22px !important; padding: 0 10px !important; border-radius: 7px !important; font-size: 11px !important; line-height: 1 !important; }
 html body #page .abt-pg .pgu-a button:not(.eye):not(.mini) { width: 52px; padding: 0 !important; }
 html body #page .abt-pg .pgu-prow > button:not(.eye):not(.mini) { width: 60px; padding: 0 !important; }
-html body #page .abt-card .eng-row > .eng-st { display: flex; align-items: center; gap: 8px; overflow: visible; justify-content: flex-end; }
-html body #page .abt-card .eng-row > .eng-st small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* 1.64.0 - a question with several answers (glassChoice): the second line of a choice (the address of a server, the note of a program) was cut - "body #ask .ask-box .ask-act button" gave every button 36 px and beat the "height: auto" of the list (the owner, 2026-10-17, his picture of the Spoof test: "fix the text of these too") */
 body #ask .ask-box .ask-act.ask-choices { justify-content: stretch; }
@@ -1401,3 +1388,14 @@ html[data-mode="light"] body #page .rv-m, html[data-mode="light"] body #page .rv
 html body #page .abt-pg .pgu-i { display: inline-grid; place-items: center; box-sizing: border-box; width: 16px; height: 16px; margin-left: 6px; vertical-align: -2px; border-radius: 50%; border: 1px solid var(--uk-line); background: #1a2036; color: #8f9bbd; font-size: 10.5px; font-weight: 650; font-style: normal; line-height: 1; cursor: pointer; user-select: none; }
 html body #page .abt-pg .pgu-i:hover, html body #page .abt-pg .pgu-i:focus-visible { color: var(--uk-text); border-color: #4a5a8a; outline: none; }
 html[data-mode="light"] body #page .abt-pg .pgu-i { background: #f3f6fc; border-color: rgba(30, 50, 100, .2); color: #5b6888; }
+/* the cores card after the owner's words (2026-11-04): neat and MacBook-like - one grouped list, a line per core (name, newest release, one word of state), no buttons: the Doctor updates by itself at night */
+html body #page .tcr-list { display: flex; flex-direction: column; overflow: hidden; border-radius: 12px; border: 1px solid rgba(128, 140, 170, .2); background: rgba(128, 140, 170, .07); }
+html body #page .tcr-row { display: grid; grid-template-columns: minmax(0, 1fr) auto 132px; align-items: center; gap: 14px; min-height: 38px; padding: 0 14px; }
+html body #page .tcr-row + .cr-row { border-top: 1px solid rgba(128, 140, 170, .18); }
+html body #page .tcr-n { font-size: 13.5px; font-weight: 600; color: var(--text); }
+html body #page .tcr-v { max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; color: var(--mut); }
+html body #page .tcr-s { display: inline-flex; align-items: center; justify-content: flex-end; gap: 6px; font-size: 12.5px; font-weight: 600; white-space: nowrap; color: var(--mut); }
+html body #page .tcr-s.ok { color: #2fbf7a; } html body #page .tcr-s.warn { color: #e8a53a; } html body #page .tcr-s.bad { color: #f0596d; } html body #page .tcr-s.run { color: #4da3ff; }
+html body #page .tcr-s .spin { display: inline-block; width: 12px; height: 12px; }
+html body #page .tcr-s button.tcr-b { flex: none; box-sizing: border-box; height: 24px !important; min-height: 24px !important; padding: 0 12px !important; border: 0 !important; border-radius: 999px !important; background: #2f7bf5 !important; box-shadow: none !important; color: #fff !important; font-size: 12px !important; font-weight: 600; line-height: 1; cursor: pointer; }      /* (the Settings rule gives every button 32 px with !important: the small button of this row says !important too) */
+html body #page .tcr-empty { padding: 12px 14px; font-size: 12.5px; color: var(--mut); }

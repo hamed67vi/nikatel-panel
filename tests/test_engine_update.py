@@ -162,9 +162,10 @@ def test_a_server_that_cannot_be_reached_does_not_stop_the_others(client, monkey
     assert by["r1"]["state"] == "failed" and "Connection timed out" in by["r1"]["detail"] and by["r2"]["state"] == "ok" and not job.get("halt")
 
 
-def test_the_screen_tells_the_truth_about_a_failed_update():
+def test_the_screen_has_no_update_button_and_a_release_that_did_not_hold_says_held_back():
+    """The owner, 2026-11-04: "always safe-update by yourself, we must never need to press update: remove the buttons" - the toast of the button (it once said "✓ 0 updated" when all 29 servers had failed) went with it;
+    what is left on the screen is the word of the row, and the nightly run writes its result as an event."""
     app = (Path(__file__).resolve().parent.parent / "nikatel" / "web" / "app.js").read_text(encoding="utf-8")
-    btn = app[app.index("window.engineUpdate = async k =>"): app.index("/* A tunnel the Doctor REPLACES")]
-    assert "ok === n ? `✓ ${ok} updated` : `${ok} of ${n} updated - ${n - ok} failed" in btn and 'r.halt ? "✕ Stopped: " + r.halt' in btn      # (it said "✓ 0 updated" when all 29 servers had failed)
-    assert "One server at a time" in btn and "the other servers are not touched" in btn                                                       # (the question before it says how it works)
-    assert "d.job.halt" in app and "first failure:" in app                                                                                    # (the line of the last update says where it stopped and the first reason)
+    assert "engineUpdate" not in app and "first failure:" not in app
+    row = app.split("async function enginesLoad() {", 1)[1].split("async function engineFollow", 1)[0]
+    assert '"held back"' in row and "e.held_back" in row
