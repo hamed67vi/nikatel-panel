@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.69.214 - Removing a server forgets its SSH key, and a reinstalled server at the same address is told as that
+
+Owner (2026-11-04, Persian): a server was removed, its system was reinstalled, and it was added again at the same address. The password was right, yet the dialog asked for the password again and again.
+
+- **Cause.** The panel pins the SSH key of every server in its own known_hosts file, and removing a server left the line there. A new server at the same address (a reinstall) then failed ssh's key check *before* the password was tried; the connect step answered only "SSH connection failed: Host key verification failed", which the dialogs did not recognise, so they asked for the password again with the same text.
+- **Removal forgets the key.** Deleting a server now drops its line from the panel's known_hosts (the plain name and the `[name]:port` form) the way *Forget host key…* does. A failure there never keeps the server on the list. Nothing on the server is touched.
+- **The connect step says what happened.** A changed host key is answered with the sentence the row already uses ("the host key of this server changed (reinstalled?) - press Trust the new server in its window, or menu Access → Forget host key"), not as a wrong password; the row's *Trust the new server* button keys on the same words.
+- **The dialogs offer the way out.** *Connect SSH…* (row menu), the password box of *Add server* and its second chance now ask "The SSH identity of the server changed - trust the new one and go on?"; on yes the old key is forgotten and the same password goes in once more, with no second prompt; on no the reason is shown and nothing changes. When the box asks again after a wrong password it now says why.
+- Tests `tests/test_hostkey_forget.py` (9; the browser side runs the helper with node): removal drops only its own line (also on another SSH port), a failing cleanup never keeps the server, the forget route still answers 504 on a hang, a changed key is told as such and a wrong password still as a wrong password, trust yes / no / another error. Proved with fakes; not yet seen on a real reinstalled server.
+
 ## 1.69.213 - The panel uses a third less CPU: a settings document is parsed once a second, not hundreds of times a turn; a reconnect no longer waits inside the database session; the analysis holds light rows
 
 Owner (2026-11-04, Persian): "look at the monitor panel from zero to a hundred; if there is a dead config, an extra file, a leftover test or anything that makes the tunnels or the panel heavy or disturbs them, fix it; do the parallelizing completely and fix all the bugs".

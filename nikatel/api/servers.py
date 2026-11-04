@@ -317,8 +317,13 @@ def delete_server(server_id: int, tunnels: bool = False):
 
         emit(db, "warn", "servers", f"Server {s.name} removed from the panel (nothing was changed on the server)" + (f", with its tunnel{'s' if len(gone) > 1 else ''} {', '.join(gone)}." if gone else "."), s.name)
         profiles.drop_server(db, server_id)          # (its profile on the Lab page goes with it)
-        gone_name = s.name
+        gone_name, gone_host, gone_port = s.name, s.host, s.ssh_port
         db.delete(s)
+
+    try:          # [hostkey-forget] its pinned SSH key goes with it (a failure here never keeps the server on the list)
+        drop_known_host(gone_host, gone_port)
+    except (subprocess.TimeoutExpired, OSError):
+        log.warning("the SSH host key of %s was not dropped with the server", gone_name)
 
     muted = list(st.get("alerts").get("muted") or [])
 
@@ -367,6 +372,19 @@ def onboard_server(server_id: int, body: OnboardIn):
     return {"ok": True, "started": onboard.start(server_id, tuple(body.steps)), "steps": [s for s in onboard.ALL_STEPS if s in body.steps]}
 
 
+def drop_known_host(host: str, port: int | None) -> None:
+    """[hostkey-forget] Take the pinned SSH key of a server out of the panel's own known_hosts file (nothing on the server is touched): the next connection learns the key it has then.
+    A server that is removed takes its key with it, so a new server at the same address (a reinstalled one) is not refused for the old one's key (the owner, 2026-11-04).
+    Raises subprocess.TimeoutExpired when ssh-keygen hangs."""
+    kh = get_settings().known_hosts
+
+    if not kh.exists():
+        return
+
+    for target in {host, f"[{host}]:{port or 22}"}:
+        subprocess.run(["ssh-keygen", "-R", target, "-f", str(kh)], capture_output=True, check=False, timeout=15)
+
+
 @router.post("/servers/{server_id}/forget-hostkey")
 def forget_hostkey(server_id: int):
     """After a server is reinstalled its SSH identity changes; this drops the pinned key so the next
@@ -379,14 +397,10 @@ def forget_hostkey(server_id: int):
 
         host, name, port = s.host, s.name, s.ssh_port
 
-    kh = get_settings().known_hosts
-
-    if kh.exists():
-        for target in {host, f"[{host}]:{port}"}:
-            try:
-                subprocess.run(["ssh-keygen", "-R", target, "-f", str(kh)], capture_output=True, check=False, timeout=15)
-            except subprocess.TimeoutExpired:
-                raise HTTPException(status_code=504, detail="ssh-keygen did not answer in 15 s") from None
+    try:
+        drop_known_host(host, port)
+    except subprocess.TimeoutExpired:
+        raise HTTPException(status_code=504, detail="ssh-keygen did not answer in 15 s") from None
 
     with session() as db:
         emit(db, "info", "servers", f"Forgot the SSH host key of {name}; it is learnt again on the next check.", name)

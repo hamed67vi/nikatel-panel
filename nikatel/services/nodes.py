@@ -171,7 +171,9 @@ def _connect(server_id: int, password: str) -> dict:
     low = r.stdout.lower()
 
     if r.returncode != 0 or "KEY_INSTALLED" not in r.stdout:
-        if "permission denied" in low:
+        if "host key verification failed" in low or "identification has changed" in low:          # [hostkey-forget] ssh stopped BEFORE the password was tried: the server at this address was reinstalled; that is not a wrong password
+            msg = "the host key of this server changed (reinstalled?) - press Trust the new server in its window, or menu Access → Forget host key"
+        elif "permission denied" in low:
             msg = "wrong user or password"
         elif "refused" in low:
             msg = f"SSH port {node.port} is closed"

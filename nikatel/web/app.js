@@ -1317,7 +1317,7 @@ window.srvConnect = async (id, name) => {      // [connect-retry] a wrong passwo
     const pw = await gprompt(why ? `${String(why).slice(0, 100)} - the SSH password of ${name} again? (${3 - i} ${3 - i === 1 ? "try" : "tries"} left)` : `SSH password of ${name} (used once to install the panel's key, not stored):`, "", {password: true, generate: false});
     if (pw == null || pw === "") return;
     toast("Connecting…");
-    try { const r = await api(`/api/servers/${id}/connect`, {method: "POST", body: JSON.stringify({password: pw})}); toast("✓ Key installed on " + r.hostname, "ok"); refresh(); return; }
+    try { const r = await connectTry(id, name, pw); toast("✓ Key installed on " + r.hostname, "ok"); refresh(); return; }
     catch (e) { why = e.message; if (!/password|user|denied/i.test(why)) { toast("✕ " + why, "bad"); refresh(); return; } }
   }
   toast("✕ " + String(why).slice(0, 100) + " - three tries; the server keeps its old password", "bad"); refresh();
@@ -1466,14 +1466,23 @@ window.openBuild = async () => {      // the window opens ON the page that is th
 };
 window.newTunnel = () => { if (state.page !== "tunnels" || sub("tunnels") !== "list") { go("tunnels", "list"); state.build = true; refresh(); } else openBuild(); };      // (go names the tab: a first draw of another tab must never land over the Tunnel manager - the CDN was the first tab from 2026-10-14 to 2026-10-17, now it is the last)
 /* the SSH password was wrong (or the server did not answer): ask for it again, three tries, instead of leaving a server that silently has no login */
+const connectTry = async (id, name, pw) => {      // [hostkey-forget] a server reinstalled at the same address: when the owner trusts its new SSH identity, the old one is forgotten and the same password goes in once more (no second prompt)
+  const go = () => api(`/api/servers/${id}/connect`, {method: "POST", body: JSON.stringify({password: pw})});
+  try { return await go(); }
+  catch (err) {
+    if (!/host key/i.test(err.message) || !await gconfirm(`The SSH identity of ${name} changed - the server was probably reinstalled. Trust the new one and go on? (Only for a server that is yours.)`)) throw err;
+    await api(`/api/servers/${id}/forget-hostkey`, {method: "POST"});
+    return await go();
+  }
+};
 async function connectWithPrompt(id, name, firstError) {
   const noAnswer = m => /no route|timed out|timeout|refused|unreachable|could not resolve|name or service|network is/i.test(m), short = m => String(m).replace(/ ?· id [0-9a-f]+/i, "").replace(/^.*?(No route to host|Connection timed out|Connection refused|Network is unreachable|Operation timed out)/i, "$1").slice(0, 100);
   let why = firstError;
   for (let i = 0; i < 3; i++) {
     if (noAnswer(why)) { await glassChoice(`${name} does not answer on SSH (${short(why)}). Check its address and port; then use 🔑 on its row.`, [{label: "OK", v: 1, cls: "pri"}]); refresh(); return false; }      // (the server cannot be reached: a password would not help - the owner, 2026-10-15)
-    const pw = await gprompt(`SSH password of ${name}? (Cancel: later, with 🔑 on its row)`, "", {password: true, generate: false});
+    const pw = await gprompt(i ? `${short(why)} - the SSH password of ${name} again? (${3 - i} ${3 - i === 1 ? "try" : "tries"} left)` : `SSH password of ${name}? (Cancel: later, with 🔑 on its row)`, "", {password: true, generate: false});      // (the reason is told when it asks again)
     if (pw == null || pw === "") break;
-    try { const r = await api(`/api/servers/${id}/connect`, {method: "POST", body: JSON.stringify({password: pw})}); toast("✓ Connected: " + r.hostname, "ok"); refresh(); return true; }
+    try { const r = await connectTry(id, name, pw); toast("✓ Connected: " + r.hostname, "ok"); refresh(); return true; }
     catch (err) { why = err.message; if (!/password|user|denied/i.test(why) && !noAnswer(why)) break; }
   }
   toast(`✕ ${name} is added but has no login yet: ${short(why)}. Use 🔑 on its row.`, "bad"); refresh();
@@ -1505,7 +1514,7 @@ window.saveServer = async (e, id) => {
     if (id && !pw) toast("✓ Saved", "ok");
     else if (pw) {   // a password: the panel logs in once with it and installs its own key (the password is not kept)
       toast(`Logging in to ${body.name}…`);
-      try { const r = await api(`/api/servers/${saved.id}/connect`, {method: "POST", body: JSON.stringify({password: pw})}); toast((id ? "✓ Saved and connected: " : "✓ Added and connected: ") + r.hostname + (id ? "" : " - the steps are on its row"), "ok"); await prep([...first, ...rest]); }
+      try { const r = await connectTry(saved.id, body.name, pw); toast((id ? "✓ Saved and connected: " : "✓ Added and connected: ") + r.hostname + (id ? "" : " - the steps are on its row"), "ok"); await prep([...first, ...rest]); }
       catch (err) { connected = await connectWithPrompt(saved.id, body.name, err.message); if (connected) await prep([...first, ...rest]); }
     } else {          // no password: the panel's key must already be on the server - try it (the check IS the first reading)
       try { const r = await api(`/api/servers/${saved.id}/check`, {method: "POST"}); if (r.online === true) { toast("✓ Server added", "ok"); await prep(["gre", ...rest]); } else { connected = false; toast("Added, but the panel's key does not log in yet: " + String(r.last_error || "the server does not answer").slice(0, 160), "bad"); } } catch (err) { connected = false; toast("Added, but the panel's key does not log in yet: " + err.message, "bad"); }
