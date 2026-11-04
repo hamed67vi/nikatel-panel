@@ -1447,6 +1447,13 @@ cp "$U.bak-ports" "$U"; systemctl daemon-reload; systemctl restart '@UNIT@'; ech
 if [ $ok = 1 ]; then echo "LISTENING"; else echo "NOTLISTEN"; fi
 """, {"CHECK": r"^\d{1,5}( \d{1,5}){0,200}$"}),
 
+    # every port the server forwards really CARRIES a connection (1.69.208): a connection to it stays open waiting for the client's first bytes (what a proxy does); one that is closed at once found nothing at its end
+    "ports_carry": (r"""for P in @CHECK@; do
+  timeout 6 bash -c 'exec 3<>/dev/tcp/127.0.0.1/$1 || exit 99; read -t 2 -u 3 x; [ $? -eq 1 ] && exit 1; exit 0' _ "$P"
+  case $? in 0) echo "CARRIES $P";; 99) echo "NOCONNECT $P";; *) echo "CLOSED $P";; esac
+done
+""", {"CHECK": r"^\d{1,5}( \d{1,5}){0,200}$"}),
+
     # swap a core binary that put_file left next to it (checksum verified there), restart its tunnel units
     "engine_swap": (r"""set -e; NEW='@BIN@.nikatel.new'; [ -f "$NEW" ] || { echo NO_FILE; exit 2; }
 S=$(sha256sum "$NEW" | awk '{print $1}'); [ "$S" = '@SHA@' ] || { rm -f "$NEW"; echo BAD_SHA; exit 3; }

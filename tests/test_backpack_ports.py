@@ -16,8 +16,8 @@ def _tunnel(client, kind, ttype, direction="reverse"):
     from nikatel.models import Tunnel
 
     with session() as db:
-        db.add(Tunnel(name="de3-ir1", type=ttype, transport="pck", iran_server_id=1, foreign_server_id=2, port=9905, forwarded_ports=[443],
-                      record={"kind": kind, "direction": direction, "test_port": 41234, "port_mapping": "443"}))
+        db.add(Tunnel(name="de3-ir1", type=ttype, transport="pck", iran_server_id=1, foreign_server_id=2, port=9905, forwarded_ports=[443], iran_tunnel_ip="10.10.7.1", foreign_tunnel_ip="10.10.7.2",
+                      record={"kind": kind, "direction": direction, "test_port": 41234, "port_mapping": "443", "inner_net": 7}))
 
 
 def _spy(monkeypatch, answers):
@@ -41,6 +41,12 @@ def test_the_list_is_rewritten_on_the_iran_server_with_the_test_door_kept(client
     assert host == "1.1.1.1" and name == action and params["CFG"] == "de3-ir1" and params["CHECK"] == "443 8443 10000 10001"
     body = base64.b64decode(params["B64"]).decode()
     assert "41234" in body and "2096" in body
+
+    if kind == "backpack_direct":
+        assert '"8443=10.10.7.2:2096",' in body and "=127.0.0.1:" not in body            # (1.69.208: the Iran server DIALS - 127.0.0.1 would be itself)
+    elif kind == "backpack":
+        assert '"8443=127.0.0.1:2096",' in body                                           # (reverse: the foreign server dials back, 127.0.0.1 is the service next to it)
+
     assert client.get("/api/tunnels").json()[0]["forwarded_ports"] == [443, 8443, 10000, 10001]
     _spy(monkeypatch, {action: "NOTLISTEN\n"})
     assert client.put("/api/tunnels/1/ports", json={"ports": "9"}).status_code == 502
@@ -59,6 +65,20 @@ def test_chisel_remotes_are_changed_on_the_side_that_dials(client, monkeypatch, 
     calls2 = _spy(monkeypatch, {"set_ports_chisel": "EDITED\n", "ports_wait": "NOTLISTEN\n", "unit_restore": "RESTORED\n"})
     assert client.put("/api/tunnels/1/ports", json={"ports": "9"}).status_code == 502
     assert [c[1] for c in calls2] == ["set_ports_chisel", "ports_wait", "unit_restore"]          # (the old unit is put back when a port does not listen)
+
+
+def test_a_direct_tunnel_without_a_known_tunnel_network_is_not_rewritten_with_the_wrong_host(client, monkeypatch):
+    _tunnel(client, "backpack_direct", "backpack")
+    from nikatel.db import session
+    from nikatel.models import Tunnel
+
+    with session() as db:
+        t = db.get(Tunnel, 1)
+        t.foreign_tunnel_ip = ""
+        t.record = {**t.record, "inner_net": 0}
+
+    calls = _spy(monkeypatch, {"set_ports_bp": "PORTS_OK\n"})
+    assert client.put("/api/tunnels/1/ports", json={"ports": "8443=2096"}).status_code == 400 and calls == []
 
 
 def test_other_kinds_are_refused_and_the_actions_are_guarded(client):

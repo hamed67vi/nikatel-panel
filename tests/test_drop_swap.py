@@ -259,22 +259,24 @@ def test_a_drop_of_the_whole_iran_server_is_handed_to_the_move_for_quality_witho
     assert calls == [(tid, "quality", 14.0, 100.0)] and not tested                                                       # no type of this server cures it: no types are tested, the move is looked at
 
 
-def test_the_look_at_a_lasting_drop_comes_once_more_when_it_has_lasted_long_enough_for_a_move():
-    assert bandwidth.QUALITY_LOOK_AFTER == failover.QUALITY_DROP_AGE
-    bw = {"state": "drop", "drop": {"since": NOW}}
-    assert bandwidth.relook_due(bw, 0, NOW + 3600) is False                                                              # an hour: an evening dip, the first look was enough
-    assert bandwidth.relook_due(bw, 0, NOW + 91 * 60) is True                                                            # ninety minutes: a move may be the cure
-    assert bandwidth.relook_due(bw, NOW + 92 * 60, NOW + 100 * 60) is False                                              # (looked at just then)
-    assert bandwidth.relook_due(bw, NOW + 92 * 60, NOW + 92 * 60 + bandwidth.RELOOK_AFTER) is True                      # ... and every three hours after that
+def test_the_look_at_a_drop_of_the_iran_server_itself_comes_every_twenty_minutes_and_the_ninety_minute_rule_is_gone():      # (1.69.208, the owner, 2026-11-04)
+    assert not hasattr(failover, "QUALITY_DROP_AGE") and not hasattr(bandwidth, "QUALITY_LOOK_AFTER")
+    bw = {"state": "drop", "drop": {"since": NOW}, "why": {"code": "iran_wide"}}
+    assert bandwidth.relook_due(bw, 0, NOW + 10 * 60) is False                                                           # (the first look has just been)
+    assert bandwidth.relook_due(bw, 0, NOW + 21 * 60) is True                                                            # no type cures it: every look is a chance to move the tunnel
+    assert bandwidth.relook_due(bw, NOW + 22 * 60, NOW + 30 * 60) is False                                               # (looked at just then)
+    assert bandwidth.relook_due(bw, NOW + 22 * 60, NOW + 43 * 60) is True
+    other = {"state": "drop", "drop": {"since": NOW}, "why": {"code": "this_only"}}
+    assert bandwidth.relook_due(other, 0, NOW + 91 * 60) is False and bandwidth.relook_due(other, 0, NOW + 3 * 3600 + 60) is True      # any other cause keeps the three hours
 
 
-def test_a_short_drop_is_not_moved(monkeypatch):
+def test_a_short_drop_is_handed_to_the_move_too_there_is_no_waiting(monkeypatch):      # (1.69.208, the owner, 2026-11-04: "remove the 90-minute rule - a config must not stay down")
     tid = _world(monkeypatch)
-    _dropped_for(tid, 10 * 60)                                                                                  # an evening dip: it passes by itself
+    _dropped_for(tid, 10 * 60)
     calls = _quality_calls(monkeypatch)
     _said, tested, _calls = _spy(monkeypatch, [_row("tcp", 22.0)])
     bandwidth.investigate(7, tid)
-    assert tested and calls == []
+    assert tested and calls == [(tid, "quality", 14.0, 100.0)]
 
 
 def test_a_cure_by_type_needs_no_move(monkeypatch):

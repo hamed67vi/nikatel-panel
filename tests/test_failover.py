@@ -291,16 +291,16 @@ def test_a_tunnel_that_shares_a_dns_record_with_another_is_not_moved_alone(monke
     assert any("it would pull t3 along" in s for s in said)
 
 
-def test_one_move_for_quality_an_hour_and_the_rails_of_every_move_hold(monkeypatch):
+def test_one_move_for_quality_every_ten_minutes_and_the_rails_of_every_move_hold(monkeypatch):
     import time
 
     from nikatel.services import doctor
 
     ids, said, started, tested = _quality_world(monkeypatch)
     s = doctor._state()
-    s["moves"].append({"id": "q1", "at": int(time.time()) - 600, "reason": "quality", "tunnels": ["other"], "ok": True})
+    s["moves"].append({"id": "q1", "at": int(time.time()) - 300, "reason": "quality", "tunnels": ["other"], "ok": True})
     doctor._save(s)
-    assert failover.quality_move(1, ids["t2"], "quality", 30.0, 120.0, said.append) is False and not tested and any("one an hour" in x for x in said)
+    assert failover.quality_move(1, ids["t2"], "quality", 30.0, 120.0, said.append) is False and not tested and any("one every 10 minutes" in x for x in said)
     s = doctor._state()
     s["moves"] = [{"id": "q2", "at": int(time.time()) - 600, "reason": "manual", "tunnels": ["t2"], "ok": True}]                         # this tunnel moved ten minutes ago
     doctor._save(s)

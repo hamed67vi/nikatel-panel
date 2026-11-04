@@ -135,6 +135,13 @@ def _entries(ports: list[PortMap], test_port: int) -> list[str]:
     return [p.entry() for p in ports] + [f"127.0.0.1:{test_port}={test_port}"]
 
 
+def _direct_entries(ports: list[PortMap], test_port: int, peer: str) -> list[str]:
+    """The `ports` lines of the Iran toml of a BackPack DIRECT tunnel. In this mode the Iran server DIALS: a target host of 127.0.0.1 is the Iran server itself, so a port that goes to ANOTHER port of the foreign
+    server must name the foreign end of the tunnel network (`peer`, 10.10.<net>.2). Written as `11426=127.0.0.1:8680` (the reverse form) the tunnel came up, passed every check and refused every connection (1.69.208:
+    the Emirates and US configs, 2026-11-04). A port that keeps its number needs no host: it goes to the same port of the peer."""
+    return [f"{p.listen}={peer}:{p.target}" if p.target else str(p.listen) for p in ports] + [f"127.0.0.1:{test_port}={test_port}"]
+
+
 def backpack_texts(iran_host: str, port: int, token: str, transport: str, ports: list[PortMap], test_port: int, preset: str = "turbo", opts: dict | None = None) -> tuple[str, str]:
     """(Iran server toml, foreign client toml) of a reverse BackPack tunnel."""
     o = opts or {}
@@ -189,7 +196,7 @@ def direct_texts(foreign_host: str, port: int, token: str, carrier: str, net: in
     """(Iran toml - dials, foreign toml - listens) of a BackPack Direct (L3) tunnel on 10.10.<net>.0/30. The IP spoofing carrier also needs the real address of the Iran server on the listener (`spoof_peer_ip`: its
     packets do not tell where they came from), the same packet profile on both ends and - when a source is forged - the forged address on the Iran side and the address the listener should expect (`spoof_peer_src_ip`)."""
     o = opts or {}
-    port_lines = "\n".join(f'    "{p}",' for p in _entries(ports, test_port))
+    port_lines = "\n".join(f'    "{p}",' for p in _direct_entries(ports, test_port, f"10.10.{net}.2"))
     extra = ""
     iran_extra = foreign_extra = ""
 
@@ -993,6 +1000,7 @@ def set_ports(tunnel_id: int, ports_text: str) -> dict:
 
         iran, foreign, name, test_port = _node(t.iran), _node(t.foreign), sname(t), int(rec.get("test_port") or 0)
         udp, forward = bool((rec.get("opts") or {}).get("accept_udp")), rec.get("direction") == "forward"
+        peer = str(t.foreign_tunnel_ip or (f"10.10.{int(rec['inner_net'])}.2" if rec.get("inner_net") else ""))
 
     b64 = lambda text: base64.b64encode(text.encode()).decode()
     check = " ".join(str(p.listen) for p in ports)
@@ -1009,7 +1017,11 @@ def set_ports(tunnel_id: int, ports_text: str) -> dict:
         if not done and "EDITED" in out:
             run_action(client, "unit_restore", {"UNIT": unit}, timeout=60)
     else:
-        body = "\n".join(f'    "{e}",' for e in _entries(ports, test_port))
+        if kind == "backpack_direct" and not peer:
+            raise ValueError("the tunnel network of this tunnel is not known: its ports cannot be rewritten")
+
+        entries = _direct_entries(ports, test_port, peer) if kind == "backpack_direct" else _entries(ports, test_port)
+        body = "\n".join(f'    "{e}",' for e in entries)
         out = run_action(iran, "set_ports_bp", {"CFG": name, "B64": b64(body), "CHECK": check}, timeout=60)
         done = "PORTS_OK" in out
 

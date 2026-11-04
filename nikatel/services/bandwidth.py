@@ -811,15 +811,10 @@ def drop_slots(kinds: list[str], cannot, extra: list[str], limit: int) -> tuple[
 
 
 def _move_for_quality(aid: int, tunnel_id: int, snap: dict, f: dict, say) -> None:
-    """(1.69.186) The tunnel has stayed dropped for `failover.QUALITY_DROP_AGE` and no type of its own server does better: another Iran server may carry it - `failover.quality_move` moves it by itself when one is PROVED much
-    faster (only in the Doctor's mode "move"; the owner, 2026-11-02). A short drop - an evening dip - is left alone: it passes by itself."""
+    """(1.69.186, 1.69.208) No type of its own server does better: another Iran server may carry the tunnel - `failover.quality_move` moves it by itself when one is PROVED much faster (only in the Doctor's mode "move";
+    the owner, 2026-11-02). It was looked at only after the drop had lasted 90 minutes ("an evening dip passes by itself"); the owner, 2026-11-04: "remove the 90-minute rule - when the server itself is the problem and nothing
+    else cures it, change the server quickly; a config must not stay down". The proof and the rails stay: a much faster server on a clean line, three moves a day for a tunnel, two hours between."""
     from . import failover
-
-    bw = (snap.get("record") or {}).get("bw") or {}
-    since = int(((bw.get("drop") or bw.get("slow") or {}).get("since")) or 0)
-
-    if not since or int(time.time()) - since < failover.QUALITY_DROP_AGE:
-        return
 
     failover.quality_move(aid, tunnel_id, "quality", float(f.get("now") or 0), f.get("rtt"), say)
 
@@ -1294,7 +1289,7 @@ def _retype_later(tunnel_id: int) -> None:
         log.info("the change of type of tunnel %s not started: %s", tunnel_id, str(e)[:100])
 
 RELOOK_AFTER = 3 * 3600          # a drop that lasts is looked at again this long after its last look
-QUALITY_LOOK_AFTER = 90 * 60     # ... and once when it has lasted this long (= failover.QUALITY_DROP_AGE: from then on a move to another Iran server may be the cure)
+QUALITY_RELOOK = 20 * 60         # ... and every 20 minutes while the cause is the Iran server itself (`iran_wide`): no type cures that, so every look is another chance to move the tunnel (1.69.208; it was one more look after 90 minutes)
 _RELOOKED: dict[int, int] = {}   # tunnel id -> when the Doctor last looked at its drop (kept in memory: after a restart of the panel a drop older than RELOOK_AFTER is looked at once more)
 
 
@@ -1308,10 +1303,9 @@ def relook_due(bw: dict | None, last: int, now: int) -> bool:
     if bw.get("state") != "drop" or since <= 0:
         return False
 
-    if now - since >= QUALITY_LOOK_AFTER and int(last or 0) < since + QUALITY_LOOK_AFTER:
-        return True                           # (1.69.186: the look at the beginning of a drop cannot move a tunnel - an evening dip passes by itself; one more look when the drop has lasted long enough for a move)
+    gap = QUALITY_RELOOK if (bw.get("why") or {}).get("code") == "iran_wide" else RELOOK_AFTER
 
-    return now - max(since, int(last or 0)) >= RELOOK_AFTER
+    return now - max(since, int(last or 0)) >= gap
 
 
 def _relook_later(tunnel_id: int, bw: dict) -> None:

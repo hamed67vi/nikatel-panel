@@ -211,7 +211,10 @@ def test_a_move_from_a_server_that_is_on_builds_first_then_the_dns_waits_the_ttl
     monkeypatch.setattr(failover, "_sleep", lambda secs: events.append(("sleep", secs)))
     p = failover._make_plan(ids["ir1"], {ids["t2"]}, "manual", target_id=ids["ir2"])
     p["id"] = "m-1"
+    asked = []
+    monkeypatch.setattr("nikatel.ssh.run_action", lambda node, name, params=None, timeout=90: asked.append((node.host, name, dict(params or {}))) or "CARRIES 8075\n")
     assert failover._work(7, p) is True
+    assert asked == [("203.0.113.9", "ports_carry", {"CHECK": "8075"})]                                 # (the new half is asked on the new Iran server before any DNS record follows it)
     assert events == [("build", "t2-mv", ids["ir2"]), ("sleep", 420), ("delete", "t2", True)]           # new first, the DNS (TTL 120 + 300 s), then the old
     assert FakeProv.calls == [("update", "arvan", "example.test", "r-b", ["203.0.113.9"], 120, True)]
 
@@ -224,6 +227,68 @@ def test_a_move_from_a_server_that_is_on_builds_first_then_the_dns_waits_the_ttl
     log = st.get("failover")["dns_log"][-1]
     assert log["account"] == "arvan" and log["fqdn"] == "b.example.test" and log["before"] == {"id": "r-b", "was": "old"}
     assert any("old tunnels stay for 7 more minutes" in x for x in said)
+
+
+def test_a_new_tunnel_whose_port_carries_nothing_is_not_given_the_dns_and_the_old_one_stays(monkeypatch):      # (1.69.208: the Emirates and US configs, 2026-11-04 - a BackPack Direct tunnel that was up and refused every connection)
+    from nikatel.config import get_settings
+    from nikatel.services import builder
+
+    monkeypatch.setattr(get_settings(), "read_only", False)
+    ids = _servers_and_tunnels()
+    _dns_world(monkeypatch)
+    said, events = [], []
+    monkeypatch.setattr(autopilot, "_say", lambda aid, line, done=None, ok=None: said.append(line))
+
+    def build(snap, iran_id, foreign_id, kind, opts=None):
+        events.append(("build", snap["name"]))
+
+        with session() as db:
+            db.add(Tunnel(name=snap["name"], type="backhaul", transport="tcpmux", iran_server_id=iran_id, foreign_server_id=foreign_id, state="up", forwarded_ports=[8075]))
+
+        return 0
+
+    def delete(tid, keep_record=False, trash=False, skip_offline=False):
+        with session() as db:
+            t = db.get(Tunnel, tid)
+            events.append(("delete", t.name, trash))
+            db.delete(t)
+
+        return []
+
+    monkeypatch.setattr(autopilot, "_build_kind", build)
+    monkeypatch.setattr(autopilot, "_wait", _finished(True))
+    monkeypatch.setattr(builder, "delete_tunnel", delete)
+    monkeypatch.setattr(failover, "_sleep", lambda secs: events.append(("sleep", secs)))
+    monkeypatch.setattr("nikatel.ssh.run_action", lambda node, name, params=None, timeout=90: "CLOSED 8075\n")
+    p = failover._make_plan(ids["ir1"], {ids["t2"]}, "manual", target_id=ids["ir2"])
+    p["id"] = "m-3"
+    assert failover._work(7, p) is False
+    assert events == [("build", "t2-mv"), ("delete", "t2-mv", False)] and FakeProv.calls == []           # (built, asked, taken away again: no DNS, no sleep, the old tunnel untouched)
+    assert any("carries nothing" in x for x in said) and any("the DNS is NOT changed" in x for x in said)
+
+    with session() as db:
+        assert db.get(Tunnel, ids["t2"]).iran_server_id == ids["ir1"] and db.scalar(select(Tunnel).where(Tunnel.name == "t2-mv")) is None
+
+
+def test_a_port_that_cannot_be_asked_does_not_stop_a_move(monkeypatch):
+    from nikatel.ssh import SSHError
+
+    ids = _servers_and_tunnels()
+    said = []
+    monkeypatch.setattr(autopilot, "_say", lambda aid, line, done=None, ok=None: said.append(line))
+
+    with session() as db:
+        db.add(Tunnel(name="t2-mv", type="backhaul", transport="tcpmux", iran_server_id=ids["ir2"], foreign_server_id=ids["fi1"], state="up", forwarded_ports=[8075]))
+
+    def refuse(*a, **k):
+        raise SSHError("no answer")
+
+    monkeypatch.setattr("nikatel.ssh.run_action", refuse)
+    assert failover._not_carrying(7, [(ids["t2"], "t2-mv", {"name": "t2"})]) == [] and any("could not be tried" in x for x in said)
+    monkeypatch.setattr("nikatel.ssh.run_action", lambda node, name, params=None, timeout=90: "CARRIES 8075\n")
+    assert failover._not_carrying(7, [(ids["t2"], "t2-mv", {"name": "t2"})]) == []
+    monkeypatch.setattr("nikatel.ssh.run_action", lambda node, name, params=None, timeout=90: "CARRIES 80\nNOCONNECT 8075\n")
+    assert failover._not_carrying(7, [(ids["t2"], "t2-mv", {"name": "t2"})]) == ["t2: 8075"]
 
 
 def test_when_the_new_tunnel_does_not_come_up_the_old_one_stays_and_the_dns_is_not_touched(monkeypatch):

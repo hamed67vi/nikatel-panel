@@ -29,6 +29,24 @@ def test_direct_texts_and_fw():
     assert "ExecStartPre=/usr/local/sbin/nikatel-bpfw-fi-ir1 up" in unit and "ExecStopPost=" in unit
 
 
+def test_a_direct_port_that_changes_its_number_goes_to_the_peer_not_to_the_iran_server():
+    """1.69.208 (2026-11-04): the Iran server of a Direct tunnel DIALS, so `11426=127.0.0.1:8680` was the Iran server itself - the tunnel was up, passed every check and refused every connection (the Emirates and US configs)."""
+    ports = parse_ports("8072, 1826=1820, 11426=8680")
+    i, f = bo.direct_texts("203.0.113.5", 9850, "tok", "pck", 15, ports, 39605)
+    assert '"8072",' in i and '"1826=10.10.15.2:1820",' in i and '"11426=10.10.15.2:8680",' in i and '"127.0.0.1:39605=39605",' in i
+    assert "=127.0.0.1:" not in i and "ports" not in f                                                    # (that was the Iran server itself; the foreign toml holds no port list)
+    assert bo._direct_entries(ports, 39605, "10.10.15.2") == ["8072", "1826=10.10.15.2:1820", "11426=10.10.15.2:8680", "127.0.0.1:39605=39605"]
+    assert bo._entries(ports, 39605)[1] == "1826=127.0.0.1:1820"                                         # the reverse form (the foreign server dials back) is unchanged
+
+
+def test_the_ports_carry_action_is_guarded_and_asks_every_port():
+    script = render_action("ports_carry", {"CHECK": "11426 1826"})
+    assert "for P in 11426 1826; do" in script and "/dev/tcp/127.0.0.1/" in script and "CARRIES" in script and "CLOSED" in script
+    for bad in ("11426; rm -rf /", "", "a b", "1 " * 300):
+        with pytest.raises(ValueError):
+            render_action("ports_carry", {"CHECK": bad})
+
+
 def test_the_ip_spoofing_carrier_keeps_its_profile_on_both_ends_and_forges_only_when_asked():
     """The owner, 2026-10-17 ("why did you not add the spoof of this project?"): BackPack's IP spoofing is a carrier of the direct tunnel - raw packets with a source address of your choice. The first build forges nothing."""
     ports = parse_ports("8072")

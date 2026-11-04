@@ -53,8 +53,8 @@ REASONS = {"down": "the server does not answer",
 QUALITY_MIN_SCORE = 70     # (1.69.186, the owner, 2026-11-02: "I gave the Doctor permission to change the IP too - anything it likes, only speed, stability and quality must be high") the Iran server a tunnel is moved to for quality ranks at least this
 QUALITY_DELAY = 1.1        # ... answers the foreign server in at most this many times the tunnel's own delay ...
 QUALITY_LOSS = 1.0         # ... and loses at most this % of the packets
-QUALITY_DROP_AGE = 90 * 60  # a dropped tunnel is moved only after it has been dropped this long (an evening dip passes by itself)
-QUALITY_GAP = 3600         # one such move an hour for the whole panel: a bad evening must not move many tunnels one after another
+# (1.69.208, the owner, 2026-11-04: "remove the 90-minute rule - when the server itself is the problem and nothing else cures it, change the server quickly; a config must not stay down": a dropped tunnel is looked at for a move at once)
+QUALITY_GAP = 600          # one such move every ten minutes for the whole panel (it was an hour: the tunnels of an Iran server whose own line is bad waited in a queue, one an hour)
 
 
 def conf() -> dict:
@@ -733,6 +733,38 @@ def _say_left(aid: int, p: dict) -> None:
         autopilot._say(aid, f"DNS {d['fqdn']}: still points at {p['ip']} ({why}) - left alone; if a config uses it, point it by hand (Tunnels → CDN).")
 
 
+def _not_carrying(aid: int, built: list) -> list[str]:
+    """(1.69.208) The new halves of a move are asked, before any DNS record follows them, whether every port they forward really carries a connection (`ports_carry` on the Iran server: a connection that is closed at once found
+    nothing at its far end). A tunnel that is up, answers its ping and passes its own checks can still refuse every connection - the Emirates and US configs, 2026-11-04, moved onto a BackPack Direct tunnel whose port lines
+    dialled the Iran server itself. Returns "<tunnel>: <port>" for each port that does not; an answer that cannot be had (the server did not answer) is not a no."""
+    from ..ssh import Node, SSHError, run_action
+
+    bad: list[str] = []
+
+    for _old, temp, snap in built:
+        try:
+            with session() as db:
+                row = db.scalar(select(Tunnel).where(Tunnel.name == temp))
+
+                if row is None or row.iran is None or not row.forwarded_ports:
+                    continue
+
+                node, ports = Node(row.iran.host, row.iran.ssh_user, row.iran.ssh_port), [int(x) for x in row.forwarded_ports]
+
+            out = run_action(node, "ports_carry", {"CHECK": " ".join(str(x) for x in ports)}, timeout=60)
+        except (SSHError, ValueError, RuntimeError, OSError) as e:
+            autopilot._say(aid, f"{snap['name']}: the ports of the new tunnel could not be tried ({str(e)[:100]}); the move goes on.")
+            continue
+
+        shut = [ln.split()[1] for ln in out.splitlines() if ln.startswith(("CLOSED ", "NOCONNECT "))]
+
+        if shut:
+            autopilot._say(aid, f"{snap['name']}: the new tunnel is up but port {', '.join(shut)} carries nothing (a connection to it is closed at once): it is NOT used, the DNS is not changed and the old tunnel stays.")
+            bad += [f"{snap['name']}: {x}" for x in shut]
+
+    return bad
+
+
 def _work(aid: int, p: dict, finish: bool = True) -> bool:
     """Inside story `aid`: move the tunnels, then - only when all moved - the DNS. When the source server is on, the new tunnels are
     built and checked FIRST, the DNS changed, the old tunnels kept for the TTL + 5 minutes, and only then removed (nobody is cut).
@@ -779,6 +811,9 @@ def _work(aid: int, p: dict, finish: bool = True) -> bool:
                     moved_names.append(snap["name"])
         except (ValueError, RuntimeError) as e:
             autopilot._say(aid, f"{t['name']}: not moved: {str(e)[:160]}")
+
+    if built and moved == len(p["tunnels"]) and _not_carrying(aid, built):
+        moved = 0                                      # (the branch below takes the new halves away again and leaves the DNS alone)
 
     done_dns, errors, logged = [], [], []
 
@@ -899,7 +934,7 @@ def quality_move(aid: int, tunnel_id: int, reason: str, now_mbps: float, rtt: fl
     last = max((int(m.get("at") or 0) for m in moves if m.get("reason") == "quality"), default=0)
 
     if not block and last and now - last < QUALITY_GAP:
-        block = f"another tunnel was moved for quality {(now - last) // 60} minutes ago (one an hour)"
+        block = f"another tunnel was moved for quality {(now - last) // 60} minutes ago (one every {QUALITY_GAP // 60} minutes)"
 
     if block:
         say(f"No move for quality now: {block}.")
