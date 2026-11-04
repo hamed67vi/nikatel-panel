@@ -3,6 +3,7 @@ the probe; subscriptions whose nodes become a group of configs."""
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
 import re
 import threading
@@ -24,6 +25,10 @@ from .events import emit
 log = get_logger("configs")
 KEEP_SAMPLES_SECONDS = 7 * 86400
 _SCHEMES = ("vless://", "vmess://", "trojan://", "ss://")
+FOLLOW_EVERY = 300          # the groups are made equal to their subscriptions this often (1.69.221; was every six hours: a config added to the panel waited hours before the probe tested it)
+FOLLOW_FULL = 6 * 3600      # a look that finds the subscription and the list as they were is not repeated in full sooner than this (a link edited by hand on the probe is put right at that time)
+FOLLOW_SOON = 20            # seconds after a host of a PasarGuard panel is made, changed or deleted in the panel: the groups follow at once
+DROP_AT_ONCE = 3            # a subscription that suddenly lacks more than max(this, half of the group) is a half-empty answer, not that many hosts gone: nothing is removed
 
 
 # ------------------------------------------------------------------ pure helpers
@@ -256,6 +261,7 @@ def sync_fast() -> None:
 
 
 REACH_TTL = 300     # seconds a reachability answer is kept
+SIBLINGS_PASS = 3   # a direct config whose full test fails while its port opens is called "up on the port alone" only when fewer than this many OTHER direct configs pass the full test in the same read (then the probe's path is the blind one, 1.69.221)
 
 
 def _direct_tcp(meta: dict | None) -> bool:
@@ -367,6 +373,7 @@ def _sync(settle: bool = True, fast: bool = False) -> list[str]:
     with session() as db:
         by_name = {c.name: c for c in db.scalars(select(Config))}
         seen = set()
+        direct_pass = sum(1 for r in rows if r["status"] == "up" and r["name"] in by_name and _direct_tcp(by_name[r["name"]].meta))          # the direct configs whose FULL test passes in this read
 
         for r in rows:
             c = by_name.get(r["name"])
@@ -389,7 +396,9 @@ def _sync(settle: bool = True, fast: bool = False) -> list[str]:
                 if r["status"] == "down":
                     down_tcp.append(c.name)
 
-                    if reach.get("ok") and fresh:
+                    if reach.get("ok") and fresh and direct_pass >= SIBLINGS_PASS:          # the probe's path works for the other direct configs: this one's own fault (a foreign server whose DNS or internet is dead looked like this on 2026-11-04) is not hidden behind its open port
+                        r = {**r, "error": f"the port opens from Iran, but the full test through it fails while {direct_pass} other direct configs pass it: the server behind this port does not carry traffic (its DNS or its internet)"}
+                    elif reach.get("ok") and fresh:
                         r = {**r, "status": "up", "ping_ms": reach.get("ms"), "error": "the port opens from Iran (the delay is the connect time); the probe's full proxy test does not pass from a data centre"}
                         overridden = True
                     elif reach.get("ok") is False and fresh:
@@ -808,8 +817,41 @@ def _link_key(uri: str) -> tuple:
         return (uri,)
 
 
+_SUB_SIG: dict[str, tuple[str, float]] = {}      # group -> (what its last complete look saw, when)
+_FOLLOW_AT = [0.0]                                # when the groups are to follow at once (0 = nobody asked)
+_TOLD_GONE: dict[str, float] = {}
+
+
+def follow_soon(delay: int = FOLLOW_SOON) -> None:
+    """A host of a PasarGuard panel was made, changed or deleted: the groups follow their subscriptions `delay` seconds from now (the job `subscriptions-soon` does it). Calls in a row are one run."""
+    if not _FOLLOW_AT[0]:
+        _FOLLOW_AT[0] = time.time() + delay
+
+
+def follow_due() -> None:
+    """Job (every 10 s): runs the follow that `follow_soon` asked for, once its moment has come."""
+    at = _FOLLOW_AT[0]
+
+    if not at or time.time() < at:
+        return
+
+    _FOLLOW_AT[0] = 0.0
+    sync_all_subscriptions()
+
+
+def _sub_sig(name: str, nodes: list[dict], excluded: set[str]) -> str:
+    """What a look at a group saw: the nodes of its subscription with their links, the unticked ones, every config the probe holds and the group's own list. Equal twice = nothing to do."""
+    with session() as db:
+        held = sorted(db.scalars(select(Config.name)))
+        sub = db.scalar(select(Subscription).where(Subscription.name == name))
+        known = sorted(sub.nodes or []) if sub is not None else []
+
+    return hashlib.sha1(json.dumps([sorted((n["name"], n["uri"]) for n in nodes), sorted(excluded), held, known]).encode()).hexdigest()
+
+
 def sync_all_subscriptions() -> None:
-    """Job (every six hours, 1.69.215): every group that has a saved subscription link follows it again - a config the owner adds to the subscription is under the probe's eyes within hours, one that left is forgotten.
+    """Job (every FOLLOW_EVERY seconds, 1.69.221; every six hours before): every group that has a saved subscription link follows it again - a config the owner adds to the subscription is under the probe's eyes within minutes
+    (at once after a host is changed in the panel, `follow_soon`), one that left is forgotten. A look that finds nothing changed costs one download and writes nothing.
     Without it the Configs monitoring was a snapshot of the day the link was pasted (10-11): twenty configs of the real subscription were never watched."""
     from .. import jobs
 
@@ -826,9 +868,10 @@ def sync_all_subscriptions() -> None:
             log.warning("subscription %s could not be followed: %s", n, str(e)[:120])
 
 
-def sync_subscription(name: str) -> dict:
+def sync_subscription(name: str, force: bool = False) -> dict:
     """Make the group equal to its subscription: nodes that are new are added, nodes whose link changed get the new link, nodes that left the subscription
-    or that the operator unticked are removed. The list then follows the order of the subscription."""
+    or that the operator unticked are removed. The list then follows the order of the subscription.
+    `force` (the operator's own button) does the whole look even when the last one saw exactly the same; the job does not repeat a look that found nothing to change (FOLLOW_FULL)."""
     with session() as db:
         sub = db.scalar(select(Subscription).where(Subscription.name == name))
 
@@ -840,6 +883,11 @@ def sync_subscription(name: str) -> dict:
     wait_for_deletes()
     nodes = fetch_subscription(url)
     node_names = {n["name"] for n in nodes}
+    total = len(nodes) - len(excluded & node_names)
+    seen = _SUB_SIG.get(name)
+
+    if not force and seen is not None and seen[0] == _sub_sig(name, nodes, excluded) and time.time() - seen[1] < FOLLOW_FULL:
+        return {"added": [], "updated": [], "removed": 0, "failed": [], "total": total, "same": True}
 
     with session() as db:
         mine = {c.name: c for c in db.scalars(select(Config).where(Config.group == name))}
@@ -854,6 +902,21 @@ def sync_subscription(name: str) -> dict:
 
     # 1. gone: imported earlier, no longer in the subscription - or unticked
     gone = [cn for cn in known if cn in have and not any(config_of(n) == cn for n in node_names - excluded)]
+
+    missing = [cn for cn in gone if not any(config_of(n) == cn for n in node_names)]          # (not the unticked ones: those are the operator's own choice)
+    held_back: list[str] = []
+
+    if len(missing) > max(DROP_AT_ONCE, len(known) // 2) and not force:          # the job runs every few minutes now: a panel that answers half-empty for a moment must not empty the list
+        held_back = list(missing)
+
+        if time.time() - _TOLD_GONE.get(name, 0) > 24 * 3600:
+            _TOLD_GONE[name] = time.time()
+
+            with session() as db:
+                emit(db, "warn", "configs", f"Group {name}: its subscription lacks {len(missing)} of its {len(known)} nodes now. They are not removed (a half-empty answer is likelier than that many hosts gone); press Sync on the group if that is what you meant.", name)
+
+        gone = [cn for cn in gone if cn not in missing]
+
     removed = remove_fast(gone)["deleted"] if gone else 0
     # 2. changed links
     changes = []
@@ -892,8 +955,18 @@ def sync_subscription(name: str) -> dict:
     imp = import_subscription(name, url)
     failed += imp["failed"]
 
+    if held_back:          # (import_subscription writes the order of the nodes it saw: those held back keep their place in the group's list, so a later, real removal is still seen)
+        with session() as db:
+            sub = db.scalar(select(Subscription).where(Subscription.name == name))
+            sub.nodes = list(dict.fromkeys([*(sub.nodes or []), *held_back]))
+
     if imp["added"] or updated or removed:          # (1.69.215: the job runs every few hours - a look that changed nothing writes nothing)
         with session() as db:
             emit(db, "info", "configs", f"Group {name} follows its subscription: {len(imp['added'])} added, {len(updated)} updated, {removed} removed.", name)
 
-    return {"added": imp["added"], "updated": updated, "removed": removed, "failed": failed, "total": len(nodes) - len(excluded & node_names)}
+    if not failed:          # a complete look: the next one that sees the same stops after the download
+        _SUB_SIG[name] = (_sub_sig(name, nodes, excluded), time.time())
+    else:
+        _SUB_SIG.pop(name, None)
+
+    return {"added": imp["added"], "updated": updated, "removed": removed, "failed": failed, "total": total}

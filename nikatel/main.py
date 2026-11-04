@@ -46,6 +46,7 @@ from .services import (
     lanes,
     livebw,
     netwatch,
+    nodedns,
     nodes,
     orphans,
     outbound,
@@ -244,7 +245,9 @@ def _register_jobs() -> None:
     jobs.register("engines-auto", 600, engines.auto_run)         # the Doctor keeps the tunnel cores up to date, once a night, ALWAYS (the owner, 2026-11-04; services/engines.py auto_run): one server at a time, the quietest first, the old build put back when a new one does not hold
     jobs.register("carry", carry.EVERY, carry.run)                  # the Doctor asks every port of every tunnel that is up whether it really CARRIES a connection, every 3 minutes, one light command per Iran server; a port that does not (and whose service answers) is repaired by itself: restart, rebuild, another Iran server (services/carry.py)
     jobs.register("test-users", 1800, panels.keep_test_users)       # the test user of the probe on every panel is kept fit (no quota, not expired): without it every full test of every config fails (1.69.215)
-    jobs.register("subscriptions", 6 * 3600, configs.sync_all_subscriptions)       # every group follows its saved subscription: new configs come under the probe by themselves (1.69.215)
+    jobs.register("subscriptions", configs.FOLLOW_EVERY, configs.sync_all_subscriptions)       # every group follows its saved subscription: new configs come under the probe by themselves (1.69.215; every five minutes since 1.69.221, was six hours)
+    jobs.register("subscriptions-soon", 10, configs.follow_due)         # a host of a PasarGuard panel was made, changed or deleted in the panel: the groups follow ~20 s later (1.69.221)
+    jobs.register("nodedns", nodedns.EVERY, nodedns.run)         # the Doctor asks each foreign server how fast it answers a name lookup; a dead resolver in front of the list (5 s for every new site, a config that "is down" behind a connected tunnel) is put right by itself (1.69.221)
     jobs.register("purpose", purpose.EVERY, purpose.run)       # every tunnel says what it is for: the hosts of the economy (ECO) and AI configs are placed on the tunnels they end on (1.69.216)
     jobs.register("retypewatch", retypewatch.EVERY, retypewatch.run)       # after a change of a tunnel's type the users are watched: they leave a type they dislike, and the old type goes back (1.69.220)
     jobs.register("orphans", orphans.EVERY, orphans.run)       # the Doctor takes off what nothing owns: the standby of a removed tunnel, idle units and links on the servers (1.69.219; never a DNS record)

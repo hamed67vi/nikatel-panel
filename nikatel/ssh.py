@@ -707,6 +707,14 @@ echo STATUS
 head -c 30000 /opt/nikatel-relay/data/status.json 2>/dev/null; echo
 echo END
 """, {}),
+
+    # the Doctor's look at the name lookups of a foreign server (services/nodedns.py), a read: the best of three lookups of a test name in ms (a dead resolver in front of the list makes it 2000-5000), whether /etc/resolv.conf is a link, its first resolver
+    "dns_look": (r"""command -v curl >/dev/null 2>&1 || { echo "DNS_MS -1"; exit 0; }
+best=$(for i in 1 2 3; do t=$(curl -s -o /dev/null -m 7 -w '%{time_namelookup}' https://www.gstatic.com/generate_204 2>/dev/null); rc=$?; [ "$rc" = 6 ] && t=9; echo "${t:-9}"; done | sort -n | head -1)
+awk -v t="${best:-9}" 'BEGIN { printf "DNS_MS %d\n", t * 1000 }'
+if [ -L /etc/resolv.conf ]; then echo "DNS_LINK 1"; else echo "DNS_LINK 0"; fi
+echo "DNS_FIRST $(grep -m1 '^nameserver' /etc/resolv.conf 2>/dev/null | awk '{print $2}')"
+""", {}),
 }
 
 
@@ -2270,6 +2278,33 @@ systemctl daemon-reload
 if [ '@PURGE@' = 1 ]; then rm -rf /opt/nikatel-relay; fi
 echo REMOVED
 """, {"PURGE": r"^[01]$"}),
+
+    # the Doctor puts the resolvers of a foreign server in order when its first one does not answer (services/nodedns.py): the public resolvers are tried FROM the server, the ones that answer go first (the old ones stay behind them),
+    # `options timeout:2 attempts:2`; the host's file and, when the node runs in Docker on the host network, the container's copy (written in place: nothing is restarted). Measured before and after; the old files are put back when the lookup
+    # did not get better. Stops (DNS_SKIP) on a link (systemd-resolved), when the lookup is fast, or when fewer than two resolvers answer. The old file is kept as /etc/resolv.conf.nikatel-bak. Last line: DNS_OK <ms before> <ms after> <first resolver> | DNS_SKIP <why> | DNS_FAIL <why>.
+    "dns_heal": (r"""RC=/etc/resolv.conf; BAK=/etc/resolv.conf.nikatel-bak; BAKC=/etc/resolv.conf.nikatel-bak-ctr
+lookup() { best=$(for i in 1 2 3; do t=$(curl -s -o /dev/null -m 7 -w '%{time_namelookup}' https://www.gstatic.com/generate_204 2>/dev/null); rc=$?; [ "$rc" = 6 ] && t=9; echo "${t:-9}"; done | sort -n | head -1); awk -v t="${best:-9}" 'BEGIN { printf "%d", t * 1000 }'; }
+ask() ( s=$(date +%s%N); exec 3<>/dev/udp/$1/53 || exit 1; printf '\x12\x34\x01\x00\x00\x01\x00\x00\x00\x00\x00\x00\x03www\x07gstatic\x03com\x00\x00\x01\x00\x01' >&3; if read -t 1.5 -n 1 -u 3 x; then e=$(date +%s%N); echo $(( (e - s) / 1000000 )); fi )
+command -v curl >/dev/null 2>&1 || { echo "DNS_SKIP curl is not installed"; exit 0; }
+[ -L $RC ] && { echo "DNS_SKIP /etc/resolv.conf is a link (systemd-resolved)"; exit 0; }
+[ -f $RC ] || { echo "DNS_SKIP there is no /etc/resolv.conf"; exit 0; }
+before=$(lookup)
+if [ "$before" -lt 1000 ]; then echo "DNS_SKIP the lookup is fast now ($before ms)"; exit 0; fi
+ok=""; n=0
+for ip in 8.8.4.4 1.0.0.1 9.9.9.9 208.67.222.222 8.8.8.8 1.1.1.1; do ms=$(ask $ip); if [ -n "$ms" ] && [ "$ms" -lt 300 ]; then ok="$ok $ip"; n=$((n+1)); fi; done
+if [ "$n" -lt 2 ]; then echo "DNS_SKIP fewer than two public resolvers answer from this server"; exit 0; fi
+[ -e $BAK ] || cp -p $RC $BAK
+CT=0
+if command -v docker >/dev/null 2>&1 && [ "$(docker inspect node --format '{{.HostConfig.NetworkMode}}' 2>/dev/null)" = host ]; then CT=1; [ -e $BAKC ] || docker exec node cat /etc/resolv.conf > $BAKC 2>/dev/null; fi
+old=$(grep '^nameserver' $RC | awk '{print $2}')
+{ echo "# written by Nikatel (the Doctor): the resolver listed first did not answer, every lookup waited seconds. The original is $BAK"; for ip in $ok; do echo "nameserver $ip"; done; for ip in $old; do case " $ok " in *" $ip "*) ;; *) echo "nameserver $ip";; esac; done; echo "options timeout:2 attempts:2"; } > $RC.nk-new
+chmod 644 $RC.nk-new && mv -f $RC.nk-new $RC
+if [ "$CT" = 1 ]; then sleep 3; first=$(docker exec node sh -c "grep -m1 '^nameserver' /etc/resolv.conf" 2>/dev/null | awk '{print $2}'); want=$(grep -m1 '^nameserver' $RC | awk '{print $2}'); [ "$first" = "$want" ] || cat $RC | docker exec -i node sh -c 'cat > /etc/resolv.conf'; fi
+sleep 2
+after=$(lookup)
+if [ "$after" -gt 500 ]; then cp -p $BAK $RC; if [ "$CT" = 1 ] && [ -e $BAKC ]; then cat $BAKC | docker exec -i node sh -c 'cat > /etc/resolv.conf'; fi; echo "DNS_FAIL the lookup did not get better ($before ms -> $after ms); the old files are back"; exit 0; fi
+echo "DNS_OK $before $after $(grep -m1 '^nameserver' $RC | awk '{print $2}')"
+""", {}),
 }
 
 

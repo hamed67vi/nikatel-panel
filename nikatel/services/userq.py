@@ -252,6 +252,12 @@ def explain_users(f: dict) -> tuple[str, str]:
     if rtt is not None and ref and rtt >= 1.5 * ref:
         return "tunnel_delay", f"The delay of the tunnel rose from {ref:.0f} to {rtt:.0f} ms: its users feel it."
 
+    dns = f.get("dns_ms")
+
+    if dns is not None and dns >= 1500:          # (1.69.221: the Emirates server listed a dead resolver first - every new site waited 5 s while the tunnel was healthy and connected)
+        return "foreign_dns", (f"The foreign server {(f.get('foreign') or {}).get('name', '')} answers every name lookup in {dns / 1000:.1f} s (a resolver in its list does not answer): everything through it waits that long for every new site, and the probe's test of {what} times out. "
+                               "The Doctor puts its resolvers in order by itself (see the events of the server).")
+
     return "beyond", (f"The tunnel is healthy (it carries {f.get('bw_text') or 'its usual speed'}, its line loses nothing, its delay is as usual) but {what} {'has' if n == 1 else 'have'} a problem: "
                       "the problem is BEYOND the tunnel - the foreign server's own internet or its Xray, or the CDN in front of the Iran server.")
 
@@ -425,7 +431,7 @@ def _store(tunnel_id: int, ux: dict, now: int) -> tuple[str, str] | None:
 
 # ------------------------------------------------------------------ the look at suffering users
 def _facts(tunnel_id: int) -> dict:
-    from . import bandwidth
+    from . import bandwidth, nodedns
 
     f = bandwidth._facts(tunnel_id)                    # the tunnel's own health: servers' load, loss, delay, what the line carries
 
@@ -435,8 +441,9 @@ def _facts(tunnel_id: int) -> dict:
         bw = dict((t.record or {}).get("bw") or {})
         state = t.state
         ns = dict((t.detail or {}).get("no_service") or {})
+        foreign_id = t.foreign_server_id
 
-    return {**f, "state": state, "n_bad": len(ux.get("bad") or []), "known": ux.get("known", 0), "bw_state": bw.get("state"), "no_service": ns.get("ports") if ns.get("confirmed") else [],
+    return {**f, "dns_ms": nodedns.last_of(foreign_id), "state": state, "n_bad": len(ux.get("bad") or []), "known": ux.get("known", 0), "bw_state": bw.get("state"), "no_service": ns.get("ports") if ns.get("confirmed") else [],
             "bw_text": f"{bw['down']:.0f} Mb/s" if bw.get("down") is not None else "", "ux": ux}
 
 
@@ -461,6 +468,9 @@ def investigate(aid: int, tunnel_id: int) -> None:
         say(("✕ " if (s["cpu"] or 0) >= 85 else "✓ ") + f"The {side} server {s['name']}: " + (f"CPU {s['cpu']:.0f} %" if s["cpu"] is not None else "no reading of its load just now"))
 
     say(("✕ " if (f["loss"] or 0) >= 5 else "✓ ") + (f"The line loses {f['loss']:.0f} % of its packets" if f["loss"] is not None else "The loss of the line cannot be measured here (the provider drops pings); the data passes"))
+    if f.get("dns_ms") is not None:
+        say(("✕ " if f["dns_ms"] >= 1500 else "✓ ") + f"A name lookup on the foreign server takes {f['dns_ms']:.0f} ms")
+
     code, sentence = explain_users(f)
 
     with session() as db:

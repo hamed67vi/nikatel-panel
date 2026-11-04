@@ -35,6 +35,14 @@ def fresh_db():
     auth._FAILS.clear()
     auth._RESET.clear()
     gate._CACHE.update({"at": 0.0, "path": ""})
+
+    from nikatel.services import configs as _configs
+    from nikatel.services import nodedns as _nodedns
+
+    _configs._SUB_SIG.clear()
+    _configs._FOLLOW_AT[0] = 0.0
+    _nodedns._STATE.clear()
+    _nodedns._TOLD.clear()
     yield
     db.reset_for_tests()
 

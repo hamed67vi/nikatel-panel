@@ -200,7 +200,7 @@ def sub_excluded(body: ExcludedIn):
 @router.post("/subscriptions/sync")
 def sub_sync(body: SubIn):
     """Make the group equal to its subscription again: add the new nodes, remove the gone ones."""
-    return {"ok": True, **_wrap(configs.sync_subscription, body.name)}
+    return {"ok": True, **_wrap(configs.sync_subscription, body.name, True)}
 
 
 @router.post("/subscriptions/import")

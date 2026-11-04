@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from ..auth import current_user
-from ..services import panels, pg_hosts
+from ..services import configs, panels, pg_hosts
 from ..services.panels import PanelError
 
 router = APIRouter(tags=["pasarguard"], dependencies=[Depends(current_user)])
@@ -21,6 +21,13 @@ def _wrap(fn, *a, **kw):
         raise HTTPException(404 if e.code == 404 else 409 if e.code == 409 else 502, str(e))
     except RuntimeError as e:
         raise HTTPException(502, str(e))
+
+
+def _wrap_change(fn, *a, **kw):
+    """`_wrap` for a call that makes, changes or deletes a host: the groups of the Configs monitoring follow their subscriptions ~20 s later (configs.follow_soon), so a new config is under the probe's eyes at once."""
+    out = _wrap(fn, *a, **kw)
+    configs.follow_soon()
+    return out
 
 
 def _cred(panel_id: int) -> dict:
@@ -89,19 +96,19 @@ def hosts_backups(panel_id: int):
 @router.post(P + "/restore/{name}")
 def host_restore(panel_id: int, name: str):
     """Put a host back from one of the kept files: written over the host that has its id now, or made again (a new id) when it was deleted."""
-    return {"ok": True, **_wrap(pg_hosts.host_restore, _cred(panel_id), name)}
+    return {"ok": True, **_wrap_change(pg_hosts.host_restore, _cred(panel_id), name)}
 
 
 @router.post(P + "/bulk")
 def hosts_bulk(panel_id: int, body: BulkIn):
     """Enable, disable or delete several hosts with the panel's own bulk routes; a delete needs confirm and saves every host to a file first."""
-    return {"ok": True, **_wrap(pg_hosts.bulk, _cred(panel_id), body.what, body.ids, body.confirm)}
+    return {"ok": True, **_wrap_change(pg_hosts.bulk, _cred(panel_id), body.what, body.ids, body.confirm)}
 
 
 @router.post(P)
 def host_create(panel_id: int, body: HostIn):
     """Make a host from the fields given (a remark is needed); the priority is the next free one unless it is given."""
-    return {"ok": True, **_wrap(pg_hosts.host_create, _cred(panel_id), body.model_dump(exclude_unset=True))}
+    return {"ok": True, **_wrap_change(pg_hosts.host_create, _cred(panel_id), body.model_dump(exclude_unset=True))}
 
 
 @router.get(P + "/{host_id}")
@@ -113,16 +120,16 @@ def host_view(panel_id: int, host_id: int):
 @router.put(P + "/{host_id}")
 def host_update(panel_id: int, host_id: int, body: HostIn):
     """Change a host: only the fields that differ are changed, after the host is saved to a file; an advanced setting with a key the panel does not know is refused."""
-    return {"ok": True, **_wrap(pg_hosts.host_update, _cred(panel_id), host_id, body.model_dump(exclude_unset=True))}
+    return {"ok": True, **_wrap_change(pg_hosts.host_update, _cred(panel_id), host_id, body.model_dump(exclude_unset=True))}
 
 
 @router.post(P + "/{host_id}/clone")
 def host_clone(panel_id: int, host_id: int):
     """Copy a host: the copy is called “… copy”, gets the next free priority and is switched off until it is looked at."""
-    return {"ok": True, **_wrap(pg_hosts.host_clone, _cred(panel_id), host_id)}
+    return {"ok": True, **_wrap_change(pg_hosts.host_clone, _cred(panel_id), host_id)}
 
 
 @router.delete(P + "/{host_id}")
 def host_delete(panel_id: int, host_id: int, confirm: bool = False):
     """Delete a host (needs confirm=true); it is saved to a file first, so Backups can make it again."""
-    return {"ok": True, **_wrap(pg_hosts.host_delete, _cred(panel_id), host_id, confirm)}
+    return {"ok": True, **_wrap_change(pg_hosts.host_delete, _cred(panel_id), host_id, confirm)}

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # The repository is public: nothing that identifies the real infrastructure may be committed.
 # Fails when a tracked file contains a public IPv4 address, a hostname of ours, a token or a key.
-# Allowed: loopback, 0.0.0.0, RFC1918, documentation ranges, and the test addresses 1.1.1.1 … 9.9.9.9.
+# Allowed: loopback, 0.0.0.0, RFC1918, documentation ranges, the test addresses 1.1.1.1 … 9.9.9.9 and the well-known public DNS resolvers.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 # tracked AND new (untracked, not ignored) files - a fresh file must not slip through before `git add`
@@ -14,6 +14,7 @@ while IFS=: read -r file line match; do
     case "$match" in
         127.*|0.0.0.0|10.*|192.168.*|172.1[6-9].*|172.2[0-9].*|172.3[01].*|192.0.2.*|198.51.100.*|203.0.113.*|255.*|169.254.*) continue ;;
         1.1.1.1|2.2.2.2|3.3.3.3|4.4.4.4|5.5.5.5|9.9.9.9|8.8.8.8) continue ;;
+        8.8.4.4|1.0.0.1|208.67.222.222|208.67.220.220) continue ;;      # the other well-known public resolvers (the Doctor's list in ssh.py dns_heal)
     esac
     echo "$file:$line: public IPv4 '$match'"; bad=1
 done < <(grep -nEo '\b([0-9]{1,3}\.){3}[0-9]{1,3}\b' $FILES 2>/dev/null | grep -vE '^(\./)?(pyproject\.toml|CHANGELOG\.md|scripts/check_no_secrets\.sh):' || true)
