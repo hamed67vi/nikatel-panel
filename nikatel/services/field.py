@@ -305,7 +305,7 @@ def direct_verdict(d: dict) -> tuple[str, str]:
     if tls and not any(t["ok"] for t in tls):
         return "tls", "it connects but every TLS handshake fails (the handshake is dropped)"
 
-    failed = sorted({t["sni"] for t in tls if not t["ok"]})
+    failed = sorted(s for s in {t["sni"] for t in tls} if all(not t["ok"] for t in tls if t["sni"] == s))          # a name counts as filtered only when it fails on EVERY port it was tried on (a lost packet fails one handshake)
 
     if failed:
         return "sni", f"the handshake fails for {', '.join(failed[:4])} and passes for other names (that name is filtered)"
@@ -561,7 +561,7 @@ def ingest(payload, sender: str, now: int | None = None) -> dict:
         db.execute(delete(FieldRun).where((FieldRun.ts < now - KEEP_DAYS * 86400) | FieldRun.id.in_(old)))
 
     states = [row_state(c) for c in run["cfg"]]
-    return {"id": rid, "configs": len(states), "ok": states.count("ok"), "findings": [_slim(f) for f in findings]}
+    return {"id": rid, "configs": len(states), "configs_ok": states.count("ok"), "findings": [_slim(f) for f in findings]}          # (not `ok`: the route answers ok: true, and a number here would take its place)
 
 
 def _latest(db, now: int, hours: int = 48) -> list[FieldRun]:

@@ -144,7 +144,7 @@ def test_ingest_keeps_a_compact_copy_tells_once_and_tells_when_the_network_is_fi
 
     bad = _payload([_cfg("TCP-3", bytes3=38_000), _cfg("LAB-TR1-reality1845", bulk=_bulk()), _cfg("Cloud-1")])
     r1 = f.ingest(bad, "token:iran-kit", now=1_000_000)
-    assert r1["configs"] == 3 and r1["ok"] == 2 and {x["kind"] for x in r1["findings"]} == {"stall", "protocol"}
+    assert r1["configs"] == 3 and r1["configs_ok"] == 2 and "ok" not in r1 and {x["kind"] for x in r1["findings"]} == {"stall", "protocol"}
     f.ingest(bad, "token:iran-kit", now=1_000_600)                           # the same findings 10 minutes later: no second event
     texts = [e["text"] for e in client.get("/api/events?domain=configs").json()["events"] if e["text"].startswith("Field test")]
     assert len(texts) == 2 and all("Irancell (Tabriz)" in t for t in texts)
@@ -191,7 +191,7 @@ def test_the_kit_reaches_the_panel_only_through_a_field_token(client):
     h = {"Authorization": "Bearer " + tok.json()["token"]}
     m = TestClient(client.app)
     r = m.post("/api/field/ingest", headers=h, json=_payload([_cfg("TCP-3", bytes3=38_000), _cfg("LAB-TR1-reality1845", bulk=_bulk())]))
-    assert r.status_code == 200 and r.json()["ok"] and r.json()["id"] > 0 and {f["kind"] for f in r.json()["findings"]} >= {"stall", "protocol"}
+    assert r.status_code == 200 and r.json()["ok"] is True and r.json()["id"] > 0 and {f["kind"] for f in r.json()["findings"]} >= {"stall", "protocol"}
     assert m.get("/api/field", headers=h).status_code == 403 and m.get("/api/servers", headers=h).status_code == 403 and m.get("/api/field/runs", headers=h).status_code == 403
     assert m.post("/api/field/ingest", headers=h, json={"nothing": 1}).status_code == 400
     assert m.post("/api/field/ingest", json=_payload(_good())).status_code == 401
@@ -370,3 +370,12 @@ def test_the_quick_download_may_be_smaller_than_it_used_to_be():
     assert field.row_state(run["cfg"][0]) == "stall"
     assert "30 KB of a 1.0 MB download" in next(f for f in field.judge(run) if f["kind"] == "stall")["text"]
     assert field.compact(_payload([_cfg("A")]))["cfg"][0]["want"] == 3_000_000                                       # a kit of before asked for 3 MB
+
+def test_a_name_is_filtered_only_when_it_fails_on_every_port_and_the_answer_says_ok_true(client):
+    one_port = {(8680, "api.example.org"): False, (1845, "api.example.org"): True, (8680, "www.google.com"): True, (1845, "www.google.com"): True}
+    assert _verdict(_direct(ALL_OPEN, tls=one_port)) == "ok"                                                       # one failed handshake among two ports: a lost packet, not a filter
+    every_port = {(8680, "api.example.org"): False, (1845, "api.example.org"): False, (8680, "www.google.com"): True, (1845, "www.google.com"): True}
+    assert _verdict(_direct(ALL_OPEN, tls=every_port)) == "sni"
+    tok = client.post("/api/tokens", json={"name": "iran-kit", "scope": "field", "password": PW}).json()["token"]
+    r = TestClient(client.app).post("/api/field/ingest", headers={"Authorization": "Bearer " + tok}, json=_payload(_good()))
+    assert r.json()["ok"] is True and r.json()["configs_ok"] == 5 and r.json()["id"] > 0                           # `ok` stays the boolean every route answers with
