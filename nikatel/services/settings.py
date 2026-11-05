@@ -89,6 +89,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
     "knowledge": {"on": True, "from_hour": 2, "to_hour": 6, "pairs": {}, "incidents": []},      # the night survey (temporary tunnels, tested one pair at a time, only at night, only on quiet servers) and what the Doctor remembers of every cut
     # the way back to the better tunnel type (services/comeback.py): a cut tunnel swapped to an emergency type is tested again for its old type, with growing waits, and swapped back when it is clearly better
     "alert_orphans": {"since": {}},          # the alert state of a thing that is gone ("kind|ref") -> when the sweep first saw it missing (alerts.prune_orphans)
+    "warpwatch": {"on": True, "done": {}, "told": {}},          # the WARP watch (services/warpwatch.py): an AI config down for 7 minutes with its tunnel and node up gets its node reconnected; done: node key -> times of its reconnects, told: config -> when the "needs a look" event was sent
     "comeback": {"wants": {}, "returns": {}},          # wants: tunnel name -> {kind it should go back to, kind it runs as, cause, when it left, looks so far, next look}; returns: tunnel name -> when it was swapped back (the last 24 hours)
     # the Reviewer (services/reviewer.py), the teacher of the Doctor: ai = the AI may write the reviews (when a key is saved); reviews = what it found about the repairs that went badly (newest last); lessons = what it proposes to
     # teach the Doctor (proposed -> approved / dismissed by the owner); seq = the last lesson number

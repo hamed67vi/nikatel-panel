@@ -283,6 +283,25 @@ def witness_remove(name: str):
     return probe_get()
 
 
+class WarpWatchIn(BaseModel):
+    on: bool
+
+
+@router.get("/settings/warpwatch")
+def warpwatch_get():
+    """The WARP watch (an AI config down for 7 minutes with its node up gets its node reconnected): on or off, and how many times each node was reconnected in the last 24 hours."""
+    d = st.get("warpwatch")
+    now = time.time()
+    return {"ok": True, "on": bool(d.get("on", True)), "reconnects_24h": {k: sum(1 for t in v if now - float(t) < 86400) for k, v in (d.get("done") or {}).items()}}
+
+
+@router.put("/settings/warpwatch")
+def warpwatch_put(body: WarpWatchIn):
+    """Switch the WARP watch on or off."""
+    st.put("warpwatch", {"on": body.on})
+    return warpwatch_get()
+
+
 @router.post("/settings/probe/witness/mirror")
 def witness_mirror():
     """Put the witnesses' config lists equal to the main probe's now (the job does it every 5 minutes)."""

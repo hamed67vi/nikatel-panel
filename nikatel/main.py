@@ -65,6 +65,7 @@ from .services import (
     tunnels,
     underuse,
     userq,
+    warpwatch,
     weather,
     witness,
 )
@@ -259,6 +260,7 @@ def _register_jobs() -> None:
     jobs.register("doctor", 60, doctor.run)                    # the Doctor's moves (mode "move"): dead Iran servers, exhausted ones, the returns; nothing in mode off / fix
 
     jobs.register("configs", 120, configs.sync)
+    jobs.register("warpwatch", warpwatch.EVERY, warpwatch.run)             # an AI config down 7 minutes with its tunnel and node up: its node is reconnected (stuck WARP session of its Xray); at most once in 30 minutes and 3 times a day per node (services/warpwatch.py)
     jobs.register("witness", 300, witness.mirror)                          # the second vantage(s) of the Configs monitoring keep the same configs as the main probe (services/witness.py); nothing happens while no witness is installed
     jobs.register("configs-fast", configs.QUICK_READ, configs.sync_fast)   # the probe's answer read every 15 s (it tests each config about every 30 s): a config is called down / up after two different tests, ~30-60 s, not 2-4 minutes
     jobs.register("panels", 15, panels.check_all)          # a panel that stops answering or a node that drops off a Marzban / PasarGuard panel shows within ~30 s (two checks; the reconnect request is still sent at most every 30 s)
