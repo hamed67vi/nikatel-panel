@@ -2,6 +2,8 @@
 keeps a stuck WARP session the config still connects and still opens Instagram and Cloudflare pages, but Google, Telegram, YouTube and X time out - and nothing else notices: on 2026-11-05 AI-2 stayed like this for 85 minutes
 (03:40 - 05:06) and ONE reconnect of its node (4 s) cured it. So: an AI config the monitor shows down for DOWN_FOR seconds - both vantages agree, the monitor already weighed the witnesses - whose tunnel is not down and whose node is
 connected gets its node reconnected, at most once in COOLDOWN seconds and PER_DAY times in 24 hours; every reconnect is an event. A config that stays down after that is told once a day and left alone.
+The same goes for a config that keeps going up and down (1.69.229): on the afternoon of 2026-11-05 AI-2 passed only 6-8 % of its tests from 17:00 but an odd good test reset the seven minutes every time, so nothing happened until 17:53. Now an AI
+config also counts as down when at most FLAP_UP_MAX of its samples of the last FLAP_WINDOW seconds are up (at least FLAP_MIN_ROWS samples, and not when the three newest are all up: it just came back).
 The placement (config -> tunnel -> foreign server -> PasarGuard node) is the one `purpose` uses; nothing is guessed: a config that cannot be placed on exactly one node is not touched. `decide` is pure and tested."""
 from __future__ import annotations
 
@@ -14,7 +16,7 @@ from .. import jobs
 from ..config import get_settings
 from ..db import session
 from ..log import get_logger
-from ..models import Config, Panel, Server, Tunnel, is_temp
+from ..models import Config, ConfigSample, Panel, Server, Tunnel, is_temp
 from . import dnscache, panels, userq
 from . import settings as st
 from .events import emit
@@ -24,11 +26,24 @@ EVERY = 60
 DOWN_FOR = 420            # seconds an AI config is down (as the monitor shows it) before its node is touched
 COOLDOWN = 1800           # seconds between two reconnects of one node
 PER_DAY = 3               # reconnects of one node in 24 hours
+FLAP_WINDOW = 900         # seconds looked back at a config that keeps going up and down
+FLAP_UP_MAX = 0.34        # ... it counts as down when at most this share of the samples of that window is up
+FLAP_MIN_ROWS = 6         # ... judged on at least this many samples (a test every two minutes, a witness adds its own)
 _AI = re.compile(r"^AI-?\d", re.IGNORECASE)
 
 
 def is_ai(name: str) -> bool:
     return bool(_AI.match(str(name or "").strip()))
+
+
+def flapping(samples: list[tuple[int, bool]], now: int) -> bool:
+    """Pure. samples: [(time, up)] of one config. True when the last FLAP_WINDOW seconds hold at least FLAP_MIN_ROWS of them, at most FLAP_UP_MAX of those are up and the three newest are not all up (a config that just came back is left alone)."""
+    win = sorted((int(t), bool(u)) for t, u in samples if now - FLAP_WINDOW < int(t) <= now)
+
+    if len(win) < FLAP_MIN_ROWS or sum(u for _, u in win) / len(win) > FLAP_UP_MAX:
+        return False
+
+    return not all(u for _, u in win[-3:])
 
 
 def decide(down: list[dict], where: dict[str, dict], done: dict[str, list[int]], now: int) -> tuple[dict[str, list[str]], list[tuple[str, str]]]:
@@ -105,11 +120,19 @@ def run() -> None:
 
     now = int(time.time())
 
-    with session() as db:
-        down = [{"name": c.name, "since": c.status_since, "meta": c.meta or {}, "tunnel": c.tunnel}
-                for c in db.scalars(select(Config).where(Config.enabled.is_(True), Config.status == "down")) if is_ai(c.name)]
+    down: list[dict] = []
 
-    down = [d for d in down if now - int(d["since"] or now) >= DOWN_FOR]
+    with session() as db:
+        for c in db.scalars(select(Config).where(Config.enabled.is_(True), Config.status.in_(("down", "up")))):
+            if not is_ai(c.name):
+                continue
+
+            item = {"name": c.name, "since": c.status_since, "meta": c.meta or {}, "tunnel": c.tunnel}
+
+            if c.status == "down" and now - int(c.status_since or now) >= DOWN_FOR:
+                down.append(item)
+            elif flapping([(r.ts, r.up) for r in db.execute(select(ConfigSample.ts, ConfigSample.up).where(ConfigSample.config_id == c.id, ConfigSample.ts > now - FLAP_WINDOW))], now):
+                down.append({**item, "since": now - FLAP_WINDOW, "flap": True})          # (up now and then, down most of the time: the seven minutes never run out)
 
     if not down or get_settings().read_only:
         return
@@ -126,6 +149,8 @@ def run() -> None:
             with session() as db:
                 emit(db, "bad", "configs", f"Config {name} is still down: {why}. The WARP watch stops here - it needs a look by hand (the WARP account, the node's Xray, the tunnel).", name)
 
+    flapped = {d["name"] for d in down if d.get("flap")}
+
     for key, names in todo.items():
         w = where.get(names[0])
 
@@ -140,7 +165,9 @@ def run() -> None:
 
         done[key] = [t for t in done.get(key, []) if now - int(t) < 86400] + [now]
 
+        lead = f"has been going up and down for {FLAP_WINDOW // 60} minutes (most of its tests fail)" if all(n in flapped for n in names) else f"has been down for {DOWN_FOR // 60}+ minutes"
+
         with session() as db:
-            emit(db, "warn", "configs", f"{', '.join(names)} has been down for {DOWN_FOR // 60}+ minutes while its tunnel and its node are up: the WARP session of the node's Xray is probably stuck. Node {w['node_name']} reconnected (a few seconds of its connections).", names[0])
+            emit(db, "warn", "configs", f"{', '.join(names)} {lead} while its tunnel and its node are up: the WARP session of the node's Xray is probably stuck. Node {w['node_name']} reconnected (a few seconds of its connections).", names[0])
 
     st.put("warpwatch", {"done": done, "told": told})

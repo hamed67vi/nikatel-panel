@@ -4,7 +4,7 @@ import time
 import pytest
 
 from nikatel.db import session
-from nikatel.models import Config, Panel, Server, Tunnel
+from nikatel.models import Config, ConfigSample, Panel, Server, Tunnel
 from nikatel.services import dnscache, panels, warpwatch
 from nikatel.services import settings as st
 
@@ -160,3 +160,55 @@ def test_the_switch_reports_the_reconnects_of_the_last_day(client):
     st.put("warpwatch", {"done": {"1:11": [now - 100, now - 90000]}})
     r = client.get("/api/settings/warpwatch").json()
     assert r["on"] is True and r["reconnects_24h"] == {"1:11": 1}
+
+
+def samples(ups, step=60):
+    """[(time, up)] one every `step` seconds, the newest at NOW, ups[0] the oldest"""
+    return [(NOW - (len(ups) - 1 - i) * step, u) for i, u in enumerate(ups)]
+
+
+def test_a_config_that_goes_up_and_down_counts_as_down_when_most_of_a_quarter_of_an_hour_is_down():
+    # (1.69.229: on 2026-11-05 AI-2 passed 6-8 % of its tests from 17:00, an odd good one reset the seven minutes every time, and nothing happened until 17:53)
+    assert warpwatch.flapping(samples([False] * 5 + [True] + [False] * 4 + [True] + [False] * 4), NOW)                  # 2 of 15 up
+    assert not warpwatch.flapping(samples([True, True, True, True, False] * 3), NOW)                                    # 12 of 15 up: a mild dip, not an outage
+    assert warpwatch.flapping(samples([False] * 6), NOW) and not warpwatch.flapping(samples([False] * 5), NOW)       # at least six samples
+    assert warpwatch.flapping(samples([False, False, True] * 5), NOW)                                                   # 5 of 15 = 33 %: the edge
+    assert not warpwatch.flapping(samples([False, False, True, False, True] * 3), NOW)                                  # 6 of 15 = 40 %
+    assert not warpwatch.flapping(samples([False] * 12 + [True] * 3), NOW)                                              # the three newest are up: it just came back
+    assert warpwatch.flapping(samples([False] * 12 + [True, True, False]), NOW)
+    assert not warpwatch.flapping(samples([False] * 10, step=300), NOW)                                                 # older than the window does not count
+    assert not warpwatch.flapping([], NOW)
+
+
+def flap_samples(ups, name="AI-2"):
+    """A config that shows `up` right now (a lucky test: the seven minutes never run out) with one sample a minute, the newest a few seconds ago."""
+    now = int(time.time())
+
+    with session() as db:
+        c = db.query(Config).filter(Config.name == name).one()
+        c.status, c.status_since = "up", now - 30
+        db.query(ConfigSample).filter(ConfigSample.config_id == c.id).delete()
+        db.add_all([ConfigSample(config_id=c.id, ts=now - 5 - (len(ups) - 1 - i) * 60, up=u) for i, u in enumerate(ups)])
+
+
+def test_an_ai_config_that_goes_up_and_down_gets_its_node_reconnected_once(client, watch):
+    flap_samples([False] * 5 + [True] + [False] * 4 + [True] + [False] * 4)
+    warpwatch.run()
+    assert watch == [(1, 11)]
+    assert any("going up and down" in t and "Node DE2 reconnected" in t and "AI-2" in t for t in events(client))
+    warpwatch.run()
+    assert watch == [(1, 11)]                                                                 # the cooldown holds
+
+
+def test_a_config_that_is_mostly_up_just_came_back_or_is_no_ai_config_is_left_alone(client, watch):
+    flap_samples([True, True, True, False] * 3 + [True, True, False])                         # mostly up
+    warpwatch.run()
+    assert watch == []
+    flap_samples([False] * 12 + [True] * 3)                                                   # it just came back
+    warpwatch.run()
+    assert watch == []
+    flap_samples([False] * 15)
+    flap_samples([False] * 15, name="TCP-1")                                                  # (TCP-1 is down in the same way but is no AI config)
+    warpwatch.run()
+    assert watch == [(1, 11)]                                                                 # once, for AI-2 only
+    assert not any("TCP-1" in t for t in events(client))
