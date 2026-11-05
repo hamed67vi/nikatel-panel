@@ -1,0 +1,49 @@
+/* The Field test tab of Network (field.js): cards per network, the config x network table, the pills of the direct configs and of the subscription names. Colours are the panel's own (--ok, --warn, --bad). */
+.fd-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; margin-bottom: 14px; }
+.fd-tile { border: 1px solid var(--line, rgba(255,255,255,.1)); border-radius: 12px; padding: 12px 14px; background: rgba(255,255,255,.03); }
+.fd-tile small { display: block; font-size: 11px; opacity: .7; text-transform: uppercase; letter-spacing: .04em; }
+.fd-tile b { display: block; font-size: 26px; margin: 2px 0; }
+.fd-tile span { font-size: 12px; opacity: .65; }
+.fd-tile.ok b { color: var(--ok); } .fd-tile.warn b { color: var(--warn); } .fd-tile.bad b { color: var(--bad); }
+
+.fd-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)); gap: 12px; margin-bottom: 14px; }
+.fd-card { border: 1px solid var(--line, rgba(255,255,255,.1)); border-left: 4px solid var(--unk); border-radius: 12px; padding: 12px 14px; background: rgba(255,255,255,.03); min-width: 0; }
+.fd-card.ok { border-left-color: var(--ok); } .fd-card.warn { border-left-color: var(--warn); } .fd-card.bad { border-left-color: var(--bad); }
+.fd-head { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+.fd-head > b { font-size: 15px; }
+.fd-big { margin: 6px 0 8px; font-size: 14px; } .fd-big b { font-size: 22px; }
+.fd-row { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 8px; align-items: start; margin: 5px 0; }
+.fd-row small { opacity: .65; padding-top: 3px; }
+.fd-row > div { display: flex; flex-wrap: wrap; gap: 5px; min-width: 0; }
+.fd-foot { margin-top: 8px; font-size: 11px; }
+@media (max-width: 520px) { .fd-row { grid-template-columns: minmax(0, 1fr); gap: 2px; } .fd-tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; } .fd-tile { padding: 8px 10px; } .fd-tile b { font-size: 20px; } .fd-tile span { display: none; } .fd-tile small { font-size: 10px; } }
+
+.fd-pill { display: inline-block; max-width: 100%; padding: 2px 9px; border-radius: 999px; font-size: 11px; font-weight: 700; border: 1px solid rgba(255,255,255,.18); overflow-wrap: anywhere; }
+.fd-pill.ok { color: var(--ok); border-color: rgba(61,220,151,.45); background: rgba(61,220,151,.1); }
+.fd-pill.warn { color: var(--warn); border-color: rgba(255,196,77,.5); background: rgba(255,196,77,.1); }
+.fd-pill.bad { color: var(--bad); border-color: rgba(255,107,139,.5); background: rgba(255,107,139,.1); }
+
+.fd-h { margin: 0 0 8px; font-size: 15px; }
+.fd-note { margin: 0 0 10px; font-size: 12px; }
+.fd-wrap { overflow-x: auto; }
+.fd-tbl td, .fd-tbl th { vertical-align: middle; text-align: left; white-space: normal; overflow: visible; text-overflow: clip; }
+.fd-finds { display: grid; gap: 8px; }
+.fd-find { display: grid; grid-template-columns: 200px 84px minmax(0, 1fr); gap: 4px 12px; align-items: start; padding: 10px 12px; border: 1px solid var(--line, rgba(255,255,255,.1)); border-left: 4px solid var(--unk); border-radius: 10px; background: rgba(255,255,255,.03); }
+.fd-find.ok { border-left-color: var(--ok); } .fd-find.warn { border-left-color: var(--warn); } .fd-find.bad { border-left-color: var(--bad); }
+.fd-fpill { white-space: nowrap; } .fd-ftext { font-size: 13px; line-height: 1.45; overflow-wrap: anywhere; }
+.fd-fhint { grid-column: 3; font-size: 12px; line-height: 1.45; overflow-wrap: anywhere; }
+@media (max-width: 760px) { .fd-find { grid-template-columns: minmax(0, 1fr) auto; } .fd-ftext, .fd-fhint { grid-column: 1 / -1; } }
+.fd-tbl .fd-matrix th, .fd-matrix th, .fd-tbl td.fd-c { text-align: center; } .fd-matrix th { white-space: nowrap; } .fd-matrix th small { display: block; font-weight: 400; opacity: .65; }
+.fd-matrix td.name { position: sticky; left: 0; background: var(--bg, #0f1320); white-space: nowrap; z-index: 1; }
+html body #page .fd-wrap table.fd-tbl.fd-matrix { display: table !important; table-layout: auto !important; width: 100% !important; min-width: 540px !important; }   /* (the phone rules turn every .tbl into a squeezed block; this one scrolls sideways inside its card, the first column stays) */
+.fd-c { text-align: center; min-width: 110px; }
+.fd-c span { display: inline; font-size: 12px; font-weight: 700; margin-right: 4px; }
+.fd-c small { display: inline; font-size: 11px; opacity: .8; overflow-wrap: anywhere; }
+.fd-c.bad small, .fd-c.warn small { display: block; }
+.fd-c.ok span { color: var(--ok); } .fd-c.warn span { color: var(--warn); } .fd-c.bad span { color: var(--bad); } .fd-c.none { opacity: .4; }
+.fd-c.ok { background: rgba(61,220,151,.06); } .fd-c.warn { background: rgba(255,196,77,.07); } .fd-c.bad { background: rgba(255,107,139,.08); }
+.fd-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--unk); margin-right: 4px; vertical-align: middle; }
+.fd-dot.ok { background: var(--ok); } .fd-dot.warn { background: var(--warn); } .fd-dot.bad { background: var(--bad); }
+.fd-tbl tr.fd-detail td:last-child { text-align: left; }
+.fd-detail pre { margin: 0; max-height: 360px; overflow: auto; font-size: 11px; white-space: pre-wrap; word-break: break-word; }
+.fd-empty h3 { margin-top: 0; }

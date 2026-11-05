@@ -320,7 +320,9 @@ def test_a_panel_that_opens_everywhere_has_nothing_to_report():
     run = _panel_run({"sub-a.example": _pname(), "monitor.example": _pname(works=False)},                      # (the monitor has no subscription: it is not fetched through every address, so it is not judged)
                      {"sub-a.example|Panel-new": True, "sub-a.example|boxB": True}, ADDRS)
     assert field.judge(run) == []
-    assert field.panel_view(run) == {"names": {"sub-a.example": "ok"}, "addresses": {"Panel-new": "ok", "boxB": "ok", "iran-forwarder": "ok", "monitor-host": "ok"}}
+    v = field.panel_view(run)
+    assert v["names"] == {"sub-a.example": "ok"} and v["addresses"] == {"Panel-new": "ok", "boxB": "ok", "iran-forwarder": "ok", "monitor-host": "ok"}
+    assert [(r["name"], r["state"]) for r in v["rows"]] == [("sub-a.example", "ok")]
 
 
 def test_a_panel_address_that_does_not_answer_and_a_name_that_opens_only_through_another_address_are_told():
@@ -379,3 +381,22 @@ def test_a_name_is_filtered_only_when_it_fails_on_every_port_and_the_answer_says
     tok = client.post("/api/tokens", json={"name": "iran-kit", "scope": "field", "password": PW}).json()["token"]
     r = TestClient(client.app).post("/api/field/ingest", headers={"Authorization": "Bearer " + tok}, json=_payload(_good()))
     assert r.json()["ok"] is True and r.json()["configs_ok"] == 5 and r.json()["id"] > 0                           # `ok` stays the boolean every route answers with
+
+def test_the_overview_carries_what_the_field_test_page_shows(client):
+    cfgs = [_cfg("TCP-3", kind="direct", lat=(80.0, 380.0, 0), par=(3.3, 0), video=(16.0, 6), bulk=_bulk(avg=10.8)), _cfg("Cloud-1", ok=False, kind="cdn"), _cfg("LAB-TR1-reality1845")]
+    p = _payload(cfgs)
+    p["panel"] = {"names": {"sub-a.example": _pname(), "sub-b.example": _pname(works=False, tls_ok=False, tls_err="The message received was unexpected")}, "ips": ADDRS,
+                  "matrix": {"sub-a.example|Panel-new": _pget(True), "sub-b.example|Panel-new": _pget(False)}}
+    p["manifest"] = "live:abc12345"
+    field.ingest(p, "token:iran-kit", now=5_000_000)
+    s = field.summary(now=5_000_100)
+    key = "Irancell|mobile|Tabriz"
+    assert s["labels"] == ["TCP-3", "Cloud-1", "LAB-TR1-reality1845"]                                    # in the order the kit tested them
+    assert s["metrics"]["TCP-3"][key] == {"kind": "direct", "state": "ok", "sites": [10, 10], "lat": [80.0, 380.0], "dl": 20.0, "bulk": 10.8, "stalled": False, "vid": 16.0, "par": 3.3, "up": 5.0, "exit": "198.51.100.7"}
+    assert s["metrics"]["Cloud-1"][key]["state"] == "closed" and s["metrics"]["Cloud-1"][key]["lat"] is None and s["metrics"]["Cloud-1"][key]["bulk"] is None
+    n = s["networks"][0]
+    assert n["manifest"] == "live:abc12345" and n["kit"] == "1"
+    assert [(r["name"], r["state"]) for r in n["panel"]["rows"]] == [("sub-a.example", "ok"), ("sub-b.example", "fail")]
+    assert "28 links" in n["panel"]["rows"][0]["why"] and "TLS fails" in n["panel"]["rows"][1]["why"]
+    why = lambda **k: field.panel_rows(_panel_run({"n.example": _pname(**k)}, {"n.example|Panel-new": False}, ADDRS))[0]["why"]
+    assert "DNS" in why(works=False, sys_ok=False) and "HTTP 0" in why(works=False)

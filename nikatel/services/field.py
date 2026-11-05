@@ -323,11 +323,43 @@ def _fetched(pn: dict, name: str) -> dict:
     return {k: g for k, g in (pn.get("matrix") or {}).items() if k.split("|", 1)[0] == name}
 
 
+def cfg_metrics(c: dict) -> dict:
+    """Pure. The numbers of one config in one run that the Field test page shows: its state, the sites that opened, the delay (median, slowest), the quick download, the long download and whether it stalled, the video it plays without stopping (Mb/s), six pictures at once, the upload and the exit address."""
+    b, v, p, lat = c.get("bulk"), c.get("video"), c.get("par"), c.get("lat")
+    return {"kind": c.get("kind") or "", "state": row_state(c), "sites": [c.get("ok_n", 0), c.get("sites_n", 0)], "lat": [lat["med"], lat["p95"]] if lat else None, "dl": c.get("mbps3"), "bulk": b["avg"] if b else None,
+            "stalled": bool(b and b.get("stalled")), "vid": v["best"] if v else None, "par": p["mbps"] if p else None, "up": c.get("up"), "exit": c.get("exit")}
+
+
+def panel_rows(run: dict) -> list[dict]:
+    """Pure. The subscription names the kit fetched from, one row each: [{name, state ok / fail, why}] - what failed first (DNS, TCP, TLS, or the answer of the panel)."""
+    pn = run.get("panel") or {}
+    out = []
+
+    for name, r in (pn.get("names") or {}).items():
+        if not _fetched(pn, name):
+            continue
+
+        h, t, tls, d = r.get("http"), r.get("tcp"), r.get("tls"), r.get("dns") or {}
+
+        if panel_works(h):
+            out.append({"name": name, "state": "ok", "why": f"{h['links']} links in {h['ms'] or 0:.0f} ms"})
+        elif not d.get("sys_ok"):
+            out.append({"name": name, "state": "fail", "why": "the DNS of this network does not resolve it"})
+        elif t and t[1] and t[0] == 0:
+            out.append({"name": name, "state": "fail", "why": "TCP to its address does not connect"})
+        elif tls and not tls.get("ok"):
+            out.append({"name": name, "state": "fail", "why": "TLS fails: " + (tls.get("err") or "no answer")[:60]})
+        else:
+            out.append({"name": name, "state": "fail", "why": f"the answer was HTTP {h['code'] if h else 0}, {h['links'] if h else 0} links"})
+
+    return out
+
+
 def panel_view(run: dict) -> dict:
     """Pure. The panel as one network saw it: which subscription names open and which addresses answer on 443."""
     pn = run.get("panel") or {}
     return {"names": {n: "ok" if panel_works(r.get("http")) else "fail" for n, r in (pn.get("names") or {}).items() if _fetched(pn, n)},
-            "addresses": {lab: "ok" if a["tcp443"] and a["tcp443"][0] > 0 else "dead" for lab, a in (pn.get("ips") or {}).items()}}
+            "addresses": {lab: "ok" if a["tcp443"] and a["tcp443"][0] > 0 else "dead" for lab, a in (pn.get("ips") or {}).items()}, "rows": panel_rows(run)}
 
 
 def _panel_findings(cur: dict, who: str) -> list[dict]:
@@ -579,12 +611,14 @@ def _latest(db, now: int, hours: int = 48) -> list[FieldRun]:
 
 
 def summary(now: int | None = None) -> dict:
-    """The newest run of every network and the matrix config x network (ok / partial / slow / stall / closed / skipped)."""
+    """The newest run of every network, the matrix config x network (ok / partial / slow / stall / closed / skipped), the numbers behind every cell (`metrics`) and the configs in the order the kit tested them (`labels`)."""
     now = int(now or time.time())
 
     with session() as db:
         nets = []
         matrix: dict[str, dict] = {}
+        metrics: dict[str, dict] = {}
+        labels: list[str] = []
 
         for r in _latest(db, now, 24 * 14):
             states = {c["label"]: row_state(c) for c in (r.data or {}).get("cfg", [])}
@@ -593,11 +627,17 @@ def summary(now: int | None = None) -> dict:
             for lab, s in states.items():
                 matrix.setdefault(lab, {})[key] = s
 
+            for c in (r.data or {}).get("cfg", []):
+                metrics.setdefault(c["label"], {})[key] = cfg_metrics(c)
+
+                if c["label"] not in labels:
+                    labels.append(c["label"])
+
             direct = [{"ip": ip, "labels": d.get("labels", []), "code": v[0], "words": v[1]} for ip, d in ((r.data or {}).get("direct") or {}).items() for v in [direct_verdict(d)]]
             nets.append({"id": r.id, "ts": r.ts, "age_s": now - r.ts, "operator": r.operator, "connection": r.connection, "city": r.city, "ip": r.ip, "mode": r.mode, "key": key,
-                         "configs": len(states), "ok": list(states.values()).count("ok"), "direct": direct, "panel": panel_view(r.data or {}), "findings": r.findings or []})
+                         "configs": len(states), "ok": list(states.values()).count("ok"), "direct": direct, "panel": panel_view(r.data or {}), "kit": (r.data or {}).get("kit", ""), "manifest": (r.data or {}).get("manifest", ""), "findings": r.findings or []})
 
-    return {"networks": nets, "matrix": matrix}
+    return {"networks": nets, "matrix": matrix, "metrics": metrics, "labels": labels}
 
 
 def runs(limit: int = 30) -> list[dict]:
