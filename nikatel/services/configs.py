@@ -19,7 +19,7 @@ from ..db import session
 from ..log import get_logger
 from ..models import Config, ConfigSample, Server, Subscription
 from ..ssh import Node, SSHError, run_script
-from . import probe
+from . import probe, witness
 from .events import emit
 
 log = get_logger("configs")
@@ -365,6 +365,7 @@ def _sync(settle: bool = True, fast: bool = False) -> list[str]:
         return []
 
     now = int(time.time())
+    second = witness.read() if any(r["status"] == "down" for r in rows) else {}          # the witnesses (a second probe on another network) are asked only while something is down
     down_tcp: list[str] = []
     held: list[str] = []
     fell: list[tuple[str, str]] = []          # (name, why) of the configs that went down in this read: told together below
@@ -407,6 +408,14 @@ def _sync(settle: bool = True, fast: bool = False) -> list[str]:
                         hold = True        # no fresh answer from Iran yet: the quick read does not call it down
                 elif r["status"] == "up" and reach:
                     meta.pop("reach", None)
+
+            rescued = None if overridden else witness.rescue(r, second.get(r["name"]), now)          # the main probe says down, a second vantage gets through: its own network is what fails
+
+            if rescued:
+                r, overridden = rescued, True
+                meta["witness"] = {"by": second[r["name"]]["by"], "at": now}
+            else:
+                meta.pop("witness", None)
 
             old = c.status
             probe_test = int(r["checked_at"] or 0) or now // 30 * 30          # (a probe that sends no time of its test: one test per 30 s is assumed)

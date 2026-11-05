@@ -37,7 +37,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
     # itself; the buttons still try it), `last` = what the last night did
     "pg_auto": {"auto": False, "hour": 3, "budget_minutes": 60, "bad": {}, "last": {}},
     # the probe(s): primary + standby list [{name, api_url, api_token}]
-    "probe": {"api_url": "", "api_token": "", "standby": [], "server_id": 0},
+    "probe": {"api_url": "", "api_token": "", "standby": [], "witness": [], "server_id": 0},      # witness: second probes on other networks that only look (services/witness.py)
     # the shop bot: where it runs (reached over SSH with the panel's key) and its public webhook URL
     "shopbot": {"host": "", "ssh_user": "root", "ssh_port": 22, "dir": "/var/www/nikabot", "env": "/opt/nikabot/db.env", "public_url": ""},
     # the Bale relay (services/bale.py): a customer channel for the days the international internet is cut. server_id / installed_at: where it runs (an Iran server) and since when; hosts: the hosts a customer's subscription link may be on;

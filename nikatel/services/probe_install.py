@@ -1,5 +1,5 @@
 """Install the probe (probe/ in this repository) on an Iran server, with the Xray binary from the
-panel's engine cache, and register it as the primary (or a standby) probe."""
+panel's engine cache, and register it as the primary (or a standby, or a witness: a second vantage that only looks, services/witness.py) probe."""
 from __future__ import annotations
 
 import base64
@@ -32,11 +32,14 @@ def _put(node: Node, path: str, data: bytes, mode: str) -> None:
     run_action(node, "put_file", {"PATH": path, "B64": base64.b64encode(data).decode(), "MODE": mode})
 
 
-def install(server_id: int, as_standby: bool = False) -> dict:
+def install(server_id: int, as_standby: bool = False, as_witness: bool = False) -> dict:
     s = get_settings()
 
     if s.read_only:
         raise ValueError("the panel is read-only; set NIKATEL_READ_ONLY=false on the panel server to install a probe")
+
+    if as_witness and server_id == int(st.get("probe").get("server_id") or 0):
+        raise ValueError("a witness is a SECOND vantage: choose another server than the one that runs the main probe")
 
     eng = s.data_dir.parent / "engines"
     xray = eng / "xray"
@@ -91,7 +94,11 @@ def install(server_id: int, as_standby: bool = False) -> dict:
     api_url = f"http://{host}:18080"
     cur = st.get("probe")
 
-    if as_standby or cur.get("api_url"):
+    if as_witness:
+        witness = [x for x in (cur.get("witness") or []) if x.get("api_url") != api_url] + [{"name": name, "api_url": api_url, "api_token": token}]
+        st.put("probe", {"witness": witness})
+        role = "witness"
+    elif as_standby or cur.get("api_url"):
         standby = [x for x in (cur.get("standby") or []) if x.get("api_url") != api_url] + [{"name": name, "api_url": api_url, "api_token": token}]
         st.put("probe", {"standby": standby})
         role = "standby"

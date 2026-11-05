@@ -53,6 +53,18 @@ def candidates() -> list[dict]:
     return out
 
 
+def witnesses() -> list[dict]:
+    """The second vantages (services/witness.py): probes on other networks that only LOOK at the configs. They are not candidates: the panel never changes a config through
+    them and never fails over to them (their list is only a copy)."""
+    out = []
+
+    for x in st.get("probe").get("witness") or []:
+        if x.get("api_url") and x.get("api_token"):
+            out.append({"name": x.get("name") or "witness", "api_url": x["api_url"].rstrip("/"), "api_token": x["api_token"]})
+
+    return out
+
+
 def _call(p: dict, method: str, path: str, body: dict | None = None, timeout: float = 30) -> dict:
     headers = {"Authorization": "Bearer " + p["api_token"], "Accept": "application/json", "Accept-Encoding": "gzip"}
     r = httpx.request(method, p["api_url"] + path, json=body, headers=headers, timeout=timeout, verify=tls.shared())

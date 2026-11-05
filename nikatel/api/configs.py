@@ -236,6 +236,7 @@ def probe_get():
     """The probe (primary and standby): addresses, whether a token is kept, the server it runs on."""
     d = st.public("probe")
     d["standby"] = [{"name": x.get("name", ""), "api_url": x.get("api_url", ""), "has_token": bool(x.get("api_token"))} for x in d.get("standby") or []]
+    d["witness"] = [{"name": x.get("name", ""), "api_url": x.get("api_url", ""), "has_token": bool(x.get("api_token"))} for x in d.get("witness") or []]
     return {"ok": True, **d, "state": probe.active()}
 
 
@@ -262,11 +263,32 @@ def probe_put(body: ProbeIn):
 
 
 @router.post("/settings/probe/install")
-def probe_install(server_id: int, as_standby: bool = False):
-    """Install a probe on an Iran server of the inventory, as an action (primary or standby)."""
+def probe_install(server_id: int, as_standby: bool = False, as_witness: bool = False):
+    """Install a probe on an Iran server of the inventory, as an action (primary, standby, or witness: a second vantage on another network that only looks)."""
     from ..services import probe_install as pi
 
-    return {"ok": True, **_wrap(pi.install, server_id, as_standby)}
+    return {"ok": True, **_wrap(pi.install, server_id, as_standby, as_witness)}
+
+
+@router.delete("/settings/probe/witness/{name}")
+def witness_remove(name: str):
+    """Stop using a witness (the probe stays on its server; the configs go back to the main probe's word alone)."""
+    cur = st.get("probe")
+    keep = [x for x in cur.get("witness") or [] if x.get("name") != name]
+
+    if len(keep) == len(cur.get("witness") or []):
+        raise HTTPException(404, "no such witness")
+
+    st.put("probe", {"witness": keep})
+    return probe_get()
+
+
+@router.post("/settings/probe/witness/mirror")
+def witness_mirror():
+    """Put the witnesses' config lists equal to the main probe's now (the job does it every 5 minutes)."""
+    from ..services import witness
+
+    return {"ok": True, "done": _wrap(witness.mirror)}
 
 
 @router.post("/configs/{config_id}/speedtest")
