@@ -473,6 +473,11 @@ def investigate(aid: int, tunnel_id: int) -> None:
 
     code, sentence = explain_users(f)
 
+    from . import field
+
+    for line in field.story_for([b["config"] for b in (f["ux"].get("bad") or [])]):          # (1.69.231) what the Iran test kit saw from a real network for these configs, when a run is lately in
+        say(line)
+
     with session() as db:
         t = db.get(Tunnel, tunnel_id)
 

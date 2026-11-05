@@ -400,13 +400,31 @@ class UserWatchSample(Base):
     online: Mapped[list] = mapped_column(JSON, default=list)
 
 
+class FieldRun(Base):
+    """One run of the Iran test kit (services/field.py): what a person's laptop saw from ONE real network (a SIM's hotspot, a home line) - the reach of our addresses, DNS, path MTU and what every config really carried.
+    `data` is the compact run, `findings` what the Doctor's rules found in it. Kept 60 days (at most 500 runs)."""
+    __tablename__ = "field_runs"
+    __table_args__ = (Index("ix_field_runs_ts", "ts"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    ts: Mapped[int] = mapped_column(Integer, default=now)
+    sender: Mapped[str] = mapped_column(String(64), default="")              # the token that sent it
+    operator: Mapped[str] = mapped_column(String(32), default="")
+    connection: Mapped[str] = mapped_column(String(16), default="")
+    city: Mapped[str] = mapped_column(String(32), default="")
+    ip: Mapped[str] = mapped_column(String(64), default="")
+    mode: Mapped[str] = mapped_column(String(8), default="")
+    data: Mapped[dict] = mapped_column(JSON, default=dict)
+    findings: Mapped[list] = mapped_column(JSON, default=list)
+
+
 class ApiToken(Base):
     """The sign-in of a machine (docs/api.md section 3): only the hash of the token is kept; the token itself is shown once when it is made."""
     __tablename__ = "api_tokens"
 
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(40))
-    scope: Mapped[str] = mapped_column(String(8))                        # read | act | admin
+    scope: Mapped[str] = mapped_column(String(8))                        # read | act | admin | field (1.69.231: the Iran test kit, one route)
     token_hash: Mapped[str] = mapped_column(String(64), unique=True)
     prefix: Mapped[str] = mapped_column(String(12), default="")          # the first characters, so the operator can tell tokens apart
     created_at: Mapped[int] = mapped_column(Integer, default=now)

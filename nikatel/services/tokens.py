@@ -1,7 +1,7 @@
 """API tokens: the sign-in of a machine (a script, a Telegram bot, an AI agent) - docs/api.md section 3.
 
 A token is `nkt_` plus 40 random characters, shown ONCE when it is made; the panel keeps only its SHA-256. Each token has a scope:
-`read` (GET only), `act` (also the routes that start work on servers), `admin` (everything, including settings, tokens, sign-in and the log).
+`read` (GET only), `act` (also the routes that start work on servers), `admin` (everything, including settings, tokens, sign-in and the log), `field` (1.69.231: the Iran test kit - it may send the result of a run, POST /api/field/ingest, and nothing else).
 A token can be revoked; every use moves `last_used_at` (at most once a minute). `allowed` is pure and tested."""
 from __future__ import annotations
 
@@ -16,7 +16,8 @@ from sqlalchemy import select
 from ..db import session
 from ..models import ApiToken
 
-SCOPES = ("read", "act", "admin")
+SCOPES = ("read", "act", "admin", "field")
+FIELD_PATH = "/api/field/ingest"
 PREFIX = "nkt_"
 ADMIN_PATHS = ("/api/auth", "/api/tokens", "/api/settings", "/api/license", "/api/system", "/api/logs", "/api/dns/accounts", "/api/shopbot/query", "/api/shopbot/table",
                "/api/backup", "/api/nodes/user-key", "/api/servers/add-many", "/api/shopbot/settings", "/api/shopbot/payment-keys", "/api/commander")      # (a backup restores the sign-in itself; the user key is the PRIVATE key; add-many takes SSH passwords; the bot settings hold its payment keys; the phone assistant is driven by the owner's own phone: a read or act token may not drive it)
@@ -30,6 +31,9 @@ def allowed(scope: str, method: str, path: str) -> bool:
     """What a token of this scope may do with this request. Pure."""
     if scope == "admin" or path in ("/api/auth/me", "/api/health"):          # every token may ask who it is
         return True
+
+    if scope == "field":                                      # a file that leaves the owner's hands (the kit of a person in Iran): ONE route, never a read
+        return method.upper() == "POST" and path == FIELD_PATH
 
     if any(path == p or path.startswith(p + "/") for p in ADMIN_PATHS) or any(rx.fullmatch(path) for rx in ADMIN_RE):
         return False
@@ -65,7 +69,7 @@ def create(name: str, scope: str, by: str = "admin") -> tuple[str, dict]:
         raise ValueError("give the token a name (what will use it)")
 
     if scope not in SCOPES:
-        raise ValueError("the scope must be read, act or admin")
+        raise ValueError("the scope must be read, act, admin or field")
 
     token = PREFIX + secrets.token_urlsafe(30)
 

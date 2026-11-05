@@ -11,7 +11,7 @@ router = APIRouter(tags=["tokens"], dependencies=[Depends(auth.current_user)])
 
 class TokenIn(BaseModel):
     name: str = Field(max_length=40)
-    scope: str = Field(pattern=r"^(read|act|admin)$")
+    scope: str = Field(pattern=r"^(read|act|admin|field)$")
     password: str = Field("", max_length=256)       # the admin password, when the request comes from the browser (a token of scope admin needs no password)
 
 

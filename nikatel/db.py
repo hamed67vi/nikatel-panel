@@ -55,6 +55,7 @@ MIGRATIONS: list[tuple[int, str, list[str] | Callable[[Session], None]]] = [
     (21, "user_watches, user_watch_samples tables (created by create_all)", []),
     (22, "panels.host_server_id column (the server that runs a PasarGuard panel, chosen by the owner)", lambda db: _add_column(db, "panels", "host_server_id", "INTEGER")),
     (23, "commander_runs table (created by create_all)", []),
+    (24, "field_runs table (created by create_all)", []),
 ]
 
 
