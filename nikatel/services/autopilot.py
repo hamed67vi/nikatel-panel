@@ -468,8 +468,11 @@ def diagnose_config(config_id: int) -> dict:
     return out
 
 # ------------------------------------------------------------------ the runs
+_SAY_LOCK = threading.Lock()      # the tunnels of one failover are built at the same time and all write into one story: a line must not be lost to a second writer
+
+
 def _say(aid: int, line: str, done: bool | None = None, ok: bool | None = None) -> None:
-    with session() as db:
+    with _SAY_LOCK, session() as db:
         e = db.get(ActionLog, aid)
 
         if e is not None:
@@ -1562,6 +1565,41 @@ def working() -> list[dict]:
 
 def storm_now() -> bool:
     return outage_state()["storm"]
+
+
+# ------------------------------------------------------------------ the quiet time of a failover (1.69.230, the owner: "when servers go off the Doctor stops every unnecessary job and connects the configs; what it does in one place must not collide with anything")
+MASS_SETTLE = 300       # after the last failover story ended: the DNS settles and the old tunnels leave before the Doctor goes back to its own affairs
+_MASS = {"running": 0, "until": 0.0}
+_MASS_LOCK = threading.Lock()
+
+
+def mass_note(seconds: float) -> None:
+    """A server that carries tunnels is off (its minute runs) or a failover is being planned: the Doctor's own affairs wait this long from now."""
+    with _MASS_LOCK:
+        _MASS["until"] = max(_MASS["until"], time.time() + seconds)
+
+
+def mass_begin() -> None:
+    with _MASS_LOCK:
+        _MASS["running"] += 1
+
+
+def mass_end() -> None:
+    with _MASS_LOCK:
+        _MASS["running"] = max(0, _MASS["running"] - 1)
+        _MASS["until"] = max(_MASS["until"], time.time() + MASS_SETTLE)
+
+
+def mass_on() -> bool:
+    with _MASS_LOCK:
+        return _MASS["running"] > 0 or time.time() < _MASS["until"]
+
+
+def quiet_now() -> bool:
+    """The Doctor's OWN affairs wait: a mass disruption, or a failover that is waited for, planned, running or settling. Waiting: the surveys and speed tests, the changes of a tunnel's type, the sweeps (janitor, orphans),
+    the updates (cores, PasarGuard), the returns, the moves for quality or resources, new standbys and strands. NOT waiting - what keeps the users connected: the checks of every tunnel and server, the repair of the other tunnels
+    (restarts), the standby handover, the Trident's weights, the carry watch, the Configs monitoring, the DNS heal, the failover itself."""
+    return storm_now() or mass_on()
 
 
 def _tell_storm(o: dict) -> None:

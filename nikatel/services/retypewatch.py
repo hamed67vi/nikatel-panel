@@ -153,9 +153,9 @@ def _revert(name: str, tunnel_id: int, e: dict, text: str) -> None:
 # ------------------------------------------------------------------ the job
 def run() -> None:
     """Job (every five minutes): the looks that are due, one note at a time."""
-    from . import actions
+    from . import actions, autopilot
 
-    if get_settings().read_only or jobs.stopping() or actions.doctor_mode() == "off":
+    if get_settings().read_only or jobs.stopping() or actions.doctor_mode() == "off" or autopilot.quiet_now():
         return
 
     now = int(time.time())

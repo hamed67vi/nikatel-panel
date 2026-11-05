@@ -22,7 +22,9 @@ old and new address, which server, when), so the panel can list the changes and 
 from __future__ import annotations
 
 import fnmatch
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 
 from sqlalchemy import select
 
@@ -173,6 +175,90 @@ def pick_target(rankings: dict[int, list[dict]]) -> dict | None:
     """Pure: {tunnel_id: [candidate servers best first]} -> the one server that can carry them all with the best total rank."""
     ranked = rank_targets(rankings)
     return ranked[0] if ranked else None
+
+
+# ------------------------------------------------------------------ the load spread (1.69.230: the owner, 2026-11-05: "when two or three servers - or half of them - are off at once, start every move together; with only two servers left, balance the load yourself")
+RESERVE_COST = 12          # a tunnel that is on its way to an Iran server (a plan that runs now) takes this many points off that server's free resources in the ranking ...
+RESERVE_QUALITY = 5        # ... and this many off its line quality (half a step of the ranking), so that the plans of one outage, all started in the same minute, do not pile onto the one server that ranks first
+RESERVE_TTL = 1800         # a reservation nobody gave back (a plan that died in the middle) is forgotten after this long
+PARALLEL_TUNNELS = 4       # tunnels of one dead server built at the same time
+PLAN_THREADS = 6           # dead servers planned at the same time
+_RESERVED: dict[str, tuple[int, int, float]] = {}      # plan key -> (Iran server the tunnels go to, how many, when): the tunnels that are on their way
+_RESERVE_LOCK = threading.Lock()
+_STATE_LOCK = threading.RLock()                         # the failover record (seen, tried, history, dns_log) is read, changed and saved by several plans at once
+
+
+def held(book: dict | None = None) -> dict[int, int]:
+    """The tunnels on their way to each Iran server: {server id: how many}."""
+    now = time.time()
+    out: dict[int, int] = {}
+
+    for tid, n, at in list((_RESERVED if book is None else book).values()):
+        if now - at < RESERVE_TTL:
+            out[tid] = out.get(tid, 0) + n
+
+    return out
+
+
+def with_reserved(rows: list[dict], on_the_way: dict[int, int]) -> list[dict]:
+    """Pure: the ranked Iran servers (rows of autopilot.ranking, best first) as they will look once the tunnels on their way have arrived - more tunnels, fewer free resources, a little less quality - ranked again."""
+    from .detect import rank_key
+
+    out = []
+
+    for c in rows:
+        n = int(on_the_way.get(c["id"], 0))
+
+        if n <= 0 or c.get("score", 0) <= 0:
+            out.append(c)
+            continue
+
+        res = max(0, int(c.get("resources", 0)) - RESERVE_COST * n)
+        quality = max(0, int(c.get("quality", 0)) - RESERVE_QUALITY * n)
+        have = int(c.get("tunnels") or 0) + n
+        unused = max(0, round(100 - have * 12.5))
+        out.append({**c, "tunnels": have, "resources": res, "quality": quality, "unused": unused, "score": max(1, round(quality * 0.4 + res * 0.3 + unused * 0.3)), "reserved": n})
+
+    return sorted(out, key=rank_key)
+
+
+def release(p: dict) -> None:
+    """Give back what the plan reserved on its target (once; a plan that reserved nothing is left alone)."""
+    key = p.pop("reserved", None)
+
+    if key:
+        with _RESERVE_LOCK:
+            _RESERVED.pop(key, None)
+
+
+def assign_target(p: dict, book: dict | None = None) -> dict:
+    """Phase two of a dead server's plan, one plan at a time and at once: the target is the server that can carry every tunnel with the best rank AFTER the tunnels already on their way (the other dead servers' plans of this minute)
+    are counted, and the plan reserves its own tunnels there. A plan that has its target already (or none to pick from) is left as it is."""
+    rankings = p.pop("_rankings", None)
+
+    if rankings is None:
+        return p
+
+    with _RESERVE_LOCK:
+        way = held(book)
+        target = pick_target({tid: with_reserved(lst, way) for tid, lst in rankings.items()}) if rankings else None
+        moving = len(p["tunnels"])
+
+        if target and moving:
+            key = f"{p['server_id']}-{time.time_ns()}"
+            (_RESERVED if book is None else book)[key] = (target["id"], moving, time.time())
+
+            if book is None:
+                p["reserved"] = key
+
+    if target:
+        with session() as db:
+            row = db.get(Server, target["id"])
+            p["target"] = {"id": target["id"], "name": target.get("name"), "ip": row.host if row is not None else None}
+    elif moving:
+        p["problems"].append("no other Iran server can carry all of these tunnels")
+
+    return p
 
 
 def closure(move: set[int], recs: list[dict]) -> set[int]:
@@ -338,9 +424,11 @@ def _ports_problem(server_id: int, ports: set[int]) -> str:
     return ("port " + ", ".join(str(p) for p in busy) + " already has a program listening on it") if busy else ""
 
 
-def _make_plan(server_id: int, move: set[int] | None, reason: str, target_id: int | None = None, strict: bool = False) -> dict:
+def _make_plan(server_id: int, move: set[int] | None, reason: str, target_id: int | None = None, strict: bool = False, defer: bool = False, exclude: frozenset = frozenset(), dns: bool = True) -> dict:
     """move=None: every tunnel of the server (it is dead). Otherwise the given tunnels, widened so that the DNS stays consistent.
-    `target_id`: the Iran server the operator (or the return) chose; else the one that ranks best for every moved tunnel.
+    `target_id`: the Iran server the operator (or the return) chose; else the one that ranks best for every moved tunnel - with the tunnels that are already on their way to a server counted against it (`with_reserved`).
+    `defer` (the plans of one outage): the tunnels are ranked but the target is NOT picked - `assign_target` does it, one plan at a time, so that plans made at the same moment do not all choose the same server.
+    `exclude`: Iran servers that are not candidates (a simulation of servers that are off); `dns=False`: the DNS accounts are not asked (a simulation).
     `strict` (the "Move the tunnels" button): only a server with room is a target - `room_for` (line quality, resources, tunnels on it after the move) - and every port of the moved tunnels is proved free on it
     (the panel's own tunnels there AND what listens on the server); the plan also lists the best three targets (`candidates`) and the servers left out with the reason (`skipped`)."""
     with session() as db:
@@ -352,7 +440,7 @@ def _make_plan(server_id: int, move: set[int] | None, reason: str, target_id: in
         info = {"server_id": s.id, "server": s.name, "ip": s.host}
 
     tunnels = _tunnels_of(server_id)
-    recs, dns_error = _records(info["ip"], tunnels, hosts=move is not None)       # (a whole-server move takes every record: the panels are not asked)
+    recs, dns_error = _records(info["ip"], tunnels, hosts=move is not None) if dns else ([], "")       # (a whole-server move takes every record: the panels are not asked)
     all_ids = {t["id"] for t in tunnels}
     fixed = {t["id"] for t in tunnels if t.get("protected")}          # (1.69.221: a protected tunnel stays where it is, whatever the plan - and a DNS record it shares with a moved tunnel is left alone, as one that serves a tunnel that stays)
     asked = (all_ids if move is None else set(move) & all_ids) - fixed
@@ -380,18 +468,29 @@ def _make_plan(server_id: int, move: set[int] | None, reason: str, target_id: in
             target = {"id": ts.id, "name": ts.name}
 
     if strict or not target_id:
-        for t in moving:
+        def rank_one(t: dict) -> tuple[list[dict] | None, str]:
             try:
-                rankings[t["id"]] = [r for r in autopilot.ranking(t["id"]) if r.get("online", True) is not False and r.get("score", 0) > 0]
+                return [r for r in autopilot.ranking(t["id"]) if r.get("online", True) is not False and r.get("score", 0) > 0 and r["id"] not in exclude], ""
             except (ValueError, RuntimeError) as e:
-                problems.append(f"{t['name']}: {str(e)[:120]}")
+                return None, f"{t['name']}: {str(e)[:120]}"
+
+        with ThreadPoolExecutor(max(1, min(PARALLEL_TUNNELS, len(moving)))) as ex:          # (every tunnel is ranked by pinging its foreign server from each Iran server: a dead server of four tunnels waited four rounds of that, one after the other)
+            for t, (lst, err) in zip(moving, ex.map(rank_one, moving)):
+                if lst is None:
+                    problems.append(err)
+                else:
+                    rankings[t["id"]] = lst
 
     if not strict:
-        if not target_id:
-            target = pick_target(rankings) if rankings else None
+        if not target_id and not defer:
+            way = held()
+            target = pick_target({tid: with_reserved(lst, way) for tid, lst in rankings.items()}) if rankings else None
     else:                                   # an explicit target (the one the operator confirmed) is judged by the same rules as an automatic one: the world may have changed since the plan was shown
         if len(rankings) < len(moving):
             rankings = {}                   # one tunnel could not be ranked: no server is proved to carry all of them
+
+        way = held()
+        rankings = {tid: with_reserved(lst, way) for tid, lst in rankings.items()}
 
         for lst in rankings.values():
             for c in lst:
@@ -417,7 +516,7 @@ def _make_plan(server_id: int, move: set[int] | None, reason: str, target_id: in
                 candidates.append(c)
 
         target = candidates[0] if candidates else None
-    if moving and not target:
+    if moving and not target and not defer:
         problems.append("no other Iran server can carry all of these tunnels" + (" (" + "; ".join(f"{v['name']}: {v['why']}" for v in skipped.values())[:300] + ")" if skipped else ""))
 
     if dns_error:
@@ -441,6 +540,9 @@ def _make_plan(server_id: int, move: set[int] | None, reason: str, target_id: in
     if kept:
         out["protected"] = kept
 
+    if defer:
+        out["_rankings"] = rankings
+
     if strict:
         out["candidates"] = [{"id": c["id"], "name": c["name"], "ip": hosts.get(c["id"]), "reason": c.get("reason", ""), "quality": c.get("quality"), "resources": c.get("resources"), "tunnels": c.get("tunnels")} for c in candidates]
         out["skipped"] = list(skipped.values())
@@ -451,6 +553,47 @@ def _make_plan(server_id: int, move: set[int] | None, reason: str, target_id: in
 def plan_for(server_id: int) -> dict:
     """What a failover of a dead Iran server would do: every tunnel, every record that carries its address."""
     return _make_plan(server_id, None, "down")
+
+
+def plan_dead(server_id: int) -> dict:
+    """Phase one of the plan of a dead server in an outage (the Doctor makes it for every dead server at the same time): all of `plan_for` except the target, which `assign_target` picks next, one plan at a time."""
+    return _make_plan(server_id, None, "down", defer=True)
+
+
+def simulate(off_ids: list[int]) -> dict:
+    """What the Doctor would do if these Iran servers were all off at the same moment (1.69.230; read-only: nothing is built, no DNS account is asked, nothing is saved). The servers are taken busiest first, as in a real outage, and each plan sees the
+    tunnels the plans before it sent to a server (`assign_target`): the answer shows how the load would be spread, which dead server finds no room, and how many tunnels each server that is left would carry at the end."""
+    off = {int(x) for x in off_ids}
+
+    with session() as db:
+        iran = {x.id: (x.name, x.online is not False) for x in db.scalars(select(Server).where(Server.role == "iran", Server.enabled.is_(True)))}
+        load: dict[int, int] = {}
+
+        for t in db.scalars(select(Tunnel).where(Tunnel.enabled.is_(True))):
+            load[t.iran_server_id] = load.get(t.iran_server_id, 0) + 1
+
+    book: dict = {}
+    rows, after = [], {sid: load.get(sid, 0) for sid, (_, on) in iran.items() if on and sid not in off}
+
+    for sid in sorted(off & set(iran), key=lambda x: -load.get(x, 0)):
+        if not load.get(sid):
+            rows.append({"server": iran[sid][0], "tunnels": [], "target": None, "problems": []})
+            continue
+
+        try:
+            p = assign_target(_make_plan(sid, None, "down", defer=True, exclude=frozenset(off), dns=False), book)
+        except (ValueError, RuntimeError) as e:
+            rows.append({"server": iran[sid][0], "tunnels": [f"{load[sid]} tunnel(s)"], "target": None, "problems": [str(e)[:160]]})
+            continue
+
+        tid = (p.get("target") or {}).get("id")
+
+        if tid:
+            after[tid] = after.get(tid, 0) + len(p["tunnels"])
+
+        rows.append({"server": iran[sid][0], "tunnels": [t["name"] for t in p["tunnels"]], "target": (p.get("target") or {}).get("name"), "problems": p["problems"]})
+
+    return {"off": sorted(iran[x][0] for x in off & set(iran)), "moves": rows, "load_after": {iran[sid][0]: n for sid, n in sorted(after.items())}, "stuck": [r["server"] for r in rows if r["tunnels"] and not r["target"]]}
 
 
 def route_plan(tunnel_id: int, cause: str = "route_cut") -> dict:
@@ -585,11 +728,16 @@ def _notify_plan(p: dict, headline: str) -> None:
 
 
 def _busy(s: dict, sid: int, now: int) -> bool:
-    """A failover of this server ran in the last 6 hours (or a plan still waits)."""
-    return any(p["server_id"] == sid and p.get("reason") != "replace" for p in s["pending"]) or any(h["server_id"] == sid and h.get("reason") == "down" and now - h["at"] < 6 * 3600 for h in s["history"])
+    """A failover of this server ran in the last 6 hours (or a plan still waits) - unless its tunnels have gone BACK to it since (1.69.230: a server that came back, got its tunnels again and went off a second time was not replaced for six hours)."""
+    if any(p["server_id"] == sid and p.get("reason") != "replace" for p in s["pending"]):
+        return True
+
+    last = max((h["at"] for h in s["history"] if h["server_id"] == sid and h.get("reason") == "down" and now - h["at"] < 6 * 3600), default=0)
+    back = max((h["at"] for h in s["history"] if h.get("reason") == "return" and (h.get("target") or {}).get("id") == sid), default=0)
+    return bool(last) and back < last
 
 
-RETRY_NO_TARGET = 600     # a dead server whose tunnels found no target is looked at again after this long
+RETRY_NO_TARGET = 120     # a dead server whose tunnels found no target is looked at again after this long (it was ten minutes: with half the servers off, the first plans leave a server with room later)
 CUT_WAIT = 90             # an Iran server that is ON but cut from abroad (the pulse: "the panel's host cannot connect to it, but it is on") whose tunnels are half down or more is replaced after this many seconds ...
 CUT_SHARE = 0.5           # ... (the owner, 2026-11-04: "when the routes of the Iran servers are closed the Doctor must replace one quickly - uptime matters to us"; a server that is off waits `server_minutes`)
 CUT_WHY = "the server is cut from abroad (it is on, only Iran sees it) and its tunnels are down"
@@ -616,14 +764,90 @@ def off_wait(configured: int, blind: bool) -> int:
 
 
 # ------------------------------------------------------------------ the job: dead servers (run by the Doctor in mode "move")
+_CHECKING = threading.Lock()
+
+
+FOLLOW_AFTER = 240      # the configs that ride a moved name are looked at this long after its record changed (the TTL is 2 minutes) ...
+FOLLOW_AGAIN = 300      # ... and once more after this long when some were still down
+_FOLLOW: list[dict] = []
+_FOLLOW_LOCK = threading.Lock()
+
+
+def _follow_later(p: dict, done_dns: list[dict]) -> None:
+    """Remember the names a failover moved: `follow_up` looks at the configs behind them."""
+    names = [str(d.get("fqdn") or "").lower() for d in done_dns if d.get("fqdn")]
+
+    if names and p.get("target"):
+        with _FOLLOW_LOCK:
+            _FOLLOW.append({"due": time.time() + FOLLOW_AFTER, "server": p["server"], "target": p["target"]["name"], "names": names, "looks": 0})
+
+
+def follow_up(now: float | None = None) -> None:
+    """The result of a failover (1.69.230, the owner: "the Doctor must always keep its eye on the configs"): some minutes after the DNS records of a dead server moved, the configs whose address is one of those names are looked at -
+    how many connect, which do not - and an event says so (Telegram too when some are down). Some still down: one more look later. It changes nothing; a config that stays down is the DNS heal's, the tunnel checks' and the repair's."""
+    now = time.time() if now is None else now
+
+    with _FOLLOW_LOCK:
+        due = [f for f in _FOLLOW if f["due"] <= now]
+
+        for f in due:
+            _FOLLOW.remove(f)
+
+    for f in due:
+        with session() as db:
+            rows = [(c.name, c.status) for c in db.scalars(select(Config)) if str((c.meta or {}).get("address", "")).lower() in f["names"]]
+
+        if not rows:
+            continue                                   # (no config rides these names: nothing to say)
+
+        down = sorted(n for n, status in rows if status == "down")
+        text = f"After the move of {f['server']} → {f['target']}: {len(rows) - len(down)} of {len(rows)} configs behind {', '.join(f['names'][:4])}{'…' if len(f['names']) > 4 else ''} connect" + (f"; still down: {', '.join(down[:8])}" if down else "") + "."
+
+        with session() as db:
+            emit(db, "warn" if down else "ok", "actions", f"Doctor: {text}", f["server"])
+
+        if down:
+            _notice("⚠ " + text + (" The Doctor looks again in 5 minutes." if f["looks"] < 1 else " Look at them: the tunnels, the node and the DNS name."))
+
+            if f["looks"] < 1:
+                with _FOLLOW_LOCK:
+                    _FOLLOW.append({**f, "looks": f["looks"] + 1, "due": now + FOLLOW_AGAIN})
+
+
+def tick() -> None:
+    """The job of its own (every 10 seconds, 1.69.230): the dead servers are looked at without waiting for the Doctor's round of a minute - a server that is off is replaced one minute after the pulse says so, not one to two;
+    and the result of a failover that ended is looked at (read-only, whatever the Doctor's mode)."""
+    from . import doctor
+
+    try:
+        follow_up()
+    except Exception:
+        log.exception("failover: the look at the configs after a move")
+
+    if doctor.mode() == "off" or not doctor.can_move():
+        return
+
+    check()
+
+
 def check() -> None:
-    """Every Iran server that has been off for OFF_WAIT seconds (`server_minutes` when the panel is blind: most servers off at once) gets its tunnels moved - one server per tick, the one with the most tunnels first.
-    Several servers off at once (a provider-wide outage) are handled one after the other, as long as a healthy Iran server is left to carry them."""
+    """Every Iran server that has been off for OFF_WAIT seconds (`server_minutes` when the panel is blind: most servers off at once) gets its tunnels moved - ALL of them at the same moment (1.69.230, the owner, 2026-11-05: "two or three servers
+    off together, or half of them: after a minute start every move at once, not one by one"): the plans are made at the same time, the targets are picked one plan after the other with the tunnels already on their way counted against a server
+    (the load is spread, and with two servers left both carry their share), and every plan runs in a story of its own, its tunnels at the same time too."""
     if not enabled() or get_settings().read_only:
         return
 
+    if not _CHECKING.acquire(blocking=False):
+        return                                 # another round is planning right now
+
+    try:
+        _check()
+    finally:
+        _CHECKING.release()
+
+
+def _check() -> None:
     now = int(time.time())
-    s = _state()
     configured = int(st.get("repair").get("server_minutes", 10)) * 60
 
     with session() as db:
@@ -643,51 +867,79 @@ def check() -> None:
         down.update(cut)
 
     wait = off_wait(configured, blind)
-    stale = [sid for sid in s["seen"] if int(sid) not in down]
+    due: list[tuple[int, str, int]] = []       # the servers whose waiting time is over, the one with the most tunnels first
 
-    for sid in stale:
-        s["seen"].pop(sid)                     # it answered again: the clock starts over
-        s.setdefault("tried", {}).pop(sid, None)
+    with _STATE_LOCK:
+        s = _state()
+        stale = [sid for sid in s["seen"] if int(sid) not in down]
 
-    changed = bool(stale)                      # a forgotten entry must be saved too, or the next outage would skip the waiting time
+        for sid in stale:
+            s["seen"].pop(sid)                 # it answered again: the clock starts over
+            s.setdefault("tried", {}).pop(sid, None)
 
-    for sid, name in sorted(down.items(), key=lambda kv: -load.get(kv[0], 0)):
-        since = s["seen"].setdefault(str(sid), now)
-        changed = changed or since == now
+        changed = bool(stale)                  # a forgotten entry must be saved too, or the next outage would skip the waiting time
 
-        if now - since < (CUT_WAIT if sid in cut else wait) or _busy(s, sid, now) or not load.get(sid) or now - int(s.setdefault("tried", {}).get(str(sid), 0)) < RETRY_NO_TARGET:
-            continue
+        for sid, name in sorted(down.items(), key=lambda kv: -load.get(kv[0], 0)):
+            since = s["seen"].setdefault(str(sid), now)
+            changed = changed or since == now
 
+            if load.get(sid) and now - since < (CUT_WAIT if sid in cut else wait) + 120 and not _busy(s, sid, now):
+                autopilot.mass_note(180)       # (a server that carries tunnels is off: from the first look the Doctor's own affairs wait - surveys, speed tests, sweeps, updates - and the configs come first)
+
+            if now - since < (CUT_WAIT if sid in cut else wait) or _busy(s, sid, now) or not load.get(sid) or now - int(s.setdefault("tried", {}).get(str(sid), 0)) < RETRY_NO_TARGET:
+                continue
+
+            due.append((sid, name, since))
+
+        if changed:
+            _save(s)
+
+    if not due:
+        return
+
+    def plan_one(item: tuple[int, str, int]) -> dict | None:
         try:
-            p = plan_for(sid)
+            return plan_dead(item[0])
         except (ValueError, RuntimeError):
-            log.warning("failover plan for %s failed", name, exc_info=True)
+            log.warning("failover plan for %s failed", item[1], exc_info=True)
+            return None
+
+    with ThreadPoolExecutor(max(1, min(PLAN_THREADS, len(due)))) as ex:          # (the slow part - every tunnel's foreign server is pinged from each Iran server - is done for all of them at the same time)
+        plans = list(ex.map(plan_one, due))
+
+    for (sid, name, since), p in zip(due, plans):
+        if p is None:
             continue
 
+        p = assign_target(p)                   # (instant: one plan after the other, so that the second one sees what the first one took)
         p["id"] = f"{sid}-{now}"
         p["down_since"] = since
         lead = f"is cut from abroad (on, but only Iran sees it) and its tunnels have been down for {(now - since) // 60} min" if sid in cut else f"has been off for {(now - since) // 60} min"
 
         if sid in cut:
             p["why"] = CUT_WHY
-        s["tried"][str(sid)] = now
-        changed = True
+
+        with _STATE_LOCK:
+            s = _state()
+            s.setdefault("tried", {})[str(sid)] = now
+            _save(s)
 
         if not p["target"]:
-            _notice(f"⚠ Iran server {name} {lead}, but no healthy Iran server can carry its {len(p['tunnels'])} tunnel(s) right now" + (f" ({'; '.join(p['problems'])})" if p["problems"] else "") + ". The Doctor tries again in 10 minutes.")
+            _notice(f"⚠ Iran server {name} {lead}, but no healthy Iran server can carry its {len(p['tunnels'])} tunnel(s) right now" + (f" ({'; '.join(p['problems'])})" if p["problems"] else "")
+                    + f". The Doctor tries again in {RETRY_NO_TARGET // 60} minutes.")
 
             with session() as db:
-                emit(db, "bad", "actions", f"Doctor: {name} is off, no Iran server can take its tunnels yet; trying again in 10 minutes.", name)
+                emit(db, "bad", "actions", f"Doctor: {name} is off, no Iran server can take its tunnels yet; trying again in {RETRY_NO_TARGET // 60} minutes.", name)
 
             continue
 
-        _save(s)
         _notice(f"🔶 Iran server {name} {lead}: " + _describe(p) + "." + (f" Also moved to keep the DNS consistent: {', '.join(p['pulled'])}." if p.get("pulled") else ""))
-        run_plan(p)                            # one server per tick; the story writes the state itself when it is done
-        return
 
-    if changed:
-        _save(s)
+        try:
+            run_plan(p)                        # (every server in its own story, started now; the story writes the state itself when it is done)
+        except Exception:                      # (one server that cannot start must not hold the others back)
+            release(p)
+            log.exception("failover of %s could not start", name)
 
 
 # ------------------------------------------------------------------ doing it
@@ -826,36 +1078,60 @@ def _work(aid: int, p: dict, finish: bool = True) -> bool:
     built: list[tuple[int, str, dict]] = []          # (old tunnel id, temp name, snapshot) while both run
     pairs: dict = {}                                  # (target, foreign) -> the test of the tunnel types of that pair
 
-    for t in p["tunnels"]:
+    def dead_one(t: dict) -> tuple[str, dict | None]:
+        """One tunnel of a server that is off: what is left of it there, and its name when it was moved. The tunnels of one server go together (1.69.230: they were built one after the other)."""
+        left = None
+
+        try:
+            snap = autopilot._snapshot(t["id"])
+
+            with session() as db:
+                row = db.get(Tunnel, t["id"])
+
+                if row is not None and row.iran is not None and (row.iran.online is False or is_cut(row.iran)):
+                    left = _leftover({**snap, "port": row.port}, p["server_id"])
+
+            kind = _best_kind(aid, snap, p["target"], pairs, first_ok=True)      # (a dead server: the first type that connects, in the Doctor's order - no time for a full comparison)
+
+            if autopilot._replace(aid, t["id"], p["target"]["id"], snap["foreign_id"], kind, f"Failover: {p['why']}.", skip_offline=True):
+                return snap["name"], left
+        except (ValueError, RuntimeError) as e:
+            autopilot._say(aid, f"{t['name']}: not moved: {str(e)[:160]}")
+        except Exception as e:      # (one tunnel must not stop the others that are built at the same time)
+            log.exception("failover: %s", t["name"])
+            autopilot._say(aid, f"{t['name']}: not moved: {str(e)[:160]}")
+
+        return "", left
+
+    if not src_on:
+        with ThreadPoolExecutor(max(1, min(PARALLEL_TUNNELS, len(p["tunnels"])))) as ex:
+            for name, left in ex.map(dead_one, p["tunnels"]):
+                if left:
+                    leftover.append(left)
+
+                if name:
+                    moved += 1
+                    moved_names.append(name)
+
+    for t in p["tunnels"] if src_on else []:
         try:
             snap = autopilot._snapshot(t["id"])
             kind = old_kind = autopilot.kind_of(snap["type"], snap["transport"], snap["record"])
+            temp = _temp_name(snap["name"], str((snap.get("record") or {}).get("slug") or ""))
+            autopilot._say(aid, f"{snap['name']}: building the new {kind} tunnel on {p['target']['name']} as {temp} (the old one keeps running)…")
+            kind = _best_kind(aid, snap, p["target"], pairs, prefer=str((p.get("prefer") or {}).get(t["id"]) or ""))
+            ok, story = autopilot._wait(autopilot._build_kind({**snap, "name": temp}, p["target"]["id"], snap["foreign_id"], kind, snap["record"].get("opts") if kind == old_kind else None))
 
-            if src_on:
-                temp = _temp_name(snap["name"], str((snap.get("record") or {}).get("slug") or ""))
-                autopilot._say(aid, f"{snap['name']}: building the new {kind} tunnel on {p['target']['name']} as {temp} (the old one keeps running)…")
-                kind = _best_kind(aid, snap, p["target"], pairs, prefer=str((p.get("prefer") or {}).get(t["id"]) or ""))
-                ok, story = autopilot._wait(autopilot._build_kind({**snap, "name": temp}, p["target"]["id"], snap["foreign_id"], kind, snap["record"].get("opts") if kind == old_kind else None))
+            if not ok:
+                autopilot._say(aid, f"{snap['name']}: the new tunnel did not come up ({story[-1][:120] if story else '?'}); the old one stays.")
+                break
 
-                if not ok:
-                    autopilot._say(aid, f"{snap['name']}: the new tunnel did not come up ({story[-1][:120] if story else '?'}); the old one stays.")
-                    break
-
-                built.append((t["id"], temp, snap))
-                moved += 1
-            else:
-                with session() as db:
-                    row = db.get(Tunnel, t["id"])
-
-                    if row is not None and row.iran is not None and (row.iran.online is False or is_cut(row.iran)):
-                        leftover.append(_leftover({**snap, "port": row.port}, p["server_id"]))
-
-                kind = _best_kind(aid, snap, p["target"], pairs, first_ok=True)      # (a dead server: the first type that connects, in the Doctor's order - no time for a full comparison)
-                if autopilot._replace(aid, t["id"], p["target"]["id"], snap["foreign_id"], kind, f"Failover: {p['why']}.", skip_offline=True):
-                    moved += 1
-                    moved_names.append(snap["name"])
+            built.append((t["id"], temp, snap))
+            moved += 1
         except (ValueError, RuntimeError) as e:
             autopilot._say(aid, f"{t['name']}: not moved: {str(e)[:160]}")
+
+    release(p)                                         # (the tunnels are where they go now: the ranking counts them itself)
 
     if built and moved == len(p["tunnels"]) and _not_carrying(aid, built):
         moved = 0                                      # (the branch below takes the new halves away again and leaves the DNS alone)
@@ -881,6 +1157,7 @@ def _work(aid: int, p: dict, finish: bool = True) -> bool:
     else:
         done_dns, errors, logged = _apply_dns(aid, p)
         _say_left(aid, p)
+        _follow_later(p, done_dns)
 
         if built:
             if done_dns:
@@ -914,12 +1191,14 @@ def _work(aid: int, p: dict, finish: bool = True) -> bool:
                 moved_names.append(snap["name"])
 
     ok = moved == len(p["tunnels"]) and not errors
-    s = _state()
-    s["dns_log"].extend(logged)
-    s["pending"] = [x for x in s["pending"] if x["id"] != p["id"]]
-    s["history"].append({"id": p["id"], "at": int(time.time()), "server_id": p["server_id"], "server": p["server"], "ip": p["ip"], "reason": p.get("reason", "down"), "target": p["target"],
-                         "moved": moved, "tunnels": len(p["tunnels"]), "dns": done_dns, "errors": errors, "ok": ok, "undone": False})
-    _save(s)
+
+    with _STATE_LOCK:                                  # (the plans of an outage end at about the same time: one reads, changes and saves the record at a time)
+        s = _state()
+        s["dns_log"].extend(logged)
+        s["pending"] = [x for x in s["pending"] if x["id"] != p["id"]]
+        s["history"].append({"id": p["id"], "at": int(time.time()), "server_id": p["server_id"], "server": p["server"], "ip": p["ip"], "reason": p.get("reason", "down"), "target": p["target"],
+                             "moved": moved, "tunnels": len(p["tunnels"]), "dns": done_dns, "errors": errors, "ok": ok, "undone": False})
+        _save(s)
 
     if p["tunnels"]:
         doctor.record_move(p, moved_names, leftover, ok)
@@ -940,7 +1219,21 @@ def run_plan(p: dict) -> int:
     if not p.get("target"):
         raise ValueError("there is no replacement server for this plan")
 
-    return autopilot._start(f"failover {p['server']}", _work, p, action="move")
+    autopilot.mass_begin()                             # (the Doctor's own affairs wait while any failover story runs, and a few minutes after: `autopilot.quiet_now`)
+
+    try:
+        return autopilot._start(f"failover {p['server']}", _run, p, action="move")
+    except BaseException:
+        autopilot.mass_end()
+        raise
+
+
+def _run(aid: int, p: dict) -> bool:
+    try:
+        return _work(aid, p)
+    finally:
+        release(p)                                     # (whatever happened, the tunnels on their way are not counted any more)
+        autopilot.mass_end()
 
 
 def quality_pick(ranking: list[dict], rtt: float | None) -> dict | None:
@@ -969,7 +1262,7 @@ def quality_move(aid: int, tunnel_id: int, reason: str, now_mbps: float, rtt: fl
     from ..ssh import SSHError
     from . import bandwidth, doctor, knowledge, license
 
-    if not doctor.can_move() or move_blocked():
+    if not doctor.can_move() or move_blocked() or autopilot.quiet_now():          # (1.69.230: no move for quality while the Doctor moves the tunnels of a dead server)
         return False
 
     snap = autopilot._snapshot(tunnel_id)

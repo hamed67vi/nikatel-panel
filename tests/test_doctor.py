@@ -72,7 +72,7 @@ def _fake_plan(ids, target=True):
     return plan_for
 
 
-def test_a_provider_wide_outage_is_handled_server_by_server_without_asking(monkeypatch):
+def test_a_provider_wide_outage_starts_every_server_at_once_without_asking(monkeypatch):
     from nikatel.config import get_settings
     from nikatel.services import netwatch
 
@@ -82,12 +82,11 @@ def test_a_provider_wide_outage_is_handled_server_by_server_without_asking(monke
     monkeypatch.setattr(failover, "_notice", lambda text: told.append(text))
     st.put("repair", {"mode": "move", "server_minutes": 10})
     ids = _outage_world()
-    monkeypatch.setattr(failover, "plan_for", _fake_plan(ids))
+    monkeypatch.setattr(failover, "plan_dead", _fake_plan(ids))
     monkeypatch.setattr(failover, "run_plan", lambda p: ran.append(p["server"]) or 1)
     st.put("failover", {"seen": {str(ids["p1"]): 1, str(ids["p2"]): 1}})
     doctor.run()                                                      # the job: both servers have been off for long
-    failover.check()
-    assert ran == ["prov-a1", "prov-a2"]                                # the one with more tunnels first, one per tick, nobody asked
+    assert ran == ["prov-a1", "prov-a2"]                                # the one with more tunnels first, BOTH in the same round (1.69.230), nobody asked
     failover.check()
     assert ran == ["prov-a1", "prov-a2"]                                # tried a moment ago: not again
     assert any("prov-a1" in t and "move 2 tunnel" in t for t in told)
@@ -102,11 +101,11 @@ def test_without_a_healthy_server_the_doctor_tells_and_tries_again_later(monkeyp
     monkeypatch.setattr(failover, "_notice", lambda text: told.append(text))
     st.put("repair", {"mode": "move", "server_minutes": 10})
     ids = _outage_world()
-    monkeypatch.setattr(failover, "plan_for", _fake_plan(ids, target=False))
+    monkeypatch.setattr(failover, "plan_dead", _fake_plan(ids, target=False))
     monkeypatch.setattr(failover, "run_plan", lambda p: ran.append(p["server"]) or 1)
     st.put("failover", {"seen": {str(ids["p1"]): 1}})
     failover.check()
-    assert ran == [] and any("no healthy Iran server" in t and "10 minutes" in t for t in told) and str(ids["p1"]) in st.get("failover")["tried"]
+    assert ran == [] and any("no healthy Iran server" in t and "2 minutes" in t for t in told) and str(ids["p1"]) in st.get("failover")["tried"]
 
 
 def test_an_exhausted_server_is_a_suggestion_in_mode_fix_and_a_move_in_mode_move(monkeypatch):
@@ -138,7 +137,7 @@ def test_an_exhausted_server_is_a_suggestion_in_mode_fix_and_a_move_in_mode_move
     assert moved == [(11, 2, "resources")]                                 # one per hour per server
 
 
-def test_the_tunnels_go_back_after_the_server_has_been_healthy_for_three_hours(monkeypatch):
+def test_the_tunnels_go_back_after_the_server_has_been_healthy_for_an_hour(monkeypatch):
     from nikatel.config import get_settings
     from nikatel.services import netwatch
 
@@ -155,16 +154,19 @@ def test_the_tunnels_go_back_after_the_server_has_been_healthy_for_three_hours(m
         db.flush()
         ids = {"ir1": ir1.id, "ir2": ir2.id, "t1": t.id}
 
-    entry = {"id": "m1", "at": now - 5 * 3600, "reason": "down", "why": "off", "tunnels": ["t1"], "from_id": ids["ir1"], "from": "ir1", "from_ip": "203.0.113.5", "to_id": ids["ir2"], "to": "ir2", "to_ip": "203.0.113.9", "dns": 1, "ok": True, "returned": False, "returned_at": None, "leftover": []}
+    entry = {"id": "m1", "at": now - 80 * 60, "reason": "down", "why": "off", "tunnels": ["t1"], "from_id": ids["ir1"], "from": "ir1", "from_ip": "203.0.113.5", "to_id": ids["ir2"], "to": "ir2", "to_ip": "203.0.113.9", "dns": 1, "ok": True, "returned": False, "returned_at": None, "leftover": []}
     st.put("doctor", {"moves": [entry], "back": {str(ids["ir1"]): now - 600}})
     monkeypatch.setattr(netwatch, "report", lambda: {"items": [], "iran": [{"name": "ir1", "level": "ok"}]})
     moved = []
-    monkeypatch.setattr(doctor, "move_now", lambda tid, iran_id, reason="manual", why="": moved.append((tid, iran_id, reason)) or 1)
+    monkeypatch.setattr(doctor, "move_now", lambda tid, iran_id, reason="manual", why="", **k: moved.append((tid, iran_id, reason, k.get("rails"))) or 1)
     doctor.returns()
     assert moved == []                                                    # back for 10 minutes only
-    st.put("doctor", {"back": {str(ids["ir1"]): now - 4 * 3600}})
+    st.put("doctor", {"back": {str(ids["ir1"]): now - 50 * 60}})
     doctor.returns()
-    assert moved == [(ids["t1"], ids["ir1"], "return")]
+    assert moved == []                                                    # back for 50 minutes: not yet
+    st.put("doctor", {"back": {str(ids["ir1"]): now - 65 * 60}})
+    doctor.returns()
+    assert moved == [(ids["t1"], ids["ir1"], "return", False)]            # an hour: it goes back, although the tunnel moved only 80 minutes ago (the two hours between two moves do not hold it)
     plan = {"id": "r1", "server_id": ids["ir2"], "server": "ir2", "ip": "203.0.113.9", "reason": "return", "why": "back", "tunnels": [{"id": ids["t1"], "name": "t1"}], "target": {"id": ids["ir1"], "name": "ir1", "ip": "203.0.113.5"}, "dns": []}
     doctor.record_move(plan, ["t1"], [], True)
     moves = doctor.state()["moves"]

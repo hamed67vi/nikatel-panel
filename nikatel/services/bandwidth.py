@@ -582,6 +582,11 @@ def run() -> None:
     if get_settings().read_only or jobs.stopping():
         return
 
+    from . import autopilot
+
+    if autopilot.quiet_now():
+        return                              # (1.69.230: a failover is on - no speed test, no upgrade check, no swap now)
+
     with _LOCK:
         if _RUNNING:
             return

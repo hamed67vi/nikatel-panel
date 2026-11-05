@@ -64,6 +64,21 @@ def _no_type_test_after_a_drop(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _no_room_held_for_a_move():
+    """The tunnels on their way to an Iran server (failover._RESERVED), the quiet time of a failover (autopilot._MASS) and the looks still to be made after a move (failover._FOLLOW) belong to one test only."""
+    from nikatel.services import autopilot, failover
+
+    def clean():
+        failover._RESERVED.clear()
+        failover._FOLLOW.clear()
+        autopilot._MASS.update(running=0, until=0.0)
+
+    clean()
+    yield
+    clean()
+
+
+@pytest.fixture(autouse=True)
 def _no_review_after_a_repair(monkeypatch):
     """After a smart repair the Reviewer reads what happened in a thread of its own (services/reviewer.py): a thread that writes settings after the test that started the repair is over is not wanted - only tests/test_reviewer.py turns it on."""
     from nikatel.services import reviewer

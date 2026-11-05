@@ -106,7 +106,7 @@ def run(now: float | None = None) -> int | None:
     """The job (every 5 minutes): at the hour, with the switch on and no PasarGuard update running, tonight's run starts as an action of the panel (its story is in the history of the Tunnel Doctor). Returns the id
     of the action, None when it was not the time. The day is marked FIRST (one run a night); a run that a restart of the panel cut is found on the first tick after it (`last` says "running" and no thread runs it):
     its story is closed and, while the window is open, the night goes on in a new action (`_after_restart`)."""
-    if get_settings().read_only:
+    if get_settings().read_only or autopilot.quiet_now():          # (1.69.230: the night's PasarGuard update waits while a failover runs)
         return None
 
     s = state()

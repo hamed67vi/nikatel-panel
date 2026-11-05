@@ -161,7 +161,7 @@ def run(aid: int, limit: int = 0) -> bool:
     results, back_in_a_row = {}, 0
 
     for n, tid in enumerate(ids):
-        if autopilot.storm_now():
+        if autopilot.quiet_now():
             autopilot._say(aid, "Stopped: a mass disruption is going on - nothing more is changed now.")
             break
 

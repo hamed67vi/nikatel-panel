@@ -199,6 +199,11 @@ def _guard(aid: int, fn, *args) -> None:
 
 def run() -> None:
     """The job: every busy multi-core server is probed; a skewed one gets RPS from the Doctor when `balance.auto` is on (never in read-only mode)."""
+    from . import autopilot
+
+    if autopilot.quiet_now():
+        return
+
     s = get_settings()
 
     with session() as db:

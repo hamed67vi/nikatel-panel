@@ -142,7 +142,7 @@ def run() -> None:
     """Job (every ten minutes): every foreign server that ends a tunnel is asked how fast it answers a name lookup; a slow one, confirmed twice, gets its resolvers put in order (see the top of this file)."""
     from . import actions, autopilot
 
-    if get_settings().read_only or jobs.stopping() or actions.doctor_mode() == "off":
+    if get_settings().read_only or jobs.stopping() or actions.doctor_mode() == "off" or autopilot.quiet_now():
         return
 
     if not _LOCK.acquire(blocking=False):

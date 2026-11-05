@@ -1003,7 +1003,7 @@ def run() -> None:
     window = in_window(now, tz, int(d["from_hour"]), int(d["to_hour"]))
     _tell_finished()
     running = _running()
-    busy = bool(autopilot.repairing_names()) or autopilot.storm_now()
+    busy = bool(autopilot.repairing_names()) or autopilot.quiet_now()
 
     if running:
         if busy or (running["source"] == "survey" and not (d["on"] and window)) or (running["source"] in ("survey-cold", "survey-verify") and not d["on"]):

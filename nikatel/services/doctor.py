@@ -38,7 +38,7 @@ log = get_logger("doctor")
 MODES = ("off", "fix", "move")
 MAX_PER_DAY = 3             # moves of one tunnel in 24 hours (out and back count)
 COOLDOWN = 2 * 3600         # between two moves of the same tunnel
-BACK_AFTER = 3 * 3600       # a server that came back must stay healthy this long before its tunnels return
+BACK_AFTER = 3600           # a server that came back must stay healthy this long before its tunnels return (1.69.230, the owner: one hour; it was three)
 SATURATED = 90.0            # % CPU or RAM ...
 SATURATED_FOR = 900         # ... over this many seconds of samples (one every 2 minutes)
 SATURATED_MIN_SAMPLES = 5
@@ -227,7 +227,7 @@ def ready_to_return(entry: dict, back_since: int | None, now: int, net_level: st
         return "the server is still off"
 
     if now - int(back_since) < back_after:
-        return f"the server has been back for {(now - int(back_since)) // 60} minutes; it must stay healthy for {back_after // 3600} hours"
+        return f"the server has been back for {(now - int(back_since)) // 60} minutes; it must stay healthy for {back_after // 60} minutes"
 
     if net_level in ("bad", "down"):
         return "the server's own network is still disturbed"
@@ -549,7 +549,7 @@ def resources() -> None:
     """Every 5 minutes: an exhausted Iran server gives its busiest tunnel to a server with room (mode move), or the move is suggested (mode fix)."""
     m = mode()
 
-    if m == "off" or get_settings().read_only:
+    if m == "off" or get_settings().read_only or autopilot.quiet_now():          # (1.69.230: an exhausted server is relieved after the failover, not in the middle of it)
         return
 
     now = int(time.time())
@@ -609,7 +609,7 @@ def resources() -> None:
 
 def returns() -> None:
     """Every 5 minutes: the tunnels that left a server because it was off go back once it has been healthy for BACK_AFTER."""
-    if not can_move():
+    if not can_move() or autopilot.quiet_now():          # (1.69.230: the tunnels go back to a server that came back only when no failover is going on)
         return
 
     now = int(time.time())
@@ -637,13 +637,13 @@ def returns() -> None:
             continue
 
         tid, name = rows[0]
-        block = may_move(name, s["moves"], now)
+        block = may_move(name, s["moves"], now, cooldown=0)          # (the hour of health is the wait: the two hours between two moves of a tunnel would hold the return back for another hour)
 
         if block:
             continue
 
         try:
-            move_now(tid, origin.id, "return", f"{origin.name} has been back and healthy for {(now - int(s['back'][str(origin.id)])) // 3600} hours")
+            move_now(tid, origin.id, "return", f"{origin.name} has been back and healthy for {(now - int(s['back'][str(origin.id)])) // 60} minutes", rails=False)
         except ValueError as ex:
             log.info("return of %s refused: %s", name, ex)
 

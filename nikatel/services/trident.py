@@ -808,8 +808,8 @@ def build_strand(name: str, kind: str = "") -> int:
     if name in autopilot.repairing_names():
         raise ValueError("a repair works on this tunnel: the strand is built after it")
 
-    if autopilot.storm_now():
-        raise ValueError("several servers are off or many tunnels are down: nothing is built now")
+    if autopilot.quiet_now():
+        raise ValueError("several servers are off, many tunnels are down or a failover is running: nothing is built now")
 
     plan = build_plan(name, kind)
     k, tr = tunnel_test.kind_parts(plan["kind"])
@@ -1001,8 +1001,8 @@ def build_relay(name: str) -> int:
     if p.get("foreign_off"):
         raise ValueError("the foreign server itself is off (the panel cannot reach it either): a relay through another server would not reach it")
 
-    if autopilot.storm_now():
-        raise ValueError("several servers are off or many tunnels are down: nothing is built now")
+    if autopilot.quiet_now():
+        raise ValueError("several servers are off, many tunnels are down or a failover is running: nothing is built now")
 
     plan = relay_plan(name)
     k, tr = tunnel_test.kind_parts(plan["kind"])

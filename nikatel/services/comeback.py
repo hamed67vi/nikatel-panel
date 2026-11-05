@@ -170,7 +170,7 @@ def run(now: int | None = None) -> None:
         if not due(e, now) or name in busy:
             continue
 
-        if row["state"] != "up" or now - row["since"] < UP_FOR or autopilot.storm_now():
+        if row["state"] != "up" or now - row["since"] < UP_FOR or autopilot.quiet_now():
             continue
 
         if not may_return([int(t) for t in returns.get(name) or []], now):

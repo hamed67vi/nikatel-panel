@@ -204,7 +204,7 @@ def check(now: int | None = None) -> list[str]:
     acted = None
     m = actions.doctor_mode()
 
-    if due and m != "off" and not get_settings().read_only and not autopilot.storm_now():
+    if due and m != "off" and not get_settings().read_only and not autopilot.quiet_now():
         for t in due:
             if t["name"] in autopilot._BUSY or doctor.may_retype(t["name"], doctor._state().get("retype_done") or {}, now):
                 continue

@@ -850,15 +850,20 @@ def start_build(iran_id: int, foreign_id: int, ports_text: str, transport: str =
     return aid
 
 
+_PENDING_LOCK = threading.Lock()      # (1.69.230) several tunnels are rebuilt at the same time (a failover): the list is read, changed and saved by one at a time
+
+
 def pending_put(item: dict) -> None:
     """Remember a rebuild before the old tunnel is removed: if the panel restarts before the new one is built, `resume_pending` builds it."""
-    items = [i for i in st.get("pending_builds").get("items", []) if i.get("name") != item["name"]] + [item]
-    st.put("pending_builds", {"items": items})
+    with _PENDING_LOCK:
+        items = [i for i in st.get("pending_builds").get("items", []) if i.get("name") != item["name"]] + [item]
+        st.put("pending_builds", {"items": items})
 
 
 def pending_drop(name: str) -> None:
     if name:
-        st.put("pending_builds", {"items": [i for i in st.get("pending_builds").get("items", []) if i.get("name") != name]})
+        with _PENDING_LOCK:
+            st.put("pending_builds", {"items": [i for i in st.get("pending_builds").get("items", []) if i.get("name") != name]})
 
 
 def pending_item(name: str, iran_id: int, foreign_id: int, typ: str, transport: str, rec: dict, ports_text: str, opts: dict | None = None) -> dict:

@@ -311,7 +311,7 @@ def run() -> None:
     """Job (every half hour): the helper rows and the units nothing owns are looked for, confirmed by a second look, and removed (see the top of this file)."""
     from . import actions, autopilot, builder
 
-    if get_settings().read_only or jobs.stopping() or actions.doctor_mode() == "off" or autopilot.storm_now():
+    if get_settings().read_only or jobs.stopping() or actions.doctor_mode() == "off" or autopilot.quiet_now():
         return
 
     if not _LOCK.acquire(blocking=False):

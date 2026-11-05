@@ -3,6 +3,7 @@ the pair of servers, the name, the ports, the type and its options. "Restore" bu
 for 30 days and at most 30 of them; one whose name exists as a tunnel again is dropped by itself."""
 from __future__ import annotations
 
+import threading
 import time
 
 from sqlalchemy import select
@@ -28,11 +29,16 @@ def snapshot(t: Tunnel) -> dict:
                      "mtu": int(rec.get("mtu") or 0), "keepalive": int(rec.get("keepalive") or 75), "nodelay": bool(rec.get("nodelay", True)), "opts": dict(rec.get("opts") or {})}}
 
 
+_ADD_LOCK = threading.Lock()      # (1.69.230) the tunnels of a failover are removed at the same time: the list is read, added to and saved by one at a time, or a copy is lost
+
+
 def add(snap: dict) -> None:
     now = int(time.time())
-    items = [i for i in st.get("trash").get("items", []) if now - i.get("at", 0) < TTL and i.get("name") != snap["name"]]
-    items.append({**snap, "id": f"{now}-{snap['name']}", "at": now})
-    st.put("trash", {"items": items[-MAX:]})
+
+    with _ADD_LOCK:
+        items = [i for i in st.get("trash").get("items", []) if now - i.get("at", 0) < TTL and i.get("name") != snap["name"]]
+        items.append({**snap, "id": f"{now}-{snap['name']}", "at": now})
+        st.put("trash", {"items": items[-MAX:]})
 
 
 def items() -> list[dict]:

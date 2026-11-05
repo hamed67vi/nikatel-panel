@@ -28,7 +28,7 @@ def _world(monkeypatch, extra_off=0):
         sid = s.id
 
     ran = []
-    monkeypatch.setattr(failover, "plan_for", lambda server_id: {"server_id": server_id, "server": "ir9", "tunnels": [{"id": 1, "name": "t9"}], "dns": [], "target": {"id": 2, "name": "ir2"}, "problems": [], "pulled": []})
+    monkeypatch.setattr(failover, "plan_dead", lambda server_id: {"server_id": server_id, "server": "ir9", "tunnels": [{"id": 1, "name": "t9"}], "dns": [], "target": {"id": 2, "name": "ir2"}, "problems": [], "pulled": []})
     monkeypatch.setattr(failover, "run_plan", lambda p: ran.append(p) or 1)
     return sid, ran
 

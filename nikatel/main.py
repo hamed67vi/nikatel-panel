@@ -40,6 +40,7 @@ from .services import (
     engines,
     extras,
     facts,
+    failover,
     housekeeping,
     janitor,
     knowledge,
@@ -258,6 +259,7 @@ def _register_jobs() -> None:
     jobs.register("outbound", 180, outbound.check)              # what the outbound pool looks like from each Iran server that carries it (read-only: curl through every exit); nothing runs while no Iran server is chosen
     jobs.register("outbound-users", 60, outbound.auto_users)    # the automatic switch of CDN records: OFF for now (AUTO_USERS in services/outbound.py), the job returns at once; when it is on, the records of a tunnel that stays down are pointed at the pool, and back when it is healthy
     jobs.register("doctor", 60, doctor.run)                    # the Doctor's moves (mode "move"): dead Iran servers, exhausted ones, the returns; nothing in mode off / fix
+    jobs.register("failover", 10, failover.tick)               # the dead Iran servers on their own clock (1.69.230): a server that is off for a minute is replaced at once, every dead server at the same moment, not at the next round of the Doctor
 
     jobs.register("configs", 120, configs.sync)
     jobs.register("warpwatch", warpwatch.EVERY, warpwatch.run)             # an AI config down 7 minutes with its tunnel and node up: its node is reconnected (stuck WARP session of its Xray); at most once in 30 minutes and 3 times a day per node (services/warpwatch.py)

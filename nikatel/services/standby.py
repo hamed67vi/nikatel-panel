@@ -806,8 +806,8 @@ def build(name: str, kind: str = "", by_swap: bool = False) -> int:
     if name in autopilot.repairing_names() and not by_swap:
         raise ValueError("a repair works on this tunnel: the standby is built after it")
 
-    if autopilot.storm_now():
-        raise ValueError("several servers are off or many tunnels are down: nothing is built now")
+    if autopilot.quiet_now():
+        raise ValueError("several servers are off, many tunnels are down or a failover is running: nothing is built now")
 
     plan = build_plan(name, kind)
     k, tr = tunnel_test.kind_parts(plan["kind"])

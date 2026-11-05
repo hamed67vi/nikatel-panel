@@ -566,7 +566,9 @@ def auto_due(now: float | None = None) -> bool:
 def auto_run(now: float | None = None) -> dict | None:
     """Once a day at the chosen hour, unless it is paused: look at every server, and for each core that is behind (and whose newest release has not already been put back) run the same update as the button -
     one server at a time, the quietest first, the old build put back when a new one does not hold. It stops at the first core that fails. Returns what it did (None when it was not the time)."""
-    if get_settings().read_only or not auto_due(now):
+    from . import autopilot
+
+    if get_settings().read_only or autopilot.quiet_now() or not auto_due(now):          # (1.69.230: no core is updated and no service restarted while a failover runs: the night run waits for a calm minute)
         return None
 
     if _STATE["job"] and not _STATE["job"].get("done"):

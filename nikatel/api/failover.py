@@ -73,6 +73,16 @@ def fo_plan(server_id: int):
         raise HTTPException(400, str(e))
 
 
+class SimulateIn(BaseModel):
+    servers: list[int] = Field(..., min_length=1, max_length=40)
+
+
+@router.post("/failover/simulate")
+def fo_simulate(body: SimulateIn):
+    """What the Doctor would do if these Iran servers were all off at the same moment: where each one's tunnels would go and how many tunnels every server that is left would carry (read-only; it pings the foreign servers from the Iran servers, so it takes a while)."""
+    return {"ok": True, **failover.simulate(body.servers)}
+
+
 @router.get("/failover/move-plan/{server_id}")
 def fo_move_plan(server_id: int, target_id: int | None = None):
     """The "Move the tunnels" item of an Iran server's menu: what it would do now (nothing is changed) - the tunnels, the best Iran server with room and free ports (and two more), the DNS records

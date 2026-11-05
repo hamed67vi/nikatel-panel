@@ -283,7 +283,7 @@ def run() -> None:
     """The job: every 30 minutes a couple of the underused servers are looked at; a fault the kernel settings can fix is fixed (when `underuse.auto` is on and the panel is not read-only)."""
     from . import autopilot
 
-    if autopilot.storm_now():
+    if autopilot.quiet_now():
         return
 
     done_fix = 0

@@ -360,7 +360,7 @@ def test_check_moves_a_dead_server_in_mode_move_and_forgets_one_that_answers_aga
         sid = s.id
 
     ran = []
-    monkeypatch.setattr(failover, "plan_for", lambda server_id: {"server_id": server_id, "server": "ir9", "ip": "203.0.113.77", "reason": "down", "why": "off", "tunnels": [{"id": 1, "name": "t9"}], "dns": [], "target": {"id": 2, "name": "ir2", "ip": "203.0.113.9"}, "problems": [], "pulled": []})
+    monkeypatch.setattr(failover, "plan_dead", lambda server_id: {"server_id": server_id, "server": "ir9", "ip": "203.0.113.77", "reason": "down", "why": "off", "tunnels": [{"id": 1, "name": "t9"}], "dns": [], "target": {"id": 2, "name": "ir2", "ip": "203.0.113.9"}, "problems": [], "pulled": []})
     monkeypatch.setattr(failover, "run_plan", lambda p: ran.append(p) or 1)
     failover.check()
     assert str(sid) in st.get("failover")["seen"] and ran == []               # seen, but the waiting time has not passed

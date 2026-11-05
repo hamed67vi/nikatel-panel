@@ -51,7 +51,7 @@ def _cut_world(monkeypatch, tunnel_state="down", note=CUT, online=True):
         sid = s.id
 
     ran = []
-    monkeypatch.setattr(failover, "plan_for", lambda server_id: {"server_id": server_id, "server": "ir9", "ip": "203.0.113.77", "reason": "down", "why": "the server does not answer", "tunnels": [{"id": 1, "name": "t9"}], "dns": [],
+    monkeypatch.setattr(failover, "plan_dead", lambda server_id: {"server_id": server_id, "server": "ir9", "ip": "203.0.113.77", "reason": "down", "why": "the server does not answer", "tunnels": [{"id": 1, "name": "t9"}], "dns": [],
                                                                   "target": {"id": 2, "name": "other", "ip": "203.0.113.3"}, "problems": []})
     monkeypatch.setattr(failover, "run_plan", lambda p: ran.append(p) or 1)
     return sid, ran

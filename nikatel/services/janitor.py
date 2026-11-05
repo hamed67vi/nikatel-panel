@@ -227,7 +227,7 @@ def run() -> None:
         extra = extras[0]
         blocked = rails(st.get("janitor").get("done") or [], now) if bandwidth.actions_mode_allows_fix() else "the Doctor's mode is not fix or move"
 
-        if not blocked and (autopilot.storm_now() or extra["name"] in autopilot._BUSY or keeper["name"] in autopilot._BUSY):
+        if not blocked and (autopilot.quiet_now() or extra["name"] in autopilot._BUSY or keeper["name"] in autopilot._BUSY):
             blocked = "a repair is running or the system is in a storm"
 
         if blocked:
@@ -313,7 +313,7 @@ def _consolidate(group: list[dict], keeper: dict | None, age: dict[int, int], re
         return False
 
     done = st.get("janitor").get("done") or []
-    blocked = rails(done, now) or ("a repair is running or the system is in a storm" if autopilot.storm_now() or cand["name"] in autopilot._BUSY or keeper["name"] in autopilot._BUSY else "")
+    blocked = rails(done, now) or ("a repair is running or the system is in a storm" if autopilot.quiet_now() or cand["name"] in autopilot._BUSY or keeper["name"] in autopilot._BUSY else "")
 
     if blocked:
         _tell_once(key + ":b", f"Tunnel {cand['name']} is a second copy of {keeper['name']}. Its names are not moved now: {blocked}.")
