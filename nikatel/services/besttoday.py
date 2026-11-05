@@ -87,11 +87,12 @@ def rank(hours: int = 24) -> dict:
 
 
 def refresh() -> None:
-    """The job: the latency, jitter and loss of every tunnel are measured again (read-only pings over the GRE links), one tunnel after the other."""
+    """The job: the latency, jitter and loss of every tunnel are measured again (30 pings over the GRE link or through the test door - NO data moved; 1.69.226, the owner: the least test traffic - before, every
+    tunnel with a door pulled 8 connections for 4 s both ways every half hour, the biggest share of the panel's own traffic on the Iran servers; the speed is the bandwidth job's), one tunnel after the other."""
     from . import tunnel_test
 
     try:
-        res = tunnel_test.quality_all()
+        res = tunnel_test.quality_all(speed=False)
     except (SSHError, ValueError) as e:
         log.warning("quality refresh failed: %s", str(e)[:120])
         return

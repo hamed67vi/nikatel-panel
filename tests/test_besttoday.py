@@ -61,10 +61,10 @@ def test_the_ranking_puts_the_steady_one_first_marks_the_best_to_a_server_and_wa
 def test_the_job_measures_every_tunnel_and_survives_a_failure(monkeypatch):
     from nikatel.services import tunnel_test
 
-    monkeypatch.setattr(tunnel_test, "quality_all", lambda: [{"id": 1, "score": 80}, {"id": 2, "error": "x"}])
+    monkeypatch.setattr(tunnel_test, "quality_all", lambda speed=True: [{"id": 1, "score": 80}, {"id": 2, "error": "x"}])
     bt.refresh()
 
-    def boom():
+    def boom(speed=True):
         raise ValueError("no")
 
     monkeypatch.setattr(tunnel_test, "quality_all", boom)

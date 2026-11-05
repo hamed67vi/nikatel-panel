@@ -282,7 +282,7 @@ class ProtectIn(BaseModel):
 
 @router.put("/tunnels/{tunnel_id}/protected")
 def protect(tunnel_id: int, body: ProtectIn):
-    """(1.69.221) Mark a tunnel protected (or not): the Doctor repairs it in place but never moves, replaces, rebuilds or removes it, and the page refuses to remove it until the mark is off."""
+    """(1.69.226) Mark a tunnel protected (or not): the Doctor repairs it in place but never moves, replaces, rebuilds or removes it, and the page refuses to remove it until the mark is off."""
     try:
         return {"ok": True, "protected": builder.set_protected(tunnel_id, body.on)}
     except ValueError as e:
@@ -593,6 +593,19 @@ def trident_rebalance(tunnel_id: int):
         return {"ok": True, **trident.rebalance(_standby_name(tunnel_id))}
     except ValueError as e:
         raise HTTPException(400, str(e))
+
+
+@router.get("/trident/lean")
+def trident_lean_get():
+    """Whether every Trident is lean (on by default): the best strand carries nearly everything (94 %), the others stay small (3 %), a heavier kind gets less, a strand's capacity is measured once a day.
+    The owner, 2026-11-05: the least overhead, less traffic to pay for on the Iran servers."""
+    return {"ok": True, "lean": trident.lean_on()}
+
+
+@router.put("/trident/lean")
+def trident_lean_set(body: TridentIn):
+    """Lean on or off for every Trident (off = the shares of before: ceiling 70 %, floor 5 %, capacity tests every 6 hours). The plans are put again at the next turn; nobody is cut."""
+    return {"ok": True, **trident.set_lean(body.on)}
 
 
 class LanesIn(BaseModel):

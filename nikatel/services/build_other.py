@@ -474,11 +474,13 @@ class Build:
     quality: dict = field(default_factory=dict)
     standby_of: str = ""        # the warm standby of this tunnel (services/standby.py): the row is made switched off and without an event, under its own lock
     hidden_key: str = "standby_of"          # the key of the row's record that names the tunnel ("strand_of": an extra strand of a Trident, services/trident.py)
+    extra_record: dict = field(default_factory=dict)          # more fields for the row's record (the relay strand of a Trident: `relay`)
 
 
 def start_build(iran_id: int, foreign_id: int, ports_text: str, kind: str, transport: str = "", opts: dict | None = None, forced_name: str = "", measure: str = "full", standby_of: str = "",
-                hidden_key: str = "standby_of") -> int:
-    """Validate, create the action_log entry, build in a thread. Returns the action id. `standby_of`: the name of the tunnel this one is the warm standby of (`hidden_key` "strand_of": an extra strand of its Trident)."""
+                hidden_key: str = "standby_of", extra_record: dict | None = None) -> int:
+    """Validate, create the action_log entry, build in a thread. Returns the action id. `standby_of`: the name of the tunnel this one is the warm standby of (`hidden_key` "strand_of": an extra strand of its Trident;
+    `extra_record`: more fields of the row's record, e.g. the `relay` of a relay strand)."""
     if get_settings().read_only:
         raise ValueError("the panel is read-only; set NIKATEL_READ_ONLY=false on the panel server to build tunnels")
 
@@ -560,7 +562,7 @@ def start_build(iran_id: int, foreign_id: int, ports_text: str, kind: str, trans
             db.add(entry)
             db.flush()
             aid = entry.id
-            b = Build(aid, kind, iran, foreign, ports, transport, opts, name=forced_name, measure=measure, standby_of=standby_of, hidden_key=hidden_key)
+            b = Build(aid, kind, iran, foreign, ports, transport, opts, name=forced_name, measure=measure, standby_of=standby_of, hidden_key=hidden_key, extra_record=dict(extra_record or {}))
             db.expunge(iran)
             db.expunge(foreign)
 
@@ -978,7 +980,7 @@ def _build(b: Build) -> None:
                    forwarded_ports=[p.listen for p in b.ports],
                    record={"kind": b.kind, "direction": direction, "transport_label": tlabel, "port_mapping": ",".join(p.spec() for p in b.ports),
                            "test_port": b.test_port, "inner_net": b.net, "udp_carrier": b.udp, "opts": {k: v for k, v in b.opts.items() if k != "sni_domain" or v},
-                           "quality": b.quality, "built_by": "nikatel-panel", **({b.hidden_key: b.standby_of} if b.standby_of else {})},
+                           "quality": b.quality, "built_by": "nikatel-panel", **({b.hidden_key: b.standby_of} if b.standby_of else {}), **(b.extra_record or {})},
                    secrets={"token": token, "test_key": key}, state="starting", state_since=int(time.time()))
         db.add(t)
         db.flush()
@@ -1086,7 +1088,9 @@ def remove(t: Tunnel, skip: set[str] | None = None) -> list[str]:
 
 
 def quality(tunnel_id: int, secs: float = 4) -> dict:
-    """Latency / jitter / loss / speed through the test door of an existing tunnel (the real tunnel, not GRE)."""
+    """Latency / jitter / loss / speed through the test door of an existing tunnel (the real tunnel, not GRE). `secs` 0 = PINGS ONLY (30 of them, no data moved): the speed fields of the last full test are kept
+    with their own `speed_at`, so the score and the window still have a speed, and nothing is noted as a bandwidth sample or a full measurement (1.69.226, the owner: the least test traffic - the quality job of
+    every half hour used to pull 8 connections for 4 s both ways through every tunnel with a door, the biggest share of the panel's own traffic on the Iran servers; the bandwidth job measures the speed)."""
     with session() as db:
         t = db.get(Tunnel, tunnel_id)
 
@@ -1100,17 +1104,25 @@ def quality(tunnel_id: int, secs: float = 4) -> dict:
 
         iran, foreign, name, port, key = _node(t.iran), _node(t.foreign), sname(t), int(rec["test_port"]), str(sec["test_key"])
         bind = "0.0.0.0" if str(t.transport or "").startswith("l3:") else ""
+        old = dict(rec.get("quality") or {})
 
     try:   # keep the sink at the current version
         run_action(foreign, "sink_install", {"NAME": name, "PORT": str(port), "KEY": key, "BIND": bind}, timeout=60)
     except (SSHError, ValueError):
         pass
 
-    with livebw.quiet(tunnel_id, 60):                     # (the test moves data over the link: that is not the users' - the live numbers wait for it)
+    with livebw.quiet(tunnel_id, 60 if secs > 0 else 1):                     # (the test moves data over the link: that is not the users' - the live numbers wait for it; pings move nothing)
         q = _probe(iran, port, key, secs=secs, streams=8, pings=30, to=2.5)
 
     if q.get("error") or q.get("latency_ms") is None:
         raise RuntimeError("no data passes through the tunnel right now" + (f" ({q['error']})" if q.get("error") else ""))
+
+    if secs <= 0:                                          # pings only: the last measured speed stays (with its own time), the score is made of fresh pings and that speed
+        for k in ("down_mbps", "up_mbps", "down1_mbps", "up1_mbps"):
+            if q.get(k) is None and old.get(k) is not None:
+                q[k] = old[k]
+
+        q["speed_at"] = int(old.get("speed_at") or old.get("at") or 0)
 
     q["score"] = quality_score(q)
     q["at"] = int(time.time())
@@ -1122,6 +1134,9 @@ def quality(tunnel_id: int, secs: float = 4) -> dict:
             rec = dict(t.record or {})
             rec["quality"] = q
             t.record = rec
+
+    if secs <= 0:
+        return {"name": name, **q}
 
     from . import bandwidth, knowledge
 

@@ -23,8 +23,9 @@ def pair(**kinds):
 def test_the_running_type_and_its_best_rivals_are_tested_until_each_has_three_full_tests():
     p = pair(running=kind(60), a=kind(90), b=kind(80), c=kind(70), d=kind(65), zero=kind(10))
     assert knowledge.verify_kinds(p, NOW, "running") == ["running", "a", "b", "c"]                                      # (the running type first, then its three best rivals)
-    p = pair(running=kind(60, tests=[(30, "full"), (20, "full"), (10, "full")]), a=kind(90, tests=[(8, "full")]), b=kind(80, tests=[(2, "full")]), c=kind(70))
-    assert knowledge.verify_kinds(p, NOW, "running") == ["a", "c"]                                                       # (three full tests: done; one 8 h ago: another is due; one 2 h ago: too soon)
+    p = pair(running=kind(60, tests=[(30, "full"), (20, "full"), (10, "full")]), a=kind(90, tests=[(30, "full")]), b=kind(80, tests=[(8, "full")]), c=kind(70))
+    assert knowledge.verify_kinds(p, NOW, "running") == ["a", "c"]                                                       # (three full tests: done; one 30 h ago: another is due; one 8 h ago: too soon - one a day at most, 1.69.226)
+    assert knowledge.VERIFY_EVERY == 24 * 3600 and knowledge.VERIFY_QUIET_MBPS == knowledge.QUIET_MBPS == 150.0         # (the owner, 2026-11-05: the least test traffic; a full test moves up to 120 MB through the Iran server)
     p = pair(running=kind(60, tests=[(30, "latency"), (20, "latency"), (10, "latency")]))
     assert knowledge.verify_kinds(p, NOW, "running") == ["running"]                                                      # (latency tests are no speed: they do not count)
     p = pair(running=kind(60, tests=[(200, "full")]), a=kind(90))

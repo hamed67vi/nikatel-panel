@@ -41,10 +41,12 @@ def score(avg: float | None, jitter: float | None, loss: float | None, mbps: flo
     return user_score({"latency_ms": avg, "jitter_ms": jitter, "loss_pct": loss, "down_mbps": mbps})
 
 
-def quality(tunnel_id: int) -> dict:
+def quality(tunnel_id: int, speed: bool = True) -> dict:
     """Latency / jitter / loss over the GRE link of an EXISTING tunnel (30 pings from the Iran side) and a
     score. The speed is not measured here: that needs the temporary tunnel of the pair test, or a dedicated
-    test port. Stored in the tunnel record and shown in the list."""
+    test port. Stored in the tunnel record and shown in the list. A tunnel with a test door is measured
+    through the door, speed included - `speed=False` asks it pings only (the quality job of every half hour,
+    1.69.226: no data is moved, the last speed stays in the window; the bandwidth job measures the speed)."""
     with session() as db:
         t = db.get(Tunnel, tunnel_id)
 
@@ -60,10 +62,10 @@ def quality(tunnel_id: int) -> dict:
 
         node, name = Node(t.iran.host, t.iran.ssh_user, t.iran.ssh_port), t.name
 
-    if has_door:   # BackPack / Paqet / Chisel: through the real tunnel, speed included
+    if has_door:   # BackPack / Paqet / Chisel: through the real tunnel, speed included (or pings only)
         from . import build_other
 
-        return build_other.quality(tunnel_id)
+        return build_other.quality(tunnel_id, secs=4 if speed else 0)
 
     out = run_script(node, "gre_pings", {"IFACE": iface, "PEER": peer}, timeout=45)
     avg, jit, loss = jitter_from_pings(out)
@@ -99,7 +101,8 @@ def quality_all_start(source: str = "manual") -> int:
     return autopilot._start("quality of all tunnels", work, action="quality", source=source, allow_read_only=True)
 
 
-def quality_all() -> list[dict]:
+def quality_all(speed: bool = True) -> list[dict]:
+    """Every tunnel, one after the other; `speed=False` = pings only through the doors (the job)."""
     with session() as db:
         ids = [t.id for t in db.scalars(select(Tunnel).where(Tunnel.enabled.is_(True)))]
 
@@ -107,7 +110,7 @@ def quality_all() -> list[dict]:
 
     for tid in ids:
         try:
-            out.append(quality(tid))
+            out.append(quality(tid, speed=speed))
         except (ValueError, SSHError) as e:
             out.append({"id": tid, "error": str(e)[:120]})
 

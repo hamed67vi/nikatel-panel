@@ -187,6 +187,30 @@ def test_the_quality_job_feeds_the_bandwidth_of_a_tunnel_with_a_test_door(monkey
     assert bw["down"] == 120.5 and bw["up"] == 30.0 and bw["how"] == "door" and bw["state"] == "learning" and started == []
 
 
+def test_the_quality_job_asks_pings_only_and_keeps_the_last_speed_while_the_bandwidth_job_measures_the_speed(monkeypatch):
+    """1.69.226, the owner: the least test traffic. The quality job of every half hour used to pull 8 connections for 4 s both ways through every tunnel with a door (571 tests a day on the live panel)."""
+    from nikatel.services import besttoday, build_other, knowledge, tunnel_test
+
+    tid, _, _, _ = make_tunnel("bp-q", "backpack", door=True, record={"quality": {"latency_ms": 70.0, "jitter_ms": 2.0, "loss_pct": 0.0, "down_mbps": 210.0, "up_mbps": 40.0, "down1_mbps": 90.0, "score": 70, "at": NOW - 7200}})
+    probes, noted = [], []
+    monkeypatch.setattr(build_other, "run_action", lambda node, name, params=None, timeout=60: "SINK_OK")
+    monkeypatch.setattr(build_other, "_probe", lambda iran, port, key, secs=0, streams=8, pings=3, to=1.2: probes.append((secs, streams, pings)) or ({"latency_ms": 85.0, "jitter_ms": 3.0, "loss_pct": 0.0} if secs == 0 else {"latency_ms": 85.0, "jitter_ms": 3.0, "loss_pct": 0.0, "down_mbps": 250.0, "up_mbps": 50.0, "down1_mbps": 95.0}))
+    monkeypatch.setattr(bandwidth, "note_quality", lambda t, q: noted.append(("bw", t)))
+    monkeypatch.setattr(knowledge, "note_quality", lambda t, q: noted.append(("kn", t)))
+    q = tunnel_test.quality(tid, speed=False)
+    assert probes == [(0, 8, 30)] and noted == [] and q["latency_ms"] == 85.0 and q["down_mbps"] == 210.0 and q["speed_at"] == NOW - 7200 and q["score"] > 0           # pings only: nothing moved, nothing noted, the old speed kept with its time
+
+    with session() as db:
+        assert db.get(Tunnel, tid).record["quality"]["down_mbps"] == 210.0 and db.get(Tunnel, tid).record["quality"]["latency_ms"] == 85.0
+
+    q = tunnel_test.quality(tid)
+    assert probes[-1] == (4, 8, 30) and noted == [("bw", tid), ("kn", tid)] and q["down_mbps"] == 250.0 and "speed_at" not in q                                   # the speed test (the bandwidth job, the owner's button): as before
+    seen = []
+    monkeypatch.setattr(tunnel_test, "quality_all", lambda speed=True: seen.append(speed) or [])
+    besttoday.refresh()
+    assert seen == [False]                                                                                                                                          # the job asks pings only
+
+
 def fake_world(monkeypatch, answers=None, sink="SINK_OK"):
     """The foreign server's sink and the Iran server's probe, recorded: (the calls, the answers still to give)."""
     calls = []
@@ -308,6 +332,26 @@ def test_the_job_measures_one_tunnel_per_turn_the_one_that_waited_longest(monkey
     bandwidth.run()
     assert done == [never]                                                                                 # read-only: nothing is put on a server
     _ = wait
+
+
+def test_a_tunnel_whose_users_carry_most_of_its_usual_level_is_not_measured_at_all_and_the_rhythm_is_four_hours():
+    """The owner, 2026-11-05: "cut the panel's tests as much as you can; saving traffic matters most, I want the costs lower". A test moves up to 120 MB through the Iran server, which bills it; the users' own
+    traffic proves a tunnel that carries 60 % of its usual level (no drop is possible then)."""
+    assert bandwidth.INTERVAL == 4 * 3600 and bandwidth.PROVE_MBPS == 20.0
+    assert bandwidth.users_prove(300.0, 200.0) is True and bandwidth.users_prove(300.0, 150.0) is False and bandwidth.users_prove(300.0, None) is False
+    assert bandwidth.users_prove(None, 25.0) is True and bandwidth.users_prove(None, 10.0) is False and bandwidth.users_prove(10.0, 15.0) is False           # (no usual level, or a tiny one: 20 Mb/s is the least that proves anything)
+    busy, _, _, _ = make_tunnel("gr-busy", bw={**good_history(), "at": NOW - 9000, "next_at": NOW - 3000})
+    idle, _, _, _ = make_tunnel("gr-idle", bw={**good_history(), "at": NOW - 9000, "next_at": NOW - 3000})
+    poor, _, _, _ = make_tunnel("gr-poor", bw={**good_history(), "at": NOW - 9000, "next_at": NOW - 3000}, record={"quality": {"score": 25}})
+    dropped, _, _, _ = make_tunnel("gr-drop", bw={**good_history(), "state": "drop", "drop": {"since": NOW - 3000, "from": 300.0}, "down": 90.0, "at": NOW - 9000, "next_at": NOW - 3000})
+    fresh, _, _, _ = make_tunnel("gr-fresh")
+
+    with session() as db:
+        db.add_all([TunnelCheck(tunnel_id=busy, ts=NOW - 60 * i, ok=True, rtt_ms=80.0, rx_mbps=v, tx_mbps=1.0, error="") for i, v in enumerate([150.0, 210.0, 190.0, 200.0, 180.0, 170.0])])
+        db.add_all([TunnelCheck(tunnel_id=idle, ts=NOW - 60 * i, ok=True, rtt_ms=80.0, rx_mbps=v, tx_mbps=1.0, error="") for i, v in enumerate([5.0, 9.0, 12.0, 5.0, 6.0, 7.0])])
+        db.add_all([TunnelCheck(tunnel_id=t, ts=NOW - 60 * i, ok=True, rtt_ms=80.0, rx_mbps=250.0, tx_mbps=1.0, error="") for t in (poor, dropped, fresh) for i in range(6)])
+
+    assert sorted(bandwidth._due(NOW)) == sorted([idle, poor, dropped, fresh])          # busy: its users carry 210 of its usual 300 - no test; idle: measured; poor, a drop and a tunnel never measured: looked at whatever the users carry
 
 
 def test_a_tunnel_that_could_not_be_measured_is_left_alone_for_a_while_and_a_drop_is_looked_at(monkeypatch):

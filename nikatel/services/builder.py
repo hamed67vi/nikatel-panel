@@ -618,6 +618,7 @@ class Build:
     link_tried: list = field(default_factory=list)
     standby_of: str = ""   # the warm standby of this tunnel (services/standby.py): the row is made switched off and without an event, under its own lock (the repair of the real tunnel may build at the same time)
     hidden_key: str = "standby_of"          # the key of the row's record that names the tunnel: "strand_of" for an extra strand of a Trident (services/trident.py) - hidden in the same way, but not THE standby of the tunnel
+    extra_record: dict = field(default_factory=dict)          # more fields for the row's record (the relay strand of a Trident: `relay`)
 
 
 CANCEL: set[int] = set()   # build ids the operator stopped: the next step of the build raises and the build rolls everything back
@@ -783,8 +784,9 @@ def mtu_limit(opts: dict | None) -> int:
 
 
 def start_build(iran_id: int, foreign_id: int, ports_text: str, transport: str = "tcpmux", mtu: int = 0, keepalive: int = 75, forced_name: str = "", nodelay: bool = True, opts: dict | None = None,
-                standby_of: str = "", hidden_key: str = "standby_of") -> int:
-    """Validate, create the action_log entry, run the build in a thread. Returns the action id. `standby_of`: the name of the tunnel this one is the warm standby of (`hidden_key` "strand_of": an extra strand of its Trident)."""
+                standby_of: str = "", hidden_key: str = "standby_of", extra_record: dict | None = None) -> int:
+    """Validate, create the action_log entry, run the build in a thread. Returns the action id. `standby_of`: the name of the tunnel this one is the warm standby of (`hidden_key` "strand_of": an extra strand of its Trident;
+    `extra_record`: more fields of the row's record, e.g. the `relay` of a relay strand)."""
     if get_settings().read_only:
         raise ValueError("the panel is read-only; set NIKATEL_READ_ONLY=false on the panel server to build tunnels")
 
@@ -833,7 +835,7 @@ def start_build(iran_id: int, foreign_id: int, ports_text: str, transport: str =
             db.add(entry)
             db.flush()
             aid = entry.id
-            b = Build(aid, iran, foreign, ports, transport, mtu, keepalive, nodelay=bool(nodelay), opts=opts, name=forced_name, standby_of=standby_of, link_fallback=fallback, hidden_key=hidden_key)
+            b = Build(aid, iran, foreign, ports, transport, mtu, keepalive, nodelay=bool(nodelay), opts=opts, name=forced_name, standby_of=standby_of, link_fallback=fallback, hidden_key=hidden_key, extra_record=dict(extra_record or {}))
             db.expunge(iran)
             db.expunge(foreign)
 
@@ -1362,7 +1364,7 @@ def _build(b: Build) -> None:
                    port=port, iran_tunnel_ip=iran_ip, foreign_tunnel_ip=foreign_ip, forwarded_ports=[p.listen for p in b.ports],
                    record={"network": network, "prefix": 30, "mtu": b.mtu, "ttl": 255, "direction": "reverse", "keepalive": b.keepalive, "nodelay": b.nodelay, "opts": b.opts,
                            "port_mapping": ",".join(p.spec() for p in b.ports), "data_test": data, "built_by": "nikatel-panel",
-                           **({b.hidden_key: b.standby_of} if b.standby_of else {}),
+                           **({b.hidden_key: b.standby_of} if b.standby_of else {}), **(b.extra_record or {}),
                            **({"link": link, "link_port": link_port, **({"wg": {"iran_pub": pubs["iran"], "foreign_pub": pubs["foreign"]}} if link in NEEDS_WG_TOOL else {}), **({"carrier": carrier_record(link, link_port, pubs.get("fp", ""))} if carried else {})} if link != "gre" else {})},        # (public keys only: the private ones never left their servers)
                    secrets={"token": token, "gre_key": key}, state="starting", state_since=int(time.time()))
         db.add(t)
@@ -1379,7 +1381,7 @@ def _build(b: Build) -> None:
 def delete_tunnel(tunnel_id: int, keep_record: bool = False, trash: bool = False, skip_offline: bool = False) -> list[str]:
     """Remove the tunnel from both servers (and the row). Returns per-side results. `trash`: keep a copy first, so that it can be restored.
     `skip_offline`: a server that is off is not asked over SSH (a 90 s timeout per tunnel would make a failover of ten tunnels wait a quarter of an hour).
-    (1.69.221) A PROTECTED tunnel (`models.is_protected`) is never removed - not by the Doctor, the janitor, a move or a rebuild, and not by the page: the owner turns the protection off first. Every caller already
+    (1.69.226) A PROTECTED tunnel (`models.is_protected`) is never removed - not by the Doctor, the janitor, a move or a rebuild, and not by the page: the owner turns the protection off first. Every caller already
     handles the ValueError of a refusal (read-only, not found), and the refusal comes before anything is written or asked of a server."""
     if get_settings().read_only:
         raise ValueError("the panel is read-only; set NIKATEL_READ_ONLY=false on the panel server to delete tunnels")
@@ -1611,7 +1613,7 @@ def rename_tunnel(tunnel_id: int, new_name: str) -> str:
 
 
 def set_protected(tunnel_id: int, on: bool) -> bool:
-    """(1.69.221) The owner marks a tunnel PROTECTED, or takes the mark off (the tunnel's menu). Something stands on a protected tunnel - the inner link of the L2TP product, for one - so the Doctor still repairs it in place
+    """(1.69.226) The owner marks a tunnel PROTECTED, or takes the mark off (the tunnel's menu). Something stands on a protected tunnel - the inner link of the L2TP product, for one - so the Doctor still repairs it in place
     (checks, restarts) but never moves it to another Iran server, replaces it by another type, rebuilds it or removes it (`models.is_protected`; the guards sit in `delete_tunnel`, `autopilot._replace` /
     `_rebuild_safe` / `_switch_cut`, `swap.beside`, `doctor.move_now` and `failover._make_plan`). The mark is in the record, so it needs no new column and goes with the tunnel's copy in 'Recently removed'.
     A standby or a strand has no mark of its own: it follows its tunnel. Returns the state now."""

@@ -11,6 +11,9 @@ the panel - combine them into a strong multi-layer tunnel that gives the best co
   the weights        from what each strand shows NOW (`target_weights`): its capacity (the light test, `bandwidth.measure`) times a quality factor from its loss, its delay against the best one and how steady its kind has been
                      (`knowledge.stability`); a floor (a healthy strand keeps a few percent so it stays warm and measured) and a ceiling (no strand carries more than 70 %, 90 % when only two are left). A strand that
                      comes back, or is new, is let in by steps (`RAMP`: 10, 25, 50 %, then its own weight, one step per `RAMP_STEP`). A strand that is down gets nothing AT ONCE. Small drifts are ignored (`should_apply`).
+  the stall look     (1.69.226) a connection that hangs for 3 - 7 s is not seen by the checks (delay and loss are pings): every minute STALL_N small requests go from the Iran server to 127.0.0.1:<port> of every strand
+                     (ssh.py `strand_probe`, read-only; a local request never passes the NAT chain, so each port measures its own strand); the last five looks are pooled and a strand that stalls loses its share
+                     (`stall_factor`: free under 1 %, half at 2 %, a fifth at 5 % or when its p95 passes 3 s, the floor only from 10 %).
   the safety net     while the Trident is not active (not yet applied, or its job stands still for a minute: `owns`) the standby hands the users' ports over exactly as before. The Trident never touches DNS, never
                      removes the tunnel and does nothing in the Doctor's mode *off*. Switching it off parks it: all new connections go to the tunnel, the open ones stay where they are until they end.
 
@@ -21,7 +24,9 @@ import copy
 import re
 import threading
 import time
+from collections import deque
 from concurrent.futures import ThreadPoolExecutor
+from itertools import pairwise
 
 from sqlalchemy import select
 
@@ -40,6 +45,7 @@ from . import (
     knowledge,
     lanes,
     license,
+    overhead,
     standby,
     tunnel_test,
     tunnels,
@@ -84,6 +90,25 @@ RENEW_AFTER = 2 * 3600         # an extra strand whose family has been under pre
 RENEW_EVERY = 6 * 3600         # ... at most this often per tunnel
 MISSING_GRACE = 3 * 3600       # a marked tunnel whose row is gone this long is not coming back
 MAX_PLAN = 1199                # the entries of one trident_set plan (ssh.py allows 1200)
+RELAY_SHIFT = 40000            # the relay strand: the users' port P is 40000 + P on the Iran server AND the relay's local port on the second foreign server is 40000 + the tunnel's target port
+RELAY_AFTER = 60               # no strand usable this long (the foreign server's address is cut), or the weather says the address is cut: a relay strand through ANOTHER foreign server is built
+RELAY_KEEP = 1800              # the relay strand stays this long after the tunnel's own strands carry again (a filter that lifts for a minute is no reason to tear a road down)
+RELAY_EVERY = 900              # the relay unit on the second foreign server is put again (idempotent) this often while the relay strand stands ...
+RELAY_RETRY = 60               # ... and this often while it could not be put (the second server did not answer, the targets did not answer from there)
+ROLES = ("tunnel", "standby", "strand", "relay")
+LEAN_DEFAULT = True            # the lean Trident (1.69.197; the owner, 2026-11-05: "the least overhead in the tunnel we have, save on the traffic cost of the Iran servers"): the best strand carries nearly everything, the
+                               # others stay small canaries, a kind that puts more bytes on the line gets less, and a strand's capacity is measured once a day. Off with the setting `trident.lean` = false (`set_lean`).
+CEIL_LEAN = 0.94               # the most one strand carries while lean (two or three usable) ...
+FLOOR_LEAN = 0.03              # ... and the least a usable strand gets (warm and measured by its own few connections; a strand that fell still gets 0)
+CAP_FRESH_LEAN = 24 * 3600     # a measured capacity of a strand is used this long while lean (the light test moves up to 120 MB through the Iran server each time; the users' traffic says the rest)
+LOSS_LOOKS = 3                 # the loss the weights see is the least of a strand's last 3 checks: one lost ping of 20 is 5 %, which halved a share and gave it back a minute later (the live US tunnel, 2026-11-04: 137 rewrites of the plan in a day)
+STALL_EVERY = 60               # the STALL LOOK (1.69.226; the owner, 2026-11-05: "check whether the tunnels we build with this method have پرش [stalls]"): this often, per Trident, STALL_N small GETs from the Iran server
+                               # to 127.0.0.1:<port> of every strand that is up (ssh.py `strand_probe`, read-only, in a thread): a connection that hangs for 3 - 7 s is not seen by the 10 s check (its delay and loss are pings)
+STALL_N = 8                    # requests per strand per look (6 s each at most, 0.1 s apart; the services answer a plain GET with a short refusal: under 20 KB a look)
+STALL_LOOKS = 5                # the last 5 looks of a strand (40 answers) are pooled: the share of answers that took over 1.5 s, and the p95 (`stall_of`)
+STALL_MIN = 16                 # answers before the factor counts (two looks): one slow answer of the first look would otherwise bench a strand for five minutes
+STALL_CURVE = ((1.0, 1.0), (2.0, 0.5), (5.0, 0.2), (10.0, 0.0))     # the factor by the share of stalled answers (percent): free under 1 %, half at 2 %, a fifth at 5 %, the floor only from 10 % (`stall_factor`)
+SLOW_CURVE = ((1.0, 1.0), (3.0, 0.2))                               # ... and by the p95 of the answers (seconds): free under 1 s, a fifth from 3 s
 _LOCK = threading.Lock()
 _LOCKS: dict[str, threading.RLock] = {}
 _BUILDS: dict[str, dict] = {}          # tunnel name -> {"aid", "name", "kind", "at"} the extra strand being built
@@ -99,6 +124,10 @@ _FORCE: set[str] = set()               # tunnels whose plan is put at the next t
 _CHECKING: set[int] = set()            # strands being looked at right now (the look runs in a thread: the conductor never waits for ssh)
 _REMOVING: set[str] = set()            # tunnels whose extra strand is being removed right now
 _STATE: dict = {"init": False, "reconciled": 0.0, "cleaned": 0.0}
+_LOSS: dict[int, tuple[int, deque]] = {}       # strand row id -> (when the row was created, (time of the check, loss) of its last LOSS_LOOKS checks) (`smooth_loss`; a row id reused by a rebuilt strand starts a new history)
+_STALL: dict[int, tuple[int, deque]] = {}      # strand row id -> (when the row was created, its last STALL_LOOKS stall looks {"at", "n", "ok", "stalls", "p95", "max"}) (`stall_of`; a rebuilt strand starts anew)
+_STALL_AT: dict[str, float] = {}               # tunnel name -> when its last stall look started
+_STALLING: set[str] = set()                    # tunnels whose stall look runs right now (in a thread)
 
 
 # ------------------------------------------------------------------ pure helpers (tested)
@@ -132,6 +161,71 @@ def traits(kind: str) -> dict:
         t["over"] = _OVER_L4.get(t["l4"], 0)
 
     return t
+
+
+def wire_overhead(kind: str) -> float:
+    """Pure: the bytes a strand of this kind puts on the Iran server's line for every byte of the users' data, as a fraction (0.06 = 6 % more) - the Doctor's own model of what every type costs on the wire
+    (services/overhead.py, 1.69.223: headers, mux and TLS framing, KCP's parity and resends: plain Backhaul / BackPack / Chisel 1.04 - 1.13, Paqet 1.4, BackPack KCP 1.6, xDi 1.9), the same table the Doctor
+    ranks the types by; what an Iran server bills per TB is about the users' bytes times (1 + this)."""
+    return round(max(0.0, float(overhead.model_cost(kind)) - 1.0), 3)
+
+
+def smooth_loss(hist: deque, at: int, loss) -> float | None:
+    """Pure: the loss the weights see - the least of the strand's last LOSS_LOOKS checks (`hist` holds (time of the check, loss); a new check is a new time). A loss that stands shows in every check and is seen
+    whole; one lost ping in twenty (5 %) is noise. A check without a loss (the ping is blocked) leaves the history alone and gives None (nothing known)."""
+    if loss is None:
+        return None
+
+    if not hist or hist[-1][0] != at:
+        hist.append((int(at), float(loss)))
+    else:
+        hist[-1] = (int(at), float(loss))
+
+    return min(x for _, x in hist)
+
+
+_PROBE_RE = re.compile(r"^STRAND (\d+) n=(\d+) ok=(\d+) stalls=(\d+) p95=(\d+(?:\.\d+)?) max=(\d+(?:\.\d+)?)", re.MULTILINE)
+
+
+def parse_probe(out: str) -> dict[int, dict]:
+    """Pure: the lines of ssh.py `strand_probe` ("STRAND <port> n=8 ok=8 stalls=1 p95=1.800 max=4.100 ...") as {port: {"n", "ok", "stalls", "p95", "max"}}; a line that is not understood is left out."""
+    return {int(m.group(1)): {"n": int(m.group(2)), "ok": int(m.group(3)), "stalls": int(m.group(4)), "p95": float(m.group(5)), "max": float(m.group(6))} for m in _PROBE_RE.finditer(out or "")}
+
+
+def stall_of(looks) -> tuple[float | None, float | None, int]:
+    """Pure: (the share of stalled answers in percent, the p95 in seconds, the answers counted) over the last looks of a strand. A look in which nothing answered and nothing stalled (the port refused at once: the
+    strand's own check says it is down) counts for nothing; the p95 is the median of the looks' p95 (a strand that is slow is slow in every look, one bad look is its stalls). (None, None, 0) when nothing is known."""
+    runs = [r for r in looks if int(r.get("ok") or 0) + int(r.get("stalls") or 0) > 0 and int(r.get("n") or 0) > 0]
+
+    if not runs:
+        return None, None, 0
+
+    n = sum(int(r["n"]) for r in runs)
+    p95s = sorted(float(r["p95"]) for r in runs)
+    return round(100.0 * sum(int(r["stalls"]) for r in runs) / n, 1), p95s[len(p95s) // 2], n
+
+
+def _curve(x: float, pts: tuple) -> float:
+    """A straight line through `pts` ((x, y) with x rising), flat outside them."""
+    if x <= pts[0][0]:
+        return pts[0][1]
+
+    for (x0, y0), (x1, y1) in pairwise(pts):
+        if x <= x1:
+            return y0 + (y1 - y0) * (x - x0) / (x1 - x0)
+
+    return pts[-1][1]
+
+
+def stall_factor(stalls: float | None, p95: float | None) -> float:
+    """Pure: what a strand's stalls cost it in the weights (0 - 1): 1.0 while it stalls under 1 % of its answers (STALL_CURVE) and answers within 1.0 s at p95 (SLOW_CURVE), 0.5 at 2 %, 0.2 at 5 % or a p95 over 3 s,
+    and 0 from 10 % - the strand is held at the floor only (warm and measured, carrying almost nothing). The lower of the two; a number that is not known costs nothing."""
+    f = 1.0 if stalls is None else _curve(float(stalls), STALL_CURVE)
+
+    if p95 is not None:
+        f = min(f, _curve(float(p95), SLOW_CURVE))
+
+    return round(max(0.0, min(1.0, f)), 3)
 
 
 def mtu_of(kind: str, recorded: int | None = None) -> int:
@@ -226,10 +320,12 @@ def quality(loss: float | None, rtt: float | None, best_rtt: float | None, stab:
     return max(0.01, min(1.0, q))
 
 
-def target_weights(items: list[dict]) -> list[float]:
+def target_weights(items: list[dict], lean: bool = False) -> list[float]:
     """The share of each strand of the users' NEW connections, summing to 1 (all 0 when none is usable). `items`: one per strand in order (index 0 = the tunnel), each {"usable", "cap" (Mb/s or None),
-    "rtt", "loss", "stab", "stage"}. A strand gets its capacity x quality as a share; then it is held inside [floor, ceiling] where the ceiling is the lower of the global ceiling and the step of its way in
-    (`RAMP`). When the ceilings cannot add up to 1 (everybody is on the first steps) the strands that are fully in take the rest."""
+    "rtt", "loss", "stab", "stage", "overhead" (what its kind puts on the wire, `wire_overhead`; 0 when not given), "stall" (`stall_factor` of its stall looks; 1 when not given)}. A strand gets its capacity x
+    quality x stall / (1 + overhead) as a share; then it is held inside [floor, ceiling] where the ceiling is the lower of the global ceiling and the step of its way in (`RAMP`). When the ceilings cannot add up
+    to 1 (everybody is on the first steps) the strands that are fully in take the rest. `lean`: the ceiling is CEIL_LEAN and the floor FLOOR_LEAN - the best strand carries nearly everything, the others stay
+    small (the owner, 2026-11-05: the least overhead)."""
     n = len(items)
     use = [i for i in range(n) if items[i].get("usable")]
     w = [0.0] * n
@@ -245,10 +341,11 @@ def target_weights(items: list[dict]) -> list[float]:
     default = caps[len(caps) // 2] if caps else CAP_DEFAULT
     rtts = [float(items[i]["rtt"]) for i in use if items[i].get("rtt") is not None]
     best = min(rtts) if rtts else None
-    raw = {i: float(items[i].get("cap") or default) * quality(items[i].get("loss"), items[i].get("rtt"), best, items[i].get("stab"), items[i].get("mtu")) * float(items[i].get("wx") or 1.0) for i in use}      # wx: the weather of the strand's family on the route (services/weather.py) - 1 when nothing is known
-    top = CEIL_TWO if len(use) == 2 else CEIL_MANY
+    raw = {i: float(items[i].get("cap") or default) * quality(items[i].get("loss"), items[i].get("rtt"), best, items[i].get("stab"), items[i].get("mtu")) * float(items[i].get("wx") or 1.0) * _stall_w(items[i])
+          / (1.0 + max(0.0, float(items[i].get("overhead") or 0.0))) for i in use}      # wx: the weather of the strand's family on the route (services/weather.py) - 1 when nothing is known; overhead: a kind that puts 30 % more bytes on the line carries 23 % less, all else equal; stall: what its stall looks cost it (0 = the floor only)
+    top = CEIL_LEAN if lean else (CEIL_TWO if len(use) == 2 else CEIL_MANY)
     ceil = {i: min(top, RAMP[max(0, min(3, int(items[i].get("stage", 3))))]) for i in use}
-    floor = {i: min(FLOOR, ceil[i]) for i in use}
+    floor = {i: min(FLOOR_LEAN if lean else FLOOR, ceil[i]) for i in use}
 
     if sum(ceil.values()) < 1.0:                                        # everybody is on the first steps: the ones that are fully in may take more than the ceiling
         for i in use:
@@ -301,6 +398,12 @@ def target_weights(items: list[dict]) -> list[float]:
         w[i] = result[i] / s if s > 0 else 1.0 / len(use)
 
     return w
+
+
+def _stall_w(item: dict) -> float:
+    """The stall factor of an item in the weights: 1 when the item has none (every strand before 1.69.226, a strand with no stall look yet)."""
+    v = item.get("stall")
+    return 1.0 if v is None else max(0.0, min(1.0, float(v)))
 
 
 def advance(stage: int, usable: bool, up_for: float, in_stage_for: float) -> int:
@@ -417,6 +520,17 @@ def strand_name(base: str, taken: set[str]) -> str:
     return standby.standby_name(base, taken)
 
 
+def relay_name(base: str, taken: set[str]) -> str:
+    """The name of the relay strand: `<base>-rl`, `-rl2` ... in at most 15 characters, unique among `taken`."""
+    stem = (str(base)[:11].rstrip("-") or "t") + "-rl"
+    name, n = stem, 2
+
+    while name in taken:
+        name, n = f"{stem}{n}", n + 1
+
+    return name
+
+
 # ------------------------------------------------------------------ the mark, who owns the users' ports
 def _doc() -> dict:
     return st.get("trident")
@@ -429,6 +543,22 @@ def _view() -> dict:
 
 def marks() -> dict:
     return copy.deepcopy(_view().get("tunnels") or {})
+
+
+def lean_on() -> bool:
+    """The lean Trident (LEAN_DEFAULT) unless the setting `trident.lean` says false."""
+    v = _doc().get("lean")
+    return LEAN_DEFAULT if v is None else bool(v)
+
+
+def set_lean(on: bool) -> dict:
+    """The owner's switch: lean on or off for every Trident; the plans are put again at the next turn."""
+    with _LOCK:
+        st.put("trident", {"lean": bool(on)})
+
+    _FORCE.update(marks())
+    wake()
+    return {"lean": lean_on()}
 
 
 def _applied(name: str) -> dict:
@@ -507,20 +637,56 @@ def _node(host: str, user: str, port: int):
 
 
 def strand_row(db, name: str) -> Tunnel | None:
-    return next((t for t in db.scalars(select(Tunnel).where(Tunnel.enabled.is_(False))) if (t.record or {}).get("strand_of") == name), None)
+    return next((t for t in db.scalars(select(Tunnel).where(Tunnel.enabled.is_(False))) if (t.record or {}).get("strand_of") == name and not (t.record or {}).get("relay")), None)
+
+
+def relay_row(db, name: str) -> Tunnel | None:
+    """The relay strand of a tunnel: a hidden tunnel from the same Iran server to ANOTHER foreign server (`record.relay = {"to": the tunnel's foreign server, "ports": [[local port on it, the tunnel's target port], ...]}`)."""
+    return next((t for t in db.scalars(select(Tunnel).where(Tunnel.enabled.is_(False))) if (t.record or {}).get("strand_of") == name and (t.record or {}).get("relay")), None)
+
+
+def relay_mapping(text: str, taken: set[int]) -> tuple[str, list[tuple[int, int, int]]]:
+    """Pure: ('40443:42096,40080:40080', [(443, 40443, 2096), (80, 40080, 80)]) - the users' port P becomes RELAY_SHIFT + P on the Iran server, and the tunnel's target port T becomes RELAY_SHIFT + T on the second foreign server
+    (its local relay port: the tunnel's own target port there would collide with that server's own services). ValueError when a port cannot be shifted or is taken on the Iran server."""
+    _, mapping = standby.shift_mapping(text, taken, RELAY_SHIFT)
+    out, triples = [], []
+
+    for m in builder.parse_ports(text):
+        listen = mapping[m.listen]
+        target = m.target or m.listen
+        local = standby.shifted(target, RELAY_SHIFT)
+
+        if local is None:
+            raise ValueError(f"port {target} cannot be shifted for a relay")
+
+        out.append(f"{listen}:{local}")
+        triples.append((m.listen, listen, target))
+
+    return ",".join(out), triples
+
+
+def relay_spec(triples: list[tuple[int, int, int]], to_host: str) -> str:
+    """Pure: the SPEC of the relay unit on the second foreign server: '<local port>:<the tunnel's foreign address>:<target port>,...'."""
+    return ",".join(f"{standby.shifted(t, RELAY_SHIFT)}:{to_host}:{t}" for _, _, t in triples)
 
 
 def _stale(t: Tunnel, p: dict | None) -> str:
-    """Why an extra strand no longer fits its tunnel ('' = it does): other servers, other ports."""
+    """Why an extra strand no longer fits its tunnel ('' = it does): other servers, other ports. A relay strand runs to ANOTHER foreign server on purpose: only its Iran server and its ports are compared."""
     if p is None:
         return ""
 
-    if (t.iran_server_id, t.foreign_server_id) != (p["iran_id"], p["foreign_id"]):
+    rec = t.record or {}
+    relay = bool(rec.get("relay"))
+
+    if t.iran_server_id != p["iran_id"] or (not relay and t.foreign_server_id != p["foreign_id"]):
         return "the tunnel runs between other servers now"
 
+    if relay and int((rec.get("relay") or {}).get("to") or 0) != int(p["foreign_id"]):
+        return "the tunnel's foreign server changed"
+
     try:
-        want = standby.norm_ports(standby.shift_mapping(p["mapping"], set(), STRAND_SHIFT)[0])
-        have = standby.norm_ports((t.record or {}).get("port_mapping") or "")
+        want = standby.norm_ports(relay_mapping(p["mapping"], set())[0] if relay else standby.shift_mapping(p["mapping"], set(), STRAND_SHIFT)[0])
+        have = standby.norm_ports(rec.get("port_mapping") or "")
     except ValueError:
         return "the ports of the tunnel cannot be shifted"
 
@@ -534,11 +700,12 @@ def _xview(t: Tunnel, p: dict | None) -> dict:
             "ports": [int(x) for x in (t.forwarded_ports or []) if str(x).isdigit()], "udp": bool((rec.get("opts") or {}).get("accept_udp")), "rtt": t.rtt_ms,
             "loss": (t.detail or {}).get("loss_pct"), "last_error": t.last_error or "", "iran_id": t.iran_server_id, "foreign_id": t.foreign_server_id, "created_at": int(t.created_at or 0),
             "stale": _stale(t, p) if rec.get("strand_of") else "", "iran": (t.iran.host, t.iran.ssh_user, t.iran.ssh_port), "iran_off": t.iran.enabled is not False and t.iran.online is False,
-            "bw": dict(rec.get("bw") or {}), "mtu": rec.get("mtu")}
+            "bw": dict(rec.get("bw") or {}), "mtu": rec.get("mtu"), "relay": dict(rec.get("relay") or {}), "foreign": (t.foreign.host, t.foreign.ssh_user, t.foreign.ssh_port), "foreign_name": t.foreign.name,
+            "foreign_off": t.foreign.enabled is not False and t.foreign.online is False}
 
 
 def _read(name: str) -> dict:
-    """{"p": the tunnel, "s1": its standby, "s2": the extra strand, "sb": the standby view of services/standby.py} as plain data (None where there is no such row)."""
+    """{"p": the tunnel, "s1": its standby, "s2": the extra strand, "s3": the relay strand (through another foreign server), "sb": the standby view of services/standby.py} as plain data (None where there is no such row)."""
     v = standby._view(name)
     p, sb = v["p"], v["s"]
 
@@ -549,6 +716,8 @@ def _read(name: str) -> dict:
         s1 = _xview(r1, p) if r1 is not None else None
         r2 = strand_row(db, name)
         s2 = _xview(r2, p) if r2 is not None else None
+        r3 = relay_row(db, name)
+        s3 = _xview(r3, p) if r3 is not None else None
 
     if px is not None and p is not None:
         px.update({"mapping": p["mapping"], "ports": p["ports"], "off": p["off"]})
@@ -556,7 +725,11 @@ def _read(name: str) -> dict:
     if s1 is not None and sb is not None:
         s1.update({"stale": sb["stale"], "use": sb["use"], "parked": sb["parked"]})
 
-    return {"p": px, "pv": p, "s1": s1, "s2": s2, "sb": sb}
+    return {"p": px, "pv": p, "s1": s1, "s2": s2, "s3": s3, "sb": sb}
+
+
+def _rows_of(v: dict) -> tuple:
+    return (v.get("p"), v.get("s1"), v.get("s2"), v.get("s3"))
 
 
 def standby_row_by_id(db, tid: int) -> Tunnel | None:
@@ -700,6 +873,309 @@ def remove_strand(name: str) -> list[str]:
         return builder.delete_tunnel(tid, skip_offline=off)
 
 
+# ------------------------------------------------------------------ the relay strand: through ANOTHER foreign server when the tunnel's foreign address is cut
+def relay_due(usable: list[bool], states: dict, all_down_since: int, now: int, has_relay: bool) -> str:
+    """Pure: why a relay strand is due now ('' = not): the tunnel's foreign address is cut for the ordinary families (`weather.address_cut`), or no strand at all has been usable for RELAY_AFTER - and no relay stands yet.
+    (The owner, 2026-11-03: "if the Iran server's address is reachable and the foreign address is filtered, it must still answer".)"""
+    if has_relay:
+        return ""
+
+    if weather.address_cut(states):
+        return "the foreign server's address is filtered on this route (tcp, icmp and udp are all blocked)"
+
+    if not any(usable) and all_down_since and now - all_down_since >= RELAY_AFTER:
+        return f"no strand has carried for {now - all_down_since} s"
+
+    return ""
+
+
+def relay_keep(usable_own: list[bool], own_up_since: int, now: int, states: dict | None = None) -> bool:
+    """Pure: does the relay strand stay - yes while the weather still says the foreign address is cut; else until the tunnel's OWN strands have carried again for RELAY_KEEP (counted from the later of: they came back,
+    the relay stood)."""
+    if states is not None and weather.address_cut(states):
+        return True
+
+    return not (any(usable_own) and own_up_since and now - own_up_since >= RELAY_KEEP)
+
+
+def relay_target(iran_id: int, foreign_id: int, now: int | None = None) -> tuple[int, str]:
+    """(the id of the SECOND foreign server, why) - the foreign server this Iran server reaches best right now: one with an UP tunnel from this Iran server (the surest sign), the most open families in its weather, the
+    lowest delay; never the tunnel's own foreign server, never one that is off. (0, why not) when there is none."""
+    now = now or int(time.time())
+    cands: dict[int, dict] = {}
+
+    with session() as db:
+        servers = {s.id: s for s in db.scalars(select(Server)) if s.role == "foreign" and s.enabled and s.online is not False and s.id != foreign_id}
+
+        for t in db.scalars(select(Tunnel).where(Tunnel.iran_server_id == iran_id)):
+            if t.foreign_server_id in servers and not is_temp(t.name) and t.state in ("up", "degraded") and not (t.record or {}).get("relay"):
+                c = cands.setdefault(t.foreign_server_id, {"up": 0, "rtt": None})
+                c["up"] += 1
+
+                if t.rtt_ms is not None and (c["rtt"] is None or float(t.rtt_ms) < c["rtt"]):
+                    c["rtt"] = float(t.rtt_ms)
+
+        for sid in servers:
+            cands.setdefault(sid, {"up": 0, "rtt": None})
+
+        names = {sid: s.name for sid, s in servers.items()}
+
+    if not cands:
+        return 0, "no other foreign server is on"
+
+    def key(sid: int):
+        c = cands[sid]
+        wx = weather.weather_of(iran_id, sid)
+        return (c["up"] == 0, -sum(1 for e in wx.values() if e.get("state") == "open"), sum(1 for e in wx.values() if e.get("state") == "blocked"), c["rtt"] if c["rtt"] is not None else 9999.0, sid)
+
+    best = min(cands, key=key)
+    c = cands[best]
+
+    if c["up"] == 0 and not weather.open_families(iran_id, best):
+        return 0, "no other foreign server is known to be reachable from this Iran server now (no tunnel of it is up, nothing open in the weather)"
+
+    return best, f"{names[best]}: {c['up']} tunnel(s) up from this Iran server" + (f", {c['rtt']:.0f} ms" if c["rtt"] is not None else "") + (", open families: " + ", ".join(sorted(weather.open_families(iran_id, best))) if weather.open_families(iran_id, best) else "")
+
+
+def relay_plan(name: str) -> dict:
+    """What the relay strand would be: `via` the second foreign server (the strand's own foreign end), `to` / `to_host` the tunnel's foreign server (where the unit carries the connections on to), its name, kind and
+    ports - or ValueError with the reason there is none."""
+    v = _read(name)
+    p = v["p"]
+
+    if p is None:
+        raise ValueError("tunnel not found")
+
+    if not p["ports"]:
+        raise ValueError("this tunnel forwards no port, so there is nothing to relay")
+
+    now = int(time.time())
+    to_id, why_to = relay_target(p["iran_id"], p["foreign_id"], now)
+
+    if not to_id:
+        raise ValueError(why_to)
+
+    why = standby._busy_reason(p["iran_id"], to_id)
+
+    if why:
+        raise ValueError(why)
+
+    ports_text, triples = relay_mapping(p["mapping"], _taken_ports(p["iran_id"]))
+    pair = knowledge.pair(p["iran_id"], to_id)
+    kinds, _ = knowledge.plan_for(p["iran_id"], to_id, "", False, False, now=now)
+    skip = {x for x, at in (_failed(name + "#relay").get("kinds") or {}).items() if now - int(at) < KIND_SKIP}
+    k, note = pick_kind(kinds, [], pair, now, allowed=license.tunnel_kind_allowed, skip=skip, states=weather.states_for(p["iran_id"], to_id))
+
+    if not k:
+        raise ValueError(note)
+
+    with session() as db:
+        taken = {t.name for t in db.scalars(select(Tunnel))}
+        to_host = (db.get(Server, p["foreign_id"]) or Server(host="")).host
+
+    return {"name": relay_name(name, taken), "kind": k, "note": f"through {why_to}; {note}", "ports": ports_text, "triples": triples, "via": to_id, "to": int(p["foreign_id"]), "to_host": to_host}
+
+
+def build_relay(name: str) -> int:
+    """Start the build of the relay strand: a real tunnel from the Iran server to the second foreign server on the relay ports, hidden like a strand, `record.relay` naming the tunnel's foreign server and the ports the
+    relay unit must forward (put by `_ensure_relay` when the strand is up). ValueError with the reason when it must not be built now."""
+    if get_settings().read_only:
+        raise ValueError("the panel is read-only: nothing is built")
+
+    v = _read(name)
+    p = v["p"]
+    key = name + "#relay"
+
+    if p is None:
+        raise ValueError("tunnel not found")
+
+    if v["s3"] is not None:
+        raise ValueError("this tunnel already has its relay strand")
+
+    if key in _BUILDS:
+        raise ValueError("its relay strand is being built")
+
+    if p.get("iran_off"):
+        raise ValueError("the Iran server is off: a relay is built when it is on")
+
+    if p.get("foreign_off"):
+        raise ValueError("the foreign server itself is off (the panel cannot reach it either): a relay through another server would not reach it")
+
+    if autopilot.storm_now():
+        raise ValueError("several servers are off or many tunnels are down: nothing is built now")
+
+    plan = relay_plan(name)
+    k, tr = tunnel_test.kind_parts(plan["kind"])
+    relay = {"to": int(plan["to"]), "to_host": plan["to_host"], "ports": [[standby.shifted(t, RELAY_SHIFT), t] for _, _, t in plan["triples"]]}          # (the tunnel's foreign server: where the unit carries on to)
+
+    if k == "backhaul":
+        opts = {} if tunnel_test.kind_link(plan["kind"]) == "gre" else {"link": tunnel_test.kind_link(plan["kind"])}
+        aid = builder.start_build(p["iran_id"], plan["via"], plan["ports"], tr, forced_name=plan["name"], opts=opts, standby_of=name, hidden_key="strand_of", extra_record={"relay": relay})
+    else:
+        aid = build_other.start_build(p["iran_id"], plan["via"], plan["ports"], k, tr, {}, forced_name=plan["name"], measure="latency", standby_of=name, hidden_key="strand_of", extra_record={"relay": relay})
+
+    with _LOCK:
+        _BUILDS[key] = {"aid": aid, "name": plan["name"], "kind": plan["kind"], "at": int(time.time())}
+
+    log.info("trident: building the relay strand %s for %s (%s)", plan["name"], name, plan["note"])
+
+    with session() as db:
+        emit(db, "warn", "tunnels", f"Trident of {name}: the foreign server's address looks filtered from its Iran server - a relay strand ({plan['kind']}) is being built {plan['note'].split(';')[0]}.", name)
+
+    return aid
+
+
+def _ensure_relay(name: str, s3: dict, applied: dict, now: int) -> None:
+    """The relay unit on the second foreign server: put (idempotent) when the relay strand is up and it was not put in the last RELAY_EVERY (or never)."""
+    if s3["state"] not in ("up", "degraded") or s3.get("foreign_off"):
+        return
+
+    r = s3.get("relay") or {}
+    age = now - int(applied.get("relay_at") or 0)
+
+    if applied.get("relay_at") and age < (RELAY_EVERY if applied.get("relay_ok") else RELAY_RETRY):
+        return
+
+    spec = ",".join(f"{int(lp)}:{r.get('to_host')}:{int(t)}" for lp, t in (r.get("ports") or []))
+
+    try:
+        out = run_action(_node(*s3["foreign"]), "relay_on", {"NAME": name, "SPEC": spec}, timeout=60)
+    except (SSHError, ValueError) as e:
+        _merge_applied(name, {"relay_at": now, "relay_ok": False, "relay_why": str(e)[:120]})
+        return
+
+    m = re.search(rf"RELAY_ON {re.escape(name)} (\d+) (\d+)/(\d+)", out)
+    ok, why = (True, "") if m else (False, out.strip()[-120:])
+
+    if m and int(m.group(2)) == 0 and int(m.group(3)) > 0:
+        ok, why = False, f"the tunnel's foreign server does not answer on its service ports from {s3.get('foreign_name')}: the relay cannot carry (a firewall there keeps the ports to the tunnel?)"
+
+    _merge_applied(name, {"relay_at": now, "relay_ok": ok, "relay_why": why, "relay_reach": m.group(2) + "/" + m.group(3) if m else ""})
+
+    if not ok:
+        _note(name, f"the relay strand stands but does not carry: {why}")
+        log.warning("trident: the relay unit of %s on %s: %s", name, s3.get("foreign_name"), why)
+
+
+def remove_relay(name: str) -> list[str]:
+    """Take the relay strand away: the relay unit on the second foreign server first (when that server answers), then the tunnel itself from both servers."""
+    with _lock(name):
+        with session() as db:
+            t = relay_row(db, name)
+
+            if t is None:
+                return []
+
+            tid = t.id
+            node = _node(t.foreign.host, t.foreign.ssh_user, t.foreign.ssh_port) if t.foreign is not None and t.foreign.online is not False else None
+            off = any(srv is not None and srv.online is False for srv in (t.iran, t.foreign))
+
+        if node is not None:
+            try:
+                run_action(node, "relay_off", {"NAME": name}, timeout=40)
+            except (SSHError, ValueError) as e:
+                log.warning("trident: the relay unit of %s could not be taken off: %s", name, str(e)[:120])
+
+        _merge_applied(name, {"relay_at": 0, "relay_ok": False, "relay_retire": 0, "relay_seen": 0, "relay_why": "", "relay_reach": ""})
+        return builder.delete_tunnel(tid, skip_offline=off)
+
+
+def _remove_relay_async(name: str, why: str) -> None:
+    key = name + "#relay"
+
+    with _LOCK:
+        if key in _REMOVING:
+            return
+
+        _REMOVING.add(key)
+
+    def work():
+        try:
+            log.info("trident: the relay strand of %s is removed (%s)", name, why)
+            remove_relay(name)
+        except (ValueError, RuntimeError, SSHError) as e:
+            log.warning("trident: the relay strand of %s could not be removed yet: %s", name, str(e)[:120])
+        except Exception:
+            log.exception("trident: removing the relay strand of %s crashed", name)
+        finally:
+            with _LOCK:
+                _REMOVING.discard(key)
+
+    threading.Thread(target=work, name=f"trident-remove-relay-{name}", daemon=True).start()
+
+
+def _relay_step(name: str, v: dict, items: list, applied: dict, now: int) -> None:
+    """The relay strand's own turn: built when the tunnel's foreign address is cut (or nothing has carried for a minute) and another foreign server is reachable; its unit put when it is up; removed after the tunnel's own
+    strands have carried again for RELAY_KEEP; mended like a strand meanwhile."""
+    p, s3 = v["p"], v["s3"]
+    key = name + "#relay"
+    own = [bool(it and it["usable"]) for it in items[:3]]
+    all_down_since = int(applied.get("all_down_since") or 0)
+    own_up_since = int(applied.get("own_up_since") or 0)
+
+    if any(own):
+        changes = {"all_down_since": 0, **({"own_up_since": now} if not own_up_since else {})}
+    else:
+        changes = {"own_up_since": 0, **({"all_down_since": now} if not all_down_since else {})}
+
+    if changes != {k: applied.get(k) for k in changes}:
+        _merge_applied(name, changes)
+        applied = {**applied, **changes}
+
+    states = weather.weather_of(p["iran_id"], p["foreign_id"])
+
+    if s3 is None:
+        why = relay_due(own, states, int(applied.get("all_down_since") or 0), now, False)
+
+        if why and key not in _BUILDS and now >= int(_failed(key).get("at") or 0) + standby.retry_wait(int(_failed(key).get("n") or 0)) and time.time() >= _RETRY_AT.get(key, 0.0):
+            try:
+                build_relay(name)
+            except ValueError as e:
+                _note(name, f"a relay strand is due ({why}) but cannot be built: {str(e)[:100]}")
+                _RETRY_AT[key] = time.time() + BUILD_RETRY
+
+        return
+
+    if not applied.get("relay_seen"):
+        applied = _merge_applied(name, {"relay_seen": now})          # (the relay strand stands from now: the own strands' way back is counted from here at the earliest)
+
+    if s3["stale"] and key not in _REMOVING:
+        _remove_relay_async(name, s3["stale"])                       # (its share is already 0: a stale strand is not usable)
+        return
+
+    back_since = max(int(applied.get("own_up_since") or 0), int(applied.get("relay_seen") or 0)) if applied.get("own_up_since") else 0
+
+    if not relay_keep(own, back_since, now, states) and key not in _REMOVING:
+        if not applied.get("relay_retire"):
+            _merge_applied(name, {"relay_retire": now, "relay_ok": False})          # its share goes first (the next turn's plan leaves it out), the strand itself a turn later
+            return
+
+        if now - int(applied["relay_retire"]) >= TICK:
+            _remove_relay_async(name, f"the tunnel's own strands have carried again for {(now - back_since) // 60} min")
+
+        return
+
+    if applied.get("relay_retire"):
+        _merge_applied(name, {"relay_retire": 0})          # (the own strands fell again before the relay went: it stays)
+
+    if time.time() - _CHECKED.get(s3["id"], 0) >= CHECK_EVERY:
+        _CHECKED[s3["id"]] = time.time()
+        _check_async(s3["id"])
+
+    _ensure_relay(name, s3, applied, now)
+
+    if s3["state"] in ("up", "degraded") or key in _REMOVING:
+        return
+
+    sick = now - int(s3["state_since"] or now)
+
+    if sick >= REBUILD_AFTER and not p.get("off"):
+        _remove_relay_async(name, f"it has not been up for {sick} s: it is built again")
+    elif sick >= UNHEALTHY_AFTER and time.time() - _RESTARTED.get(s3["id"], 0) >= RESTART_EVERY:
+        _RESTARTED[s3["id"]] = time.time()
+        threading.Thread(target=_restart_strand, args=({"id": s3["id"], "name": s3["name"]},), name=f"trident-restart-{s3['name']}", daemon=True).start()
+
+
 def _restart_strand(s: dict) -> None:
     standby._restart(s)
 
@@ -745,7 +1221,7 @@ def _cap_of(item: dict, applied: dict, now: int) -> float | None:
 
     c = (applied.get("caps") or {}).get(str(item["idx"])) or {}
 
-    if c.get("v") and c.get("kind") == item["kind"] and now - int(c.get("at") or 0) < CAP_FRESH:
+    if c.get("v") and c.get("kind") == item["kind"] and now - int(c.get("at") or 0) < (CAP_FRESH_LEAN if lean_on() else CAP_FRESH):
         return float(c["v"])
 
     return None
@@ -787,13 +1263,13 @@ def _items(name: str, v: dict, applied: dict, now: int) -> list[dict]:
     """The strands as the conductor reads them: index 0 the tunnel, 1 its standby, 2 the extra strand (an item with no row is None)."""
     ref = v["p"] or v.get("ref")
     pair = knowledge.pair(ref["iran_id"], ref["foreign_id"]) if ref else None
-    stages = list(applied.get("stages") or [3, 0, 0])
-    since = list(applied.get("stage_at") or [now, now, now])
+    stages = list(applied.get("stages") or [3, 0, 0, 0])
+    since = list(applied.get("stage_at") or [now, now, now, now])
     out = []
 
     was = list(applied.get("usable") or [])
 
-    for idx, row in enumerate((v["p"], v["s1"], v["s2"])):
+    for idx, row in enumerate(_rows_of(v)):
         if row is None:
             out.append(None)
             continue
@@ -811,10 +1287,25 @@ def _items(name: str, v: dict, applied: dict, now: int) -> list[dict]:
         if usable and not before:              # it enters now: the tunnel the first time the trident looks at it is fully in; a strand, or the tunnel after it was down, starts on the first step
             stage, stage_at = (3 if idx == 0 and not was else 0), now
 
-        item = {"idx": idx, "id": row["id"], "name": row["name"], "kind": row["kind"], "state": row["state"], "up_for": up_for, "usable": usable, "rtt": row["rtt"], "loss": row["loss"],
-                "ports": row["ports"], "udp": row["udp"], "bw": row.get("bw"), "stab": _stab_of(pair, row["kind"], now), "mtu": mtu_of(row["kind"], row.get("mtu")), "stage": stage, "stage_at": stage_at, "iran": row["iran"], "last_error": row["last_error"]}
+        if idx == 3 and not (applied.get("relay_ok") and row["state"] in ("up", "degraded")):
+            usable = False                     # the relay strand carries only once its relay unit stands on the second foreign server
+
+        with _LOCK:
+            born, ent = int(row.get("created_at") or 0), _LOSS.get(int(row["id"]))
+
+            if ent is None or ent[0] != born:
+                ent = (born, deque(maxlen=LOSS_LOOKS))
+                _LOSS[int(row["id"])] = ent
+
+            loss = smooth_loss(ent[1], int(row.get("last_check_at") or 0), row["loss"])          # (the least of the last checks: one lost ping is not a worse strand)
+            sl = _STALL.get(int(row["id"]))
+            stalls, p95, n_st = stall_of(sl[1]) if sl is not None and sl[0] == born else (None, None, 0)          # (the stall looks of this row, pooled; a rebuilt strand under the same id starts anew)
+
+        item = {"idx": idx, "id": row["id"], "name": row["name"], "kind": row["kind"], "state": row["state"], "up_for": up_for, "usable": usable, "rtt": row["rtt"], "loss": loss, "overhead": wire_overhead(row["kind"]),
+                "ports": row["ports"], "udp": False if idx == 3 else row["udp"], "bw": row.get("bw"), "stab": _stab_of(pair, row["kind"], now), "mtu": mtu_of(row["kind"], row.get("mtu")), "stage": stage, "stage_at": stage_at, "iran": row["iran"], "last_error": row["last_error"],
+                "born": born, "stall": stall_factor(stalls, p95) if n_st >= STALL_MIN else 1.0, "stall_pct": stalls, "stall_p95": p95}          # stall: the factor of its stall looks once STALL_MIN answers are in (`stall_factor`)
         item["cap"] = _cap_of(item, applied, now)
-        item["wx"], item["wx_word"] = weather.factor_for(row["iran_id"], row["foreign_id"], row["kind"], now)          # the weather of its family on the route: 1.0 and "" when nothing is known
+        item["wx"], item["wx_word"] = weather.factor_for(row["iran_id"], row["foreign_id"], row["kind"], now)          # the weather of its family on the route: 1.0 and "" when nothing is known (a relay strand: the route to the second foreign server)
         out.append(item)
 
     return out
@@ -860,8 +1351,8 @@ def _apply(name: str, v: dict, items: list[dict], weights: list[float], now: int
         _off(iran, name, 1)
         n, state = 0, "idle"
 
-    rec = _merge_applied(name, {"w": [round(x, 4) for x in weights], "usable": [bool(i and i["usable"]) for i in items], "stages": [(i or {}).get("stage", 0) for i in items],
-                                "stage_at": [(i or {}).get("stage_at", now) for i in items], "plan": plan, "at": now, "iran_id": p["iran_id"], "ports": list(p["ports"]), "state": state, "rules": n,
+    rec = _merge_applied(name, {"w": _trim(items, [round(x, 4) for x in weights]), "usable": _trim(items, [bool(i and i["usable"]) for i in items]), "stages": _trim(items, [(i or {}).get("stage", 0) for i in items]),
+                                "stage_at": _trim(items, [(i or {}).get("stage_at", now) for i in items]), "plan": plan, "at": now, "iran_id": p["iran_id"], "ports": list(p["ports"]), "state": state, "rules": n,
                                 "why": why[:160], "parked": not plan, "off": False})
     _touch(p["iran_id"])
 
@@ -875,6 +1366,12 @@ def _apply(name: str, v: dict, items: list[dict], weights: list[float], now: int
 
 def _words(items: list[dict], weights: list[float]) -> str:
     return ", ".join(f"{(i['kind'] if i else '-')} {round(100 * w)} %" for i, w in zip(items, weights) if i is not None)
+
+
+def _trim(items: list, values: list) -> list:
+    """`values` cut after the last strand that has a row (the relay strand is the fourth: a tunnel without one keeps its lists of three, as before)."""
+    n = max([i + 1 for i, it in enumerate(items) if it is not None] or [1])
+    return list(values)[:max(n, 3)]
 
 
 def _step(name: str) -> None:
@@ -949,6 +1446,10 @@ def _step(name: str) -> None:
             if now - int(c.get("fail_at") or 0) >= CAP_RETRY:
                 _measure_async(name, it)
 
+    if sum(1 for it in items if it is not None and it["usable"]) >= 2 and time.time() - _STALL_AT.get(name, 0.0) >= STALL_EVERY and not iran_off and not autopilot.storm_now() and name not in autopilot.repairing_names():
+        _STALL_AT[name] = time.time()          # the stall look: STALL_N small requests to every strand that is up, made on the Iran server, in a thread; what it finds is read by `_items` at the next turns
+        _stall_async(name, p, [it for it in items if it is not None and it["state"] in ("up", "degraded") and it["ports"]])
+
     for it in items:                           # the way in: a step up after RAMP_STEP, back to 0 when the strand is not usable
         if it is None:
             continue
@@ -960,17 +1461,20 @@ def _step(name: str) -> None:
         elif not it["usable"]:
             it["stage_at"] = now
 
-    weights = target_weights([({"usable": False} if it is None else it) for it in items])
+    weights = target_weights([({"usable": False} if it is None else it) for it in items], lean=lean_on())
     prev_w = applied.get("w")
     prev_usable = applied.get("usable")
     prev_stages = applied.get("stages")
-    usable_now = [bool(i and i["usable"]) for i in items]
-    stages_now = [(i or {}).get("stage", 0) for i in items]
+    usable_now = _trim(items, [bool(i and i["usable"]) for i in items])
+    stages_now = _trim(items, [(i or {}).get("stage", 0) for i in items])
     forced = name in _FORCE
     urgent = prev_usable != usable_now or prev_stages != stages_now or forced
 
-    if prev_w is not None and len(prev_w) != len(weights):
+    if prev_w is not None and len(prev_w) != len(_trim(items, weights)):
         prev_w = None
+
+    if prev_w is not None:
+        prev_w = list(prev_w) + [0.0] * (len(weights) - len(prev_w))
 
     sh = _shadowed_note(v)
 
@@ -995,11 +1499,17 @@ def _step(name: str) -> None:
             _told(name, items, prev_usable, usable_now, weights)
             _NOTE.pop(name, None)
             log.info("trident: %s -> %s (%s)", name, rec["state"], rec["why"])
-    elif not (_NOTE.get(name) or "").startswith(("the Trident could not", "waiting for", "the extra strand", "a handover")) and applied.get("at"):
+    elif not (_NOTE.get(name) or "").startswith(("the Trident could not", "waiting for", "the extra strand", "a handover", "the relay strand", "a relay strand")) and applied.get("at"):
         _NOTE.pop(name, None)
 
     _mend_strand(name, p, s2, now)          # (last: a strand that is to be removed has had its share taken away by the plan above)
     _renew_if_due(name, v, applied, now)
+
+    try:
+        _relay_step(name, v, items, _applied(name), now)
+    except (SSHError, ValueError, RuntimeError) as e:
+        log.warning("trident: the relay step of %s: %s", name, str(e)[:160])
+
     _ALIVE[name] = time.time()
 
 
@@ -1039,7 +1549,7 @@ def _gone_share(name: str, v: dict, now: int) -> None:
     """The row of the tunnel is missing - the Doctor is rebuilding it (the old one is removed, the new one is not recorded yet; about a minute or two): the share the tunnel had goes to the strands at once, so
     that a rebuild of a tunnel that was still up cuts nothing. Needs what the last plan remembered (the users' ports) and a strand that is usable."""
     a = _applied(name)
-    rows = [r for r in (v["s1"], v["s2"]) if r is not None]
+    rows = [r for r in (v["s1"], v["s2"], v.get("s3")) if r is not None]
     w = list(a.get("w") or [])
 
     if not a.get("at") or not a.get("ports") or not rows or not w or float(w[0]) <= 0 or a.get("state") != "active":
@@ -1056,9 +1566,9 @@ def _gone_share(name: str, v: dict, now: int) -> None:
         if it is not None and it["idx"] > 0 and not it["usable"]:
             it["stage"], it["stage_at"] = 0, now
 
-    weights = target_weights([({"usable": False} if it is None else it) for it in items])
+    weights = target_weights([({"usable": False} if it is None else it) for it in items], lean=lean_on())
 
-    if should_apply(a.get("w"), weights, now, int(a.get("at") or 0), True):
+    if should_apply(_trim(items, list(a.get("w") or []) + [0.0] * 4), weights, now, int(a.get("at") or 0), True):
         rec = _apply(name, vv, items, weights, now, "the tunnel is being rebuilt: " + _words(items, weights))
 
         if rec is not None:
@@ -1082,6 +1592,68 @@ def _check_async(sid: int) -> None:
                 _CHECKING.discard(sid)
 
     threading.Thread(target=work, name=f"trident-check-{sid}", daemon=True).start()
+
+
+def _stall_look(name: str, node, probes: list[tuple[int, int, int]]) -> dict[int, dict]:
+    """One stall look of a Trident: the reviewed read-only script `strand_probe` on the Iran server - STALL_N small GETs to 127.0.0.1:<port> for the first port of every strand given as (row id, created_at, port) -
+    and what it said kept in memory per strand (`_STALL`, the last STALL_LOOKS looks). Returns {row id: the parsed line}. A request made ON the server never passes the Trident's NAT chain (it stands in
+    PREROUTING): every port measures its own strand alone, the users' port the tunnel itself. SSHError / ValueError when the server did not answer or said nothing the panel understands."""
+    if not probes:
+        return {}
+
+    out = run_script(node, "strand_probe", {"PORTS": " ".join(str(port) for _, _, port in probes), "N": str(STALL_N)}, timeout=STALL_N * 7 + 15)
+    got = parse_probe(out)
+
+    if not got:
+        raise ValueError("the stall look answered nothing the panel understands: " + out.strip().replace("\n", " | ")[-120:])
+
+    now, seen = int(time.time()), {}
+
+    with _LOCK:
+        for rid, born, port in probes:
+            r = got.get(int(port))
+
+            if r is None:
+                continue
+
+            ent = _STALL.get(int(rid))
+
+            if ent is None or ent[0] != int(born):
+                ent = (int(born), deque(maxlen=STALL_LOOKS))
+                _STALL[int(rid)] = ent
+
+            ent[1].append({"at": now, **r})
+            seen[int(rid)] = r
+
+    log.debug("trident: the stall look of %s: %s", name, " ".join(f"{port}={r['stalls']}/{r['n']}" for port, r in sorted(got.items())))
+    return seen
+
+
+def _stall_async(name: str, p: dict, items: list[dict]) -> None:
+    """The stall look in a thread (the conductor never waits for ssh): `_stall_look` with the first port of every strand that is up. One look per tunnel at a time; a look that fails is logged and left - the next one is in STALL_EVERY."""
+    probes = [(int(it["id"]), int(it.get("born") or 0), int(it["ports"][0])) for it in items if it.get("ports")]
+
+    if not probes:
+        return
+
+    with _LOCK:
+        if name in _STALLING:
+            return
+
+        _STALLING.add(name)
+
+    def work():
+        try:
+            _stall_look(name, _node(*p["iran"]), probes)
+        except (SSHError, ValueError, RuntimeError) as e:
+            log.info("trident: the stall look of %s did not answer: %s", name, str(e)[:120])
+        except Exception:
+            log.exception("trident: the stall look of %s crashed", name)
+        finally:
+            with _LOCK:
+                _STALLING.discard(name)
+
+    threading.Thread(target=work, name=f"trident-stall-{name}", daemon=True).start()
 
 
 def _shadowed_note(v: dict) -> str:
@@ -1252,6 +1824,7 @@ def _safe_release(name: str) -> None:
     try:
         release(name)
         remove_strand(name)
+        remove_relay(name)
         _NOTE.pop(name, None)
     except (ValueError, RuntimeError, SSHError) as e:
         log.warning("trident: %s could not be switched off yet: %s", name, str(e)[:160])
@@ -1275,13 +1848,14 @@ def forget(name: str) -> None:
 
 def strand_exists(name: str) -> bool:
     with session() as db:
-        return strand_row(db, name) is not None
+        return strand_row(db, name) is not None or relay_row(db, name) is not None
 
 
 def _forget_work(name: str) -> None:
     try:
-        if name in _BUILDS:
-            builder.CANCEL.add(_BUILDS[name]["aid"])
+        for key in (name, name + "#relay"):
+            if key in _BUILDS:
+                builder.CANCEL.add(_BUILDS[key]["aid"])
 
         try:
             release(name, hard=True)
@@ -1289,7 +1863,9 @@ def _forget_work(name: str) -> None:
             log.warning("trident: the rules of %s could not be taken off now: %s", name, str(e)[:120])
 
         remove_strand(name)
+        remove_relay(name)
         _set_failed(name, None)
+        _set_failed(name + "#relay", None)
         _NOTE.pop(name, None)
     except Exception:
         log.exception("trident: forgetting %s crashed", name)
@@ -1311,8 +1887,16 @@ def renamed(old: str, new: str) -> None:
         if changes:
             st.put("trident", changes)
 
-    if old in _BUILDS:
-        _BUILDS[new] = _BUILDS.pop(old)
+    for suffix in ("", "#relay"):
+        if old + suffix in _BUILDS:
+            _BUILDS[new + suffix] = _BUILDS.pop(old + suffix)
+
+    with _LOCK:
+        cur = dict(_doc().get("failed") or {})
+
+        if old + "#relay" in cur:
+            cur[new + "#relay"] = cur.pop(old + "#relay")
+            st.put("trident", {"failed": cur})
 
     a = (changes.get("applied") or {}).get(new)
 
@@ -1335,10 +1919,26 @@ def renamed(old: str, new: str) -> None:
         threading.Thread(target=park_old, name=f"trident-retire-{old}", daemon=True).start()
 
     # (tunnels.HANDED follows the new name in standby.renamed, which calls this)
+    relay_node = None
+
     with session() as db:
         for t in db.scalars(select(Tunnel).where(Tunnel.enabled.is_(False))):
             if (t.record or {}).get("strand_of") == old:
                 t.record = {**(t.record or {}), "strand_of": new}
+
+                if (t.record or {}).get("relay") and t.foreign is not None and t.foreign.online is not False:
+                    relay_node = _node(t.foreign.host, t.foreign.ssh_user, t.foreign.ssh_port)
+
+    if relay_node is not None:                 # the relay unit on the second foreign server carries the OLD name: it goes, and the job puts it again under the new one
+        _merge_applied(new, {"relay_at": 0, "relay_ok": False})
+
+        def off_old():
+            try:
+                run_action(relay_node, "relay_off", {"NAME": old}, timeout=40)
+            except (SSHError, ValueError) as e:
+                log.warning("trident: the old relay unit of %s could not be taken off: %s", old, str(e)[:120])
+
+        threading.Thread(target=off_old, name=f"trident-relay-retire-{old}", daemon=True).start()
 
 
 # ------------------------------------------------------------------ what the tunnel window shows
@@ -1353,6 +1953,9 @@ def _state_of(name: str, marked: bool, v: dict | None, now: int) -> tuple[str, s
 
     if name in _BUILDS:
         return "building", f"the extra strand ({_BUILDS[name]['kind']}) is being built"
+
+    if name + "#relay" in _BUILDS:
+        return "active" if a.get("state") == "active" else "building", f"a relay strand ({_BUILDS[name + '#relay']['kind']}) through another foreign server is being built: the foreign server's address looks filtered"
 
     if a.get("state") == "active":
         return "active", ""
@@ -1369,7 +1972,7 @@ def _state_of(name: str, marked: bool, v: dict | None, now: int) -> tuple[str, s
 
 
 def status(name: str) -> dict:
-    """What the tunnel window shows: on, state (off · waiting · building · active · idle · failed · winding_down), why, and one row per strand {role, kind, name, state, weight, step, capacity, delay, loss}."""
+    """What the tunnel window shows: on, state (off · waiting · building · active · idle · failed · winding_down), why, and one row per strand {role, kind, name, state, weight, step, capacity, delay, loss, stalls}."""
     now = int(time.time())
     marked = name in marks()
     a = _applied(name)
@@ -1391,14 +1994,15 @@ def status(name: str) -> dict:
             if it is None:
                 continue
 
-            strands.append({"idx": it["idx"], "role": ("tunnel", "standby", "strand")[it["idx"]], "kind": it["kind"], "name": it["name"], "state": it["state"], "usable": it["usable"],
+            strands.append({"idx": it["idx"], "role": ROLES[it["idx"]], "kind": it["kind"], "name": it["name"], "state": it["state"], "usable": it["usable"],
                             "weight": round(100 * float(w[it["idx"]])) if it["idx"] < len(w) else None, "step": it["stage"], "capacity": it["cap"], "delay": it["rtt"], "loss": it["loss"], "weather": it.get("wx_word", ""),
-                            "mtu": it["mtu"], "enc": traits(it["kind"])["enc"]})
+                            "mtu": it["mtu"], "enc": traits(it["kind"])["enc"], "overhead": round(100 * float(it.get("overhead") or 0.0)),          # overhead: percent more bytes on the Iran server's line than the users' data (`wire_overhead`)
+                            "stalls": it.get("stall_pct"), "stall_p95": it.get("stall_p95")})          # stalls: percent of the panel's own small requests to the strand that took over 1.5 s in its last looks (None before the first look)
 
         if state == "active" and not why and v.get("p"):
             why = weather.words(v["p"]["iran_id"], v["p"]["foreign_id"], now)          # (the only place the weather shows: a few words under the bar, e.g. "udp blocked on this route for 2 h")
 
-    return {"on": marked, "state": state, "why": why, "since": int((marks().get(name) or {}).get("since") or 0), "strands": strands, "applied_at": int(a.get("at") or 0)}
+    return {"on": marked, "state": state, "why": why, "since": int((marks().get(name) or {}).get("since") or 0), "strands": strands, "applied_at": int(a.get("at") or 0), "lean": lean_on()}
 
 
 def summaries(names: list[str]) -> dict[str, dict]:

@@ -27,10 +27,30 @@ def clock() -> int:
 
 # ------------------------------------------------------------------ the fusion
 def test_families_of_links_and_kinds():
+    from nikatel.services import linkmodels, tunnel_test
+
     assert weather.family_of_link("gre") == "gre" and weather.family_of_link("fou") == "udp" and weather.family_of_link("wg") == "udp" and weather.family_of_link("ipsec") == "esp"
     assert weather.family_of_link("ipip") == "ipip" and weather.family_of_link("wgchisel") == "tcp" and weather.family_of_link("something") == "udp"
     assert weather.family_of_kind("tcpmux") == "gre" and weather.family_of_kind("bp:wssmux") == "tcp" and weather.family_of_kind("bpd:udp") == "udp" and weather.family_of_kind("bpd:xdi") == "icmp"
-    assert set(weather.FAMILIES) == {"gre", "udp", "tcp", "icmp", "esp", "ipip"}
+    assert set(weather.FAMILIES) == {"gre", "udp", "tcp", "icmp", "esp", "ipip", "l2tp"}
+
+    # the C-Tunnel L2 carriers of 1.69.180 (the owner, 2026-11-03: "check the tunnels we added recently"): the weather knows their families like the Trident does - L2TPv3 is its own family (IP protocol 115), GRE-TAP is GRE, VXLAN and Geneve are UDP
+    assert weather.family_of_link("l2tpv3") == "l2tp" and weather.family_of_link("gretap") == "gre" and weather.family_of_link("vxlan") == "udp" and weather.family_of_link("geneve") == "udp"
+    assert weather.family_of_kind("l2tpv3:tcpmux") == "l2tp" and weather.family_of_kind("gretap:wssmux") == "gre" and weather.family_of_kind("vxlan:tcp") == "udp"
+    assert set(linkmodels.ALL_LINKS) <= set(weather.LINK_FAMILY) and set(weather.LINK_FAMILY.values()) <= set(weather.FAMILIES)                      # every link model the builder knows has a family the weather fuses
+    assert all(weather.family_of_kind(k[0]) in weather.FAMILIES for k in tunnel_test.KINDS) and len(tunnel_test.KINDS) == 80                           # ... and so has every one of the 80 kinds
+    assert all(weather.LINK_FAMILY[link] == trident._LINK_FAMILY[link] for link in trident._LINK_FAMILY if link in weather.LINK_FAMILY)                 # the two tables agree
+    assert "l2tpv3" in weather.PROBE_LINKS and "gre" in weather.PROBE_LINKS                                                                           # the link probe asks for an L2TPv3 link too
+
+
+def test_the_foreign_address_is_cut_when_every_ordinary_family_is_blocked_at_once():
+    cut = {"tcp": {"state": "blocked"}, "icmp": {"state": "blocked"}, "udp": {"state": "blocked"}, "gre": {"state": "open"}}
+    assert weather.address_cut(cut) is True                                                                                                          # a raw carrier may still pass: the address is cut for the ordinary protocols all the same
+    assert weather.address_cut({"tcp": "blocked", "icmp": "blocked", "udp": "blocked"}) is True                                                       # {family: state} works too
+    assert weather.address_cut({"tcp": {"state": "blocked"}, "icmp": {"state": "blocked"}}) is False                                                 # nothing known about udp: not called a cut
+    assert weather.address_cut({"tcp": {"state": "blocked"}, "icmp": {"state": "pressure"}, "udp": {"state": "blocked"}}) is False                    # pressure is not blocked
+    assert weather.address_cut({}) is False and weather.address_cut({"gre": {"state": "blocked"}}) is False                                           # one family blocked is a filter on that family, not the address
+    assert weather.CUT_FAMILIES == ("tcp", "icmp", "udp")
 
 
 def ev(at, verdict, why="x"):

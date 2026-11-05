@@ -852,9 +852,9 @@ def _live_pairs(db) -> dict[tuple[int, int], int]:
 
 
 VERIFY_TESTS = 3                # (1.69.220, the owner: "test which type is the best and the steadiest, always") the running type of a live pair and each of its best rivals get this many FULL tests in a week ...
-VERIFY_EVERY = 6 * 3600         # ... one more of a kind at most this often (spread over the day: steadiness is about different hours) ...
+VERIFY_EVERY = 24 * 3600        # ... one more of a kind at most this often (spread over the days: steadiness is about different hours; 1.69.226: was 6 h - every full test moves up to 120 MB through the Iran server, the owner wants the least test traffic) ...
 VERIFY_RIVALS = 3               # ... the rivals are the best kinds of the pair's own survey
-VERIFY_QUIET_MBPS = 400.0       # a verify survey (a few kinds, a short speed test each) runs when the users of the pair's servers carry less than this
+VERIFY_QUIET_MBPS = QUIET_MBPS  # a verify survey (a few kinds, a short speed test each) runs when the users of the pair's servers carry less than this (1.69.226: 150 like the night survey; was 400)
 
 
 def _full_tests(e: dict | None, now: int) -> list[dict]:

@@ -32,6 +32,7 @@ from nikatel.services import (
 from nikatel.services import settings as st
 
 NOW = int(time.time())
+STALL_ASYNC = trident._stall_async          # (the real thread of the stall look, kept before the fixture below replaces it)
 
 
 def clock() -> int:
@@ -486,10 +487,10 @@ def test_a_server_without_iptables_restore_says_so_and_changes_nothing(tmp_path)
 @pytest.fixture(autouse=True)
 def _clean_memory(monkeypatch):
     """What the module keeps in memory must not leak from one test to the next."""
-    for d in (trident._BUILDS, trident._NOTE, trident._ALIVE, trident._CHECKED, trident._RESTARTED, trident._MISSING, trident._RETIRED, trident._LOCKS, trident._RETRY_AT):
+    for d in (trident._BUILDS, trident._NOTE, trident._ALIVE, trident._CHECKED, trident._RESTARTED, trident._MISSING, trident._RETIRED, trident._LOCKS, trident._RETRY_AT, trident._STALL, trident._STALL_AT):
         d.clear()
 
-    for s in (trident._FORCE, trident._CHECKING, trident._REMOVING, trident._MEASURING):
+    for s in (trident._FORCE, trident._CHECKING, trident._REMOVING, trident._MEASURING, trident._STALLING):
         s.clear()
 
     trident._STATE.update({"init": False, "reconciled": 0.0, "cleaned": 0.0})
@@ -501,12 +502,15 @@ def _clean_memory(monkeypatch):
     monkeypatch.setattr(trident, "wake", lambda: None)
     monkeypatch.setattr(trident, "_check_async", lambda sid: None)
     monkeypatch.setattr(trident, "_measure_async", lambda name, it: None)
+    monkeypatch.setattr(trident, "_stall_async", lambda name, p, items: None)          # (the stall look of 1.69.226: a thread and an ssh - the tests of the look run it by hand with a stand-in for run_script)
     monkeypatch.setattr(actions, "doctor_mode", lambda: "fix")
     yield
 
 
 def world(name, state="up", since=300, bw=100.0, **kw):
     """Two servers and a Backhaul tunnel (capacity `bw` Mb/s by its light test) forwarding one port."""
+    trident._LOSS.clear()                  # (the loss history and the stall looks of the strands are kept in memory by row id: a new world's rows take the same ids)
+    trident._STALL.clear()
     rec = {"bw": {"down": bw, "ref": bw, "at": clock()}} if bw else {}
 
     with session() as db:
@@ -561,8 +565,8 @@ def set_state(tid, state, since=300, **kw):
             setattr(t, k, v)
 
 
-def fake_actions(monkeypatch, fail=False, off="TRIDENT_OFF {n} 0 0 0"):
-    """The reviewed actions of the trident, answered like the real ones (nothing leaves the test)."""
+def fake_actions(monkeypatch, fail=False, off="TRIDENT_OFF {n} 0 0 0", relay_reach=None):
+    """The reviewed actions of the trident, answered like the real ones (nothing leaves the test). `relay_reach`: how many of the relay's targets answer (None = all)."""
     calls = []
 
     def run_action(node, name, params=None, timeout=90):
@@ -582,6 +586,13 @@ def fake_actions(monkeypatch, fail=False, off="TRIDENT_OFF {n} 0 0 0"):
 
         if name == "standby_on":
             return f"STANDBY_ON {params['NAME']} {len(params['MAP'].split(',')) * len(params['PROTOS'].split())}\n"
+
+        if name == "relay_on":
+            n = len(params["SPEC"].split(","))
+            return f"RELAY_ON {params['NAME']} {n} {n if relay_reach is None else relay_reach}/{n}\n"
+
+        if name == "relay_off":
+            return f"RELAY_OFF {params['NAME']}\n"
 
         return "\n"
 
@@ -797,9 +808,9 @@ def test_a_strand_that_falls_loses_its_share_at_once_and_the_tunnel_that_falls_g
     a = applied("de-ir1")
     st.put("trident", {"applied": {"de-ir1": {**a, "at": clock() - 3600, "stages": [3, 3, 3], "stage_at": [clock() - 9999] * 3}}})
     calls.clear()
-    trident._step("de-ir1")                                                                                               # (the steps are full, an hour has passed: the shares follow the strands' own numbers, none above 70 %)
+    trident._step("de-ir1")                                                                                               # (the steps are full, an hour has passed: the shares follow the strands' own numbers, none above 94 % - the Trident is lean by default)
     a = applied("de-ir1")
-    assert len(plans(calls)) == 1 and max(a["w"]) <= trident.CEIL_MANY + 1e-9 and min(a["w"]) >= trident.FLOOR and a["w"][0] > a["w"][2]            # (the tunnel has the best delay)
+    assert len(plans(calls)) == 1 and max(a["w"]) <= trident.CEIL_LEAN + 1e-9 and min(a["w"]) >= trident.FLOOR_LEAN - 1e-9 and a["w"][0] > a["w"][2]            # (the tunnel has the best delay)
 
     calls.clear()
     set_state(xid, "down", since=3)
@@ -1237,15 +1248,19 @@ def test_the_bar_of_the_trident_says_what_every_state_means_and_shows_the_shares
     fn = "const TR_WORD" + js.split("const TR_WORD", 1)[1].split("/* the warm standby", 1)[0]
     code = ("const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;');\n" + fn + "\n"
             "const bar = w => tunTrident({id: 7, trident: w});\n"
-            "const strands = [{kind: 'tcpmux', usable: true, weight: 80, step: 3}, {kind: 'bp:wssmux', usable: true, weight: 10, step: 0}, {kind: 'bpd:udp', usable: false, weight: 0, step: 0}];\n"
+            "const strands = [{kind: 'tcpmux', usable: true, weight: 80, step: 3, overhead: 5, stalls: 0.4}, {kind: 'bp:wssmux', usable: true, weight: 10, step: 0, overhead: 34, stalls: 2.5, stall_p95: 1.8}, {kind: 'bpd:udp', usable: false, weight: 0, step: 0, overhead: 2, stalls: null}, {role: 'relay', kind: 'chisel:tls', usable: true, weight: 5, step: 3, overhead: 4}];\n"
             "const out = {off: bar({state: 'off'}), none: tunTrident({id: 7}), waiting: bar({state: 'waiting', why: 'waiting for the standby (strand 1) to be built'}), building: bar({state: 'building', why: 'the extra strand (bpd:udp) is being built'}),\n"
-            "  active: bar({state: 'active', strands}), activeNoRows: bar({state: 'active', weights: [80, 10, 10]}), failed: bar({state: 'failed', why: 'the last strand build failed (x)'}), ending: bar({state: 'winding_down', why: 'ending'})};\n"
+            "  active: bar({state: 'active', strands, lean: true}), activeNoRows: bar({state: 'active', weights: [80, 10, 10]}), failed: bar({state: 'failed', why: 'the last strand build failed (x)'}), ending: bar({state: 'winding_down', why: 'ending'})};\n"
             "console.log(JSON.stringify(out));")
     out = json.loads(subprocess.run(["node", "-e", code], capture_output=True, text=True, timeout=30, check=True).stdout)
     assert "Trident · Off" in out["off"] and "tunTridentSet(7, true)" in out["off"] and out["off"] == out["none"] and "Nobody is cut" in out["off"]
     assert "Trident · Starting…" in out["waiting"] and "waiting for the standby" in out["waiting"] and "tunTridentSet(7, false)" in out["waiting"] and "tunTridentSet(7, true)" not in out["waiting"]
     assert "Trident · Building…" in out["building"] and "bpd:udp" in out["building"]
     assert "Trident · Active" in out["active"] and "tcpmux 80 %" in out["active"] and "bp:wssmux 10 % ↗" in out["active"] and "bpd:udp down" in out["active"] and "tunTridentRebalance(7)" in out["active"] and "tunTridentSet(7, false)" in out["active"]
+    assert "relay chisel:tls 5 %" in out["active"]                                                                           # the relay strand (through another foreign server) is named as such
+    assert "(+34 % on the line)" in out["active"] and "(+5 %" not in out["active"] and "(+4 %" not in out["active"]          # a heavy kind says what it costs on the Iran server's line; a light one says nothing
+    assert ">lean</span>" in out["active"] and "lean" not in out["activeNoRows"]                                              # the lean Trident is named in the bar
+    assert "stalls 2.5 %" in out["active"] and out["active"].count("stalls ") == 1 and "stalls 0" not in out["active"]      # the stall look (1.69.226): a strand that stalled says so from 1 %; one under it and one never looked at say nothing
     assert "80 / 10 / 10 %" in out["activeNoRows"] and "lab-ban ok" in out["active"] and "lab-ban bad" in out["failed"] and "lab-ban warn" in out["building"]
     assert "Trident · Ending…" in out["ending"] and "tunTridentSet" not in out["ending"]
 
@@ -1273,7 +1288,7 @@ def test_the_window_shows_one_row_per_strand_with_its_share_and_the_state_of_the
     trident._step("de-ir1")
     s = trident.status("de-ir1")
     assert s["on"] is True and s["state"] == "active" and [r["role"] for r in s["strands"]] == ["tunnel", "standby", "strand"] and [r["weight"] for r in s["strands"]] == [80, 10, 10]
-    assert s["strands"][1]["kind"] and s["strands"][0]["step"] == 3 and s["strands"][2]["step"] == 0
+    assert s["strands"][1]["kind"] and s["strands"][0]["step"] == 3 and s["strands"][2]["step"] == 0 and s["lean"] is True and all("overhead" in r for r in s["strands"])
     sm = trident.summaries(["de-ir1", "nobody"])
     assert sm["nobody"] == {"on": False, "state": "off", "why": ""} and sm["de-ir1"]["weights"] == [80, 10, 10] and sm["de-ir1"]["strands"] == s["strands"] and sm["de-ir1"]["state"] == "active"
     trident._BUILDS["de-ir1"] = {"aid": 1, "name": "x", "kind": "bpd:udp", "at": clock()}
@@ -1307,9 +1322,636 @@ def test_among_strands_that_are_alike_the_lighter_one_gets_the_bigger_share():
     assert abs(same[0] - same[1]) < 1e-9                                                               # (equal strands share equally, as before)
 
 
+# ------------------------------------------------------------------ the lean Trident (1.69.197): the least overhead, less to pay for on the Iran servers' line
+def test_every_kind_has_a_wire_overhead_and_kcp_with_its_error_correction_is_the_heaviest():
+    """The owner, 2026-11-05: "in the tunnel we have, the least overhead; save on the traffic cost of the Iran servers"."""
+    o = trident.wire_overhead
+    from nikatel.services import overhead
+
+    assert o("bp:tcpmux") == pytest.approx(0.04) and o("bp:wssmux") == pytest.approx(0.08) and o("chisel:tls") == pytest.approx(0.13)         # a TCP stream: its outer headers, mux / WebSocket / TLS framing on top
+    assert o("tcpmux") == pytest.approx(0.06) and o("fou:tcpmux") == pytest.approx(0.06)                                                       # Backhaul inside GRE / a FOU link: the stream plus the link's bytes
+    assert o("bpd:udp") == pytest.approx(0.07) and o("bpd:pck") == pytest.approx(0.06)                                                         # raw packets and a UDP carrier with its acknowledgements
+    assert o("bp:kcp") == pytest.approx(0.60) and o("bp:xdi") > o("bp:kcp") > o("paqet") > o("bp:quic") > o("bp:tcpmux")                     # KCP with forward error correction (3 parity packets for every 10, the resends) - the Doctor's model (services/overhead.py, 1.69.223)
+    assert all(o(k[0]) == pytest.approx(overhead.model_cost(k[0]) - 1.0) and 0.0 <= o(k[0]) < 1.0 for k in tunnel_test.KINDS) and len(tunnel_test.KINDS) == 80          # one table for the Trident and the Doctor; every kind answers
+
+
+def test_a_heavier_kind_gets_less_of_the_share_and_lean_holds_the_best_strand_at_94_and_the_rest_at_3():
+    w = trident.target_weights([item(), item(overhead=0.30)])
+    assert w[0] == pytest.approx(1.3 / 2.3) and w[0] > w[1]                                                                                 # equal strands, one puts 30 % more on the line: it carries 23 % less
+    w = trident.target_weights([item(cap=1000), item(cap=10), item(cap=10)], lean=True)
+    assert w[0] == pytest.approx(trident.CEIL_LEAN) and w[1] == pytest.approx(trident.FLOOR_LEAN) and w[2] == pytest.approx(trident.FLOOR_LEAN) and sum(w) == pytest.approx(1.0)
+    w = trident.target_weights([item(cap=1000), item(cap=1)], lean=True)
+    assert w[0] == pytest.approx(trident.CEIL_LEAN) and w[1] == pytest.approx(1 - trident.CEIL_LEAN)                                        # (two usable: the same ceiling while lean)
+    assert trident.target_weights([item(), item(), item()], lean=True) == pytest.approx([1 / 3] * 3)                                         # equal strands share equally, lean or not
+    assert trident.target_weights([item(cap=100, stage=3), item(cap=100, stage=0), item(cap=100, stage=1)], lean=True) == pytest.approx([0.65, 0.10, 0.25])      # the way in by steps is the same
+    assert trident.target_weights([item(usable=False), item(), item(usable=False)], lean=True) == [0.0, 1.0, 0.0]
+
+
+def test_the_loss_the_weights_see_is_the_least_of_the_last_three_checks():
+    from collections import deque
+
+    h = deque(maxlen=trident.LOSS_LOOKS)
+    assert trident.smooth_loss(h, 100, 0.0) == 0.0 and trident.smooth_loss(h, 110, 5.0) == 0.0 and trident.smooth_loss(h, 120, 5.0) == 0.0     # one lost ping, then another: noise
+    assert trident.smooth_loss(h, 130, 5.0) == 5.0 and trident.smooth_loss(h, 140, 40.0) == 5.0                                              # three checks in a row with a loss: seen whole
+    assert trident.smooth_loss(h, 140, 0.0) == 0.0 and len(h) == 3                                                                             # the same check read again replaces its reading
+    assert trident.smooth_loss(h, 150, None) is None and len(h) == 3                                                                           # the ping is blocked: nothing known, the history untouched
+
+
+def test_lean_is_on_by_default_the_window_says_so_and_the_switch_puts_the_plans_again(monkeypatch):
+    assert trident.lean_on() is True
+    _w, _sid, xid = up_world(monkeypatch)
+    calls = fake_actions(monkeypatch)
+    trident._step("de-ir1")
+    s = trident.status("de-ir1")
+    assert s["lean"] is True and s["strands"][0]["overhead"] == 6 and all(0 <= r["overhead"] < 100 for r in s["strands"])                  # the tunnel (Backhaul over GRE) costs about 6 % on the line
+    a = applied("de-ir1")
+    st.put("trident", {"applied": {"de-ir1": {**a, "at": clock() - 3600, "stages": [3, 3, 3], "stage_at": [clock() - 9999] * 3}}})
+    calls.clear()
+    trident._step("de-ir1")
+    a = applied("de-ir1")
+    assert len(plans(calls)) == 1 and max(a["w"]) <= trident.CEIL_LEAN + 1e-9 and min(a["w"]) >= trident.FLOOR_LEAN - 1e-9 and sum(a["w"]) == pytest.approx(1.0, abs=1e-3)          # (the applied shares are rounded to 4 places)
+
+    assert trident._cap_of({"idx": 2, "kind": "x"}, {"caps": {"2": {"v": 50.0, "at": clock() - 7 * 3600, "kind": "x"}}}, clock()) == 50.0          # a capacity of 7 hours is still used while lean ...
+    monkeypatch.setattr(trident, "wake", lambda: None)
+    assert trident.set_lean(False) == {"lean": False} and trident.lean_on() is False and "de-ir1" in trident._FORCE
+    assert trident._cap_of({"idx": 2, "kind": "x"}, {"caps": {"2": {"v": 50.0, "at": clock() - 7 * 3600, "kind": "x"}}}, clock()) is None          # ... not when lean is off (6 hours)
+    calls.clear()
+    trident._step("de-ir1")
+    a = applied("de-ir1")
+    assert len(plans(calls)) == 1 and max(a["w"]) <= trident.CEIL_MANY + 1e-9 and min(a["w"]) >= trident.FLOOR - 1e-9 and trident.status("de-ir1")["lean"] is False      # the shares of before
+    assert trident.set_lean(True) == {"lean": True}
+
+    with session() as db:                                                                                                                      # one check with 5 % loss (one lost ping of twenty) does not move the strand's loss ...
+        db.get(Tunnel, xid).detail = {"loss_pct": 5.0}
+        db.get(Tunnel, xid).last_check_at = clock() + 10
+
+    assert trident._items("de-ir1", trident._read("de-ir1"), applied("de-ir1"), clock())[2]["loss"] == 0.0
+
+    for n in (20, 30):                                                                                                                         # ... three in a row do
+        with session() as db:
+            db.get(Tunnel, xid).last_check_at = clock() + n
+
+        trident._items("de-ir1", trident._read("de-ir1"), applied("de-ir1"), clock())
+
+    assert trident._items("de-ir1", trident._read("de-ir1"), applied("de-ir1"), clock())[2]["loss"] == 5.0
+
+
+def test_the_lean_switch_has_a_route(client, monkeypatch):
+    monkeypatch.setattr(trident, "wake", lambda: None)
+    assert client.get("/api/trident/lean").json() == {"ok": True, "lean": True}
+    assert client.put("/api/trident/lean", json={"on": False}).json() == {"ok": True, "lean": False} and trident.lean_on() is False
+    assert client.put("/api/trident/lean", json={"on": True}).json()["lean"] is True and trident.lean_on() is True
+
+
 def test_a_tie_between_kinds_goes_to_the_encrypted_one_then_to_the_lighter_one():
     kinds = ["ipip:tcpmux", "wg:tcpmux"]                                                               # the same fate as "tcpmux" for the filter (another family, the same dialling side, the same packets), nobody tested either
     k, why = trident.pick_kind(kinds, ["tcpmux"], None, NOW)
     assert k == "wg:tcpmux" and "not tested" in why                                                    # (listed second: it is encrypted)
     k, _ = trident.pick_kind(["fou:tcpmux", "gue:tcpmux"], ["tcpmux"], None, NOW)
     assert k == "fou:tcpmux"                                                                           # (both plain UDP links: 28 bytes against 36)
+
+
+# ------------------------------------------------------------------ the relay strand (the owner, 2026-11-03: "the Iran server's address is reachable but the foreign address is filtered - it must still answer")
+def join_threads(prefix):
+    import threading
+
+    for t in threading.enumerate():
+        if t.name.startswith(prefix):
+            t.join(3)
+
+
+def add_foreign2(w, up=True, name="fr2"):
+    """Another foreign server - with (or without) a tunnel from the same Iran server that is up."""
+    with session() as db:
+        n = len(db.scalars(select(Server)).all()) + 10
+        f2 = Server(name=f"{name}-{w['name']}", host=f"198.51.100.{n}", role="foreign", online=True)
+        db.add(f2)
+        db.flush()
+
+        if up:
+            t = Tunnel(name=f"o-{w['name']}"[:15], type="backhaul", transport="tcpmux", port=9400 + n, iran_server_id=w["iran"], foreign_server_id=f2.id, state="up", state_since=clock() - 3000,
+                       last_check_at=clock() - 2, forwarded_ports=[8800 + n], record={"port_mapping": str(8800 + n)}, rtt_ms=55.0, detail={"loss_pct": 0.0})
+            db.add(t)
+            db.flush()
+
+        return f2.id
+
+
+def add_relay(w, to, state="up", since=300, rtt=90.0):
+    """The relay strand of w's tunnel: a hidden tunnel from its Iran server to `to` on the relay ports, its record naming the tunnel's foreign server and the ports the unit forwards."""
+    name = w["name"][:11] + "-rl"
+    lp = w["port"] + trident.RELAY_SHIFT
+
+    with session() as db:
+        host = db.get(Server, w["foreign"]).host
+        t = Tunnel(name=name, type="chisel", transport="wss", enabled=False, port=9652, iran_server_id=w["iran"], foreign_server_id=to, state=state, state_since=clock() - since, last_check_at=clock() - 2,
+                   forwarded_ports=[lp], rtt_ms=rtt, detail={"loss_pct": 0.0},
+                   record={"strand_of": w["name"], "port_mapping": f"{lp}:{lp}", "kind": "chisel:tls", "built_by": "nikatel-panel", "relay": {"to": w["foreign"], "to_host": host, "ports": [[lp, w["port"]]]}})
+        db.add(t)
+        db.flush()
+        return t.id
+
+
+def test_the_relay_ports_are_shifted_at_both_ends_and_the_spec_names_the_tunnels_foreign_server():
+    text, triples = trident.relay_mapping("443=2096, 80", set())
+    assert text == "40443:42096,40080:40080" and triples == [(443, 40443, 2096), (80, 40080, 80)]                           # the users' port +40000 on the Iran server; the tunnel's target port +40000 on the second server
+    assert trident.relay_spec(triples, "198.51.100.7") == "42096:198.51.100.7:2096,40080:198.51.100.7:80"
+
+    with pytest.raises(ValueError, match="used"):
+        trident.relay_mapping("443", {40443})
+
+    with pytest.raises(ValueError):
+        trident.relay_mapping("30000", set())                                                                                # 70000 is no port, 30000 - 40000 neither
+
+    assert trident.relay_name("de-ir1", set()) == "de-ir1-rl" and trident.relay_name("de-ir1", {"de-ir1-rl"}) == "de-ir1-rl2"
+    assert len(trident.relay_name("a-very-long-tunnel-name", {"a-very-long-rl"})) <= 15 and trident.ROLES == ("tunnel", "standby", "strand", "relay")
+
+
+def test_a_relay_is_due_when_the_address_is_cut_or_nothing_carried_for_a_minute_and_it_stays_half_an_hour_after_the_own_strands_are_back():
+    now = clock()
+    cut = {"tcp": {"state": "blocked"}, "icmp": {"state": "blocked"}, "udp": {"state": "blocked"}}
+    assert "filtered" in trident.relay_due([True, True, False], cut, 0, now, False)                                           # the weather says the address is cut: even while a raw strand still carries
+    assert trident.relay_due([True, True, False], cut, 0, now, True) == ""                                                   # one relay at a time
+    assert trident.relay_due([False, False, False], {}, now - trident.RELAY_AFTER, now, False).startswith("no strand has carried")
+    assert trident.relay_due([False, False, False], {}, now - 10, now, False) == "" and trident.relay_due([False, False, False], {}, 0, now, False) == ""
+    assert trident.relay_due([True, False, False], {}, now - 9999, now, False) == ""
+    assert trident.relay_keep([False, False, False], 0, now) is True
+    assert trident.relay_keep([True, False, False], now - trident.RELAY_KEEP + 10, now) is True
+    assert trident.relay_keep([True, False, False], now - trident.RELAY_KEEP, now) is False
+    assert trident.relay_keep([True, False, False], now - trident.RELAY_KEEP, now, cut) is True                              # ... unless the weather still says the address is cut
+
+
+def test_the_relay_actions_put_one_unit_on_the_second_foreign_server_that_listens_on_localhost_only():
+    on = ssh.render_action("relay_on", {"NAME": "de-ir1", "SPEC": "42096:198.51.100.7:2096,40080:198.51.100.7:80"})
+    assert "n='de-ir1'" in on and 'u="nikatel-relay-$n"' in on and '"127.0.0.1"' in on and "asyncio.start_server" in on and "/dev/tcp/$h/$p" in on and "systemctl enable" in on and 'echo "RELAY_ON' in on
+    assert "iptables" not in on and "reboot" not in on and "0.0.0.0" not in on and "apt-get" not in on and "pip install" not in on and "curl" not in on      # nothing installed, nothing in the firewall, nothing public
+    off = ssh.render_action("relay_off", {"NAME": "de-ir1"})
+    assert "disable --now" in off and 'u="nikatel-relay-$n"' in off and "n='de-ir1'" in off and "rm -f /etc/systemd/system/$u.service" in off and "iptables" not in off
+
+    for bad in ({"NAME": "de-ir1", "SPEC": "42096:example.com:2096"}, {"NAME": "de-ir1", "SPEC": "42096:198.51.100.7:2096; reboot"}, {"NAME": "x; reboot", "SPEC": "42096:198.51.100.7:2096"},
+                {"NAME": "de-ir1", "SPEC": ""}, {"NAME": "de-ir1", "SPEC": "42096:198.51.100.7"}, {"NAME": "de-ir1", "SPEC": ",".join(["42096:198.51.100.7:2096"] * 201)}):
+        with pytest.raises(ValueError):
+            ssh.render_action("relay_on", bad)
+
+    with pytest.raises(ValueError):
+        ssh.render_action("relay_off", {"NAME": "Upper"})
+
+
+def test_the_relay_goes_through_the_foreign_server_this_iran_server_reaches_best(monkeypatch):
+    w = world("de-ir1")
+    assert trident.relay_target(w["iran"], w["foreign"])[0] == 0                                                            # no other foreign server
+    f2 = add_foreign2(w, up=False)
+    to, why = trident.relay_target(w["iran"], w["foreign"])
+    assert to == 0 and "no other foreign server is known to be reachable" in why                                             # nothing says the Iran server reaches it
+    f3 = add_foreign2(w, up=True, name="fr3")
+    to, why = trident.relay_target(w["iran"], w["foreign"])
+    assert to == f3 and "1 tunnel(s) up" in why and "55 ms" in why                                                           # an up tunnel from this Iran server is the surest sign
+
+    monkeypatch.setattr(trident.weather, "weather_of", lambda i, f: {"tcp": {"state": "open"}} if f == f2 else {})
+    monkeypatch.setattr(trident.weather, "open_families", lambda i, f: {"tcp"} if f == f2 else set())
+    assert trident.relay_target(w["iran"], w["foreign"])[0] == f3                                                            # (still: a tunnel that is up beats a probe)
+
+    with session() as db:
+        db.get(Server, f3).online = False
+
+    to, why = trident.relay_target(w["iran"], w["foreign"])
+    assert to == f2 and "open families: tcp" in why                                                                          # the server that is off is never chosen; open weather is enough
+    assert trident.relay_target(w["iran"], f2)[0] == w["foreign"]                                                            # never the tunnel's own foreign server
+
+
+def test_the_relay_strand_is_planned_on_the_relay_ports_and_built_hidden_with_its_relay_record(monkeypatch):
+    writable(monkeypatch)
+    w = world("de-ir1")
+
+    with pytest.raises(ValueError, match="no other foreign server"):
+        trident.relay_plan("de-ir1")
+
+    f2 = add_foreign2(w)
+    monkeypatch.setattr(knowledge, "plan_for", lambda *a, **k: (["bp:wssmux", "tcpmux"], []))
+    plan = trident.relay_plan("de-ir1")
+    assert plan["name"] == "de-ir1-rl" and plan["via"] == f2 and plan["to"] == w["foreign"] and plan["ports"] == f"{w['port'] + 40000}:{w['port'] + 40000}" and plan["triples"] == [(w["port"], w["port"] + 40000, w["port"])]
+
+    with session() as db:
+        assert plan["to_host"] == db.get(Server, w["foreign"]).host                                                      # the unit carries on to the TUNNEL's foreign server
+
+    assert plan["kind"] in ("bp:wssmux", "tcpmux") and plan["note"].startswith("through fr2-de-ir1")
+
+    started = []
+    monkeypatch.setattr(trident.build_other, "start_build", lambda *a, **k: started.append((a, k)) or 91)
+    monkeypatch.setattr(trident.builder, "start_build", lambda *a, **k: started.append((a, k)) or 92)
+    aid = trident.build_relay("de-ir1")
+    a, k = started[0]
+    assert aid in (91, 92) and a[0] == w["iran"] and a[1] == f2 and k["standby_of"] == "de-ir1" and k["hidden_key"] == "strand_of" and k["forced_name"] == "de-ir1-rl"
+    assert k["extra_record"]["relay"]["to"] == w["foreign"] and k["extra_record"]["relay"]["ports"] == [[w["port"] + 40000, w["port"]]] and trident._BUILDS["de-ir1#relay"]["aid"] == aid
+
+    with session() as db:
+        assert any("relay strand" in e.text for e in db.scalars(select(Event)))                                             # one sentence in the events: the address looks filtered, a relay is being built
+
+    with pytest.raises(ValueError, match="being built"):
+        trident.build_relay("de-ir1")
+
+    assert trident._state_of("de-ir1", True, None, clock())[0] == "building" and "relay strand" in trident._state_of("de-ir1", True, None, clock())[1]
+    trident._BUILDS.clear()
+    rid = add_relay(w, f2)
+
+    with pytest.raises(ValueError, match="already has"):
+        trident.build_relay("de-ir1")
+
+    with session() as db:
+        db.delete(db.get(Tunnel, rid))
+        db.get(Server, w["foreign"]).online = False
+
+    with pytest.raises(ValueError, match="foreign server itself is off"):
+        trident.build_relay("de-ir1")
+
+    with session() as db:
+        db.get(Server, w["foreign"]).online = True
+
+    monkeypatch.setattr(get_settings(), "read_only", True)
+
+    with pytest.raises(ValueError, match="read-only"):
+        trident.build_relay("de-ir1")
+
+
+def test_when_nothing_carries_for_a_minute_or_the_weather_says_the_address_is_cut_a_relay_strand_is_built(monkeypatch):
+    w, sid, xid = up_world(monkeypatch)
+    fake_actions(monkeypatch)
+    add_foreign2(w)
+    built = []
+    monkeypatch.setattr(trident, "build_relay", lambda n: built.append(n) or 1)
+    trident._step("de-ir1")
+    a = applied("de-ir1")
+    assert built == [] and a["all_down_since"] == 0 and a["own_up_since"] > 0
+
+    for tid in (w["id"], sid, xid):
+        set_state(tid, "down", since=3)
+
+    trident._step("de-ir1")
+    a = applied("de-ir1")
+    assert a["state"] == "idle" and a["all_down_since"] > 0 and a["own_up_since"] == 0 and built == []                       # the first minute is the Doctor's: a restart may bring the tunnel back
+    st.put("trident", {"applied": {"de-ir1": {**a, "all_down_since": clock() - trident.RELAY_AFTER - 1}}})
+    trident._step("de-ir1")
+    assert built == ["de-ir1"]
+
+    built.clear()
+    monkeypatch.setattr(trident, "build_relay", lambda n: (_ for _ in ()).throw(ValueError("no other foreign server is on")))
+    trident._step("de-ir1")
+    assert "cannot be built" in trident.status("de-ir1")["why"] and "no other foreign server" in trident.status("de-ir1")["why"]       # the reason is in the window, tried again in half a minute
+    trident._RETRY_AT.clear()
+
+    monkeypatch.setattr(trident, "build_relay", lambda n: built.append(n) or 1)
+
+    for tid in (w["id"], sid, xid):
+        set_state(tid, "up", since=300)
+
+    monkeypatch.setattr(trident.weather, "weather_of", lambda i, f: {"tcp": {"state": "blocked"}, "icmp": {"state": "blocked"}, "udp": {"state": "blocked"}} if f == w["foreign"] else {})
+    trident._step("de-ir1")
+    assert built == ["de-ir1"] and applied("de-ir1")["own_up_since"] > 0                                                     # the address is cut for every ordinary protocol: the road is built while the raw strands still carry
+
+
+def test_a_relay_strand_that_is_up_gets_its_unit_on_the_second_server_then_carries_and_goes_half_an_hour_after_the_own_strands_are_back(monkeypatch):
+    w, sid, xid = up_world(monkeypatch)
+    calls = fake_actions(monkeypatch)
+    f2 = add_foreign2(w)
+    trident._step("de-ir1")                                                                                                 # (a plan stands: the tunnel and its two strands)
+    rid = add_relay(w, f2)
+
+    with session() as db:
+        host = db.get(Server, w["foreign"]).host
+
+    for tid in (w["id"], sid, xid):
+        set_state(tid, "down", since=3)
+
+    calls.clear()
+    trident._step("de-ir1")
+    a = applied("de-ir1")
+    ons = [c for c in calls if c[0] == "relay_on"]
+    assert len(ons) == 1 and ons[0][1] == {"NAME": "de-ir1", "SPEC": f"{w['port'] + 40000}:{host}:{w['port']}"} and a["relay_ok"] is True and a["relay_seen"] > 0 and a["relay_reach"] == "1/1"
+    assert a["usable"] == [False, False, False, False] and a["state"] == "idle"                                              # the unit was put this turn: the relay carries from the next
+
+    calls.clear()
+    trident._step("de-ir1")
+    a = applied("de-ir1")
+    assert a["usable"] == [False, False, False, True] and a["w"] == pytest.approx([0.0, 0.0, 0.0, 1.0]) and plans(calls) == [f"tcp:{w['port']}:{w['port'] + 40000}:1"] and a["state"] == "active"
+    s = trident.status("de-ir1")
+    assert [r["role"] for r in s["strands"]] == ["tunnel", "standby", "strand", "relay"] and s["strands"][3]["weight"] == 100 and s["strands"][3]["usable"] and s["strands"][3]["kind"] == "chisel:tls"
+    assert trident.summaries(["de-ir1"])["de-ir1"]["weights"] == [0, 0, 0, 100]
+
+    calls.clear()
+    trident._step("de-ir1")
+    assert [c for c in calls if c[0] == "relay_on"] == [] and plans(calls) == []                                              # the unit is put again only every RELAY_EVERY; nothing is rewritten for nothing
+
+    for tid in (w["id"], sid, xid):
+        set_state(tid, "up", since=300)
+
+    calls.clear()
+    trident._step("de-ir1")
+    a = applied("de-ir1")
+    assert a["usable"] == [True, True, True, True] and 0 < a["w"][3] < 1 and a["own_up_since"] > 0 and len(plans(calls)) == 1 and plans(calls)[0].count("tcp:") == 3      # the own strands are back: they are let in by steps beside the relay
+
+    removed = []
+    monkeypatch.setattr(trident, "remove_relay", lambda n: removed.append(n) or [])
+    st.put("trident", {"applied": {"de-ir1": {**a, "own_up_since": clock() - trident.RELAY_KEEP - 1, "relay_seen": clock() - trident.RELAY_KEEP - 1}}})
+    calls.clear()
+    trident._step("de-ir1")
+    a = applied("de-ir1")
+    assert a["relay_retire"] > 0 and a["relay_ok"] is False and removed == []                                                # half an hour later: its share goes first ...
+    st.put("trident", {"applied": {"de-ir1": {**a, "relay_retire": clock() - trident.TICK - 1}}})
+    trident._step("de-ir1")
+    join_threads("trident-remove-relay")
+    a = applied("de-ir1")
+    assert removed == ["de-ir1"] and a["usable"][3] is False and f":{w['port'] + 40000}:" not in a["plan"]                   # ... then the strand
+
+    # a relay strand whose ports no longer are the tunnel's is removed like any strand
+    removed.clear()
+    trident._REMOVING.clear()
+    st.put("trident", {"applied": {"de-ir1": {**a, "relay_retire": 0, "relay_ok": True, "relay_at": clock()}}})
+
+    with session() as db:
+        t = db.get(Tunnel, rid)
+        t.record = {**t.record, "port_mapping": f"41999:{w['port'] + 40000}"}
+
+    trident._step("de-ir1")
+    join_threads("trident-remove-relay")
+    assert removed == ["de-ir1"]
+
+
+def test_a_relay_whose_targets_do_not_answer_from_the_second_server_gets_no_share_and_says_why(monkeypatch):
+    w, sid, xid = up_world(monkeypatch)
+    calls = fake_actions(monkeypatch, relay_reach=0)
+    f2 = add_foreign2(w)
+    trident._step("de-ir1")
+    add_relay(w, f2)
+    calls.clear()
+
+    for tid in (w["id"], sid, xid):
+        set_state(tid, "down", since=3)
+
+    trident._step("de-ir1")
+    trident._step("de-ir1")
+    a = applied("de-ir1")
+    assert a["relay_ok"] is False and "does not answer" in a["relay_why"] and a["usable"] == [False, False, False, False] and a["state"] == "idle"
+    assert "does not answer" in trident.status("de-ir1")["why"] and len([c for c in calls if c[0] == "relay_on"]) == 1       # said in the window; tried again after RELAY_RETRY, not every turn
+
+
+def test_removing_the_relay_takes_the_unit_off_the_second_server_then_the_tunnel(monkeypatch):
+    w = world("de-ir1")
+    f2 = add_foreign2(w)
+    rid = add_relay(w, f2)
+    calls = fake_actions(monkeypatch)
+    deleted = []
+    monkeypatch.setattr(trident.builder, "delete_tunnel", lambda tid, **k: deleted.append(tid) or ["x"])
+    assert trident.remove_relay("nobody") == []
+    assert trident.remove_relay("de-ir1") == ["x"] and deleted == [rid] and [c for c in calls if c[0] == "relay_off"] == [("relay_off", {"NAME": "de-ir1"})]
+    assert trident.strand_exists("de-ir1") is True                                                                           # (the row is still there: the delete is a stand-in)
+
+
+def test_forgetting_and_renaming_take_the_relay_strand_with_them(monkeypatch):
+    w, _sid, _xid = up_world(monkeypatch)
+    calls = fake_actions(monkeypatch)
+    f2 = add_foreign2(w)
+    rid = add_relay(w, f2)
+    trident._step("de-ir1")
+    trident._BUILDS["de-ir1#relay"] = {"aid": 5, "name": "de-ir1-rl", "kind": "chisel:tls", "at": clock()}
+    trident._set_failed("de-ir1#relay", {"n": 1, "at": clock(), "why": "x", "kinds": {}})
+    trident.renamed("de-ir1", "de-ir9")
+    join_threads("trident-retire")
+    join_threads("trident-relay-retire")
+    assert [c for c in calls if c[0] == "relay_off" and c[1]["NAME"] == "de-ir1"]                                            # the unit carried the old name: it goes, the job puts it again under the new one
+    assert applied("de-ir9")["relay_ok"] is False and "de-ir9#relay" in trident._BUILDS and "de-ir1#relay" not in trident._BUILDS and trident._failed("de-ir9#relay")["n"] == 1
+
+    with session() as db:
+        assert (db.get(Tunnel, rid).record or {}).get("strand_of") == "de-ir9"
+
+    removed = []
+    monkeypatch.setattr(trident, "remove_strand", lambda n: removed.append(("strand", n)) or [])
+    monkeypatch.setattr(trident, "remove_relay", lambda n: removed.append(("relay", n)) or [])
+    trident.forget("de-ir9")
+    join_threads("trident-forget")
+    assert ("relay", "de-ir9") in removed and ("strand", "de-ir9") in removed and 5 in trident.builder.CANCEL and trident._failed("de-ir9#relay") == {}
+    trident.builder.CANCEL.discard(5)
+
+
+# ------------------------------------------------------------------ the stall look (1.69.226; the owner, 2026-11-05: "check whether the tunnels we build with this method have پرش [stalls]")
+def test_the_strand_probe_script_reads_only_asks_each_port_on_localhost_and_takes_only_ports_and_a_count():
+    """A connection that hangs for 3 - 7 s is not seen by the 10 s check of a strand (its delay and loss are pings): on the live UK Trident (2026-11-04) the KCP strand stalled 0.7 % of 450 connections, the TCP
+    strand none, and both kept a share. The look is a handful of small requests made ON the Iran server to each strand's own port - they never pass the Trident's NAT chain (PREROUTING only)."""
+    assert "strand_probe" in ssh.SCRIPTS and "strand_probe" not in ssh.ACTIONS
+    s = ssh._script_text("strand_probe", {"PORTS": "8075 28075 38075 48075", "N": "8"})
+    assert "for p in 8075 28075 38075 48075; do" in s and "n='8'" in s and '"http://127.0.0.1:$p/"' in s and "-m 6" in s and "-o /dev/null" in s and "sleep 0.1" in s          # each port, on localhost, small, sequential, 6 s at most
+    assert "STRAND %s n=%d ok=%d stalls=%d p95=%.3f max=%.3f" in s and "> 1.5" in s and ") < /dev/null & done; wait" in s                                                       # one line per port; the ports at the same time
+    assert "systemctl" not in s and "iptables" not in s and " -j " not in s and "rm " not in s and "apt" not in s and ">>" not in s and " > /" not in s                       # nothing installed, nothing changed, nothing written
+
+    for bad in ({"PORTS": "8075; reboot", "N": "8"}, {"PORTS": "8075", "N": "0"}, {"PORTS": "8075", "N": "100"}, {"PORTS": "8075", "N": "8x"}, {"PORTS": " ".join(str(8000 + i) for i in range(9)), "N": "8"},
+                {"PORTS": "", "N": "8"}, {"PORTS": "8075", "N": "8", "HOST": "203.0.113.9"}):
+        with pytest.raises(ValueError):
+            ssh._script_text("strand_probe", bad)
+
+
+@pytest.mark.skipif(shutil.which("bash") is None or shutil.which("curl") is None, reason="needs bash and curl")
+def test_the_strand_probe_script_runs_here_against_a_quick_a_stalling_and_a_dead_listener():
+    """The script for real (bash + curl on this machine), in front of three ports: one that answers at once, one that answers after two seconds, one where nothing listens."""
+    import socket
+    import threading
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+    class H(BaseHTTPRequestHandler):
+        wait = 0.0
+
+        def do_GET(self):
+            time.sleep(self.wait)
+            body = b"no\n"
+            self.send_response(404)
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *a):
+            pass
+
+    class Slow(H):
+        wait = 2.0
+
+    quick, slow = ThreadingHTTPServer(("127.0.0.1", 0), H), ThreadingHTTPServer(("127.0.0.1", 0), Slow)
+    dead = socket.socket()
+    dead.bind(("127.0.0.1", 0))
+    dead_port = dead.getsockname()[1]
+    dead.close()                                                                                   # (a port that was free a moment ago: nothing listens there)
+    threads = [threading.Thread(target=srv.serve_forever, daemon=True) for srv in (quick, slow)]
+
+    for t in threads:
+        t.start()
+
+    try:
+        ports = [quick.server_address[1], slow.server_address[1], dead_port]
+        t0 = time.time()
+        out = subprocess.run(["bash", "-c", ssh._script_text("strand_probe", {"PORTS": " ".join(str(p) for p in ports), "N": "4"})], capture_output=True, text=True, timeout=60, check=False).stdout
+        took = time.time() - t0
+    finally:
+        quick.shutdown()
+        slow.shutdown()
+
+    got = trident.parse_probe(out)
+    assert set(got) == set(ports), out
+    q, s, d = got[ports[0]], got[ports[1]], got[ports[2]]
+    assert q["n"] == 4 and q["ok"] == 4 and q["stalls"] == 0 and q["p95"] < 1.5 and q["max"] < 1.5                       # answered at once
+    assert s["n"] == 4 and s["ok"] == 4 and s["stalls"] == 4 and 2.0 <= s["p95"] <= 6.0 and s["max"] >= s["p95"]           # answered, but every answer took over 1.5 s: four stalls
+    assert d["n"] == 4 and d["ok"] == 0 and d["stalls"] == 0 and d["max"] < 1.5                                            # refused at once: neither an answer nor a stall (the strand's own check says it is down)
+    assert took < 4 * 2.2 + 6, took                                                                                        # the ports are asked at the same time: the slow one sets the pace, not the sum
+    assert all(float(line.rsplit("kb=", 1)[1]) < 1.0 for line in out.splitlines() if line.startswith("STRAND "))          # a few bytes per answer
+
+
+def test_the_stall_factor_is_free_under_one_percent_and_falls_to_the_floor_at_ten():
+    f = trident.stall_factor
+    assert f(None, None) == 1.0 and f(0.0, 0.3) == 1.0 and f(0.9, 0.99) == 1.0 and f(1.0, 1.0) == 1.0                   # nothing known, or under 1 % and under 1 s: free
+    assert f(2.0, 0.5) == pytest.approx(0.5) and f(5.0, 0.5) == pytest.approx(0.2) and f(10.0, 0.5) == 0.0 and f(40.0, 0.5) == 0.0          # 2 % half, 5 % a fifth, 10 % and more the floor only
+    assert 0.5 < f(1.5, 0.5) < 1.0 and 0.2 < f(3.0, 0.5) < 0.5 and 0.0 < f(7.5, 0.5) < 0.2                               # straight lines between
+    assert f(0.0, 3.0) == pytest.approx(0.2) and f(0.0, 5.0) == pytest.approx(0.2) and 0.2 < f(0.0, 2.0) < 1.0 and f(0.0, None) == 1.0          # slow at p95 counts too: a fifth from 3 s
+    assert f(2.0, 3.5) == pytest.approx(0.2) and f(5.0, 2.0) == pytest.approx(0.2)                                        # the lower of the two
+    vals = [f(x / 10, 0.5) for x in range(0, 120, 3)]
+    assert vals == sorted(vals, reverse=True) and all(0.0 <= v <= 1.0 for v in vals)                                      # never up with more stalls, always 0 - 1
+
+
+def test_parse_probe_reads_the_script_lines_and_stall_of_pools_the_last_looks():
+    out = "STRAND 8075 n=8 ok=8 stalls=1 p95=1.800 max=4.100 kb=1.2\nSTRAND 28075 n=8 ok=8 stalls=0 p95=0.210 max=0.300 kb=1.1\nSTRAND 38075 n=8 ok=0 stalls=0 p95=0.001 max=0.001 kb=0.0\ngarbage\nSTRAND x n=1\n"
+    got = trident.parse_probe(out)
+    assert got == {8075: {"n": 8, "ok": 8, "stalls": 1, "p95": 1.8, "max": 4.1}, 28075: {"n": 8, "ok": 8, "stalls": 0, "p95": 0.21, "max": 0.3}, 38075: {"n": 8, "ok": 0, "stalls": 0, "p95": 0.001, "max": 0.001}}
+    assert trident.parse_probe("") == {} and trident.parse_probe("TRIDENT_SET x 2\n") == {}
+
+    from collections import deque
+
+    h = deque(maxlen=trident.STALL_LOOKS)
+    assert trident.stall_of(h) == (None, None, 0)
+    h.append(got[38075])
+    assert trident.stall_of(h) == (None, None, 0)                                                                         # a port that refused: nothing known
+    h.append(got[28075])
+    assert trident.stall_of(h) == (0.0, 0.21, 8)
+    h.append(got[8075])
+    assert trident.stall_of(h) == (pytest.approx(6.2), 1.8, 16)                                                           # 1 of 16 = 6.2 %; the p95 the middle look's (two looks: the slower)
+
+    for _ in range(6):                                                                                                    # six more clean looks: only the last five looks count, the stalled one is gone
+        h.append({"n": 8, "ok": 8, "stalls": 0, "p95": 0.3, "max": 0.5})
+
+    assert len(h) == trident.STALL_LOOKS and trident.stall_of(h) == (0.0, 0.3, 40)
+    h.append({"n": 8, "ok": 6, "stalls": 2, "p95": 6.0, "max": 6.0})                                                      # two timeouts of eight (they count as stalls, not as answers)
+    assert trident.stall_of(h) == (5.0, 0.3, 40)                                                                           # 2 of 40; the p95 is the median of the looks: one bad look does not make the strand slow
+
+
+def stall_probe(monkeypatch, answers):
+    """A stand-in for ssh.run_script: `answers` = {port: "n=8 ok=8 stalls=1 p95=1.800 max=4.100"}; records every call."""
+    calls = []
+
+    def run_script(node, name, params=None, timeout=40):
+        calls.append((name, dict(params or {}), timeout))
+        assert name == "strand_probe"
+        ssh._script_text(name, params)                                                                                      # (the real guards on the parameters the look sends)
+        return "".join(f"STRAND {p} {answers[int(p)]} kb=1.0\n" for p in params["PORTS"].split() if int(p) in answers)
+
+    monkeypatch.setattr(trident, "run_script", run_script)
+    return calls
+
+
+def test_the_look_asks_the_iran_server_for_every_strand_that_is_up_and_keeps_the_answers_by_row(monkeypatch):
+    w, sid, xid = up_world(monkeypatch)
+    calls = fake_actions(monkeypatch)
+    P = w["port"]
+    probes = stall_probe(monkeypatch, {P: "n=8 ok=8 stalls=2 p95=1.800 max=4.100", P + 20000: "n=8 ok=8 stalls=0 p95=0.210 max=0.300", P + 30000: "n=8 ok=0 stalls=0 p95=0.001 max=0.001"})
+    looked = []
+    monkeypatch.setattr(trident, "_stall_async", lambda name, p, items: looked.append([it["idx"] for it in items]) or trident._stall_look(name, None, [(it["id"], it["born"], it["ports"][0]) for it in items]))
+    trident._step("de-ir1")
+    assert plans(calls) and looked == [[0, 1, 2]] and len(probes) == 1 and probes[0][1] == {"PORTS": f"{P} {P + 20000} {P + 30000}", "N": str(trident.STALL_N)} and probes[0][2] >= trident.STALL_N * 6           # every strand that is up, its first port, in one ssh with time for N slow answers
+    assert trident._STALL[w["id"]][1][-1]["stalls"] == 2 and trident._STALL[sid][1][-1]["stalls"] == 0 and trident._STALL[xid][1][-1]["ok"] == 0
+    s = trident.status("de-ir1")["strands"]
+    assert s[0]["stalls"] == 25.0 and s[0]["stall_p95"] == 1.8 and s[1]["stalls"] == 0.0 and s[2]["stalls"] is None                                                          # the window: percent per strand; the refused port says nothing yet
+
+    looked.clear()
+    trident._step("de-ir1")
+    assert looked == []                                                                                                   # not again within STALL_EVERY
+    trident._STALL_AT["de-ir1"] = 0.0
+    set_state(xid, "down", since=3)
+    trident._step("de-ir1")
+    assert looked == [[0, 1]]                                                                                             # a strand that is down is not asked (its port refuses: nothing to learn)
+
+    trident._STALL_AT["de-ir1"] = 0.0
+    set_state(xid, "up", since=300)
+    set_state(w["id"], "down", since=3)
+    set_state(sid, "down", since=3)
+    looked.clear()
+    trident._step("de-ir1")
+    assert looked == []                                                                                                   # one usable strand carries everything whatever it does: no look
+
+    trident._STALL_AT["de-ir1"] = 0.0
+    set_state(w["id"], "up", since=300)
+    set_state(sid, "up", since=300)
+    monkeypatch.setattr(autopilot, "storm_now", lambda: True)
+    trident._step("de-ir1")
+    assert looked == []                                                                                                   # not in a storm
+
+    looks = trident._STALL[w["id"]][1]
+    it = trident._items("de-ir1", trident._read("de-ir1"), applied("de-ir1"), clock())[0]
+    assert len(looks) == 2 and it["stall"] == 0.0 and it["stall_pct"] == 25.0 and it["stall_p95"] == 1.8                   # the tunnel was looked at twice: 4 of 16 stalled = 25 %, the floor only
+    looks.pop()
+    it = trident._items("de-ir1", trident._read("de-ir1"), applied("de-ir1"), clock())[0]
+    assert it["stall"] == 1.0 and it["stall_pct"] == 25.0                                                                 # one look (8 answers) is not enough to bench a strand: the percent shows, the factor waits
+    trident._STALL[w["id"]] = (trident._STALL[w["id"]][0] + 1, looks)                                                     # a rebuilt row (another creation time) starts anew
+    it = trident._items("de-ir1", trident._read("de-ir1"), applied("de-ir1"), clock())[0]
+    assert it["stall"] == 1.0 and it["stall_pct"] is None and trident.status("de-ir1")["strands"][0]["stalls"] is None
+
+
+def test_a_strand_that_stalls_loses_its_share_and_a_look_that_fails_changes_nothing(monkeypatch):
+    """The live UK Trident (2026-11-04): the KCP tunnel stalled, the TCP standby did not, and the tunnel kept the biggest share. Here the TUNNEL stalls 2 of 8 in every look: after two looks it is held at the floor
+    and the standby carries; when the looks come back clean (the last five looks count) the tunnel is let back by its own numbers."""
+    w, sid, xid = up_world(monkeypatch)
+    calls = fake_actions(monkeypatch)
+    P = w["port"]
+    answers = {P: "n=8 ok=8 stalls=2 p95=1.800 max=4.100", P + 20000: "n=8 ok=8 stalls=0 p95=0.210 max=0.300", P + 30000: "n=8 ok=8 stalls=0 p95=0.300 max=0.400"}
+    stall_probe(monkeypatch, answers)
+    monkeypatch.setattr(trident, "_stall_async", lambda name, p, items: trident._stall_look(name, None, [(it["id"], it["born"], it["ports"][0]) for it in items]))
+
+    def settled():
+        a = applied("de-ir1")
+        st.put("trident", {"applied": {"de-ir1": {**a, "at": clock() - 3600, "stages": [3, 3, 3], "stage_at": [clock() - 9999] * 3}}})
+        trident._STALL_AT["de-ir1"] = 0.0
+        calls.clear()
+
+    trident._step("de-ir1")                                                                                               # the first plan + the first look (8 answers: nothing is judged yet)
+    settled()
+    trident._step("de-ir1")                                                                                               # the second look
+    a = applied("de-ir1")
+    assert a["w"][0] > a["w"][1] > a["w"][2] and a["w"][0] > 0.4                                                           # the tunnel still carries the most (the best delay)
+    settled()
+    trident._step("de-ir1")                                                                                               # now 16 answers, 4 stalled = 25 %: the tunnel is held at the floor, the standby takes the share
+    a = applied("de-ir1")
+    assert len(plans(calls)) == 1 and a["w"][0] == pytest.approx(trident.FLOOR_LEAN) and a["w"][1] > a["w"][2] > 0 and sum(a["w"]) == pytest.approx(1.0, abs=1e-3)
+    s = trident.status("de-ir1")["strands"]
+    assert s[0]["stalls"] == 25.0 and s[1]["stalls"] == 0.0 and s[2]["stalls"] == 0.0 and s[0]["weight"] == 3
+
+    answers[P] = "n=8 ok=8 stalls=0 p95=0.150 max=0.200"                                                                 # the tunnel answers again (three stalled looks are in memory: 6 of 24)
+    for _ in range(4):                                                                                                    # four turns: the plan sees 6/24, 6/32, 6/40, then 4/40 (the first stalled look left the five) - the floor each time
+        settled()
+        trident._step("de-ir1")
+
+    assert applied("de-ir1")["w"][0] == pytest.approx(trident.FLOOR_LEAN) and trident.status("de-ir1")["strands"][0]["stalls"] == 5.0           # (the window reads the memory after the fourth clean look: 2 of 40)
+    settled()
+    trident._step("de-ir1")
+    assert trident.FLOOR_LEAN < applied("de-ir1")["w"][0] < 0.5 and trident.status("de-ir1")["strands"][0]["stalls"] == 0.0                  # 2 of 40 = 5 %: a fifth of its raw share - back, but small
+    settled()
+    trident._step("de-ir1")
+    a = applied("de-ir1")
+    assert a["w"][0] > a["w"][1] > a["w"][2] and a["w"][0] > 0.4                                                                              # clean for five looks: the tunnel carries the most again
+
+    # a look that fails (the server does not answer, or says nothing the panel understands) changes nothing, and the next look is not blocked
+    before = [list(x[1]) for x in (trident._STALL[w["id"]], trident._STALL[sid], trident._STALL[xid])]
+    p = trident._read("de-ir1")["p"]
+    items = [it for it in trident._items("de-ir1", trident._read("de-ir1"), applied("de-ir1"), clock()) if it is not None]
+
+    def lost(node, name, params=None, timeout=40):
+        raise ssh.SSHError("ssh connection lost (network)", 255)
+
+    for stand_in in (lost, lambda node, name, params=None, timeout=40: "garbage\n"):
+        monkeypatch.setattr(trident, "run_script", stand_in)
+        STALL_ASYNC("de-ir1", p, items)                                                                                   # (the real thread)
+        join_threads("trident-stall-")
+        assert [list(x[1]) for x in (trident._STALL[w["id"]], trident._STALL[sid], trident._STALL[xid])] == before and "de-ir1" not in trident._STALLING
+
+    assert trident.target_weights([item(), item(stall=0.0), item(stall=0.5)]) == pytest.approx([0.95 * 2 / 3, trident.FLOOR, 0.95 / 3])       # the pure weights: a factor of 0 is the floor, 0.5 half the raw share; an item without one keeps its numbers

@@ -35,9 +35,11 @@ from . import autopilot, knowledge, linkprobe, tunnels
 from . import settings as st
 
 log = get_logger("weather")
-FAMILIES = ("gre", "udp", "tcp", "icmp", "esp", "ipip")
-LINK_FAMILY = {"gre": "gre", "fou": "udp", "gue": "udp", "ipipfou": "udp", "ipipgue": "udp", "ipsecnat": "udp", "wg": "udp", "ipip": "ipip", "ipsec": "esp", "wgchisel": "tcp", "wgchiselfwd": "tcp"}
-PROBE_LINKS = ["gre", "fou", "ipip", "ipsec"]          # one link per family the link probe can ask (udp = GRE in a UDP port; the carried links need Chisel and a minute - not asked)
+FAMILIES = ("gre", "udp", "tcp", "icmp", "esp", "ipip", "l2tp")          # (l2tp = the L2TPv3 pseudowire, IP protocol 115 - the C-Tunnel carrier of 1.69.180 that passed a route where TCP, UDP, ICMP and IPIP were dropped)
+LINK_FAMILY = {"gre": "gre", "fou": "udp", "gue": "udp", "ipipfou": "udp", "ipipgue": "udp", "ipsecnat": "udp", "wg": "udp", "ipip": "ipip", "ipsec": "esp", "wgchisel": "tcp", "wgchiselfwd": "tcp",
+               "l2tpv3": "l2tp", "gretap": "gre", "vxlan": "udp", "geneve": "udp"}          # (the same families as trident._LINK_FAMILY for the C-Tunnel L2 carriers)
+PROBE_LINKS = ["gre", "fou", "ipip", "ipsec", "l2tpv3"]          # one link per family the link probe can ask (udp = GRE in a UDP port; the carried links need Chisel and a minute - not asked)
+CUT_FAMILIES = ("tcp", "icmp", "udp")                    # when these are all blocked on a route the foreign server's ADDRESS is filtered for the ordinary protocols (`address_cut`): only a raw carrier or a relay through another foreign server can still reach it
 FRESH = 3600                   # evidence older than this says nothing about now ...
 BLOCK_FRESH = 2 * 3600         # ... but a block seen this recently still counts (a filter does not lift in an hour)
 PROBE_EVERY = 600              # a pair with a Trident is probed this often ...
@@ -295,6 +297,21 @@ def factor_for(iran_id: int, foreign_id: int, kind: str, now: int | None = None)
 def blocked_families(iran_id: int, foreign_id: int, now: int | None = None) -> set[str]:
     """The families blocked on the route now (pressure is not blocked)."""
     return {fam for fam, e in weather_of(iran_id, foreign_id).items() if e.get("state") == "blocked"}
+
+
+def address_cut(states: dict[str, dict] | dict[str, str]) -> bool:
+    """Pure: is the foreign server's ADDRESS filtered on this route - every ordinary family (tcp, icmp, udp) blocked at once (the owner, 2026-11-03: "the Iran server is reachable but the foreign address is filtered")?
+    A raw carrier (gre, esp, l2tp) may still pass; nothing is said about those. `states`: {family: entry} or {family: state}."""
+    def state(fam: str) -> str:
+        e = states.get(fam)
+        return str(e.get("state") if isinstance(e, dict) else e or "")
+
+    return all(state(f) == "blocked" for f in CUT_FAMILIES)
+
+
+def open_families(iran_id: int, foreign_id: int) -> set[str]:
+    """The families with OPEN evidence on the route now."""
+    return {fam for fam, e in weather_of(iran_id, foreign_id).items() if e.get("state") == "open"}
 
 
 def states_for(iran_id: int, foreign_id: int) -> dict[str, str]:

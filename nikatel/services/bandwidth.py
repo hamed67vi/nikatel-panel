@@ -2,7 +2,10 @@
 (The owner, 2026-10-16: "show the bandwidth of the tunnel very simply - and when it drops, the Doctor checks it by itself and we understand".)
 
   how it is measured   a GRE tunnel (Backhaul): TWO connections pull 60 MB each at most (3 s) over the link from a small sink the panel keeps on the foreign server, bound to the link's inner address (nothing public);
-                       a tunnel with a test door (BackPack, Paqet, Chisel): the quality job of every half hour already measures it through the door - its number is taken from there.
+                       a tunnel with a test door (BackPack, Paqet, Chisel): the same job measures it through the door (8 connections, 4 s, both ways). Every 4 hours (1.69.226; was 90 minutes), and NOT AT ALL while
+                       the users themselves carry 60 % of the tunnel's usual level (at least 20 Mb/s): their traffic proves it (`users_prove`; the owner, 2026-11-05: "cut the panel's tests as much as you can,
+                       saving traffic matters most"). A drop, a very slow tunnel, a poor quality score and a new tunnel keep their fast looks. The quality job of every half hour asks pings only since 1.69.226.
+                       On top of it the day's volume of the Doctor's tests (services/testbudget.py, 1.69.223) stretches the interval and stops the routine tests when the budget is used.
   where it is kept     the record of the tunnel, `bw`: the last number, the history (60 samples), the usual level (`ref`), a verdict (learning / ok / low / drop) and, while it lasts, the drop.
   what is a drop       a sample under 60 % of the usual level (the 75th percentile of the last 7 days), confirmed by a second sample three minutes later; it ends when a sample is back over 80 %.
   what is "slow"       a tunnel that has no usual level to drop from (new, rebuilt, or one that never gave 20 Mb/s) whose test gives under 20 Mb/s twice in a row (the second a minute later): it is looked at like a drop,
@@ -30,7 +33,8 @@ from .events import emit
 from .tunnels import link_of
 
 log = get_logger("bandwidth")
-INTERVAL = 90 * 60           # between two measurements of one tunnel (a little different for each, so they do not all fall in one minute)
+INTERVAL = 4 * 3600          # between two measurements of one tunnel (a little different for each, so they do not all fall in one minute); 1.69.226: was 90 minutes - each test moves up to 120 MB through the Iran server, which bills it
+PROVE_MBPS = 20.0            # the users' own traffic through a tunnel proves it (no test needed) when their peak of the last half hour is at least this and 60 % (DROP_RATIO) of the usual level: no drop is possible then
 CONFIRM_AFTER = 180          # a sample that looks like a drop is measured again after this
 SLOW_CONFIRM_AFTER = 60      # the second test of a very slow one comes this soon (a drop keeps its 3 minutes): the owner, 2026-10-19: "the process must not take long"
 POOR_SCORE = 40             # a tunnel whose quality test scored under this is measured every POOR_AFTER, not every INTERVAL
@@ -494,14 +498,24 @@ def remove_sink(tunnel_id: int, foreign: Node, rec: dict) -> None:
 
 
 # ------------------------------------------------------------------ the job
+def users_prove(ref: float | None, peak: float | None) -> bool:
+    """Pure: the users' own traffic proves the tunnel - their peak of the last half hour (`_live_peak`) is at least PROVE_MBPS and at least DROP_RATIO of the usual level (`ref`; with no level, PROVE_MBPS alone):
+    a tunnel that carries 60 % of its usual level cannot be in a drop, so the little test (up to 120 MB through the Iran server, which bills it) has nothing to tell."""
+    if peak is None:
+        return False
+
+    return float(peak) >= max(PROVE_MBPS, DROP_RATIO * float(ref)) if ref else float(peak) >= PROVE_MBPS
+
+
 def _due(now: int) -> list[int]:
-    """The tunnels to measure, the one that waited longest first: up, with a GRE link, not measured for INTERVAL (or asked for sooner by `next_at`)."""
-    out = []
+    """The tunnels to measure, the one that waited longest first: up, with a GRE link or a test door, not measured for INTERVAL (times the budget's stretch; or asked for sooner by `next_at`) - and, on the usual
+    rhythm, not proven by their own users (`users_prove`): a drop, a very slow tunnel, a poor score and a tunnel never measured are looked at whatever the users carry."""
+    out, usual = [], {}
     stretch = testbudget.stretch(now)          # (1.69.223: once the Doctor's tests have used half of the day's volume the interval is 2 times as long, from 80 % 4 times)
 
     with session() as db:
         for t in db.scalars(select(Tunnel).where(Tunnel.enabled.is_(True), Tunnel.state.in_(("up", "degraded")))):         # (a tunnel that is only unstable carries its users: its bandwidth is the thing to see)
-            has_door = bool((t.record or {}).get("test_port") and (t.secrets or {}).get("test_key"))       # (a tunnel with a test door is measured by its quality test: the job only repeats it to confirm and to watch a drop)
+            has_door = bool((t.record or {}).get("test_port") and (t.secrets or {}).get("test_key"))       # (a tunnel with a test door is measured through the door by this job - the quality job asks it pings only)
 
             if is_temp(t.name) or (_target(t) is None and not has_door) or t.iran.online is False or t.foreign.online is False:
                 continue
@@ -509,19 +523,24 @@ def _due(now: int) -> list[int]:
             bw = (t.record or {}).get("bw") or {}
             nxt = int(bw.get("next_at") or 0) or (int(bw.get("at") or 0) + INTERVAL * stretch + (t.id * 97) % 600)
             at = int(bw.get("at") or 0)
+            early = False
 
             if at:
                 q = (t.record or {}).get("quality") or {}
 
                 if bw.get("state") == "learning" and float(bw.get("down") if bw.get("down") is not None else 99) < SLOW_MBPS:
-                    nxt = min(nxt, at + SLOW_CONFIRM_AFTER)               # a very slow test that nobody has judged (the first of a pair, or one of a schedule from before 1.69.15) is not left for 90 minutes
+                    nxt, early = min(nxt, at + SLOW_CONFIRM_AFTER), True               # a very slow test that nobody has judged (the first of a pair, or one of a schedule from before 1.69.15) is not left for the next turn
                 elif q.get("score") is not None and float(q["score"]) < POOR_SCORE and bw.get("state") not in ("drop", "slow"):
-                    nxt = min(nxt, at + POOR_AFTER)                       # a tunnel the quality test calls poor is measured again soon: "when a tunnel has a problem, do not wait for the next sample" (the owner, 2026-10-19)
+                    nxt, early = min(nxt, at + POOR_AFTER), True                       # a tunnel the quality test calls poor is measured again soon: "when a tunnel has a problem, do not wait for the next sample" (the owner, 2026-10-19)
 
             if now >= nxt:
-                out.append((int(bw.get("at") or 0), t.id))
+                out.append((at, t.id))
 
-    return [i for _, i in sorted(out)]
+                if at and not early and bw.get("state") not in ("drop", "slow"):
+                    usual[t.id] = bw.get("ref") or bw.get("down")           # (on the usual rhythm: the users may prove it; a new tunnel has no users to prove it by)
+
+    proven = {tid for tid, ref in usual.items() if users_prove(ref, _live_peak(tid, now))}
+    return [i for _, i in sorted(out) if i not in proven]
 
 
 def _no_sample(tunnel_id: int) -> bool:

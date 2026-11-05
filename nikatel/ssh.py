@@ -462,6 +462,15 @@ pt=0; for i in 1 2 3; do timeout 3 bash -c "exec 3<>/dev/tcp/$h/$p" 2>/dev/null 
 echo "REACH icmp $pi/5 tcp $pt/3"
 """, {"HOST": r"^\d{1,3}(\.\d{1,3}){3}$", "PORT": r"^\d{1,5}$"}),
 
+    # the STALL LOOK of the Trident (services/trident.py `_stall_look`, 1.69.226), read-only, on the Iran server itself: for each given port - the users' port of the tunnel and the shifted ports of its strands
+    # (+20000, +30000, +40000) - N small HTTP GETs to 127.0.0.1:<port>, one after another, 0.1 s apart, 6 s each at most (the ports are asked at the same time). A request made ON the server never passes the Trident's
+    # NAT chain (it stands in PREROUTING), so every port measures its own strand alone - the 10 s check of a strand sees its delay and loss, not a connection that hangs for 3 - 7 s (the owner, 2026-11-05: "پرش").
+    # One line per port: "STRAND <port> n=<requests> ok=<answered> stalls=<answers that took over 1.5 s, a timeout counted> p95=<s> max=<s> kb=<KB received>". The services behind the ports answer a plain GET with
+    # a short refusal: under 20 KB moved in all. Nothing is installed, nothing changes on the server.
+    "strand_probe": (r"""n='@N@'
+for p in @PORTS@; do ( i=0; while [ "$i" -lt "$n" ]; do i=$((i+1)); r=$(curl -s -o /dev/null -m 6 --connect-timeout 6 -w '%{time_total} %{http_code} %{size_download}' "http://127.0.0.1:$p/" 2>/dev/null); [ -n "$r" ] || r="6.0 000 0"; echo "$r"; sleep 0.1; done | sort -n | awk -v p="$p" 'BEGIN { ok = 0; st = 0; b = 0 } { t[NR] = $1 + 0; if ($2 != "000") ok++; if ($1 + 0 > 1.5) st++; b += $3 } END { i = int(NR * 0.95); if (i < 1) i = 1; printf "STRAND %s n=%d ok=%d stalls=%d p95=%.3f max=%.3f kb=%.1f\n", p, NR, ok, st, t[i] + 0, t[NR] + 0, b / 1024 }' ) < /dev/null & done; wait
+""", {"PORTS": r"^\d{1,5}( \d{1,5}){0,7}$", "N": r"^[1-9][0-9]?$"}),
+
     # the TRIDENT (services/trident.py), read-only: "TRULE <name> <tcp|udp> <users' port> <shifted port> <probability>" for every redirect inside a trident chain (a chain NKTR_*, rules tagged "nikatel-trident-<name>"; the
     # probability is the kernel's number, 0.29999999981 for 30 %, and "1" for a rule with no statistic match: everything that reaches it goes there) and "TJUMP <name> <proto> <users' port> <chain> <shadowed>" for every jump to
     # such a chain from PREROUTING (`shadowed`: terminating rules of anybody else - a handover, a lane, a DNAT - that stand ABOVE the jump for the same port: they take the first packet before the trident sees it).
@@ -1154,6 +1163,83 @@ echo "LANE_OFF $n $(iptables -t nat -S PREROUTING 2>/dev/null | grep -- "--comme
     # the translation of every open connection - measured, see lanes). INPUT gets one tagged ACCEPT per shifted port (a closed INPUT chain would drop what was redirected); the accept of a shifted port that has left the plan lets
     # only the established connections go on. No boot unit: after a reboot everything goes to the tunnel (the safe state) and the panel puts the trident again.
     # PLAN: "<proto>:<users' port>:<shifted port>:<probability>,..." in the order of the rules (the rules of one port in the order they are tried). "TRIDENT_SET <name> <redirect rules in the chain>" / "TRIDENT_FAIL <why>".
+    # the RELAY strand of a Trident (services/trident.py `build_relay`): on a SECOND foreign server, a small forwarder - python3 only, nothing installed - listens on 127.0.0.1 ports and carries every connection on to the
+    # tunnel's own foreign server (whose address the Iran server cannot reach any more); the relay strand's tunnel (Iran -> this server) delivers the users there. One unit per Trident, `nikatel-relay-<name>.service`,
+    # enabled at boot; SPEC "<local port>:<address>:<port>,...". Put again = the unit restarted with the new SPEC. "RELAY_ON <name> <listeners>" / "RELAY_FAIL <why>".
+    "relay_on": (r"""n='@NAME@'; spec='@SPEC@'; u="nikatel-relay-$n"
+command -v python3 >/dev/null 2>&1 || { echo "RELAY_FAIL this server has no python3"; exit 0; }
+mkdir -p /usr/local/bin
+cat > /usr/local/bin/nikatel-relay.py.new <<'PY'
+import asyncio, sys
+
+
+async def pipe(r, w):
+    try:
+        while True:
+            b = await r.read(65536)
+            if not b:
+                break
+            w.write(b)
+            await w.drain()
+    except Exception:
+        pass
+    finally:
+        try:
+            w.close()
+        except Exception:
+            pass
+
+
+async def handle(host, port, r, w):
+    try:
+        r2, w2 = await asyncio.wait_for(asyncio.open_connection(host, port), 10)
+    except Exception:
+        w.close()
+        return
+    await asyncio.gather(pipe(r, w2), pipe(r2, w))
+
+
+async def main(specs):
+    servers = []
+    for s in specs:
+        lp, host, port = s.split(":")
+        servers.append(await asyncio.start_server(lambda r, w, h=host, p=int(port): handle(h, p, r, w), "127.0.0.1", int(lp), backlog=1024))
+    await asyncio.gather(*(x.serve_forever() for x in servers))
+
+
+asyncio.run(main(sys.argv[1].split(",")))
+PY
+if ! cmp -s /usr/local/bin/nikatel-relay.py.new /usr/local/bin/nikatel-relay.py 2>/dev/null; then mv -f /usr/local/bin/nikatel-relay.py.new /usr/local/bin/nikatel-relay.py; else rm -f /usr/local/bin/nikatel-relay.py.new; fi
+chmod 755 /usr/local/bin/nikatel-relay.py
+cat > /etc/systemd/system/$u.service <<EOF
+[Unit]
+Description=Nikatel Trident relay $n (a second foreign server carries the users on to the tunnel's foreign server)
+After=network-online.target
+[Service]
+ExecStart=/usr/bin/env python3 /usr/local/bin/nikatel-relay.py $spec
+Restart=always
+RestartSec=2
+LimitNOFILE=65536
+[Install]
+WantedBy=multi-user.target
+EOF
+systemctl daemon-reload; systemctl enable "$u" >/dev/null 2>&1; systemctl restart "$u" || { echo "RELAY_FAIL the unit did not start: $(systemctl status "$u" 2>&1 | tail -n 2 | cut -c1-120)"; exit 0; }
+sleep 1
+systemctl is-active --quiet "$u" || { echo "RELAY_FAIL the unit stopped: $(journalctl -u "$u" -n 2 --no-pager 2>/dev/null | tail -n 1 | cut -c1-120)"; exit 0; }
+n_all=0; n_ok=0
+for s in $(printf '%s' "$spec" | tr ',' '\n' | head -n 8); do
+  h=$(printf '%s' "$s" | cut -d: -f2); p=$(printf '%s' "$s" | cut -d: -f3); n_all=$((n_all + 1))
+  if timeout 4 bash -c "exec 3<>/dev/tcp/$h/$p" 2>/dev/null; then n_ok=$((n_ok + 1)); fi
+done
+echo "RELAY_ON $n $(ss -ltn 2>/dev/null | grep -c '127.0.0.1:') $n_ok/$n_all"
+""", {"NAME": _TNAME, "SPEC": r"^\d{1,5}:\d{1,3}(\.\d{1,3}){3}:\d{1,5}(,\d{1,5}:\d{1,3}(\.\d{1,3}){3}:\d{1,5}){0,199}$"}),
+
+    # the relay unit goes (the relay strand is removed, the tunnel's own route is open again). "RELAY_OFF <name>".
+    "relay_off": (r"""n='@NAME@'; u="nikatel-relay-$n"
+systemctl disable --now "$u" >/dev/null 2>&1; rm -f /etc/systemd/system/$u.service; systemctl daemon-reload
+echo "RELAY_OFF $n"
+""", {"NAME": _TNAME}),
+
     "trident_set": (r"""n='@NAME@'; plan='@PLAN@'; tag="nikatel-trident-$n"; ch="NKTR_$(printf '%s' "$n" | sha1sum | cut -c1-10)"
 command -v iptables >/dev/null 2>&1 && command -v iptables-restore >/dev/null 2>&1 || { echo "TRIDENT_FAIL this server has no iptables-restore"; exit 0; }
 W=""; iptables -w -t nat -S PREROUTING >/dev/null 2>&1 && W="-w"
