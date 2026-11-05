@@ -139,7 +139,7 @@ the token is shown once; the panel keeps only its hash) and sent on every reques
 | `read` | every GET except the settings, the sign-in, the tokens, the log and the licence |
 | `act` | `read`, plus the routes that start work: checks, repairs, builds, tests, DNS records - but not adding, changing or removing a Marzban / PasarGuard panel (its key, login and address: `admin` only), not changing the SSH password of a server and not pausing a background job (`admin` only) |
 | `admin` | everything, including settings, tokens (it may make tokens without a password), the log |
-| `field` | one thing: `POST /api/field/ingest`, the result of the Iran test kit (a folder a person in Iran runs; the token sits in it). It reads nothing and changes nothing else; `GET /api/field`, `/api/field/runs`, `/api/field/runs/{id}` (what was received, and what the Doctor found in it) need a `read` token or the owner's sign-in |
+| `field` | two things: `POST /api/field/ingest`, the result of the Iran test kit (a folder a person in Iran runs; the token sits in it), and `GET /api/field/manifest`, the live list of what the kit tests (its configs as Xray clients, the panel names and addresses, the newest kit number; the kit asks at every start). It changes nothing else; `GET /api/field`, `/api/field/runs`, `/api/field/runs/{id}` (what was received, and what the Doctor found in it) need a `read` token or the owner's sign-in |
 
 A token that is revoked stops at once. Every use is logged on the token (`last_used_at`); making and revoking are written to the
 security log. A valid token passes the secret entry path; a wrong one sees the missing page like everyone else. The answer to a

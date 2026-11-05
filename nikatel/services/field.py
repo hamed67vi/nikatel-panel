@@ -81,7 +81,7 @@ def compact(p) -> dict:
 
     ident = p.get("identity") if isinstance(p.get("identity"), dict) else {}
     conn = _word(p.get("connection"), 16).lower()
-    run = {"kit": _s(p.get("kit"), 8), "mode": _word(p.get("mode"), 8), "started": _s(p.get("started"), 24), "operator": _word(p.get("operator"), 32) or "unknown",
+    run = {"kit": _s(p.get("kit"), 8), "manifest": _s(p.get("manifest"), 40), "mode": _word(p.get("mode"), 8), "started": _s(p.get("started"), 24), "operator": _word(p.get("operator"), 32) or "unknown",
            "connection": conn if conn in CONNECTIONS else "other", "city": _word(p.get("city"), 32) or "unknown", "ip": _s(ident.get("ip"), 45), "asn": _s(ident.get("asn"), 80),
            "isp": _s(ident.get("isp"), 80), "country": _s(ident.get("country"), 32), "ipv6": bool((p.get("ipv6") or {}).get("ok")) if isinstance(p.get("ipv6"), dict) else None, "mtu": {}, "net": [], "cfg": []}
 

@@ -4,7 +4,8 @@ import json
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from ..auth import current_user
-from ..services import field
+from ..services import field, fieldkit
+from ..services.panels import PanelError
 
 router = APIRouter(tags=["field"], dependencies=[Depends(current_user)])
 
@@ -44,3 +45,13 @@ def one_run(run_id: int):
         raise HTTPException(404, "no such run")
 
     return {"ok": True, **r}
+
+@router.get("/field/manifest")
+def kit_manifest():
+    """The live list of what the Iran test kit tests - its configs as Xray clients, the panel's names and addresses, the newest kit number and the state of its test user - made from the panel at this moment, so the kit never goes stale (a token of scope `field` may call this too)."""
+    try:
+        return {"ok": True, **fieldkit.manifest()}
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except PanelError as e:
+        raise HTTPException(502, str(e))
