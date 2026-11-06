@@ -220,7 +220,7 @@ def build(text: str, nodes: list[dict], inbounds: dict, conf: dict, user: dict |
     targets += lab_targets(nodes, inbounds, items[0]["uuid"])
     m = re.match(r"https?://[^/]+(/sub/[^/?#]+)", str((user or {}).get("sub") or ""))
     panel = {"names": list(conf.get("panel_names") or []), "sub_names": list(conf.get("sub_names") or []), "sub_path": m.group(1) if m else "", "ips": list(conf.get("ips") or [])}
-    version = hashlib.sha1(json.dumps([[t["label"], t["config"]] for t in targets] + [panel], sort_keys=True).encode()).hexdigest()[:8]
+    version = hashlib.sha1(json.dumps([[t["label"], t["config"]] for t in targets] + [panel], sort_keys=True).encode(), usedforsecurity=False).hexdigest()[:8]
     return {"version": version, "built_at": int(now), "kit_latest": str(conf.get("kit_latest") or ""), "targets": targets, "panel": panel, "user": user_info(user, now)}
 
 

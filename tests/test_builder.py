@@ -214,7 +214,9 @@ def test_server_locks_do_not_block_other_servers(monkeypatch):
     monkeypatch.setattr(builder, "_say", lambda *a, **k: None)
 
     with builder.server_locks([911, 912], 1), builder.server_locks([913, 914], 2):
-        pass
+        assert all(builder._SRV_LOCKS[i].locked() for i in (911, 912, 913, 914))
+
+    assert not any(builder._SRV_LOCKS[i].locked() for i in (911, 912, 913, 914))          # every lock is given back
 
 def test_backhaul_wssmux_server_names_its_certificate():
     from nikatel.services.builder import PortMap, backhaul_texts

@@ -127,10 +127,6 @@ def records_list(fresh: bool = False):
     return {"ok": True, "records": _CACHE["rows"], "accounts": _CACHE["accounts"], "cached_at": int(_CACHE["at"]), "refreshing": bool(_CACHE["refreshing"])}
 
 
-def _fq(domain: str, name: str) -> str:
-    return domain if name in ("@", "") else f"{name}.{domain}"
-
-
 @router.post("/dns/records", status_code=201)
 def record_create(body: RecordIn):
     """Make an A record in one of the domains of an account (kept under Changes with a Restore)."""

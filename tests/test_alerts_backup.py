@@ -176,6 +176,8 @@ def test_backup_roundtrip_and_restore(client, tmp_path):
 
 def test_alerts_run_with_new_config_state(client):
     """A config that is down on its very first alert evaluation must not crash the job (fails was None)."""
+    from sqlalchemy import select
+
     from nikatel.db import session
     from nikatel.models import Config
     from nikatel.services import alerts
@@ -185,6 +187,9 @@ def test_alerts_run_with_new_config_state(client):
 
     alerts.run()
     alerts.run()
+
+    with session() as db:                           # the first look wrote the number the second one compares with
+        assert db.scalar(select(Config).where(Config.name == "x")).status == "down"
 
 
 def test_backup_parts_each_go_to_their_own_topic(client, monkeypatch):

@@ -457,10 +457,6 @@ def _sview(t: Tunnel, p: dict | None) -> dict:
             "iran_off": t.iran.enabled is not False and t.iran.online is False, "parked": bool(rec.get("parked")), "parked_at": int(rec.get("parked_at") or 0), "lane": rec.get("lane") or None}
 
 
-def standby_row(db, name: str) -> Tunnel | None:
-    return next((t for t in db.scalars(select(Tunnel).where(Tunnel.enabled.is_(False))) if (t.record or {}).get("standby_of") == name), None)          # (an extra strand of a Trident has `strand_of`, not `standby_of`: it is not this tunnel's standby)
-
-
 def _views(names: list[str]) -> dict[str, dict]:
     """{tunnel name: {"p": the tunnel, "s": its standby}} as plain data (two reads of the table, no session held): each is None when there is no such row."""
     with session() as db:

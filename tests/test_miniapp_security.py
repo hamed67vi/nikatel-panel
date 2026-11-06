@@ -255,6 +255,7 @@ def test_a_merged_pair_that_is_the_only_kind_has_no_heading_of_the_merged_server
     g = res["values"]["buymerge1"]
     assert g["noStepOne"] and g["tabs"] == 3 and g["plans"] == 2 and g["heads"] == 1 and g["head"] and g["byPrice"] and g["unlim"], g
 
+@pytest.mark.skipif(PHP is None, reason="php is not installed here")
 def test_the_merge_file_is_read_the_way_the_bot_reads_it(tmp_path):
     """bot/server_merge.php smMap(): {"child": parent}; a chain (the parent is itself a child), a self-map, zero or a negative id are ignored; no file or a broken one = no merge"""
     assert "'/../settings/server_merge.json'" in _fn("mergeMap")

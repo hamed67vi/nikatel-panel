@@ -29,7 +29,6 @@ from .telegram import send_file
 log = get_logger("backup")
 FILES = ("auth.json", "secret.key", "known_hosts", "backup.pass")
 PARTS = {"panel": ("Panel", "database, settings, SSH keys of the panel"), "bot": ("Shop bot", "the bot database (users, orders, payments, plans)")}
-MAX_BOT_DUMP = 30_000_000
 
 
 def pass_file() -> Path:

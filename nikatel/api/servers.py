@@ -414,6 +414,8 @@ def forget_hostkey(server_id: int):
         drop_known_host(host, port)
     except subprocess.TimeoutExpired:
         raise HTTPException(status_code=504, detail="ssh-keygen did not answer in 15 s") from None
+    except FileNotFoundError:
+        raise HTTPException(status_code=503, detail="ssh-keygen is not installed on the machine that runs the panel (the openssh-client package)") from None
 
     with session() as db:
         emit(db, "info", "servers", f"Forgot the SSH host key of {name}; it is learnt again on the next check.", name)

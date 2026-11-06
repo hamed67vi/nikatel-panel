@@ -68,4 +68,4 @@ def test_the_job_measures_every_tunnel_and_survives_a_failure(monkeypatch):
         raise ValueError("no")
 
     monkeypatch.setattr(tunnel_test, "quality_all", boom)
-    bt.refresh()
+    assert bt.refresh() is None                              # the failure is swallowed, the job lives on

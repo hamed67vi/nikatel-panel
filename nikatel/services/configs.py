@@ -855,7 +855,7 @@ def _sub_sig(name: str, nodes: list[dict], excluded: set[str]) -> str:
         sub = db.scalar(select(Subscription).where(Subscription.name == name))
         known = sorted(sub.nodes or []) if sub is not None else []
 
-    return hashlib.sha1(json.dumps([sorted((n["name"], n["uri"]) for n in nodes), sorted(excluded), held, known]).encode()).hexdigest()
+    return hashlib.sha1(json.dumps([sorted((n["name"], n["uri"]) for n in nodes), sorted(excluded), held, known]).encode(), usedforsecurity=False).hexdigest()
 
 
 def sync_all_subscriptions() -> None:

@@ -1201,7 +1201,6 @@ function serverGridHtml(s) {
   const pings = false && fl && state.flt === s.id ? `<div class="gw-out"><b>Pings to ${esc(s.host)} from Iran</b><div class="ob-inbounds">${fl.nodes.map(n => `<span><b class="${n.pending ? "mut" : n.ok === n.total ? "gw-ok" : n.ok ? "" : "err"}">${n.pending ? "…" : n.ok + "/" + n.total}</b> ${esc(n.city)} <small class="mut">${esc(n.asn)}${n.avg_ms != null ? " · " + n.avg_ms + " ms" : ""}</small></span>`).join("")}</div>${fl.note ? `<small class="mut">${esc(fl.note)}</small>` : ""}</div>` : "";
   return `<div class="sgrid">${sys}${res}${acc}</div>${pings}`;
 }
-function serverLinesHtml() { return ""; }
 function serverPartHtml(s, tab) {
   const f = s.facts || {}, x = s.extra || {}, ab = x.abuse || {}, fl = x.iran_filter, geo = x.geo || {};
   const abuseOn = ab.installed || (f.abuse_rules || 0) > 0;
@@ -2428,12 +2427,6 @@ window.foPreview = async () => {
   catch (e) { showModal("<b>👁 If it went off</b>", `<div class="err">${esc(e.message)}</div>`); }
 };
 window.foUndo = async id => { if (!await gconfirm("Point the DNS records back at the old server address? The tunnels stay where they are.", {danger: true})) return; try { const r = await api("/api/failover/" + encodeURIComponent(id) + "/undo", {method: "POST"}); toast("✓ " + r.changed.length + " record(s) pointed back", "ok"); refresh(); } catch (e) { toast("✕ " + e.message, "bad"); } };/* a page in tabs: every top-level element of #page carries data-tab; the bar at the top shows one group at a time (the choice is kept in this browser) */
-function pageTabs(key, tabs, dflt, counts = {}) {
-  const saved = localStorage.getItem("nk.tab." + key), cur = tabs.some(t => t[0] === saved) ? saved : dflt;
-  document.querySelectorAll("#page > [data-tab]").forEach(el => el.classList.toggle("hidden", el.dataset.tab !== cur));
-  if (tabs.length > 1) $("#page").insertAdjacentHTML("afterbegin", `<div class="fstrip"><div class="tabs set-tabs">${tabs.map(([k, l]) => `<button class="${k === cur ? "on" : ""}" onclick="localStorage.setItem('nk.tab.${key}','${k}');refresh()">${l}${counts[k] ? ` <i class="cnt">${counts[k]}</i>` : ""}</button>`).join("")}</div></div>`);
-  return cur;
-}
 /* DNS changes (next to the history): every record the failover re-pointed in the CDN, each with its own Restore */
 const dnsCard = (fo, av = {}, irn = []) => {
   const rows = (fo && fo.dns_log) || [];
@@ -2543,7 +2536,6 @@ window.apMoveTo = async (id, iranId, name) => {
 INFO.configs = ["Users", "The users of your Marzban and PasarGuard panels, and everything else the panels hold: hosts, groups, nodes, cores, admins and settings. Pick a panel in the bar."];      // the page is called Users (the Configs list is off: CONFIGS_UI)
 const cf = {open: null, edit: null, sub: null, q: "", group: localStorage.getItem("nk.cfgroup") || "__all"};
 const FLAGS = {de: "de", germany: "de", fi: "fi", finland: "fi", nl: "nl", netherlands: "nl", us: "us", usa: "us", unitedstates: "us", fr: "fr", france: "fr", gb: "gb", uk: "gb", unitedkingdom: "gb", england: "gb", tr: "tr", turkey: "tr", ae: "ae", uae: "ae", emirates: "ae", dubai: "ae", se: "se", sweden: "se", pl: "pl", poland: "pl", ru: "ru", russia: "ru", ir: "ir", iran: "ir", ca: "ca", canada: "ca", jp: "jp", japan: "jp", sg: "sg", singapore: "sg", hk: "hk", hongkong: "hk", it: "it", italy: "it", es: "es", spain: "es", at: "at", austria: "at", ch: "ch", switzerland: "ch", kz: "kz", kazakhstan: "kz", am: "am", armenia: "am", az: "az", ge: "ge", georgia: "ge", qa: "qa", qatar: "qa", bh: "bh", bahrain: "bh", om: "om", oman: "om", lt: "lt", lv: "lv", ee: "ee", cz: "cz", czech: "cz", czechia: "cz", ro: "ro", romania: "ro", bg: "bg", bulgaria: "bg", gr: "gr", greece: "gr", pt: "pt", portugal: "pt", ie: "ie", ireland: "ie", no: "no", norway: "no", dk: "dk", denmark: "dk", be: "be", belgium: "be", lu: "lu", ua: "ua", ukraine: "ua", md: "md", rs: "rs", serbia: "rs", in: "in", india: "in", kr: "kr", korea: "kr", au: "au", australia: "au", br: "br", brazil: "br", mx: "mx", za: "za", cn: "cn", china: "cn", tw: "tw", taiwan: "tw", vn: "vn", vietnam: "vn", th: "th", thailand: "th", my: "my", malaysia: "my", id: "id", indonesia: "id", ph: "ph", eg: "eg", egypt: "eg", sa: "sa", saudi: "sa", kw: "kw", kuwait: "kw", iq: "iq", iraq: "iq", pk: "pk", pakistan: "pk", il: "il", cy: "cy", cyprus: "cy", mt: "mt", malta: "mt", hu: "hu", hungary: "hu", sk: "sk", si: "si", hr: "hr", croatia: "hr", fin: "fi", ger: "de", ned: "nl", fra: "fr", tur: "tr", ita: "it", swe: "se", pol: "pl", can: "ca", aus: "au", usa2: "us"};
-function cfCode(name) { for (const t of String(name || "").toLowerCase().split(/[^a-z]+/)) if (FLAGS[t]) return FLAGS[t].toLowerCase(); return ""; }      // the country of a config name, "" when none
 function cfFlag(name) { for (const t of String(name || "").toLowerCase().split(/[^a-z]+/)) if (FLAGS[t]) return `<small class="cc" title="${esc(FLAGS[t].toUpperCase())}">${esc(FLAGS[t].toUpperCase())}</small> `; return ""; }   // the country code as small text instead of a flag picture: calmer lists
 const pingCls = v => v == null ? "mut" : v < 800 ? "ok" : v < 1000 ? "warn" : "bad";   // config delay: under 800 ms green, 800-999 yellow, above red
 const mb = v => v == null ? "—" : Number(v).toFixed(v >= 100 ? 0 : 1);
@@ -2861,14 +2853,6 @@ PAGES.panels = async () => {
   if (pn.tab === "hosts") pnHostsLoad(p.id);
   if (window.pgTabs && window.pgTabs[pn.tab]) { const box = $("#pn-body"); if (box) { box._qs = nkQuietDraw() ? refresh.qStart : 0; window.pgTabs[pn.tab].render(p.id, box).catch(e => pgError(box, e)); } }      // (box._qs: this tab is read again by a timer, nobody touched the page since - pgPaint then draws nothing when the tab says the same)      // a tab of a pg_*.js file draws itself
 };
-function pnOverviewHtml(p) {
-  const s = p.stats || {}, nodes = p.nodes || [], bad = nodes.filter(n => !["connected", "healthy", "disabled"].includes(n.status));
-  return `<div class="card"><h3>Nodes <span class="sp"></span><span class="pill ${bad.length ? "err" : "ok"}">${bad.length ? bad.length + " not connected" : nodes.length ? "all connected" : "none"}</span></h3>${pnNodesHtml(p)}</div>
-    <div class="card"><h3>About this panel</h3><div class="kv"><div><span>type</span> ${esc(p.type)} · <span>version</span> ${esc(p.version || "—")}</div><div><span>users</span> ${s.users_total ?? "—"} total · ${s.users_active ?? "—"} active · ${s.users_online ?? "—"} online right now</div>
-      ${CONFIGS_UI ? `<div><span>test config</span> ${s.test_user ? `<b class="gw-ok">✓</b> <span class="mono">${esc(s.test_user)}</span> — kept alive and measured on the probe as the group <b>${esc(p.name)}</b>` : "none yet — press <b>Test config on probe</b> above"}</div>` : ""}
-      <div><span>checked</span> ${p.checked_at ? ago(p.checked_at) + " ago" : "never"} · every 2 minutes${p.last_error ? ` · <span class="err">${esc(p.last_error)}</span>` : ""}</div></div>
-      <small class="mut">Open <b>Users</b> for the user list (search, status filter, edit, bulk actions) and <b>Hosts</b> for the address:port of every subscription link — they are read from the panel only when you open them.</small></div>`;
-}
 function fmtB(b) { if (b == null) return "—"; const u = ["B", "KB", "MB", "GB", "TB"]; let i = 0; while (b >= 1024 && i < u.length - 1) { b /= 1024; i++; } return b.toFixed(i >= 3 ? 2 : 0) + " " + u[i]; }
 function pnNodesHtml(p) {
   const rows = (p.nodes || []).map(n => { const ok = ["connected", "healthy", "disabled"].includes(n.status); return `<tr class="${ok ? (n.status === "disabled" ? "" : "up") : "down"}"><td class="name">${esc(n.name)}</td><td><span class="st ${ok ? (n.status === "disabled" ? "" : "up") : "down"}">${esc(n.status || "?")}</span></td><td class="mut">${esc(n.address)}</td><td class="mut">${esc(n.xray || "")}</td><td class="mut" title="${esc(n.message)}">${esc(n.message).slice(0, 60)}${n.fails ? ` <span class="pill err">${n.fails} checks</span>` : ""}</td>

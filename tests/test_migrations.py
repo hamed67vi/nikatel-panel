@@ -46,6 +46,9 @@ def test_add_column_is_idempotent():
     with session() as s:
         dbmod._add_column(s, "jobs", "last_failure", "VARCHAR(300) DEFAULT ''")
         dbmod._add_column(s, "jobs", "last_failure", "VARCHAR(300) DEFAULT ''")
+        cols = [r[1] for r in s.execute(text("PRAGMA table_info(jobs)"))]
+
+    assert cols.count("last_failure") == 1
 
 
 def test_the_connection_pool_is_big_enough_for_the_jobs_and_the_pages():

@@ -238,7 +238,6 @@ def prune(now: int | None = None) -> int:
 
 
 # ------------------------------------------------------------------ reading the hours back
-WINDOWS = (("24h", 1), ("7d", 7), ("30d", 30))
 
 
 def tehran_day(ts: int) -> int:

@@ -41,7 +41,6 @@ ENABLED = True       # the kill switch of the whole DNS failover (tests flip it)
 TTL_GRACE = 300      # seconds the old tunnel lives on after the DNS changed, on top of the record's TTL (clients that still hold the old address)
 TTL_WAIT_MAX = 900
 QUIET_LIMIT = 1800   # after the DNS grace, an old tunnel that still carries the users' traffic is waited for this long; if it is still busy it is KEPT (never cut)
-ROUTE_CAUSES = ("gre_blocked", "route_cut", "lossy_route", "port_blocked")
 REASONS = {"down": "the server does not answer",
            "resources": "the server's resources are exhausted",
            "return": "the server is back and healthy",
@@ -720,11 +719,6 @@ def _describe(p: dict) -> str:
     tgt = p.get("target")
     return (f"move {len(p['tunnels'])} tunnel(s) ({names}) to {tgt['name'] if tgt else '—'} and point {len(p['dns'])} DNS record(s)"
             f" ({', '.join(d['fqdn'] for d in p['dns']) or 'none'}) at {tgt['ip'] if tgt else '—'}")
-
-
-def _notify_plan(p: dict, headline: str) -> None:
-    _notice(f"🔶 {headline}\nPlan: {_describe(p)}." + (f"\nAlso moved to keep the DNS consistent: {', '.join(p['pulled'])}." if p.get("pulled") else "")
-            + (f"\nProblems: {'; '.join(p['problems'])}" if p.get("problems") else ""))
 
 
 def _busy(s: dict, sid: int, now: int) -> bool:
