@@ -230,13 +230,15 @@ def sample_server(server_id: int) -> None:
 
                 return
 
-            if pulse.proven(srv.id) and "key is not accepted" not in str(e) and "host key" not in str(e):
-                # somebody inside Iran sees it answer (services/vantage.py): the panel's host and its jump servers cannot open an SSH session to it, it is not "offline"
-                srv.last_error = f"{pulse.cut_prefix(srv.id, srv.host, srv.ssh_port)} ({pulse.proof_how(srv.id)}); the SSH session of the panel fails: {e}"[:300]
+            seen_how = pulse.proof_how(srv.id) if pulse.proven(srv.id) else pulse.NODE_HOW if pulse.node_connected(srv.host) else ""          # (somebody inside Iran saw it answer, or its PasarGuard node is connected)
+
+            if seen_how and "key is not accepted" not in str(e) and "host key" not in str(e):
+                # somebody inside Iran sees it answer (services/vantage.py) or its PasarGuard node is connected: the panel's host and its jump servers cannot open an SSH session to it, it is not "offline"
+                srv.last_error = f"{pulse.cut_prefix(srv.id, srv.host, srv.ssh_port)} ({seen_how}); the SSH session of the panel fails: {e}"[:300]
 
                 if was_online is not True:
                     srv.online = True
-                    emit(db, "warn", "servers", f"Server {srv.name} is on ({pulse.proof_how(srv.id)}); the SSH session of the panel to it fails: {e}", srv.name)
+                    emit(db, "warn", "servers", f"Server {srv.name} is on ({seen_how}); the SSH session of the panel to it fails: {e}", srv.name)
                     _wake_tunnels()
 
                 return

@@ -17,7 +17,7 @@ from sqlalchemy import select
 from .. import jobs
 from ..db import session
 from ..log import get_logger
-from ..models import Server
+from ..models import Panel, Server
 from .events import emit
 
 log = get_logger("servers")
@@ -37,7 +37,9 @@ _via_seen: dict[int, float] = {}          # server id -> when the panel last rea
 PROOF_GRACE = 200          # an Iran server the panel's host cannot connect to is ON while someone inside Iran saw it answer this recently (services/vantage.py asks every minute)
 IRAN_ONLY = "the panel's host cannot connect to it, but it is on"          # the start of the note in its row (the end says who saw it)
 PORT_BLOCKED = "the panel's host cannot reach its SSH port, but the server answers on other ports"          # the start of the note when only the SSH port is filtered from the panel's host (the owner, 2026-11-05: "check first - maybe only the port is closed - do not tag Iran only for nothing")
-PROBE_PORTS = (443, 80, 8443, 8080, 2222, 2083, 8000, 62050)          # tried at once (1.5 s) when the SSH port does not answer: a connection or a refusal proves the machine itself is reachable from the panel's host
+NODE_FRESH = 90          # a PasarGuard panel that was read this recently and shows a node of the server as connected is a second opinion: the server is ON (the panels job reads every 15 s)
+NODE_HOW = "its PasarGuard node is connected"          # the end of the note when that was the proof (the owner, 2026-11-06: TR2, TR3 and tr-test showed Offline for 80 s while their configs were connected)
+PROBE_PORTS = (443, 80, 8443, 8080, 2222, 2083, 8000, 62050)         # tried at once (1.5 s) when the SSH port does not answer: a connection or a refusal proves the machine itself is reachable from the panel's host
 PROBE_KEEP = 300          # the answer of the probe is kept this long (it is not asked at every pulse)
 _probe: dict[int, tuple[float, list[int]]] = {}
 _missed_at: dict[int, float] = {}          # server id -> when the panel's own connection to it last failed
@@ -114,6 +116,23 @@ def proven(sid: int) -> bool:
 
 def proof_how(sid: int) -> str:
     return (_proof.get(sid) or (0.0, ""))[1]
+
+
+def node_connected(host: str) -> bool:
+    """A second opinion for a server the panel's own check cannot reach: a PasarGuard panel read in the last NODE_FRESH seconds shows a node at this address as connected, so the server is ON and only the panel's own way in is cut.
+    The nodes talk to their own panel, not to ours (the owner, 2026-11-06 19:25: three Turkish servers showed Offline for 80 s while their configs stayed connected). A real power-off drops the node within PasarGuard's own check, and the next read says so."""
+    now = time.time()
+
+    with session() as db:
+        for p in db.scalars(select(Panel).where(Panel.enabled.is_(True), Panel.type == "pasarguard")):
+            if p.status == "down" or now - int(p.checked_at or 0) > NODE_FRESH:
+                continue
+
+            for n in p.nodes or []:
+                if isinstance(n, dict) and str(n.get("address") or "").strip() == host and str(n.get("status") or "").lower() == "connected" and not int(n.get("fails") or 0):
+                    return True
+
+    return False
 
 
 def missing(seconds: float = 30.0) -> list[int]:
@@ -248,10 +267,13 @@ def run() -> None:
             first = sid not in _missed_at or time.time() - _missed_at[sid] > 30
             _missed_at[sid] = time.time()
 
-            if proven(sid) or carried(sid, s.last_seen_at):          # (the panel's own way in is cut, but somebody inside Iran sees it or the way through another Iran server works: it is ON - and not asked again every 3 s)
+            seen_by = proven(sid) or carried(sid, s.last_seen_at)
+            on_node = not seen_by and node_connected(s.host)          # (a third opinion: the PasarGuard node of this address is connected - asked only when the first two have nothing, and only at a miss)
+
+            if seen_by or on_node:          # (the panel's own way in is cut, but somebody inside Iran sees it, the way through another Iran server works or its node is connected: it is ON - and not asked again every 3 s)
                 _miss[sid] = 0
                 _slow_until[sid] = time.time() + SLOW_SECONDS
-                how = proof_how(sid) if proven(sid) else "its SSH answers through another Iran server"
+                how = NODE_HOW if on_node else proof_how(sid) if proven(sid) else "its SSH answers through another Iran server"
                 ports = answering_ports(sid, s.host, s.ssh_port)          # [port-only] other ports answer: only the SSH port is blocked, the machine is NOT cut from abroad
                 note = f"{PORT_BLOCKED} (it answers on {', '.join(str(p) for p in ports)}; {how})" if ports else f"{IRAN_ONLY} ({how})"
 
