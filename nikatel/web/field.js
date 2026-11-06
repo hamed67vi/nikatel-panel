@@ -1,8 +1,10 @@
-/* The Field test tab of Network (1.69.235: ONE screen, no scrolling, drawn like a Mac app; the data comes from services/field.py): what the Iran test kit saw from REAL networks - a SIM's hotspot, a home line.
+/* The Field test tab of Network (1.69.236: ONE screen, no scrolling, drawn like a Mac app; the data comes from services/field.py): what the Iran test kit saw from REAL networks - a SIM's hotspot, a home line.
    A slim bar (networks, findings, newest run, the runs), a card per network (configs that work, the direct configs, the subscription names, the panel addresses - only what fails is named), one line per finding
    (click it for what would help) and every config as a list with a dot and the delay per network (hover for all its numbers). Routes: GET /api/field, /api/field/runs, /api/field/runs/{id}. Nothing is changed from here.
    Uses the helpers of app.js: $, api, esc, ago, when, renderSub, PAGES. */
-const fd = {d: null, runs: [], html: "", open: {}, err: "", all: false, exp: {}, pop: false};
+const fd = {d: null, runs: [], html: "", open: {}, err: "", all: false, exp: {}, pop: "", t: {list: [], problem: "", err: "", form: {name: "", city: "", sim: ""}}};          // (pop: "" | "runs" | "testers")
+const FD_SIMS = [["", "Asks at start"], ["Irancell", "Irancell"], ["MCI", "MCI"], ["Rightel", "Rightel"], ["Home", "Home line"]];
+const fdWho = s => String(s || "").replace(/^token:(tester-)?/, "");
 const FD_STATE = {ok: ["ok", "works"], partial: ["warn", "some sites cut"], slow: ["warn", "slow"], stall: ["bad", "stalls"], closed: ["bad", "opens nothing"], skipped: ["bad", "does not answer"]};
 const FD_DIRECT = {ok: "reachable", ipblock: "IP blocked", allports: "all ports filtered", port: "port dropped", reset: "port reset", refused: "server refuses", tls: "handshake dropped", sni: "name filtered"};
 const FD_KINDS = [["entry", "Entry"], ["cdn", "CDN"], ["direct", "Direct"], ["ai", "AI"], ["lab", "Lab"]];
@@ -17,8 +19,8 @@ const fdNetName = n => `${n.operator} · ${n.city} · ${n.connection}`;
 PAGES.field = async () => {
   renderSub();
   try {
-    const [d, r] = await Promise.all([api("/api/field"), api("/api/field/runs?limit=20")]);
-    fd.d = d; fd.runs = r.runs || []; fd.err = "";
+    const [d, r, t] = await Promise.all([api("/api/field"), api("/api/field/runs?limit=20"), api("/api/field/testers").catch(() => ({testers: [], problem: ""}))]);
+    fd.d = d; fd.runs = r.runs || []; fd.t.list = t.testers || []; fd.t.problem = t.problem || ""; fd.err = "";
   } catch (e) { fd.err = e.message; }
   fdDraw();
 };
@@ -33,26 +35,39 @@ function fdDraw() {
 
 function fdPage() {
   const d = fd.d;
-  if (!d || !d.networks.length) return `<div class="fd-app"><div class="fd-glass fd-empty"><b>No runs yet</b><span>The Iran test kit sends its result here by itself.</span></div></div>`;
+  if (!d || !d.networks.length) return `<div class="fd-app">${fdBar(null)}<div class="fd-glass fd-empty"><b>No runs yet</b><span>Add a tester (top right), send them the kit; the result comes here by itself.</span></div></div>`;
   return `<div class="fd-app" style="--n:${d.networks.length}">${fdBar(d)}<div class="fd-cards">${d.networks.map(fdCard).join("")}</div>${fdPatterns(d)}${fdFindings(d)}${fdGrid(d)}</div>`;
 }
 
-function fdBar(d) {
-  const fs = d.networks.flatMap(n => n.findings), bad = fs.some(f => f.level === "bad"), tone = bad ? "bad" : fs.length ? "warn" : "ok";
-  const newest = Math.min(...d.networks.map(n => n.age_s));
+function fdBar(d) {          // (d is null when nothing has arrived yet: only the buttons)
+  const fs = d ? d.networks.flatMap(n => n.findings) : [], bad = fs.some(f => f.level === "bad"), tone = bad ? "bad" : fs.length ? "warn" : "ok";
+  const newest = d ? Math.min(...d.networks.map(n => n.age_s)) : 0;
   return `<div class="fd-bar">
-    <span class="fd-chip"><i class="fd-dot ok"></i><b>${d.networks.length}</b><small>network${d.networks.length === 1 ? "" : "s"}</small></span>
+    ${d ? `<span class="fd-chip"><i class="fd-dot ok"></i><b>${d.networks.length}</b><small>network${d.networks.length === 1 ? "" : "s"}</small></span>
     <span class="fd-chip"><i class="fd-dot ${tone}"></i><b>${fs.length}</b><small>finding${fs.length === 1 ? "" : "s"}</small></span>
-    <span class="fd-chip"><small>newest</small><b>${ago(Date.now() / 1000 - newest)}</b></span>
+    <span class="fd-chip"><small>newest</small><b>${ago(Date.now() / 1000 - newest)}</b></span>` : ""}
     <span class="fd-sp"></span>
-    <span class="fd-leg"><i class="fd-dot ok"></i>works<i class="fd-dot warn"></i>partial<i class="fd-dot bad"></i>fails</span>
-    <button class="fd-btn${fd.pop ? " on" : ""}" onclick="fdPop()">Runs <small>${fd.runs.length}</small></button>
-    ${fd.pop ? fdRuns() : ""}
+    ${d ? `<span class="fd-leg"><i class="fd-dot ok"></i>works<i class="fd-dot warn"></i>partial<i class="fd-dot bad"></i>fails</span>` : ""}
+    <button class="fd-btn${fd.pop === "testers" ? " on" : ""}" onclick="fdPop('testers')">Testers <small>${fd.t.list.length}</small></button>
+    <button class="fd-btn${fd.pop === "runs" ? " on" : ""}" onclick="fdPop('runs')">Runs <small>${fd.runs.length}</small></button>
+    ${fd.pop === "runs" ? fdRuns() : fd.pop === "testers" ? fdTesters() : ""}
   </div>`;
 }
 
 function fdRuns() {
-  return `<div class="fd-pop fd-glass">${fd.runs.map(r => `<div class="fd-run"><div class="fd-rr" onclick="fdOpen(${r.id})"><b>${esc(r.operator)}</b><span class="mut">${esc(r.city)} · ${esc(r.connection)}</span><span class="fd-sp"></span><span class="fd-num ${r.findings ? "warn" : "ok"}">${r.findings}</span><span class="mut" title="${esc(when(r.ts))}">${ago(r.ts)}</span><span class="fd-chev">${fd.open[r.id] ? "⌃" : "⌄"}</span></div>${fd.open[r.id] ? `<pre>${esc(fd.open[r.id])}</pre>` : ""}</div>`).join("") || `<div class="mut">No runs.</div>`}</div>`;
+  return `<div class="fd-pop fd-glass">${fd.runs.map(r => `<div class="fd-run"><div class="fd-rr" onclick="fdOpen(${r.id})"><b>${esc(r.operator)}</b><span class="mut">${esc(r.city)} · ${esc(r.connection)}</span><span class="fd-sp"></span><span class="mut" title="sent by">${esc(fdWho(r.sender))}</span><span class="fd-num ${r.findings ? "warn" : "ok"}">${r.findings}</span><span class="mut" title="${esc(when(r.ts))}">${ago(r.ts)}</span><span class="fd-chev">${fd.open[r.id] ? "⌃" : "⌄"}</span></div>${fd.open[r.id] ? `<pre>${esc(fd.open[r.id])}</pre>` : ""}</div>`).join("") || `<div class="mut">No runs.</div>`}</div>`;
+}
+
+/* the people the kit is sent to (services/fieldtesters.py): a kit of their own - their name and city in it, a token of their own - to download and send; the panel reads what they send like any other run */
+function fdTesters() {
+  const t = fd.t, f = t.form;
+  return `<div class="fd-pop fd-glass fd-tp">
+    ${t.problem ? `<div class="fd-warn">${esc(t.problem)}</div>` : ""}${t.err ? `<div class="fd-warn">${esc(t.err)}</div>` : ""}
+    <div class="fd-add"><input id="fdtN" placeholder="Name" maxlength="30" value="${esc(f.name)}" oninput="fd.t.form.name = this.value"><input id="fdtC" placeholder="City" maxlength="24" value="${esc(f.city)}" oninput="fd.t.form.city = this.value">
+      <select id="fdtS" onchange="fd.t.form.sim = this.value">${FD_SIMS.map(([v, l]) => `<option value="${v}"${f.sim === v ? " selected" : ""}>${l}</option>`).join("")}</select><button class="fd-btn" onclick="fdTAdd()">Add</button></div>
+    ${t.list.map(x => `<div class="fd-tr"><b>${esc(x.name)}</b><span class="mut">${esc(x.city)}${x.sim ? " · " + esc(x.sim) : ""}</span><span class="fd-sp"></span><span class="mut">${x.runs ? `${esc(x.last_net)} · ${ago(x.last_ts)}` : "no run yet"}</span>
+      ${x.kit_ready && x.token_live ? `<a class="fd-btn" href="/api/field/testers/${esc(x.id)}/kit" download>Kit ⬇</a>` : `<span class="mut">no kit</span>`}<button class="fd-btn" title="a new kit with today's list and a new token; the old kit stops working" onclick="fdTRe('${esc(x.id)}')">↻</button><button class="fd-btn" title="remove: the token is revoked" onclick="fdTDel('${esc(x.id)}')">✕</button></div>`).join("") || `<div class="mut fd-tnone">Nobody yet: add a person and send them the kit.</div>`}
+  </div>`;
 }
 
 function fdCard(n) {
@@ -135,7 +150,22 @@ function fdGrid(d) {
   return `<div class="fd-grid">${big.map(([name, ls]) => `<div class="fd-blk fd-glass"><div class="fd-bh"><span class="fd-bk">${name}</span>${heads}</div>${rows(ls)}</div>`).join("")}${small.length ? `<div class="fd-blk fd-glass"><div class="fd-bh"><span class="fd-bk"></span>${heads}</div>${small.map(([name, ls]) => `<div class="fd-sub">${name}</div>${rows(ls)}`).join("")}</div>` : ""}</div>`;          // (the long lists are a column each; the short ones - Direct, AI, Lab - share one column under one header, so the whole list is one row of columns)
 }
 
-window.fdPop = () => { fd.pop = !fd.pop; fd.html = ""; fdDraw(); };
+async function fdLoadTesters() {
+  try { const r = await api("/api/field/testers"); fd.t.list = r.testers || []; fd.t.problem = r.problem || ""; } catch (e) { fd.t.err = e.message; }
+}
+window.fdPop = async which => {
+  fd.pop = fd.pop === which ? "" : which;
+  if (fd.pop === "testers") { fd.t.err = ""; await fdLoadTesters(); }
+  fd.html = ""; fdDraw();
+};
+const fdTDo = async (path, opts) => {
+  fd.t.err = "";
+  try { await api(path, opts); } catch (e) { fd.t.err = e.message; }
+  await fdLoadTesters(); fd.html = ""; fdDraw();
+};
+window.fdTAdd = async () => { const f = fd.t.form; if (!f.name.trim() || !f.city.trim()) { fd.t.err = "Give the name and the city."; fd.html = ""; fdDraw(); return; } await fdTDo("/api/field/testers", {method: "POST", body: JSON.stringify({name: f.name, city: f.city, sim: f.sim})}); if (!fd.t.err) fd.t.form = {name: "", city: "", sim: ""}; fd.html = ""; fdDraw(); };
+window.fdTRe = id => { if (confirm("Make a new kit for this person? The old kit stops working.")) fdTDo(`/api/field/testers/${encodeURIComponent(id)}/rebuild`, {method: "POST"}); };
+window.fdTDel = id => { if (confirm("Remove this tester? Their kit stops working (their runs stay).")) fdTDo(`/api/field/testers/${encodeURIComponent(id)}`, {method: "DELETE"}); };
 window.fdAll = () => { fd.all = !fd.all; fd.html = ""; fdDraw(); };
 window.fdExp = i => { fd.exp[i] = !fd.exp[i]; fd.html = ""; fdDraw(); };
 window.fdOpen = async id => {
