@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.69.236 - The Field test tab on one screen, in the style of a Mac app, with what the networks have in common
+
+> **In short:** the owner (2026-11-06): "build this section Mac-style, compress it, delete the extra explanations, show everything without scrolling". The tab is now ONE screen: a slim bar (networks, findings, newest run and the **Runs** list with each run's JSON), a card per network (how many configs work; Direct, Names and Panel as three numbers - only what fails is named), one line per finding (click it for what would help), a line of **what the networks have in common** (a config that fails on every network is the config's own problem; one that fails only in one city or on one network is a local filter) and every config as a list with a dot and the delay per network (hover a dot for all its numbers). The explanation lines are gone. It fits 1440x820 and 1920x1000 without scrolling; on a phone it stacks and scrolls.
+>
+> **به زبان ساده:** تب Field test حالا یک صفحه است و بدون اسکرول جا می‌شود، به سبک مک: یک نوار باریک (تعداد شبکه‌ها، یافته‌ها، تازه‌ترین اجرا و دکمهٔ Runs)، یک کارت برای هر شبکه (چند کانفیگ کار می‌کند؛ مستقیم‌ها، اسم‌ها و آدرس‌های پنل فقط به شکل عدد و فقط چیزی که خراب است اسمش نوشته می‌شود)، هر یافته یک خط (کلیک کنی راه‌حلش باز می‌شود)، یک خط «چه چیزی بین شبکه‌ها مشترک است» (کانفیگی که روی همهٔ شبکه‌ها خراب است مشکل خودِ کانفیگ است؛ کانفیگی که فقط در یک شهر یا یک شبکه خراب است فیلتر محلی است) و فهرست همهٔ کانفیگ‌ها با یک نقطهٔ رنگی و تأخیر برای هر شبکه. توضیحات اضافه پاک شد.
+
+- **Where:** `web/field.js` and `web/field.css` (rewritten), `web/app.js` (the tab has no sub-title line).
+- **Proved:** a walk in a real browser on a private panel with seeded runs: 1440x820 and 1920x1000 without scrolling, a phone width, a finding opened, the Runs list with a run's details.
+- **Not proved:** the page with many networks (six and more) and with real runs from several cities.
+
+
 ## 1.69.235 - ARM servers run the tunnel cores (BackPack, Backhaul, Chisel, Paqet, Xray)
 
 > **In short:** the owner (2026-11-06): "replace DE2 with this IP - build the tunnel - and name it DE2 in the panel", then, told that the box is an ARM machine and every tunnel type refused it as "x86_64 only": "add ARM". Every core publishes an arm64 build of the same release, so a server now gets the build of the machine it is. The panel keeps the ARM build beside the x86 one in its cache (`engines/<core>-arm64`), asks the server what it is (`uname -m`) before it copies, and the nightly update and the manual update put each build on the right machines in one run. Only a machine that is neither x86_64 nor aarch64 is still refused. Nothing changes for an x86 server: same files, same cache, same checks.
