@@ -28,12 +28,18 @@ from .events import emit
 
 log = get_logger("engines")
 ENGINES = {
-    "backhaul": {"title": "Backhaul", "repo": "Musixal/Backhaul", "asset": r"backhaul_linux_amd64\.tar\.gz$", "member": "backhaul", "bin": "/usr/local/bin/backhaul", "units": "backhaul-*.service"},
-    "backpack": {"title": "BackPack", "repo": "AminMGMT/BackPack", "asset": r"(?i)backpack[_-]linux[_-]amd64.*\.(tar\.gz|zip)$", "member": "backpack", "bin": "/usr/local/bin/backpack", "units": "backpack-*.service"},
-    "paqet": {"title": "Paqet", "repo": "hanselime/paqet", "asset": r"^paqet-linux-amd64.*\.tar\.gz$", "member": "paqet_linux_amd64", "bin": "/usr/local/bin/paqet", "units": "paqet-*.service"},
-    "chisel": {"title": "Chisel", "repo": "jpillora/chisel", "asset": r"^chisel_.*_linux_amd64\.gz$", "member": "chisel", "bin": "/usr/local/bin/nikatel-chisel", "units": "chisel-*.service"},
-    "xray": {"title": "Xray", "repo": "XTLS/Xray-core", "asset": r"^Xray-linux-64\.zip$", "member": "xray", "bin": "/opt/nikatel-xgw/xray", "units": "nikatel-xgw.service"},
+    "backhaul": {"title": "Backhaul", "repo": "Musixal/Backhaul", "asset": r"backhaul_linux_amd64\.tar\.gz$", "member": "backhaul", "bin": "/usr/local/bin/backhaul", "units": "backhaul-*.service",
+                 "arm64": {"asset": r"backhaul_linux_arm64\.tar\.gz$", "member": "backhaul"}},
+    "backpack": {"title": "BackPack", "repo": "AminMGMT/BackPack", "asset": r"(?i)backpack[_-]linux[_-]amd64.*\.(tar\.gz|zip)$", "member": "backpack", "bin": "/usr/local/bin/backpack", "units": "backpack-*.service",
+                 "arm64": {"asset": r"(?i)backpack[_-]linux[_-]arm64.*\.(tar\.gz|zip)$", "member": "backpack"}},
+    "paqet": {"title": "Paqet", "repo": "hanselime/paqet", "asset": r"^paqet-linux-amd64.*\.tar\.gz$", "member": "paqet_linux_amd64", "bin": "/usr/local/bin/paqet", "units": "paqet-*.service",
+              "arm64": {"asset": r"^paqet-linux-arm64.*\.tar\.gz$", "member": "paqet_linux_arm64"}},
+    "chisel": {"title": "Chisel", "repo": "jpillora/chisel", "asset": r"^chisel_.*_linux_amd64\.gz$", "member": "chisel", "bin": "/usr/local/bin/nikatel-chisel", "units": "chisel-*.service",
+               "arm64": {"asset": r"^chisel_.*_linux_arm64\.gz$", "member": "chisel"}},
+    "xray": {"title": "Xray", "repo": "XTLS/Xray-core", "asset": r"^Xray-linux-64\.zip$", "member": "xray", "bin": "/opt/nikatel-xgw/xray", "units": "nikatel-xgw.service",
+             "arm64": {"asset": r"^Xray-linux-arm64-v8a\.zip$", "member": "xray"}},
 }
+ARCH_OF = {"x86_64": "amd64", "amd64": "amd64", "aarch64": "arm64", "arm64": "arm64"}      # (`uname -m` -> the build of a core that server runs; the panel's own cache of a core is the amd64 one, the arm64 ones are beside it)
 WATCH = 24                            # seconds the units of a swapped core are watched after their restart (engine_swap): a build that starts and crashes again shows within it
 TUNNEL_WAIT = 45.0                    # seconds the tunnels that carried traffic before a swap get to be "up" again
 _STATE: dict = {"checked_at": 0, "result": None, "job": None, "checking": False, "wireguard": None, "wg_job": None}
@@ -52,6 +58,17 @@ def parse_versions(out: str) -> dict:
                 d[p[1]] = (("v" + m.group(0).lstrip("v")) if m else ("none" if "NONE" in p[2] else p[2].strip()[:20]))
 
     return d
+
+
+def arch_key(machine: str) -> str:
+    """Pure: the build of a core that a server needs, from its `uname -m` - "amd64" (x86_64) or "arm64" (aarch64); "" for anything else (32-bit, RISC-V ...), which no core is built for here."""
+    return ARCH_OF.get(str(machine or "").strip().lower(), "")
+
+
+def parse_arch(out: str) -> str:
+    """Pure: the machine a server says in the answer of `engine_sha` (`ARCH=aarch64`) or `engine_versions` (`ARCH aarch64`); "" when the answer has none."""
+    m = re.search(r"^ARCH[= ](\S+)", str(out), re.MULTILINE)
+    return m.group(1) if m else ""
 
 
 def parse_wg(out: str) -> dict:
@@ -89,7 +106,14 @@ def latest(engine: str) -> dict:
     if not tag or not asset:
         raise RuntimeError("the release has no linux amd64 build")
 
-    return {"version": "v" + tag.lstrip("v"), "url": asset["browser_download_url"], "page": rel.get("html_url", ""), "digest": str(asset.get("digest", "")).replace("sha256:", "")}
+    out = {"version": "v" + tag.lstrip("v"), "url": asset["browser_download_url"], "page": rel.get("html_url", ""), "digest": str(asset.get("digest", "")).replace("sha256:", "")}
+    a64 = e.get("arm64")
+    asset64 = next((a for a in rel.get("assets", []) if a64 and re.search(a64["asset"], a.get("name", ""))), None)
+
+    if asset64:          # (the same release, the build for an ARM server; a release without one still serves every x86 server)
+        out["arm64"] = {"url": asset64["browser_download_url"], "digest": str(asset64.get("digest", "")).replace("sha256:", "")}
+
+    return out
 
 
 def check() -> dict:
@@ -110,21 +134,22 @@ def check() -> dict:
 
         try:
             raw = run_script(node, "engine_versions", timeout=25)
-            return name, role, parse_versions(raw), parse_wg(raw)
+            return name, role, parse_versions(raw), parse_wg(raw), parse_arch(raw)
         except (SSHError, ValueError):
-            return name, role, None, None
+            return name, role, None, None, ""
 
     with ThreadPoolExecutor(8) as ex:
-        rows4 = list(ex.map(one, nodes))
+        rows5 = list(ex.map(one, nodes))
 
-    rows = [(n, r, v) for n, r, v, _ in rows4]
-    _STATE["wireguard"] = wg_summary([(n, r, w) for n, r, _, w in rows4])
+    rows = [(n, r, v) for n, r, v, _, _ in rows5]
+    machines = {n: m for n, _, _, _, m in rows5}
+    _STATE["wireguard"] = wg_summary([(n, r, w) for n, r, _, w, _ in rows5])
 
     for eng, info in result.items():
         for name, role, vers in rows:
             v = None if vers is None else vers.get(eng, "none")
             state = "unreachable" if vers is None else "not installed" if v == "none" else "current" if ("latest" in info and v == info["latest"]) else "outdated" if "latest" in info else "unknown"
-            info["nodes"].append({"name": name, "role": role, "version": v, "state": state})
+            info["nodes"].append({"name": name, "role": role, "version": v, "state": state, "arch": arch_key(machines.get(name, "")) or machines.get(name, "")})
 
         info["outdated"] = sum(1 for n in info["nodes"] if n["state"] == "outdated")
         info["held_back"] = bool(info.get("latest")) and bad_versions().get(eng) == info.get("latest")      # (this release did not hold on a server and was put back: the automatic update leaves it)
@@ -171,22 +196,27 @@ def last() -> dict:
     return {"engines": _STATE["result"] or {}, "checked_at": _STATE["checked_at"], "job": _STATE["job"], "checking": bool(_STATE.get("checking")), "wireguard": _STATE.get("wireguard"), "wg_job": _STATE.get("wg_job"), "auto": auto_state()}
 
 
-def _download(engine: str) -> tuple[str, bytes]:
+def _download(engine: str, arch: str = "amd64") -> tuple[str, bytes]:
     lt = latest(engine)
-    data = httpx.get(lt["url"], timeout=300, follow_redirects=True).content
+    pick = lt if arch == "amd64" else lt.get(arch)
 
-    if lt["digest"] and hashlib.sha256(data).hexdigest() != lt["digest"]:
+    if not pick:
+        raise RuntimeError(f"the release has no linux {arch} build")
+
+    data = httpx.get(pick["url"], timeout=300, follow_redirects=True).content
+
+    if pick["digest"] and hashlib.sha256(data).hexdigest() != pick["digest"]:
         raise RuntimeError("the download does not match the checksum published by the release: nothing was changed")
 
-    if not lt["digest"]:          # an older release publishes no digest: it is used (the size and the archive are still checked), but the log says it was not verified
+    if not pick["digest"]:          # an older release publishes no digest: it is used (the size and the archive are still checked), but the log says it was not verified
         log.warning("engine %s %s: the release publishes no sha256 digest - the download could not be verified", engine, lt["version"])
 
-    member = ENGINES[engine]["member"]
+    member = ENGINES[engine]["member"] if arch == "amd64" else ENGINES[engine][arch]["member"]
 
-    if lt["url"].endswith(".zip"):
+    if pick["url"].endswith(".zip"):
         with zipfile.ZipFile(io.BytesIO(data)) as z:
             binary = z.read(member)
-    elif lt["url"].endswith(".gz") and not lt["url"].endswith(".tar.gz"):
+    elif pick["url"].endswith(".gz") and not pick["url"].endswith(".tar.gz"):
         import gzip
 
         binary = gzip.decompress(data)
@@ -205,23 +235,28 @@ def _download(engine: str) -> tuple[str, bytes]:
     return lt["version"], binary
 
 
-def cache_file(engine: str) -> Path:
-    """The core binary in the panel's cache (<data>/../engines/<engine>); downloaded and verified when missing."""
+def cache_path(engine: str, arch: str = "amd64", version: str = "") -> Path:
+    """Where the panel keeps a core: <data>/../engines/<engine> for x86 (as it always did), <engine>-arm64 beside it for an ARM server; with a version, the copy kept for that release (<engine>-<version>, <engine>-arm64-<version>)."""
+    stem = engine if arch == "amd64" else f"{engine}-{arch}"
+    return get_settings().data_dir.parent / "engines" / (f"{stem}-{version}" if version else stem)
+
+
+def cache_file(engine: str, arch: str = "amd64") -> Path:
+    """The core binary in the panel's cache (<data>/../engines/<engine>, <engine>-arm64 for an ARM server); downloaded and verified when missing."""
     if engine not in ENGINES:
         raise ValueError("unknown engine")
 
-    cache = get_settings().data_dir.parent / "engines"
-    cache.mkdir(parents=True, exist_ok=True)
-    f = cache / engine
+    f = cache_path(engine, arch)
+    f.parent.mkdir(parents=True, exist_ok=True)
 
     if f.exists() and f.stat().st_size > 1_000_000:
         return f
 
-    version, binary = _download(engine)
+    version, binary = _download(engine) if arch == "amd64" else _download(engine, arch)          # (x86 stays the one-argument call it always was)
     f.write_bytes(binary)
     f.chmod(0o755)
-    (cache / f"{engine}-{version}").write_bytes(binary)
-    log.info("cached %s %s (%d bytes)", engine, version, len(binary))
+    cache_path(engine, arch, version).write_bytes(binary)
+    log.info("cached %s %s %s (%d bytes)", engine, arch, version, len(binary))
     return f
 
 
@@ -264,14 +299,21 @@ def ensure_on_node(node: Node, engine: str, say=None, only_missing: bool = False
     """The node runs the same build of the core as the panel's cache. Returns True when it was (re)installed. With `only_missing` a core that is there is left exactly as it is (another build may be what
     the tunnels of that server run - a server added to the panel often has tunnels already): it is put there only when it is not."""
     e = ENGINES[engine]
+    probe = run_script(node, "engine_sha", {"BIN": e["bin"]}, timeout=30)
 
-    if only_missing and "SHA=none" not in run_script(node, "engine_sha", {"BIN": e["bin"]}, timeout=30):
+    if only_missing and "SHA=none" not in probe:
         return False
 
-    f = cache_file(engine)
+    machine = parse_arch(probe)
+    arch = arch_key(machine) if machine else "amd64"          # (an answer without the machine is an x86 server, as before)
+
+    if not arch:
+        raise RuntimeError(f"{e['title']} cannot be put on {node.host}: architecture {machine} is not supported (x86_64 and aarch64 only)")
+
+    f = cache_file(engine) if arch == "amd64" else cache_file(engine, arch)          # (an ARM server gets the ARM build of the same release: a binary of the wrong machine would never start)
     sha = hashlib.sha256(f.read_bytes()).hexdigest()
 
-    if f"SHA={sha}" in run_script(node, "engine_sha", {"BIN": e["bin"]}, timeout=30):
+    if f"SHA={sha}" in probe:
         return False
 
     _copy_to_node(node, engine, f)
@@ -489,7 +531,24 @@ def update(engine: str, only_missing: bool = False) -> dict:
 
         job["version"] = version
         info = (_STATE["result"] or {}).get(engine) or check()["engines"][engine]
-        targets = [n["name"] for n in info["nodes"] if n["state"] == ("not installed" if only_missing else "outdated")]
+        want = [n for n in info["nodes"] if n["state"] == ("not installed" if only_missing else "outdated")]
+        targets = [n["name"] for n in want]
+        arch_of = {n["name"]: ("amd64" if not n.get("arch") else arch_key(n["arch"])) for n in want}          # (a row without the machine is an x86 server, as before; "" = a machine no core is built for)
+        files: dict[str, tuple[Path, str]] = {} if only_missing else {"amd64": (newest, sha)}
+        files_err: dict[str, str] = {}
+
+        others = [] if only_missing else sorted({a for a in arch_of.values() if a not in ("", "amd64")})
+
+        for a in others:          # (the ARM build of the same release, only when a server that needs it is among the targets; when it cannot be had the x86 servers are still updated)
+            try:
+                v64, bin64 = _download(engine, a)
+                cache_path(engine, a, v64).write_bytes(bin64)
+                newest64 = cache_path(engine, a)
+                newest64.write_bytes(bin64)
+                newest64.chmod(0o755)
+                files[a] = (newest64, hashlib.sha256(bin64).hexdigest())
+            except (httpx.HTTPError, RuntimeError, ValueError, OSError) as err:
+                files_err[a] = str(err)[:140]
 
         with session() as db:
             nodes = [(s.id, s.name, Node(s.host, s.ssh_user, s.ssh_port)) for s in db.scalars(select(Server).where(Server.name.in_(targets)))]
@@ -500,10 +559,14 @@ def update(engine: str, only_missing: bool = False) -> dict:
             _sid, name, node = item
 
             try:
+                a = arch_of.get(name, "amd64")
+
                 if only_missing:
                     ensure_on_node(node, engine, only_missing=True)
+                elif a not in files:
+                    raise RuntimeError(files_err.get(a) or f"architecture {a or 'unknown'} is not supported (x86_64 and aarch64 only)")
                 else:
-                    _copy_to_node(node, engine, newest)                  # (the slow part, four servers at a time: only a file next to the binary - nothing runs from it yet)
+                    _copy_to_node(node, engine, files[a][0])             # (the slow part, four servers at a time: only a file next to the binary - nothing runs from it yet; the build of the machine the server is)
 
                 return name, ""
             except (SSHError, ValueError, RuntimeError, OSError, subprocess.SubprocessError) as e:
@@ -524,7 +587,7 @@ def update(engine: str, only_missing: bool = False) -> dict:
                 items.append({"name": name, "state": "failed", "detail": "not tried: " + job["halt"]})
             else:
                 with _SWAP_LOCK:                                         # (the swap restarts the units that run the core: ONE server at a time, so that what stands behind them is never all down at once)
-                    items.append(swap_one(job, engine, sid, name, node, sha, version))
+                    items.append(swap_one(job, engine, sid, name, node, files[arch_of.get(name, "amd64")][1], version))
 
         done = sum(1 for i in job["items"] if i["state"] == "ok")
 

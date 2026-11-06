@@ -664,8 +664,8 @@ def unfit_reason(f: dict) -> str:
     if not f.get("python"):
         return "has no python3 (needed for the test door)"
 
-    if f.get("arch") not in ("x86_64", "amd64"):
-        return f"has architecture {f.get('arch')} (x86_64 only)"
+    if not engines.arch_key(f.get("arch")):
+        return f"has architecture {f.get('arch')} (x86_64 and aarch64 only)"
 
     return ""
 
@@ -681,14 +681,14 @@ def _preflight(b: Build, iran: Node, foreign: Node) -> tuple[dict, dict]:
         if not f["python"]:
             raise PreflightError(f"{label} server {srv.name} has no python3 (needed for the test door)")
 
-        if f["arch"] not in ("x86_64", "amd64"):
-            raise PreflightError(f"{label} server {srv.name}: architecture {f['arch']} is not supported (x86_64 only)")
+        if not engines.arch_key(f["arch"]):
+            raise PreflightError(f"{label} server {srv.name}: architecture {f['arch']} is not supported (x86_64 and aarch64 only)")
 
     for p in b.ports:
         if p.listen in fi["tcp"]:
             raise RuntimeError(f"port {p.listen} is already in use on the Iran server; choose another port")
 
-    _say(b.aid, "Preflight: both servers inspected (root, python3, x86_64, ports free)")
+    _say(b.aid, "Preflight: both servers inspected (root, python3, x86_64 or aarch64, ports free)")
     return fi, ff
 
 

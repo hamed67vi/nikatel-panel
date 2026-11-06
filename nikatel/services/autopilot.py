@@ -723,7 +723,7 @@ def _probe_links(aid: int, snap: dict, kinds: list[str]) -> list[str]:
 
 
 def _unfit_servers(snap: dict) -> dict[str, str]:
-    """{server name: why} for each server of the pair that cannot run the types with a test door (BackPack, Paqet, Chisel): no python3, not root, not x86_64. Read only - the look every such build takes first,
+    """{server name: why} for each server of the pair that cannot run the types with a test door (BackPack, Paqet, Chisel): no python3, not root, a machine that is neither x86_64 nor aarch64. Read only - the look every such build takes first,
     asked here BEFORE the tunnel is removed, so that twenty builds that cannot work are not tried one after the other over a tunnel that is already gone. A server that does not answer is not judged."""
     with session() as db:
         servers = [db.get(Server, snap["iran_id"]), db.get(Server, snap["foreign_id"])]

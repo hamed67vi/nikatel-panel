@@ -541,11 +541,11 @@ def tools_missing(lines) -> bool:
     return any("wireguard-tools is not installed" in str(ln) for ln in list(lines or [])[-6:])
 
 
-UNFIT_MARKS = ("has no python3", "the SSH user is not root", "(x86_64 only)")
+UNFIT_MARKS = ("has no python3", "the SSH user is not root", "(x86_64 only)", "(x86_64 and aarch64 only)")          # (the old wording stays: a story saved before ARM was supported still reads as it did)
 
 
 def server_unfit(lines) -> bool:
-    """Pure: does the story of a build say it stopped because a SERVER cannot run the type at all - no python3 for the test door, not root, not x86_64 (BackPack, Paqet, Chisel)? Every type of that engine fails the same way
+    """Pure: does the story of a build say it stopped because a SERVER cannot run the type at all - no python3 for the test door, not root, a machine that is neither x86_64 nor aarch64 (BackPack, Paqet, Chisel)? Every type of that engine fails the same way
     on that server, so such a kind was NOT TESTED: it says nothing about the route (the Doctor remembers it as "could not be tried", never as "blocked")."""
     return any(m in str(ln) for ln in list(lines or [])[-6:] for m in UNFIT_MARKS)
 

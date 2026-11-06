@@ -90,14 +90,15 @@ def say_to(monkeypatch):
 def test_a_server_that_cannot_run_the_engine_is_told_from_a_route_that_fails():
     assert tunnel_test.server_unfit(["x", NO_PYTHON]) is True
     assert tunnel_test.server_unfit(["Stopped: Iran server ir1: the SSH user is not root"]) is True
-    assert tunnel_test.server_unfit(["Stopped: Foreign server f1: architecture aarch64 is not supported (x86_64 only)"]) is True
+    assert tunnel_test.server_unfit(["Stopped: Foreign server f1: architecture aarch64 is not supported (x86_64 only)"]) is True          # (a story saved before ARM was supported)
+    assert tunnel_test.server_unfit(["Stopped: Foreign server f1: architecture armv7l is not supported (x86_64 and aarch64 only)"]) is True
     assert tunnel_test.server_unfit([CANNOT_PING]) is False and tunnel_test.server_unfit([]) is False and tunnel_test.server_unfit(None) is False
     assert tunnel_test.server_unfit([NO_PYTHON] + ["later line"] * 7) is False          # only the end of the story counts
 
     ok = {"root": True, "python": True, "arch": "x86_64"}
     assert build_other.unfit_reason(ok) == "" and build_other.unfit_reason({**ok, "arch": "amd64"}) == ""
     assert "python3" in build_other.unfit_reason({**ok, "python": False}) and "not root" in build_other.unfit_reason({**ok, "root": False})
-    assert "aarch64" in build_other.unfit_reason({**ok, "arch": "aarch64"})
+    assert build_other.unfit_reason({**ok, "arch": "aarch64"}) == "" and "armv7l" in build_other.unfit_reason({**ok, "arch": "armv7l"})          # (1.69.235: an ARM server runs every core; only a machine with no build is unfit)
     assert build_other.unfit_reason(build_other.parse_simple_facts("ID=0\nPY=0\nARCH=x86_64\n")).startswith("has no python3")
     assert build_other.unfit_reason(build_other.parse_simple_facts("ID=0\nPY=1\nARCH=x86_64\nLISTEN=22\n")) == ""
 

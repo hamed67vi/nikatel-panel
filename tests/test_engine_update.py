@@ -23,7 +23,7 @@ from nikatel.services import engines
 def test_a_core_is_never_sent_as_base64_through_put_file_again():
     src = Path(engines.__file__).read_text(encoding="utf-8")
     update = src[src.index("def update(engine"): src.index("# ------------------------------------------------------------------ WireGuard tools")]
-    assert "put_file" not in update and "b64encode" not in update and "_copy_to_node(node, engine, newest)" in update
+    assert "put_file" not in update and "b64encode" not in update and "_copy_to_node(node, engine, files[a][0])" in update
 
 
 def test_the_pure_reading_of_the_swap_answer():

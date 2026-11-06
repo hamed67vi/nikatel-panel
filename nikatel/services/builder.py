@@ -597,7 +597,7 @@ def parse_facts(out: str) -> dict:
 
     return {"ips": kv.get("IPS", "").split(), "links": kv.get("LINKS", "").split(), "listen": {int(x) for x in kv.get("LISTEN", "").split() if x.isdigit()},
             "units": set(kv.get("UNITS", "").split()), "broken": kv.get("BROKEN", "").split(), "gre_mod": kv.get("GRE_MOD") == "1",
-            "backhaul": kv.get("BACKHAUL", "none") != "none", "backhaul_version": kv.get("BACKHAUL", ""), "iptables": kv.get("IPTABLES") == "1"}
+            "backhaul": kv.get("BACKHAUL", "none") != "none", "backhaul_version": kv.get("BACKHAUL", ""), "iptables": kv.get("IPTABLES") == "1", "arch": kv.get("ARCH", "")}
 
 
 # ------------------------------------------------------------------ build job
@@ -708,14 +708,26 @@ def ensure_backhaul(iran: Node, foreign: Node, fi: dict, ff: dict, aid: int) -> 
         raise RuntimeError("the backhaul binary is missing on both servers; install it on one of them first")
 
     src, dst = (iran, foreign) if fi["backhaul"] else (foreign, iran)
+    f_src, f_dst = (fi, ff) if fi["backhaul"] else (ff, fi)
     s = get_settings()
     cache = s.data_dir.parent / "engines"
     cache.mkdir(parents=True, exist_ok=True)
     local = cache / "backhaul"
     opts = ["-i", str(s.ssh_key), "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=accept-new", "-o", f"UserKnownHostsFile={s.known_hosts}", "-o", "ConnectTimeout=15"]
-    _say(aid, f"copying the backhaul binary from {src.host} to {dst.host} through the panel")
+    from . import engines  # (late: engines imports a great deal)
 
-    if not local.exists() or local.stat().st_size < 1024:
+    a_src, a_dst = (engines.arch_key(f.get("arch") or "x86_64") for f in (f_src, f_dst))          # (facts without the machine: an x86 server, as before)
+
+    if not a_dst:
+        raise RuntimeError(f"the backhaul binary cannot be put on {dst.host}: architecture {f_dst.get('arch')} is not supported (x86_64 and aarch64 only)")
+
+    if a_src != "amd64" or a_dst != "amd64":          # (an ARM server is on one side: the copy of the other machine would never start - the panel's own build for this machine, the release Update puts everywhere)
+        local = engines.cache_file("backhaul") if a_dst == "amd64" else engines.cache_file("backhaul", a_dst)
+        _say(aid, f"putting the {a_dst} backhaul build on {dst.host} from the panel's cache")
+    else:
+        _say(aid, f"copying the backhaul binary from {src.host} to {dst.host} through the panel")
+
+    if a_src == "amd64" and a_dst == "amd64" and (not local.exists() or local.stat().st_size < 1024):
         r = subprocess.run(["scp", *opts, "-P", str(src.port), "--", f"{ssh_target(src)}:/usr/local/bin/backhaul", str(local)], capture_output=True, text=True, timeout=240, check=False)
 
         if r.returncode != 0 or local.stat().st_size < 1024:

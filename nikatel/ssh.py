@@ -156,10 +156,12 @@ echo "ENGINE chisel $([ -x /usr/local/bin/nikatel-chisel ] && /usr/local/bin/nik
 echo "WGTOOL $(command -v wg >/dev/null 2>&1 && echo 1 || echo 0)"
 modprobe wireguard 2>/dev/null; echo "WGMOD $( (lsmod | grep -q '^wireguard' || [ -d /sys/module/wireguard ]) && echo 1 || echo 0)"
 echo "WGAPT $(command -v apt-get >/dev/null 2>&1 && echo 1 || echo 0)"
+echo "ARCH $(uname -m)"
 """, {}),
 
-    # checksum of one core binary (is the same build installed as the one in the panel's cache?)
+    # checksum of one core binary (is the same build installed as the one in the panel's cache?) and the machine the server is (an ARM server gets the ARM build of the core)
     "engine_sha": (r"""if [ -x '@BIN@' ]; then echo "SHA=$(sha256sum '@BIN@' | awk '{print $1}')"; else echo SHA=none; fi
+echo "ARCH=$(uname -m)"
 """, {"BIN": r"^/(usr/local/bin|opt/nikatel-xgw)/[A-Za-z0-9._-]{1,40}$"}),
 
     # what the BackPack / Paqet / Chisel builders must know about a server
@@ -628,6 +630,7 @@ echo "BROKEN=$(systemctl list-units --all --no-legend --plain 'backhaul-*.servic
 modprobe ip_gre 2>/dev/null; echo "GRE_MOD=$( (lsmod | grep -q '^ip_gre' || [ -d /sys/module/ip_gre ]) && echo 1 || echo 0)"
 echo "BACKHAUL=$([ -x /usr/local/bin/backhaul ] && /usr/local/bin/backhaul -v 2>&1 | head -1 || echo none)"
 echo "IPTABLES=$(command -v iptables >/dev/null 2>&1 && echo 1 || echo 0)"
+echo "ARCH=$(uname -m)"
 """, {}),
 
     # what a Backhaul link that is NOT plain GRE needs from a server (read-only apart from loading a module): the WireGuard module and tool, the FOU module (GRE inside UDP), the UDP ports in use,
