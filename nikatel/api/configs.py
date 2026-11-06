@@ -289,10 +289,12 @@ class WarpWatchIn(BaseModel):
 
 @router.get("/settings/warpwatch")
 def warpwatch_get():
-    """The WARP watch (an AI config down for 7 minutes with its node up gets its node reconnected): on or off, and how many times each node was reconnected in the last 24 hours."""
+    """The WARP watch (an AI config down for 7 minutes with its node up gets its node reconnected, up to 6 times a day with a longer wait each time): on or off, how many times each node was reconnected in the last 24 hours, and the flags (what it is doing about each AI config that is down)."""
+    from ..services import warpwatch
+
     d = st.get("warpwatch")
     now = time.time()
-    return {"ok": True, "on": bool(d.get("on", True)), "reconnects_24h": {k: sum(1 for t in v if now - float(t) < 86400) for k, v in (d.get("done") or {}).items()}}
+    return {"ok": True, "on": bool(d.get("on", True)), "reconnects_24h": {k: sum(1 for t in v if now - float(t) < 86400) for k, v in (d.get("done") or {}).items()}, "flags": warpwatch.flags_view(d)}
 
 
 @router.put("/settings/warpwatch")

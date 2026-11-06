@@ -1,4 +1,5 @@
-"""The WARP watch (services/warpwatch.py, 1.69.228): an AI config down for 7 minutes with its tunnel and node up gets that node reconnected - once in 30 minutes, three times a day, never a guess."""
+"""The WARP watch (services/warpwatch.py, 1.69.228; 1.69.239 patient and loud): an AI config down for 7 minutes with its tunnel and node up gets that node reconnected - up to six times a day, each wait longer
+(15, 30, 60, then 120 minutes), never a guess; the Doctor page carries a flag for every config it works on, the "needs a look by hand" event is repeated every three hours, and a config that stays up drops its flag."""
 import time
 
 import pytest
@@ -22,21 +23,40 @@ def test_a_config_is_acted_on_only_after_it_was_down_long_enough_and_everything_
     assert warpwatch.is_ai("AI-1") and warpwatch.is_ai("ai-2") and warpwatch.is_ai("AI2") and not warpwatch.is_ai("TCP-1") and not warpwatch.is_ai("Maintain") and not warpwatch.is_ai("Cloud-3")
 
     todo, held = warpwatch.decide([down()], {}, {}, NOW)
-    assert todo == {} and "exactly one node" in held[0][1]                                              # not placed for sure: not touched
+    assert todo == {} and "exactly one node" in held[0][1] and held[0][2] == "held"                    # not placed for sure: not touched, and flagged: nobody watches it
     todo, held = warpwatch.decide([down()], {"AI-2": {**PLACED["AI-2"], "node_status": "disconnected"}}, {}, NOW)
-    assert todo == {} and "not connected" in held[0][1]                                                 # the panel's own reconnect handles a node that dropped
+    assert todo == {} and "not connected" in held[0][1] and held[0][2] == ""                            # the panel's own reconnect handles a node that dropped: nothing to flag
     todo, held = warpwatch.decide([down()], {"AI-2": {**PLACED["AI-2"], "tunnel_state": "down"}}, {}, NOW)
-    assert todo == {} and "tunnel is down" in held[0][1]                                                # a dead tunnel is not the node's fault
+    assert todo == {} and "tunnel is down" in held[0][1] and held[0][2] == ""                           # a dead tunnel is not the node's fault
 
 
-def test_a_node_is_reconnected_at_most_once_in_thirty_minutes_and_three_times_a_day():
+def test_a_node_waits_longer_after_each_reconnect_and_is_reconnected_six_times_a_day_at_most():
+    assert [warpwatch.cooldown_for(n) for n in (1, 2, 3, 4, 5, 6, 9)] == [900, 1800, 3600, 7200, 7200, 7200, 7200]
     todo, held = warpwatch.decide([down()], PLACED, {"1:11": [NOW - 600]}, NOW)
-    assert todo == {} and "10 minutes ago" in held[0][1]
-    assert warpwatch.decide([down()], PLACED, {"1:11": [NOW - warpwatch.COOLDOWN - 1]}, NOW)[0] == {"1:11": ["AI-2"]}
-    three = [NOW - 3 * 3600, NOW - 2 * 3600, NOW - 3600]
-    todo, held = warpwatch.decide([down()], PLACED, {"1:11": three}, NOW)
-    assert todo == {} and "3 times in the last 24 hours" in held[0][1]
-    assert warpwatch.decide([down()], PLACED, {"1:11": [NOW - 90000, NOW - 80000, NOW - 70000]}, NOW)[0] == {"1:11": ["AI-2"]}      # older than a day does not count
+    assert todo == {} and "10 minutes ago" in held[0][1] and held[0][2] == "working"
+    again = {"1:11": ["AI-2"]}
+    assert warpwatch.decide([down()], PLACED, {"1:11": [NOW - 901]}, NOW)[0] == again                                           # after the first: fifteen minutes
+    assert warpwatch.decide([down()], PLACED, {"1:11": [NOW - 9000, NOW - 1000]}, NOW)[0] == {}                                 # after the second: thirty
+    assert warpwatch.decide([down()], PLACED, {"1:11": [NOW - 9000, NOW - 1801]}, NOW)[0] == again
+    assert warpwatch.decide([down()], PLACED, {"1:11": [NOW - 20000, NOW - 10000, NOW - 3000]}, NOW)[0] == {}                  # after the third: an hour
+    assert warpwatch.decide([down()], PLACED, {"1:11": [NOW - 20000, NOW - 10000, NOW - 3601]}, NOW)[0] == again
+    four = [NOW - 40000, NOW - 30000, NOW - 20000]
+    assert warpwatch.decide([down()], PLACED, {"1:11": [*four, NOW - 5000]}, NOW)[0] == {}                                      # after the fourth and later: two hours
+    assert warpwatch.decide([down()], PLACED, {"1:11": [*four, NOW - 7201]}, NOW)[0] == again
+    five = [NOW - 80000, NOW - 70000, NOW - 60000, NOW - 50000, NOW - 40000]
+    assert warpwatch.decide([down()], PLACED, {"1:11": five}, NOW)[0] == again                                                  # the sixth is still allowed
+    todo, held = warpwatch.decide([down()], PLACED, {"1:11": [*five, NOW - 600]}, NOW)
+    assert todo == {} and held[0][2] == "working"                                                                               # the sixth was just made: wait and see whether it holds
+    todo, held = warpwatch.decide([down()], PLACED, {"1:11": [*five, NOW - 30000]}, NOW)
+    assert todo == {} and "6 times in the last 24 hours" in held[0][1] and held[0][2] == "hand"                                 # the day's tries are used
+    assert warpwatch.decide([down()], PLACED, {"1:11": [NOW - 90000, NOW - 89000, NOW - 88000, NOW - 87000, NOW - 86500, NOW - 86450]}, NOW)[0] == again      # older than a day does not count
+
+
+def test_the_flag_says_the_tries_used_and_when_the_next_one_is_allowed():
+    f = warpwatch.flag_of("working", "", PLACED["AI-2"], [NOW - 5000, NOW - 100], NOW - 7000)
+    assert f == {"state": "working", "node": "DE2", "since": NOW - 7000, "tries": 2, "max": 6, "last": NOW - 100, "next": NOW - 100 + 1800, "why": ""}
+    assert warpwatch.flag_of("hand", "x", PLACED["AI-2"], [NOW - t for t in range(100, 700, 100)], NOW)["next"] == 0               # six used: none will follow
+    assert warpwatch.flag_of("held", "y", None, [], NOW) == {"state": "held", "node": "", "since": NOW, "tries": 0, "max": 6, "last": 0, "next": 0, "why": "y"}
 
 
 def test_two_configs_down_on_one_node_reconnect_it_once():
@@ -107,6 +127,8 @@ def test_an_ai_config_down_for_ten_minutes_gets_its_node_reconnected_once(client
     warpwatch.run()
     assert watch == [(1, 11)]                                                                 # the cooldown holds: one blip, not one a minute
     assert len(st.get("warpwatch")["done"]["1:11"]) == 1
+    f = st.get("warpwatch")["flags"]["AI-2"]                                                  # the Doctor page shows what the watch does about it
+    assert f["state"] == "working" and f["node"] == "DE2" and f["tries"] == 1 and f["max"] == 6 and 880 < f["next"] - int(time.time()) <= 900
 
 
 def test_nothing_happens_for_a_short_outage_a_read_only_panel_or_a_switch_that_is_off(client, watch, monkeypatch):
@@ -146,20 +168,83 @@ def test_a_failing_reconnect_is_not_recorded_and_is_tried_again(client, watch, m
     assert watch == [(1, 11)]
 
 
-def test_a_config_still_down_after_three_reconnects_is_told_once_a_day_and_left_alone(client, watch):
+def told(client):
+    return [t for t in events(client) if "still down" in t and "needs a look by hand" in t]
+
+
+def test_a_config_still_down_after_six_reconnects_is_flagged_and_told_again_every_three_hours(client, watch):
     now = int(time.time())
-    st.put("warpwatch", {"done": {"1:11": [now - 7 * 3600, now - 5 * 3600, now - 3 * 3600]}})
+    st.put("warpwatch", {"done": {"1:11": [now - h * 3600 for h in (9, 8, 7, 6, 5, 4)]}})
     warpwatch.run()
     warpwatch.run()
     assert watch == []
-    assert sum("still down" in t and "needs a look by hand" in t for t in events(client)) == 1
+    f = st.get("warpwatch")["flags"]["AI-2"]
+    assert f["state"] == "hand" and f["tries"] == 6 and f["next"] == 0 and "6 times" in f["why"]
+    assert len(told(client)) == 1 and "every 3 hours" in told(client)[0]                         # two runs, one event
+    st.put("warpwatch", {"told": {"AI-2": now - warpwatch.REMIND + 600}})
+    warpwatch.run()
+    assert len(told(client)) == 1                                                                 # not yet
+    st.put("warpwatch", {"told": {"AI-2": now - warpwatch.REMIND - 5}})
+    warpwatch.run()
+    assert len(told(client)) == 2 and watch == []                                                 # three hours later it says so again; still no seventh reconnect
 
 
-def test_the_switch_reports_the_reconnects_of_the_last_day(client):
+def test_the_sixth_reconnect_is_given_time_to_hold_before_the_watch_gives_up(client, watch):
+    now = int(time.time())
+    st.put("warpwatch", {"done": {"1:11": [now - 9 * 3600, now - 8 * 3600, now - 7 * 3600, now - 6 * 3600, now - 5 * 3600, now - 600]}})
+    warpwatch.run()
+    assert watch == [] and st.get("warpwatch")["flags"]["AI-2"]["state"] == "working" and told(client) == []
+
+
+def test_a_config_that_stays_up_drops_its_flag_and_an_event_says_it_recovered(client, watch):
+    warpwatch.run()
+    assert "AI-2" in st.get("warpwatch")["flags"]
+
+    with session() as db:
+        c = db.query(Config).filter(Config.name == "AI-2").one()
+        c.status, c.status_since = "up", int(time.time()) - 120
+
+    warpwatch.run()
+    assert "AI-2" in st.get("warpwatch")["flags"]                                                 # up for two minutes: it may fall again, the flag stays
+
+    with session() as db:
+        db.query(Config).filter(Config.name == "AI-2").one().status_since = int(time.time()) - warpwatch.BACK_FOR - 5
+
+    warpwatch.run()
+    warpwatch.run()
+    d = st.get("warpwatch")
+    assert d["flags"] == {} and d["told"] == {}
+    assert sum("AI-2 is back up" in t and "reconnected 1 time(s)" in t for t in events(client)) == 1       # said once
+
+
+def test_a_config_the_watch_cannot_place_is_flagged_as_not_watched_but_a_dead_tunnel_is_not_flagged(client, watch, monkeypatch):
+    monkeypatch.setattr(warpwatch, "_where", lambda cfgs: {})
+    warpwatch.run()
+    f = st.get("warpwatch")["flags"]["AI-2"]
+    assert watch == [] and f["state"] == "held" and "exactly one node" in f["why"] and f["node"] == ""
+    st.put("warpwatch", {"flags": {}})
+    monkeypatch.setattr(warpwatch, "_where", lambda cfgs: {"AI-2": {**PLACED["AI-2"], "tunnel_state": "down"}})
+    warpwatch.run()
+    assert watch == [] and st.get("warpwatch")["flags"] == {}                                    # the tunnel's own repair deals with that
+
+
+def test_the_flag_of_a_config_that_is_gone_is_dropped(client, watch):
+    st.put("warpwatch", {"flags": {"AI-9": warpwatch.flag_of("hand", "x", PLACED["AI-2"], [], NOW)}})
+    warpwatch.run()
+    assert "AI-9" not in st.get("warpwatch")["flags"] and "AI-2" in st.get("warpwatch")["flags"]
+
+
+def test_the_switch_reports_the_reconnects_of_the_last_day_and_the_flags_and_the_doctor_page_gets_them(client):
     now = time.time()
     st.put("warpwatch", {"done": {"1:11": [now - 100, now - 90000]}})
     r = client.get("/api/settings/warpwatch").json()
-    assert r["on"] is True and r["reconnects_24h"] == {"1:11": 1}
+    assert r["on"] is True and r["reconnects_24h"] == {"1:11": 1} and r["flags"] == []
+    st.put("warpwatch", {"flags": {"AI-2": warpwatch.flag_of("hand", "x", PLACED["AI-2"], [int(now) - 100], int(now) - 3000)}})
+    r = client.get("/api/settings/warpwatch").json()
+    assert [f["name"] for f in r["flags"]] == ["AI-2"] and r["flags"][0]["state"] == "hand" and r["flags"][0]["since"] == int(now) - 3000
+    assert client.get("/api/doctor").json()["warp"] == r["flags"]                                  # the Tunnel Doctor page draws them
+    client.put("/api/settings/warpwatch", json={"on": False})
+    assert client.get("/api/doctor").json()["warp"] == [] and client.get("/api/settings/warpwatch").json()["flags"] == []          # off: no stale flag on the page
 
 
 def samples(ups, step=60):
