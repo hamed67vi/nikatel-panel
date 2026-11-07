@@ -159,6 +159,19 @@ def test_the_state_read_is_parsed_and_an_account_is_shown_as_the_page_needs_it()
     assert l2tp.shape_account({"user": "l2_x"}, NOW, "")["bot"] is False          # (no prefix = no account is the bot's)
 
 
+def test_an_account_of_the_shop_bot_is_known_by_its_note_or_its_old_prefix():
+    """The bot makes `nikatelshop_<order>` accounts with the note `order N user U` (the owner, 2026-11-07: the name carries the shop's name); the older ones are `l2_<n>`."""
+    assert l2tp.made_by_bot("nikatelshop_123", "order 123 user 5445732982", "l2_") is True
+    assert l2tp.made_by_bot("l2_7", "", "l2_") is True
+    assert l2tp.made_by_bot("l2_7", "order 7 user 9", "") is True
+    assert l2tp.made_by_bot("nikatelshop_ali", "for ali", "l2_") is False          # (made by hand in the panel: the name has the brand, the note is the owner's)
+    assert l2tp.made_by_bot("nikatelshop_ali", "", "l2_") is False
+    assert l2tp.made_by_bot("alice", "my order 5 user 1", "l2_") is False          # (the note must START with the bot's words)
+    assert l2tp.made_by_bot("x", "order 5 user", "") is False
+    a = l2tp.shape_account({"user": "nikatelshop_9", "note": "order 9 user 31"}, NOW, "l2_")
+    assert a["bot"] is True and l2tp.shape_account({"user": "nikatelshop_ali", "note": ""}, NOW, "l2_")["bot"] is False
+
+
 def test_the_exit_read_is_parsed():
     p = l2tp.parse_exit(EXIT_OUT)
     assert p == {"installed": True, "routes": ["10.250.0.0/22 192.0.2.17"], "rules": 11, "forward": True, "timer": "active"}
@@ -487,6 +500,7 @@ def test_the_account_forms_are_windows_of_their_own_never_a_box_over_the_table()
     assert 'showModal("New account"' in js and "showModal(`Edit · " in js and 'showModal("Servers"' in js and "showModal(`Connection · " in js
     assert "l2-pop" not in js and "l2-pop" not in css and "position: absolute" not in css          # (the owner, 2026-11-07: the box that made an account lay over the table - it is a window now)
     assert "#modal .modal.l2-modal" in css and "l2Sync" in js and "Create account" in js and "Save changes" in js
+    assert 'const L2_BRAND = "nikatelshop_"' in js and 'value="${L2_BRAND}"' in js and "L2_BRAND + Math.random()" in js          # (the owner, 2026-11-07: every username starts with the shop's name: prefilled, and the Random name too)
 
 
 def test_the_new_files_hold_no_secret_or_address_of_ours():

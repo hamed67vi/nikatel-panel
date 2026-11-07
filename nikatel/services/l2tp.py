@@ -163,6 +163,14 @@ def parse_exit(out: str) -> dict:
     return d
 
 
+BOT_NOTE = re.compile(r"^order \d+ user \d+")                       # the note the shop bot writes on every account it makes
+
+
+def made_by_bot(name: str, note: str, prefix: str) -> bool:
+    """An account of the shop bot: its note is `order N user U` (the bot's own mark, whatever the name), or its name starts with the bot's prefix (the older `l2_` ones)."""
+    return bool(BOT_NOTE.match(note or "")) or (bool(prefix) and name.startswith(prefix))
+
+
 def shape_account(a: dict, now: float, prefix: str) -> dict:
     """One account as the page shows it (no password)."""
     exp = a.get("expires")
@@ -171,7 +179,7 @@ def shape_account(a: dict, now: float, prefix: str) -> dict:
     state = "disabled" if a.get("disabled") else "expired" if exp is not None and exp <= now else "over" if a.get("over") else "active"
     return {"user": name, "limit": a.get("limit", 1), "online": int(a.get("online") or 0), "expires": exp, "days_left": None if exp is None else round((exp - now) / DAY, 1), "state": state,
             "down": a.get("down"), "up": a.get("up"), "rx": rx, "tx": tx, "quota": a.get("quota") or None, "used": int(a.get("used") or (rx + tx)), "over": bool(a.get("over")),
-            "created": a.get("created"), "last_seen": a.get("last_seen"), "note": str(a.get("note") or "")[:120], "bot": bool(prefix) and name.startswith(prefix)}
+            "created": a.get("created"), "last_seen": a.get("last_seen"), "note": str(a.get("note") or "")[:120], "bot": made_by_bot(name, str(a.get("note") or ""), prefix)}
 
 
 def state() -> dict:

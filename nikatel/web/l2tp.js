@@ -4,6 +4,7 @@
    Uses the helpers of app.js: $, api, esc, ago, when, renderSub, PAGES, state, toast, showModal, hideModal. */
 const l2 = {d: null, err: "", html: "", cfg: null, e: null, q: "", only: "", timer: 0, asked: false};
 const L2_NAME = /^[a-z][a-z0-9_]{2,23}$/;
+const L2_BRAND = "nikatelshop_";          // (the owner, 2026-11-07: the name of every account starts with the shop's name; the shop bot names its accounts the same way)
 const l2B = n => { n = +n || 0; return n >= 1e9 ? (n / 1e9).toFixed(2) + " GB" : n >= 1e6 ? (n / 1e6).toFixed(1) + " MB" : n >= 1e3 ? Math.round(n / 1e3) + " KB" : n + " B"; };
 const l2Mb = v => v ? (+v) + " Mbit/s" : "—";
 const l2Gb = q => q ? (+(q / 1e9).toFixed(2)) + " GB" : "";
@@ -109,7 +110,7 @@ const l2Plural = (n, w) => `${n} ${w}${+n === 1 ? "" : "s"}`;
 
 window.l2Pick = (ids, v) => { ids.split(",").forEach(id => { const i = document.getElementById(id); if (i) { i.value = v; i.dispatchEvent(new Event("input", {bubbles: true})); } }); l2Sync(); };
 window.l2Pw = id => { const i = document.getElementById(id); if (i) { i.value = l2Gen(); i.type = "text"; } };
-window.l2Rand = () => { const i = document.getElementById("n-name"); if (i) { i.value = "vpn" + Math.random().toString(36).slice(2, 8); l2Sync(); } };
+window.l2Rand = () => { const i = document.getElementById("n-name"); if (i) { i.value = L2_BRAND + Math.random().toString(36).slice(2, 8); l2Sync(); } };
 window.l2EndAdd = n => { const i = document.getElementById("e-ends"); if (!i) return; const cur = i.value ? Date.parse(i.value + "T00:00:00Z") : 0, base = Math.max(cur, Date.now()); i.value = new Date(base + n * 86400000).toISOString().slice(0, 10); l2Sync(); };
 window.l2Sync = () => {          // (the chips light up for the value in their field; the summary line says what the window will do)
   document.querySelectorAll("#modal .l2-chp[data-f]").forEach(b => { const ids = b.dataset.f.split(","); b.classList.toggle("on", ids.every(x => { const i = document.getElementById(x); return !!i && String(i.value) === String(b.dataset.v); })); });
@@ -124,7 +125,7 @@ window.l2NewOpen = () => {
   const body = `<form class="l2-dlg" onsubmit="l2Create(); return false" autocomplete="off">
     <p class="l2-lead">Make a VPN account for a customer. Everything here can be changed later.</p>
     ${l2Sec("Account", `<div class="l2-two">
-      ${l2Field("Username", l2In("n-name", `maxlength="24" placeholder="e.g. ali_01" autocapitalize="off" spellcheck="false" oninput="this.value = this.value.toLowerCase(); l2Sync()"`, "", `<button type="button" class="l2-ghost" onclick="l2Rand()">Random</button>`), "3-24 characters: a-z, 0-9 and _, starting with a letter")}
+      ${l2Field("Username", l2In("n-name", `maxlength="24" placeholder="${L2_BRAND}ali" value="${L2_BRAND}" autocapitalize="off" spellcheck="false" oninput="this.value = this.value.toLowerCase(); l2Sync()"`, "", `<button type="button" class="l2-ghost" onclick="l2Rand()">Random</button>`), "3-24 characters: a-z, 0-9 and _; it starts with the shop's name")}
       ${l2Field("Password", l2In("n-pass", `maxlength="64" placeholder="Made for you" spellcheck="false"`, "", `<button type="button" class="l2-ghost" onclick="l2Pw('n-pass')">Generate</button>`), "Leave it empty and a strong one is made")}
     </div>${l2Field("Note", l2In("n-note", `maxlength="80" placeholder="Who it is for (optional)"`, ""), "", "l2-top")}`)}
     ${l2Sec("Limits", `<div class="l2-two">
@@ -138,11 +139,12 @@ window.l2NewOpen = () => {
   </form>`;
   showModal("New account", body, "l2-modal");
   l2Sync();
-  setTimeout(() => { const i = $("#n-name"); if (i) i.focus(); }, 80);
+  setTimeout(() => { const i = $("#n-name"); if (i) { i.focus(); i.setSelectionRange(i.value.length, i.value.length); } }, 80);          // (the cursor stands after "nikatelshop_": the person types the rest)
 };
 
 window.l2Create = async () => {
   const name = l2V("n-name");
+  if (name === L2_BRAND) { toast(`✕ Add something after ${L2_BRAND} - who it is for, or press Random.`, "bad"); const i = $("#n-name"); if (i) i.focus(); return; }
   if (!L2_NAME.test(name)) { toast("✕ The username is 3-24 characters: lower-case letters, digits and _, starting with a letter.", "bad"); const i = $("#n-name"); if (i) i.focus(); return; }
   const body = {name, days: +l2V("n-days") || 30, devices: +l2V("n-dev") || 1, password: l2V("n-pass"), note: l2V("n-note")};
   if (l2V("n-gb") !== "") body.gb = +l2V("n-gb");
