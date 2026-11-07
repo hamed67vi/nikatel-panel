@@ -258,6 +258,30 @@ def record_move(p: dict, moved: list[str], leftover: list[dict], ok: bool) -> di
     return e
 
 
+def renamed(old: str, new: str) -> None:
+    """(1.69.243) A tunnel got a new name (by hand, or because it moved to another Iran server): the ledger of moves and the suggestions follow it, so a return still finds the tunnel by the name the ledger holds and the rails
+    (moves per day, the cooldown) go on counting it as one tunnel."""
+    if not old or not new or old == new:
+        return
+
+    s = _state()
+    changed = False
+
+    for e in s["moves"]:
+        for key in ("tunnels", "asked"):
+            if old in (e.get(key) or []):
+                e[key] = [new if n == old else n for n in e[key]]
+                changed = True
+
+    for x in s["suggestions"]:
+        if x.get("tunnel") == old:
+            x["tunnel"] = new
+            changed = True
+
+    if changed:
+        _save(s)
+
+
 def suggest(kind: str, tunnel_id: int, tunnel: str, from_id: int, from_name: str, to_id: int | None, to_name: str, why: str, extra: dict | None = None) -> dict:
     """A move the Doctor would make in mode "move": written down for the operator (one per tunnel, the newest wins). kind "type" (1.69.14): not a move - a change of the tunnel's type (`from`: the running type,
     `to`: the type the Doctor's memory has seen give clearly more on this pair; `extra`: now_kind, to_kind, now_mbps, memory_mbps)."""

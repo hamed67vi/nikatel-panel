@@ -17,7 +17,8 @@ after a server came back); this module knows HOW:
 
 The target is the Iran server that ranks best for every moved tunnel (ping to the foreign server, free resources, how many tunnels
 it already carries, free ports). A record that serves a moved tunnel and a staying one would break the staying one, so such tunnels
-are moved too (closure). The DNS is touched only after every tunnel moved. Every record re-pointed is written to `dns_log` (account,
+are moved too (closure). The DNS is touched only after every tunnel moved (a tunnel that another move already took away counts as moved; when a dead server's tunnels moved only in part,
+the records that serve nothing but the ones that moved follow, and a record that no longer points at the old server is left alone). Every record re-pointed is written to `dns_log` (account,
 old and new address, which server, when), so the panel can list the changes and put any of them back with one click."""
 from __future__ import annotations
 
@@ -27,6 +28,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 
 from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
 
 from ..config import get_settings
 from ..db import session
@@ -533,7 +535,7 @@ def _make_plan(server_id: int, move: set[int] | None, reason: str, target_id: in
            "tunnels": [{"id": t["id"], "name": t["name"]} for t in moving], "move": sorted(moved),
            "pulled": [t["name"] for t in moving if t["id"] not in asked],
            "target": ({"id": target["id"], "name": target.get("name"), "ip": new_ip} if target else None),
-           "dns": [{k: v for k, v in r.items() if k != "tunnels"} for r in dns], "left_alone": left,
+           "dns": [{**{k: v for k, v in r.items() if k != "tunnels"}, "serves": list(r.get("tunnels") or [])} for r in dns], "left_alone": left,
            "dns_error": dns_error, "problems": problems, "made_at": int(time.time())}
 
     if kept:
@@ -808,6 +810,33 @@ def follow_up(now: float | None = None) -> None:
                     _FOLLOW.append({**f, "looks": f["looks"] + 1, "due": now + FOLLOW_AGAIN})
 
 
+TIDY_EVERY = 600         # (1.69.243) the names of tunnels that run on another Iran server than the one in their name are put right this often ...
+_TIDY_AT = [0.0]
+
+
+def tidy_names(now: float | None = None) -> list[str]:
+    """(1.69.243, the owner, 2026-11-07, tunnels moved to another Iran node that still carried the old node's name: "when a tunnel changes, its name must change too"): a move renames the tunnel it moves (`builder.follow_move`); this
+    is the same for the tunnels that were moved before - at most `builder.TIDY_MAX` in a round, never while a failover runs or waits, never in a read-only panel. Returns what it renamed."""
+    now = time.time() if now is None else now
+
+    if now - _TIDY_AT[0] < TIDY_EVERY or get_settings().read_only:
+        return []
+
+    _TIDY_AT[0] = now
+
+    if autopilot.quiet_now() or _state()["pending"]:
+        return []
+
+    from . import builder
+
+    done = builder.tidy_names()
+
+    for line in done:
+        log.info("tunnel name put right: %s", line)
+
+    return done
+
+
 def tick() -> None:
     """The job of its own (every 10 seconds, 1.69.230): the dead servers are looked at without waiting for the Doctor's round of a minute - a server that is off is replaced one minute after the pulse says so, not one to two;
     and the result of a failover that ended is looked at (read-only, whatever the Doctor's mode)."""
@@ -817,6 +846,11 @@ def tick() -> None:
         follow_up()
     except Exception:
         log.exception("failover: the look at the configs after a move")
+
+    try:
+        tidy_names()
+    except (SQLAlchemyError, ValueError, RuntimeError):
+        log.exception("failover: the names of the moved tunnels")
 
     if doctor.mode() == "off" or not doctor.can_move():
         return
@@ -1000,10 +1034,28 @@ def _best_kind(aid: int, snap: dict, target: dict, cache: dict, first_ok: bool =
     autopilot._say(aid, f"{snap['name']}: the best type here is {best['kind']} (score {best.get('score')})" + (f", not {old}." if best["kind"] != old else "."))
     return best["kind"]
 
+def _current_ips(d: dict) -> list[str] | None:
+    """(1.69.243) What the record points at RIGHT NOW, read from its provider (the plan holds what it pointed at when the plan was made, and another story may have moved it since). None when it cannot be read: then the plan's word stands."""
+    try:
+        for row in dnsprov.provider(d["account"]).records(d["domain"]):
+            if str(row.get("id")) == str(d["id"]):
+                return list(row.get("ips") or [])
+    except (AttributeError, KeyError, TypeError, ValueError, RuntimeError):           # (a provider that cannot be asked, a fake without `records`: the move must not stop for the look)
+        return None
+
+    return None
+
+
 def _apply_dns(aid: int, p: dict) -> tuple[list[dict], list[str], list[dict]]:
     done, errors, logged = [], [], []
 
     for d in p["dns"]:
+        now_ips = _current_ips(d)
+
+        if now_ips is not None and p["ip"] not in now_ips:       # (1.69.243: the record was moved by another story since this plan was made - a second failover of the same server could point records the first one had already moved at a server that does not carry them)
+            autopilot._say(aid, f"DNS {d['fqdn']}: it points at {', '.join(now_ips) or 'nothing'} now, not at {p['ip']} (another move changed it): left alone.")
+            continue
+
         try:
             res = _apply_record(d, p["ip"], p["target"]["ip"])
             done.append({"fqdn": d["fqdn"], "account": d.get("account")})
@@ -1056,10 +1108,30 @@ def _not_carrying(aid: int, built: list) -> list[str]:
     return bad
 
 
+def _vanished(tunnel_id: int, server_id: int) -> bool:
+    """(1.69.243) True when the tunnel is not on this server any more: another story (a return, a second failover of the same server) took it away while this plan was made or waited. Such a tunnel is DONE, not failed."""
+    with session() as db:
+        row = db.get(Tunnel, tunnel_id)
+        return row is None or row.iran_server_id != server_id
+
+
+def _follows(dns: list[dict], carried: set[int]) -> tuple[list[dict], list[dict]]:
+    """Pure (1.69.243): after a move of a dead server in which some tunnels did not move, the records that may follow the ones that did and the records that stay. A record follows only when it is tied to at least one tunnel and EVERY
+    tunnel it serves has moved (or is gone); a record tied to nothing, or tied to a tunnel that stays, keeps the old address (the owner, 2026-11-07: two of three tunnels moved, the DNS did not move at all and two configs were down for five hours)."""
+    follow, stay = [], []
+
+    for d in dns:
+        serves = set(d.get("serves") or [])
+        (follow if serves and serves <= carried else stay).append(d)
+
+    return follow, stay
+
+
 def _work(aid: int, p: dict, finish: bool = True) -> bool:
-    """Inside story `aid`: move the tunnels, then - only when all moved - the DNS. When the source server is on, the new tunnels are
+    """Inside story `aid`: move the tunnels, then - when all moved (or are gone: another story took them already) - the DNS. When the source server is on, the new tunnels are
     built and checked FIRST, the DNS changed, the old tunnels kept for the TTL + 5 minutes, and only then removed (nobody is cut).
-    When it is off, the old tunnels are dropped at once (their files are purged when it is back). Returns True when everything was done."""
+    When it is off, the old tunnels are dropped at once (their files are purged when it is back), and when only some of them moved the records that serve nothing but those follow.
+    Returns True when everything was done."""
     from . import builder, doctor
 
     with session() as db:
@@ -1069,12 +1141,19 @@ def _work(aid: int, p: dict, finish: bool = True) -> bool:
     autopilot._say(aid, f"{'Move' if src_on else 'Failover'} of {p['server']} ({p['why']}): {len(p['tunnels'])} tunnel(s) → {p['target']['name']}, {len(p['dns'])} DNS record(s) → {p['target']['ip']}"
                    + (" - the server is on: the new tunnels are built first, the old ones stay until the DNS has settled." if src_on and p["tunnels"] else ""))
     moved, moved_names, leftover = 0, [], []
+    moved_ids: list[int] = []                         # the tunnels that moved (1.69.243)
+    gone: list[int] = []                              # the tunnels that were not on this server any more when their turn came: another story moved them (1.69.243)
     built: list[tuple[int, str, dict]] = []          # (old tunnel id, temp name, snapshot) while both run
     pairs: dict = {}                                  # (target, foreign) -> the test of the tunnel types of that pair
 
     def dead_one(t: dict) -> tuple[str, dict | None]:
         """One tunnel of a server that is off: what is left of it there, and its name when it was moved. The tunnels of one server go together (1.69.230: they were built one after the other)."""
         left = None
+
+        if _vanished(t["id"], p["server_id"]):
+            autopilot._say(aid, f"{t['name']}: it is not on {p['server']} any more (another move took it): nothing to do for it here.")
+            gone.append(t["id"])
+            return "", None
 
         try:
             snap = autopilot._snapshot(t["id"])
@@ -1088,9 +1167,18 @@ def _work(aid: int, p: dict, finish: bool = True) -> bool:
             kind = _best_kind(aid, snap, p["target"], pairs, first_ok=True)      # (a dead server: the first type that connects, in the Doctor's order - no time for a full comparison)
 
             if autopilot._replace(aid, t["id"], p["target"]["id"], snap["foreign_id"], kind, f"Failover: {p['why']}.", skip_offline=True):
-                return snap["name"], left
+                new = builder.follow_move(snap["name"], bool((snap.get("record") or {}).get("custom_name")))          # (1.69.243: the rebuilt tunnel runs on the new Iran server: a name the panel made follows it)
+
+                if new != snap["name"]:
+                    autopilot._say(aid, f"{snap['name']}: renamed {new} (it runs on {p['target']['name']} now).")
+
+                return new, left
         except (ValueError, RuntimeError) as e:
-            autopilot._say(aid, f"{t['name']}: not moved: {str(e)[:160]}")
+            if str(e) == "tunnel not found":                     # (it went between the look above and the snapshot: the same as gone)
+                gone.append(t["id"])
+                autopilot._say(aid, f"{t['name']}: it is not here any more (another move took it): nothing to do for it.")
+            else:
+                autopilot._say(aid, f"{t['name']}: not moved: {str(e)[:160]}")
         except Exception as e:      # (one tunnel must not stop the others that are built at the same time)
             log.exception("failover: %s", t["name"])
             autopilot._say(aid, f"{t['name']}: not moved: {str(e)[:160]}")
@@ -1099,15 +1187,21 @@ def _work(aid: int, p: dict, finish: bool = True) -> bool:
 
     if not src_on:
         with ThreadPoolExecutor(max(1, min(PARALLEL_TUNNELS, len(p["tunnels"])))) as ex:
-            for name, left in ex.map(dead_one, p["tunnels"]):
+            for t, (name, left) in zip(p["tunnels"], ex.map(dead_one, p["tunnels"])):
                 if left:
                     leftover.append(left)
 
                 if name:
                     moved += 1
                     moved_names.append(name)
+                    moved_ids.append(t["id"])
 
     for t in p["tunnels"] if src_on else []:
+        if _vanished(t["id"], p["server_id"]):
+            autopilot._say(aid, f"{t['name']}: it is not on {p['server']} any more (another move took it): nothing to do for it here.")
+            gone.append(t["id"])
+            continue
+
         try:
             snap = autopilot._snapshot(t["id"])
             kind = old_kind = autopilot.kind_of(snap["type"], snap["transport"], snap["record"])
@@ -1122,18 +1216,31 @@ def _work(aid: int, p: dict, finish: bool = True) -> bool:
 
             built.append((t["id"], temp, snap))
             moved += 1
+            moved_ids.append(t["id"])
         except (ValueError, RuntimeError) as e:
-            autopilot._say(aid, f"{t['name']}: not moved: {str(e)[:160]}")
+            if str(e) == "tunnel not found":
+                gone.append(t["id"])
+                autopilot._say(aid, f"{t['name']}: it is not here any more (another move took it): nothing to do for it.")
+            else:
+                autopilot._say(aid, f"{t['name']}: not moved: {str(e)[:160]}")
 
     release(p)                                         # (the tunnels are where they go now: the ranking counts them itself)
+    total = len(p["tunnels"])
+    all_done = moved + len(gone) == total              # (1.69.243: a tunnel that another story already took away is done, not failed)
 
-    if built and moved == len(p["tunnels"]) and _not_carrying(aid, built):
-        moved = 0                                      # (the branch below takes the new halves away again and leaves the DNS alone)
+    if built and all_done and _not_carrying(aid, built):
+        all_done = False                               # (the branch below takes the new halves away again and leaves the DNS alone)
 
     done_dns, errors, logged = [], [], []
 
-    if moved < len(p["tunnels"]):
-        autopilot._say(aid, f"{moved} of {len(p['tunnels'])} tunnels moved: the DNS is NOT changed (records must not point at a server that does not carry all of their tunnels).")
+    if not all_done and not src_on:                    # the old tunnels are gone already: the ones that moved are where they go; the records that serve only them follow (1.69.243)
+        follow, stay = _follows(p["dns"], set(moved_ids) | set(gone))
+        autopilot._say(aid, f"{moved} of {total} tunnels moved" + (f" ({len(gone)} more were taken by another move)" if gone else "") + f": only the {len(follow)} DNS record(s) that serve nothing but tunnels that moved follow them (records must not point at a server that does not carry all of their tunnels).")
+        done_dns, errors, logged = _apply_dns(aid, {**p, "dns": follow})
+        _say_left(aid, {**p, "left_alone": [{"fqdn": d["fqdn"], "tunnels": d.get("serves") or []} for d in stay]})
+        _follow_later(p, done_dns)
+    elif not all_done:
+        autopilot._say(aid, f"{moved} of {total} tunnels moved: the DNS is NOT changed (records must not point at a server that does not carry all of their tunnels).")
 
         for _, temp, _ in built:                      # make before break: nothing was broken, so the new halves go again
             with session() as db:
@@ -1176,31 +1283,40 @@ def _work(aid: int, p: dict, finish: bool = True) -> bool:
                 with session() as db:
                     row = db.scalar(select(Tunnel).where(Tunnel.name == temp))
 
+                final = snap["name"]
+
                 if row is not None:
+                    hand = bool((snap.get("record") or {}).get("custom_name"))
+
                     try:
-                        builder.rename_tunnel(row.id, snap["name"])
+                        builder.rename_tunnel(row.id, snap["name"], custom=hand)          # (the name the old tunnel had; 1.69.243: marked as chosen by hand only when it was)
+                        final = builder.follow_move(snap["name"], hand)                    # (... and a name the panel made follows the tunnel to its new Iran server)
+
+                        if final != snap["name"]:
+                            autopilot._say(aid, f"{snap['name']}: renamed {final} (it runs on {p['target']['name']} now).")
                     except ValueError as e:
                         autopilot._say(aid, f"{temp}: keeps its name ({str(e)[:100]})")
 
-                moved_names.append(snap["name"])
+                moved_names.append(final)
 
-    ok = moved == len(p["tunnels"]) and not errors
+    ok = all_done and not errors
+    other = f" (+{len(gone)} taken by another move)" if gone else ""
 
     with _STATE_LOCK:                                  # (the plans of an outage end at about the same time: one reads, changes and saves the record at a time)
         s = _state()
         s["dns_log"].extend(logged)
         s["pending"] = [x for x in s["pending"] if x["id"] != p["id"]]
         s["history"].append({"id": p["id"], "at": int(time.time()), "server_id": p["server_id"], "server": p["server"], "ip": p["ip"], "reason": p.get("reason", "down"), "target": p["target"],
-                             "moved": moved, "tunnels": len(p["tunnels"]), "dns": done_dns, "errors": errors, "ok": ok, "undone": False})
+                             "moved": moved, "gone": len(gone), "tunnels": total, "dns": done_dns, "errors": errors, "ok": ok, "undone": False})
         _save(s)
 
     if p["tunnels"]:
         doctor.record_move(p, moved_names, leftover, ok)
 
     with session() as db:
-        emit(db, "ok" if ok else "warn", "actions", f"Doctor: {p['server']} → {p['target']['name']} ({p['why']}): {moved}/{len(p['tunnels'])} tunnels moved, {len(done_dns)} DNS record(s) changed" + (f", {len(errors)} failed" if errors else "") + ".", p["server"])
+        emit(db, "ok" if ok else "warn", "actions", f"Doctor: {p['server']} → {p['target']['name']} ({p['why']}): {moved}/{total} tunnels moved{other}, {len(done_dns)} DNS record(s) changed" + (f", {len(errors)} failed" if errors else "") + ".", p["server"])
 
-    _notice(f"{'✅' if ok else '⚠'} Doctor: {p['server']} → {p['target']['name']} ({p['why']}): {moved}/{len(p['tunnels'])} tunnels moved, {len(done_dns)} DNS record(s) now point at {p['target']['ip']}." + (f" Errors: {'; '.join(errors)}" if errors else "") + " Undo: Tunnels → Tunnel Doctor → Moves.")
+    _notice(f"{'✅' if ok else '⚠'} Doctor: {p['server']} → {p['target']['name']} ({p['why']}): {moved}/{total} tunnels moved{other}, {len(done_dns)} DNS record(s) now point at {p['target']['ip']}." + (f" Errors: {'; '.join(errors)}" if errors else "") + " Undo: Tunnels → Tunnel Doctor → Moves.")
 
     if finish:
         autopilot._say(aid, "Done." if ok else "Done with problems: look at the lines above.", done=True, ok=ok)

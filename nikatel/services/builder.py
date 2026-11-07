@@ -20,6 +20,7 @@ from concurrent.futures import wait as futures_wait
 from dataclasses import dataclass, field
 
 from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
 
 from ..config import get_settings
 from ..db import session
@@ -1603,8 +1604,9 @@ def _rename_row(db, t: Tunnel, new: str, custom: bool) -> None:
     standby.note_rename(old, new)      # the mark and the standby of the tunnel follow its new name (the standby job does it, outside this session)
 
 
-def rename_tunnel(tunnel_id: int, new_name: str) -> str:
-    """The operator renames a tunnel. Lowercase letters, digits and - (up to 15): the same shape a built tunnel always had, so a rebuild keeps working."""
+def rename_tunnel(tunnel_id: int, new_name: str, custom: bool = True) -> str:
+    """The operator renames a tunnel. Lowercase letters, digits and - (up to 15): the same shape a built tunnel always had, so a rebuild keeps working. The Doctor's ledger of moves follows the new name (1.69.243).
+    `custom` (the move of a tunnel puts its old name back on the rebuilt row with False): marks the name as chosen by hand, which no automatic rename touches."""
     new = str(new_name or "").strip().lower()
 
     if not NAME_RE.match(new):
@@ -1623,9 +1625,12 @@ def rename_tunnel(tunnel_id: int, new_name: str) -> str:
             raise ValueError("another tunnel already has this name")
 
         old = t.name
-        _rename_row(db, t, new, custom=True)
+        _rename_row(db, t, new, custom=custom)
         emit(db, "info", "tunnels", f"Tunnel {old} renamed to {new}.", new)
 
+    from . import doctor
+
+    doctor.renamed(old, new)
     return new
 
 
@@ -1689,3 +1694,87 @@ def follow_server_rename(db, server: Server, old_name: str) -> list[str]:
         renamed.append(f"{old} → {new}")
 
     return renamed
+
+
+def moved_name(name: str, custom: bool, foreign_name: str, iran_names: list[str], new_iran_name: str, taken: set[str]) -> str:
+    """Pure (1.69.243): the name a tunnel should carry on the Iran server `new_iran_name`. The owner, 2026-11-07, a list of tunnels that the Doctor had moved to another Iran node and that still carried the name of the old one:
+    "when a tunnel changes, its name must change too". A name the panel made - <foreign>-<iran> of ANY Iran server, with or without -N - becomes the name for the new server (`pretty_name`, unique among `taken`); a name the
+    operator chose, or any other name, stays."""
+    if custom:
+        return name
+
+    here = pretty_name(foreign_name, new_iran_name, set())
+
+    if name == here or re.fullmatch(re.escape(here) + r"-\d+", name):
+        return name                                      # (it carries a name for this server already, -2 and all)
+
+    for i in iran_names:
+        auto = pretty_name(foreign_name, i, set())
+
+        if name == auto or re.fullmatch(re.escape(auto) + r"-\d+", name):
+            return pretty_name(foreign_name, new_iran_name, taken - {name})
+
+    return name
+
+
+_NAME_LOCK = threading.Lock()
+
+
+def follow_move(name: str, custom: bool = False) -> str:
+    """(1.69.243) The tunnel `name` has just been moved to another Iran server (its row already points at the new one): it takes the name of the new server when it still carries one the panel made (`moved_name`); the configs that
+    name it, the alert mutes, the standby and the Doctor's ledger of moves follow. `custom`: the old tunnel's name was chosen by hand (the rebuilt row may have lost that mark). Returns the name the tunnel has now - the old one when
+    nothing changed or the rename failed: a name must never stop a move."""
+    new = name
+
+    try:
+        with _NAME_LOCK, session() as db:                # (the tunnels of one dead server are moved at the same time: two must not take the same new name)
+            t = db.scalar(select(Tunnel).where(Tunnel.name == name))
+
+            if t is None or t.iran is None or t.foreign is None:
+                return name
+
+            new = moved_name(t.name, custom or bool((t.record or {}).get("custom_name")), t.foreign.name, [s.name for s in db.scalars(select(Server).where(Server.role == "iran"))], t.iran.name, {x.name for x in db.scalars(select(Tunnel))})
+
+            if new == name or not NAME_RE.match(new):
+                return name
+
+            _rename_row(db, t, new, custom=False)
+            emit(db, "info", "tunnels", f"Tunnel {name} renamed to {new}: it runs on {t.iran.name} now.", new)
+    except (ValueError, RuntimeError, SQLAlchemyError):
+        log.warning("tunnel %s: the name for its new Iran server was not saved", name, exc_info=True)
+        return name
+
+    from . import doctor
+
+    doctor.renamed(name, new)
+    return new
+
+
+TIDY_MAX = 10      # names put right in one round (a name is cosmetic: a long list is done over a few rounds)
+
+
+def tidy_names(limit: int = TIDY_MAX) -> list[str]:
+    """(1.69.243) The tunnels that were moved before names followed moves: a tunnel that carries the name the panel made for ANOTHER Iran server than the one it runs on gets the name of its own (`follow_move`). Left alone: a name
+    chosen by hand, a standby, a temporary build, a protected tunnel (something stands on it), a tunnel that is switched off. Returns ["old → new"]."""
+    todo = []
+
+    with session() as db:
+        iran = [s.name for s in db.scalars(select(Server).where(Server.role == "iran"))]
+        names = {x.name for x in db.scalars(select(Tunnel))}
+
+        for t in db.scalars(select(Tunnel).where(Tunnel.enabled.is_(True)).order_by(Tunnel.id)):
+            if t.iran is None or t.foreign is None or is_standby(t) or is_temp(t.name) or is_protected(t) or (t.record or {}).get("custom_name"):
+                continue
+
+            if moved_name(t.name, False, t.foreign.name, iran, t.iran.name, names) != t.name:
+                todo.append(t.name)
+
+    done = []
+
+    for name in todo[:limit]:
+        new = follow_move(name)
+
+        if new != name:
+            done.append(f"{name} → {new}")
+
+    return done

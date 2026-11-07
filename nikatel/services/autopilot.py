@@ -1475,6 +1475,13 @@ def move_start(tunnel_id: int, iran_id: int) -> int:
 
     def run(aid: int) -> None:
         ok = _replace(aid, tunnel_id, iran_id, snap["foreign_id"], kind, "Moving to another Iran server.")
+
+        if ok:                                           # (1.69.243: a name the panel made follows the tunnel to its new Iran server)
+            new = builder.follow_move(snap["name"], bool((snap.get("record") or {}).get("custom_name")))
+
+            if new != snap["name"]:
+                _say(aid, f"Renamed {snap['name']} → {new}: it runs on its new Iran server now.")
+
         _say(aid, "Moved." if ok else "Not moved.", done=True, ok=ok)
 
     return _start(snap["name"], run)

@@ -5,7 +5,8 @@ pointed at the old one, which does not forward the port. The Doctor judged the t
 in, checks the health of the configs and changes the DNS when it sees the need.
 
 The look (every five minutes, from the quality job, only for a tunnel that has a config DOWN for ten minutes and is itself up and listening on that port): the name of the config must point at an Iran
-server that forwards the port through a tunnel that is up. When it points at none of them it is pointed at the Iran server of THIS tunnel. Only in the Doctor's mode "move" (the mode that may change
+server that forwards the port through a tunnel that is up. When it points at none of them it is pointed at the Iran server of THIS tunnel. (1.69.243: a config whose name points at an Iran server that no longer has
+its tunnel rides NO tunnel, so no tunnel has it among its down configs; `misdirected` finds those - down 15 minutes, the port forwarded by exactly one tunnel in the panel, that one up - and hands them to the same look.) Only in the Doctor's mode "move" (the mode that may change
 the DNS by itself); in "fix" the Doctor says it once an hour and leaves the record.
 
 What it never touches: a name behind a CDN, a name with no record of its own (a wildcard serves it), an address that is a number, a name that another host of a panel dials on a port this tunnel does not
@@ -33,6 +34,7 @@ FRESH = 900               # the copy of the DNS records must be this fresh (the 
 GAP = 6 * 3600            # one repair of one name in this time: a name that was changed and is still down has another problem, the Doctor must not flap it
 PER_DAY = 6               # repairs of names for the whole panel in 24 hours
 BLOCKED_GAP = 3600        # a tunnel with something to repair that the mode does not allow is looked at (and said) again after this long
+ORPHAN_DOWN = 900         # (1.69.243) a config that rides NO tunnel is judged only after it has been down this long
 _LOOKED: dict[int, float] = {}
 
 
@@ -109,6 +111,63 @@ def stale_names(down: list[dict], tunnel: dict, tunnels: list[dict], hosts: dict
     return fixes, notes
 
 
+def misdirected(configs: list[dict], tunnels: list[dict], servers: list[dict], records: list[dict]) -> dict[int, list[str]]:
+    """Pure (1.69.243): {tunnel id: [config names]} for the configs that ride NO tunnel although their name points at an Iran server - the name was right once and the tunnel moved away. The owner, 2026-11-07: Netherlands and AI-1 were
+    down for five hours; a failover rebuilt their tunnels on another Iran server and left the names on the old one. `userq.map_configs` finds no tunnel for such a config, so the look above - which starts from a tunnel that has a down
+    config - never saw them.
+    configs: [{"name", "address", "port", "down_for": seconds}] (the enabled configs that are down and ride no tunnel); tunnels: [{"id", "iran_id", "ports": set, "state"}] (enabled, not temporary); servers (Iran): [{"id", "host"}];
+    records: the rows of the DNS copy. A config counts when it has been down for ORPHAN_DOWN seconds, its name has a record that points at an Iran server (not a number, not a name nobody knows), no tunnel of that server forwards its
+    port, and EXACTLY ONE tunnel of the whole panel forwards it at all and that one is up (a port that several tunnels forward proves nothing). What is done with it is `stale_names`' business: CDN names, wildcards, other hosts that dial
+    the name, and the rails."""
+    by_host = {s["host"]: s["id"] for s in servers}
+    by_fqdn: dict[str, list[dict]] = {}
+
+    for r in records:
+        if str(r.get("type") or "A").upper() == "A" and r.get("fqdn"):
+            by_fqdn.setdefault(str(r["fqdn"]).lower().strip("."), []).append(r)
+
+    out: dict[int, list[str]] = {}
+
+    for c in configs:
+        addr, port = str(c.get("address") or "").lower().strip("."), int(c.get("port") or 0)
+
+        if not addr or not port or _is_ip(addr) or int(c.get("down_for") or 0) < ORPHAN_DOWN:
+            continue
+
+        sids = {by_host[ip] for r in by_fqdn.get(addr, []) for ip in (r.get("ips") or []) if ip in by_host}
+
+        if not sids or any(t["iran_id"] in sids and port in t["ports"] for t in tunnels):
+            continue                                        # (it points at no Iran server we know, or at one that forwards the port: not this look's business)
+
+        holders = [t for t in tunnels if port in t["ports"]]
+
+        if len(holders) == 1 and holders[0].get("state") == "up":
+            out.setdefault(holders[0]["id"], []).append(c["name"])
+
+    return out
+
+
+def _orphans_now(now: int | None = None) -> dict[int, list[str]]:
+    """{tunnel id: [config names]} read from the panel now - see `misdirected`."""
+    from . import userq
+
+    now = int(time.time()) if now is None else now
+
+    with session() as db:
+        cfgs, placed = userq._placement(db)          # (the same placement the grades use)
+        down = [{"name": c.name, "address": (c.meta or {}).get("address", ""), "port": (c.meta or {}).get("port", 0), "down_for": (now - int(c.status_since)) if c.status_since else 0}
+                for c in cfgs if c.status == "down" and c.name not in placed]
+
+        if not down:
+            return {}
+
+        tunnels = [{"id": t.id, "iran_id": t.iran_server_id, "state": t.state, "ports": {int(p) for p in (t.forwarded_ports or []) if str(p).isdigit()}}
+                   for t in db.scalars(select(Tunnel).where(Tunnel.enabled.is_(True))) if not is_temp(t.name)]
+        servers = [{"id": s.id, "host": s.host} for s in db.scalars(select(Server).where(Server.role == "iran"))]
+
+    return misdirected(down, tunnels, servers, list(dnscache.CACHE.get("rows") or []))
+
+
 def _dialled() -> dict[str, set[int]] | None:
     out, err = failover._host_ports()
     return None if (err and not out) else out
@@ -154,13 +213,23 @@ def _over(s: dict, now: int, fqdns: list[str]) -> str:
 
 
 def look(ux_by_tunnel: dict[int, dict]) -> None:
-    """Called by the quality job with the grade of every tunnel that has configs: the look at the DNS of each tunnel that has a config DOWN (see the top of this file)."""
+    """Called by the quality job with the grade of every tunnel that has configs: the look at the DNS of each tunnel that has a config DOWN (see the top of this file). Since 1.69.243 also the configs that ride no tunnel at all
+    because their name points at the wrong Iran server (`misdirected`): they are looked at through the one tunnel that forwards their port."""
+    wanted: dict[int, list[str]] = {}
+
     for tid, ux in ux_by_tunnel.items():
         down = [b["config"] for b in (ux.get("bad") or []) if b.get("issue") == "down"]
 
-        if not down:
-            continue
+        if down:
+            wanted[tid] = down
 
+    try:
+        for tid, names in _orphans_now().items():
+            wanted.setdefault(tid, []).extend(n for n in names if n not in wanted.get(tid, []))
+    except Exception:
+        log.exception("dns look at the configs that ride no tunnel failed")
+
+    for tid, down in wanted.items():
         try:
             _look_at(tid, down)
         except Exception:
