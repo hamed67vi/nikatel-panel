@@ -214,7 +214,7 @@ def _plan_fields(title, days, devices, gb, down, up, price, descr, active, sort)
 
 
 def plan_save(pid: int | None, title, days, devices, gb, down, up, price, descr, active=True, sort=0) -> list[dict]:
-    """A new plan (pid empty) or the changes of one. The accounts already sold keep what they were sold with: a plan edit reaches only the next purchase and a renewal of an account bought on this plan."""
+    """A new plan (pid empty) or the changes of one. The Mini App renews an account at its plan's CURRENT price, days and traffic (and only while the plan is on), so an edit reaches the next purchase and every renewal of the accounts bought on this plan; an account that is running keeps its own end date and limit until it is renewed."""
     f = _plan_fields(title, days, devices, gb, down, up, price, descr, active, sort)
     vals = f'title = {_lit(f["title"])}, days = {f["days"]}, devices = {f["devices"]}, gb = {_sqlnum(f["gb"])}, down = {_sqlnum(f["down"])}, up = {_sqlnum(f["up"])}, price = {f["price"]}, descr = {_lit(f["descr"]) if f["descr"] else "NULL"}, active = {f["active"]}, sort = {f["sort"]}'
 
@@ -235,6 +235,7 @@ def plan_save(pid: int | None, title, days, devices, gb, down, up, price, descr,
 
 
 def plan_active(pid: int, on: bool) -> list[dict]:
+    """Switch a plan on or off. An OFF plan cannot be bought and the accounts bought on it cannot be renewed in the Mini App."""
     pid = _int(pid, "the plan", 1, 2_000_000_000)
     _done(shopbot.write(f"UPDATE l2tp_plans SET active = {1 if on else 0} WHERE id = {pid}"))
     now = plans()
@@ -246,12 +247,12 @@ def plan_active(pid: int, on: bool) -> list[dict]:
 
 
 def plan_delete(pid: int) -> list[dict]:
-    """Remove a plan nobody bought. A plan that has accounts is switched off instead (its accounts renew on it, and the sales list names it)."""
+    """Remove a plan nobody bought. A plan that has accounts cannot be deleted: they renew on it and the sales list names it. Switching it off is possible, but it also stops the renewal of those accounts (the Mini App renews only on a plan that is on)."""
     pid = _int(pid, "the plan", 1, 2_000_000_000)
     used = _query(f"SELECT COUNT(*) AS n FROM l2tp_accounts WHERE plan_id = {pid}")
 
     if used and int(used[0].get("n") or 0) > 0:
-        raise ValueError(f"{used[0]['n']} account(s) were bought on this plan: switch it off instead of deleting it")
+        raise ValueError(f"{used[0]['n']} account(s) were bought on this plan, so it cannot be deleted (switching it off stops their renewal too)")
 
     _done(shopbot.write(f"DELETE FROM l2tp_plans WHERE id = {pid}"))
     log.info("l2tp shop: plan %s deleted", pid)

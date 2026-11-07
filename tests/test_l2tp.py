@@ -698,13 +698,15 @@ def test_a_refusal_of_the_bots_database_comes_back_in_words(monkeypatch):
         l2tp_shop.plan_save(None, "ok name", 30, 1, None, None, None, 0, "")
 
 
-def test_a_plan_with_accounts_is_switched_off_never_deleted(monkeypatch):
+def test_a_plan_with_accounts_is_never_deleted_and_its_switch_off_is_told_to_stop_the_renewal(monkeypatch):
     from nikatel.services import l2tp_shop
 
     bot = FakeBot(monkeypatch)
 
-    with pytest.raises(ValueError, match="switch it off"):
+    with pytest.raises(ValueError, match="cannot be deleted") as e:
         l2tp_shop.plan_delete(2)
+
+    assert "stops their renewal" in str(e.value)          # (the Mini App renews only on a plan that is on: switching off is no gentle way out)
 
     l2tp_shop.plan_delete(1)
     assert bot.writes[-1] == "DELETE FROM l2tp_plans WHERE id = 1"
@@ -797,9 +799,18 @@ def test_the_shop_routes(client, monkeypatch):
 def test_the_shop_window_is_wired_and_has_plans_sales_and_the_switch():
     js = (WEB / "l2tp.js").read_text(encoding="utf-8")
     css = (WEB / "l2tp.css").read_text(encoding="utf-8")
-    for need in ('showModal("Plans & sales"', "/api/l2tp/shop", "/api/l2tp/shop/stage", "/api/l2tp/plans", "Who sees L2TP in the Mini App", "l2PlanOpen(0)", "＋ New plan", "Switch off", "Only paid orders are counted", "Reading the shop…"):
+    for need in ('showModal("Plans & sales"', "/api/l2tp/shop", "/api/l2tp/shop/stage", "/api/l2tp/plans", "Who sees L2TP in the Mini App", "l2PlanOpen(0)", "＋ New plan", "Switch off", "Only paid orders are counted", "Reading the shop…", "first a top-up of the wallet"):
         assert need in js, need
 
     assert "gconfirm(key === \"on\"" in js          # (opening L2TP to the customers asks first)
     for need in (".l2-plan", ".l2-opt", ".l2-tile", ".l2-ord", ".l2-ta"):
         assert need in css, need
+
+def test_the_owner_is_told_what_a_plan_change_does_to_the_accounts_that_renew_on_it():
+    js = (WEB / "l2tp.js").read_text(encoding="utf-8")
+    # (the Mini App session, 2026-11-07: a renewal uses the plan's CURRENT price, days and traffic and needs the plan to be ON)
+    on = js.split("window.l2PlanOn = async (id, on) => {", 1)[1].split("\n};", 1)[0]
+    assert "p.accounts" in on and "gconfirm(" in on and "cannot" in on and on.index("gconfirm(") < on.index("/active`")
+    save = js.split("window.l2PlanSave = async () => {", 1)[1].split("\n};", 1)[0]
+    assert "l2PlanChanges(was, body)" in save and "gconfirm(" in save and save.index("gconfirm(") < save.index("api(id ?") and "cannot be renewed" in save
+    assert "const l2PlanChanges" in js and "A renewal in the Mini App always uses the plan" in js and "do not repeat that" in js

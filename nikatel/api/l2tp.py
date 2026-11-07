@@ -192,7 +192,7 @@ def add_plan(body: PlanIn):
 
 @router.put("/l2tp/plans/{pid}", dependencies=[Depends(_shop_licensed)])
 def change_plan(pid: int, body: PlanIn):
-    """Change a plan. The accounts already sold keep what they were sold with; the change reaches the next purchase and the renewals of accounts bought on this plan."""
+    """Change a plan. The Mini App renews an account at its plan's CURRENT price, days and traffic: the change reaches the next purchase and every renewal of the accounts bought on this plan."""
     return {"ok": True, "plans": _wrap(l2tp_shop.plan_save, pid, body.title, body.days, body.devices, body.gb, body.down, body.up, body.price, body.descr, body.active, body.sort)}
 
 
@@ -202,11 +202,11 @@ class PlanOnIn(BaseModel):
 
 @router.put("/l2tp/plans/{pid}/active", dependencies=[Depends(_shop_licensed)])
 def plan_active(pid: int, body: PlanOnIn):
-    """Switch a plan on or off (an off plan is not offered; the accounts bought on it stay)."""
+    """Switch a plan on or off (an off plan cannot be bought, and the accounts bought on it cannot be renewed in the Mini App)."""
     return {"ok": True, "plans": _wrap(l2tp_shop.plan_active, pid, body.on)}
 
 
 @router.delete("/l2tp/plans/{pid}", dependencies=[Depends(_shop_licensed)])
 def delete_plan(pid: int):
-    """Delete a plan nobody bought; a plan with accounts must be switched off instead."""
+    """Delete a plan nobody bought; a plan with accounts cannot be deleted."""
     return {"ok": True, "plans": _wrap(l2tp_shop.plan_delete, pid)}

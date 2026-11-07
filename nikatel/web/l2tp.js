@@ -354,16 +354,16 @@ function l2PlansSec(s) {
   const rows = s.plans.map(p => `<div class="l2-plan${p.active ? "" : " off"}"><div class="l2-pn"><b>${esc(p.title)}</b>${p.active ? "" : `<em class="l2-st warn" title="Not offered to anybody">Off</em>`}<small class="mut">${p.accounts ? l2Plural(p.accounts, "account") + " bought" : "nobody bought it yet"}</small></div>
       <div class="l2-pf"><span>${l2Plural(p.days, "day")}</span><span>${l2Plural(p.devices, "device")}</span><span>${p.gb ? +p.gb + " GB" : "unlimited traffic"}</span><span>${p.down || p.up ? `${+p.down || "∞"} / ${+p.up || "∞"} Mbit/s` : "no speed limit"}</span></div>
       <div class="l2-pp">${p.price ? esc(l2Toman(p.price)) : "Free"}</div>
-      <div class="l2-acts"><span class="l2-seg"><button type="button" onclick="l2PlanOpen(${p.id})">Edit</button><button type="button" onclick="l2PlanOn(${p.id}, ${p.active ? 0 : 1})">${p.active ? "Switch off" : "Switch on"}</button></span><button type="button" class="l2-ico l2-del" title="${p.accounts ? "Accounts were bought on this plan: switch it off instead" : "Delete the plan"}" aria-label="Delete" onclick="l2PlanDel(${p.id})">${L2_ICO.bin}</button></div></div>`).join("");
+      <div class="l2-acts"><span class="l2-seg"><button type="button" onclick="l2PlanOpen(${p.id})">Edit</button><button type="button" onclick="l2PlanOn(${p.id}, ${p.active ? 0 : 1})">${p.active ? "Switch off" : "Switch on"}</button></span><button type="button" class="l2-ico l2-del" title="${p.accounts ? "Accounts were bought on this plan: it cannot be deleted (switching it off stops their renewal too)" : "Delete the plan"}" aria-label="Delete" onclick="l2PlanDel(${p.id})">${L2_ICO.bin}</button></div></div>`).join("");
   return l2Sec("Plans", `${rows || `<p class="l2-lead">No plan yet. A plan is what a customer buys: time, devices, traffic, speed and a price.</p>`}<div class="l2-act"><span class="l2-sp"></span><button type="button" class="l2-btn on l2-pri" onclick="l2PlanOpen(0)">＋ New plan</button></div>
-    <p class="l2-lead">A change of price, time or traffic reaches the next purchase and the renewals of accounts bought on that plan; accounts already running keep what they have. The Mini App renews an account on the plan it was bought on.</p>`);
+    <p class="l2-lead">A renewal in the Mini App always uses the plan's CURRENT price, time and traffic: a change here reaches the next purchase and every renewal of the accounts bought on that plan (a running account keeps its own end date and limit until then). A plan that is switched off cannot be bought, and its accounts cannot be renewed.</p>`);
 }
 
 function l2SalesSec(x) {
   const tile = (t, v) => `<div class="l2-tile"><small>${t}</small><b>${esc(l2Toman(v))}</b></div>`;
   const rows = x.orders.map(o => { const p = l2Pay(o.state); return `<div class="l2-ord"><span class="mut" title="${esc(when(o.at))}">${esc(when(o.at))}</span><span class="l2-ob"><b>${esc(o.name || o.user_id)}</b><small class="mut">${esc(o.user_id)}</small></span><span><em class="l2-tag">${o.type === "RENEW_L2TP" ? "Renew" : "Buy"}</em> ${esc(o.plan || o.text)}</span><span>${o.price ? esc(l2Toman(o.price)) : "Free"}</span><span><em class="l2-st ${p[0]}">${esc(p[1])}</em></span></div>`; }).join("");
   return l2Sec("Sales", `<div class="l2-tiles">${tile("Today", x.today)}${tile("Last 7 days", x.week)}${tile("Last 30 days", x.month)}${tile("All time", x.total)}</div>
-    <p class="l2-lead">${l2Plural(x.buys, "purchase")} and ${l2Plural(x.renews, "renewal")} paid so far. Only paid orders are counted in the money above.</p>
+    <p class="l2-lead">${l2Plural(x.buys, "purchase")} and ${l2Plural(x.renews, "renewal")} paid so far. Only paid orders are counted in the money above. A customer pays an L2TP order from the wallet; a card or currency payment is first a top-up of the wallet in the bot, so it shows there and not here.</p>
     ${rows ? `<div class="l2-ords"><div class="l2-ord l2-oh"><span>When</span><span>Customer</span><span>Order</span><span>Price</span><span>State</span></div>${rows}</div>` : `<p class="l2-lead">No order yet.</p>`}`);
 }
 
@@ -375,12 +375,14 @@ window.l2Stage = async key => {
   l2ShopDraw(); toast("✓ " + (s.stages.find(o => o.key === key) || {}).label, "ok");
 };
 window.l2PlanOn = async (id, on) => {
+  const p = l2.shop.plans.find(x => x.id === id);
+  if (!on && p && p.accounts && !(await gconfirm(`Switch off "${p.title}"? ${l2Plural(p.accounts, "account")} ${p.accounts === 1 ? "was" : "were"} bought on it: while it is off nobody can buy it and ${p.accounts === 1 ? "that account cannot" : "those accounts cannot"} be renewed in the Mini App. Continue?`, {danger: false}))) return;
   try { const r = await api(`/api/l2tp/plans/${id}/active`, {method: "PUT", body: JSON.stringify({on: !!on})}); l2.shop.plans = r.plans; } catch (e) { toast("✕ " + e.message, "bad"); return; }
   l2ShopDraw(); toast(on ? "✓ The plan is on sale" : "✓ The plan is off", "ok");
 };
 window.l2PlanDel = async id => {
   const p = l2.shop.plans.find(x => x.id === id); if (!p) return;
-  if (p.accounts) { toast("✕ Accounts were bought on this plan: switch it off instead of deleting it", "bad"); return; }
+  if (p.accounts) { toast("✕ Accounts were bought on this plan, so it cannot be deleted (switching it off stops their renewal too)", "bad"); return; }
   if (!(await gconfirm(`Delete the plan "${p.title}"? It cannot be brought back.`, {danger: true}))) return;
   try { const r = await api(`/api/l2tp/plans/${id}`, {method: "DELETE"}); l2.shop.plans = r.plans; } catch (e) { toast("✕ " + e.message, "bad"); return; }
   l2ShopDraw(); toast("✓ Plan deleted", "ok");
@@ -395,7 +397,7 @@ window.l2PlanOpen = id => {
     ${l2Sec("Plan", `<div class="l2-two">
       ${l2Field("Name", l2In("p-title", `maxlength="80" placeholder="L2TP · 1 month" value="${esc(v.title)}"`, ""), "What the customer reads on the card")}
       ${l2Field("Price", l2In("p-price", `type="number" min="0" step="1000" placeholder="0" value="${esc(v.price)}" oninput="l2PSync()"`, "toman"), "0 = free (a test plan)")}
-    </div>${l2Field("Description", `<textarea id="p-descr" class="l2-ta" maxlength="500" placeholder="A line or two about the service (optional)">${esc(v.descr)}</textarea>`, "No quotes, backslashes or semicolons", "l2-top")}`)}
+    </div>${l2Field("Description", `<textarea id="p-descr" class="l2-ta" maxlength="500" placeholder="A line or two about the service (optional)">${esc(v.descr)}</textarea>`, "The Mini App adds its own text about the service (secure L2TP/IPsec, no app needed) under it: do not repeat that. No quotes, backslashes or semicolons", "l2-top")}`)}
     ${l2Sec("What the account gets", `<div class="l2-two">
       ${l2Field("Time", l2In("p-days", `type="number" min="1" max="3650" value="${esc(v.days)}" oninput="l2PSync()"`, "days") + l2Chips("p-days", [[7, "7"], [30, "30"], [90, "90"], [365, "365"]]))}
       ${l2Field("Devices at once", l2In("p-dev", `type="number" min="1" max="10" value="${esc(v.devices)}" oninput="l2PSync()"`, "devices") + l2Chips("p-dev", [[1, "1"], [2, "2"], [3, "3"], [5, "5"]]))}
@@ -418,6 +420,13 @@ window.l2PSync = () => {
   const d = l2V("p-days") || "30", dev = l2V("p-dev") || "1", gb = l2V("p-gb"), dn = l2V("p-down"), up = l2V("p-up"), pr = +l2V("p-price") || 0;
   n.textContent = `${pr ? l2Toman(pr) : "Free"} · ${l2Plural(d, "day")} · ${l2Plural(dev, "device")} · ${gb && +gb ? gb + " GB" : "unlimited traffic"} · ${(+dn || +up) ? `${+dn || "∞"} / ${+up || "∞"} Mbit/s` : "no speed limit"}`;
 };
+const l2PlanChanges = (p, b) => {          // (what a save changes for the accounts that renew on this plan: the Mini App renews on the plan's CURRENT price, days and traffic)
+  const c = [];
+  if (b.price !== p.price) c.push(`price ${l2Toman(p.price)} → ${l2Toman(b.price)}`);
+  if (b.days !== p.days) c.push(`time ${p.days} → ${b.days} days`);
+  if ((+b.gb || 0) !== (+p.gb || 0)) c.push(`traffic ${p.gb ? +p.gb + " GB" : "unlimited"} → ${b.gb ? +b.gb + " GB" : "unlimited"}`);
+  return c;
+};
 window.l2PlanSave = async () => {
   const id = l2.p ? l2.p.id : 0, title = l2V("p-title");
   if (title.length < 2) { toast("✕ Give the plan a name", "bad"); const i = $("#p-title"); if (i) i.focus(); return; }
@@ -425,6 +434,11 @@ window.l2PlanSave = async () => {
   if (l2V("p-gb") !== "") body.gb = +l2V("p-gb");
   if (l2V("p-down") !== "") body.down = +l2V("p-down");
   if (l2V("p-up") !== "") body.up = +l2V("p-up");
+  const was = id ? l2.shop.plans.find(x => x.id === id) : null;
+  if (was && was.accounts) {          // (the owner is told what a save does to the accounts that renew on this plan - the Mini App session, 2026-11-07: "the panel should warn before a plan is switched off or its price or traffic changed while accounts use it")
+    const ch = l2PlanChanges(was, body), off = was.active && !body.active;
+    if ((ch.length || off) && !(await gconfirm(`${l2Plural(was.accounts, "account")} ${was.accounts === 1 ? "was" : "were"} bought on this plan, and the Mini App renews them at its current price, time and traffic.${ch.length ? " From now: " + ch.join(", ") + "." : ""}${off ? " The plan is switched off: nobody can buy it and those accounts cannot be renewed." : ""} Save?`, {danger: false}))) return;
+  }
   try { const r = await api(id ? `/api/l2tp/plans/${id}` : "/api/l2tp/plans", {method: id ? "PUT" : "POST", body: JSON.stringify(body)}); l2.shop.plans = r.plans; } catch (e) { toast("✕ " + e.message, "bad"); return; }
   l2.tab = "plans"; l2ShopDraw(); toast(id ? "✓ Plan saved" : "✓ Plan made", "ok");
 };
