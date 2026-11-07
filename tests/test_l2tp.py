@@ -516,10 +516,11 @@ def test_the_tab_opens_at_once_and_reads_the_entry_behind_it():
 def test_the_row_buttons_are_a_segmented_control_and_two_icon_buttons_and_no_native_dialog():
     js = (WEB / "l2tp.js").read_text(encoding="utf-8")
     css = (WEB / "l2tp.css").read_text(encoding="utf-8")
-    assert 'class="l2-seg"' in js and js.count('class="l2-ico') == 2 and ".l2-seg" in css and ".l2-ico" in css and ".l2-ico:disabled" in css          # (the owner, 2026-11-07: "make these buttons smart and professional, MacBook style")
-    assert "No device is connected now: nothing to disconnect" in js and " disabled" in js          # (the arrow button is grey while nobody is connected: it only cuts devices that are connected)
+    assert 'class="l2-seg"' in js and js.count('class="l2-ico') == 3 and ".l2-seg" in css and ".l2-ico" in css and ".l2-ico:disabled" in css          # (the owner, 2026-11-07: "make these buttons smart and professional, MacBook style"; the third is the delete of a plan in the shop window)
+    assert "Nobody is connected now" in js and '" idle"' in js and ".l2-ico.idle" in css          # (1.69.245: the arrow button is muted while nobody is connected but still works - the picture could be a few seconds old)
     assert not re.search(r"(?<![\w.])(confirm|prompt|alert)\(", js)          # (the grey box of the browser is gone: the panel's own glass windows ask)
-    assert "await gconfirm(" in js and "await gprompt(" in js and "await glassChoice(" in js
+    assert "await gconfirm(" in js and "gprompt(" not in js and "glassChoice(" not in js          # (the renewal is a window of its own now: time and traffic together)
+    assert "|Add|Disconnect)" in (WEB / "app.js").read_text(encoding="utf-8")          # (the glass box of a Disconnect names its button Disconnect, not OK)
 
 
 def test_the_entry_and_the_exit_are_read_at_the_same_time(ids, monkeypatch):
@@ -540,3 +541,265 @@ def test_the_new_files_hold_no_secret_or_address_of_ours():
     for f in ("l2tp.js", "l2tp.css"):
         text = (WEB / f).read_text(encoding="utf-8")
         assert not re.search(r"\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b", text), f
+
+
+# ------------------------------------------------------------------ 1.69.245: the live light, the renewal window, the shop side (plans, sales, who sees L2TP)
+def test_an_account_knows_since_when_a_device_is_connected(ready):
+    s = l2tp.state()
+    by = {a["user"]: a for a in s["accounts"]}
+    assert by["alice"]["since"] == 1799999000 and by["bob"]["since"] is None
+
+
+def test_the_light_read_asks_only_the_entry_and_keeps_the_exit_of_the_last_full_answer(ready, monkeypatch):
+    fake = ready
+    full = l2tp.state()
+    fake.calls.clear()
+    light = l2tp.state(base=full)
+    assert [c[1] for c in fake.calls] == ["l2tp_state"]          # (not l2tp_exit_state)
+    assert light["exit"] == full["exit"] and light["tunnel"]["name"] == "fa-ia" and len(light["accounts"]) == 4
+
+
+def test_the_live_route_reads_the_entry_alone_between_the_full_reads(client, ids, monkeypatch):
+    from nikatel.api import l2tp as api
+
+    a, b, t = ids
+    api._drop()
+    fake = Fake(monkeypatch)
+    client.put("/api/l2tp/config", json={"entry_id": a, "exit_id": b, "tunnel_id": t, "title": "Nikatel Shop"})
+    monkeypatch.setattr(api, "LIVE_TTL", 0.0)
+    assert client.get("/api/l2tp").status_code == 200
+    fake.calls.clear()
+    r = client.get("/api/l2tp?live=1").json()
+    assert [c[1] for c in fake.calls] == ["l2tp_state"] and r["exit"]["ok"] and r["online"] == 1          # (one SSH read for the whole tab, every few seconds)
+    api._STATE["full_at"] -= api.FULL_MAX + 5
+    fake.calls.clear()
+    assert client.get("/api/l2tp?live=1").status_code == 200 and sorted(c[1] for c in fake.calls) == ["l2tp_exit_state", "l2tp_state"]          # (the exit, the units and the tunnel are read in full now and then)
+    api._drop()
+
+
+def test_the_page_shows_who_is_connected_by_a_light_and_follows_the_entry():
+    js = (WEB / "l2tp.js").read_text(encoding="utf-8")
+    css = (WEB / "l2tp.css").read_text(encoding="utf-8")
+    assert "l2-dot ok l2-live" in js and "Connected now:" in js and ".l2-dot.l2-live" in css and "prefers-reduced-motion" in css          # (the owner, 2026-11-07: after Disconnect "the light must change, and show Connected again when the phone connects")
+    assert "?live=1" in js and "l2.fast = Date.now() + 45000" in js and "visibilitychange" in js          # (the light read; close after a Disconnect; at once when the owner comes back to the window)
+    assert 'const L2_STATE = {expired: ["bad", "Ended"], over: ["bad", "Used up"], disabled: ["warn", "Off"]}' in js and "l2-st" in css
+    assert "l2Filters(d)" in js and 'l2Views = [["", "All"' in js and ".l2-filt" in css          # (All / Connected / Ending soon / Ended, each with its count)
+    assert "typing >= 0" in js          # (the cursor stays in the search box while the figures move)
+
+
+def test_the_renewal_is_a_window_of_its_own_with_time_and_traffic_together():
+    js = (WEB / "l2tp.js").read_text(encoding="utf-8")
+    assert 'showModal(`Renew · ' in js and "l2RenewGo" in js and "Count the traffic from zero again" in js and "Add more traffic" in js
+    assert "/renew`, {method: \"POST\", body: JSON.stringify({days, reset_usage: reset})}" in js and "gb: +((r.quota / 1e9) + add).toFixed(2)" in js          # (the top-up raises the limit of the account by that much)
+    assert "l2GbAdd(10)" in js and "x.kicked ?" in js          # (+10 GB in Edit; the Disconnect says how many devices it cut, or that nobody was connected)
+
+
+# ---- the shop side
+class FakeBot:
+    """The shop bot's database as the panel's two channels see it: `query` answers the SELECTs the module asks, `write` records the statement."""
+
+    def __init__(self, monkeypatch, plans=None, accounts_on_plan=None, stage_value=None):
+        from nikatel.services import shopbot
+
+        self.writes, self.queries, self.states = [], [], []
+        self.plans = plans if plans is not None else [
+            {"id": "2", "title": "L2TP · 1 month", "days": "30", "devices": "2", "down": "10.0", "up": "10.0", "price": "150000", "descr": "line one\nline two", "active": "1", "sort": "1", "gb": "100.00"},
+            {"id": "1", "title": "L2TP test", "days": "7", "devices": "1", "down": "NULL", "up": "NULL", "price": "0", "descr": "NULL", "active": "0", "sort": "0", "gb": "NULL"}]
+        self.on_plan = accounts_on_plan if accounts_on_plan is not None else {2: 3}
+        self.stage_value = stage_value
+        monkeypatch.setattr(shopbot, "query", self.query)
+        monkeypatch.setattr(shopbot, "write", self.write)
+        monkeypatch.setattr(shopbot, "set_states", lambda ch: self.states.append(ch) or ch)
+
+    def query(self, sql):
+        self.queries.append(sql)
+
+        if "FROM l2tp_plans p ORDER BY p.sort" in sql:
+            return [{**p, "accounts": str(self.on_plan.get(int(p["id"]), 0))} for p in sorted(self.plans, key=lambda p: (int(p["sort"]), int(p["id"])))]
+
+        if "WHERE plan_id =" in sql:
+            return [{"n": str(self.on_plan.get(int(sql.rsplit("=", 1)[1]), 0))}]
+
+        if "BOT_STATES" in sql:
+            return [] if self.stage_value is None else [{"value": json.dumps({"miniL2tp": self.stage_value} if self.stage_value else {})}]
+
+        if "COALESCE(SUM(CASE" in sql:
+            return [{"n": "5", "total": "750000", "d1": "150000", "d7": "450000", "d30": "750000", "buys": "3", "renews": "2"}]
+
+        if "FROM pays p LEFT JOIN users" in sql and "lp.title AS plan_title" in sql:
+            return [{"id": "9", "user_id": "55", "name": "Sara", "username": "sara_x", "type": "BUY_L2TP", "price": "150000", "state": "paid_with_wallet", "request_date": "1799990000", "plan_id": "2", "description": "L2TP", "plan_title": "L2TP · 1 month"},
+                    {"id": "8", "user_id": "66", "name": "", "username": "kian", "type": "RENEW_L2TP", "price": "150000", "state": "low_wallet", "request_date": "1799980000", "plan_id": "7", "description": "renew nikatelshop_4", "plan_title": "NULL"}]
+
+        raise AssertionError("unexpected query: " + sql)
+
+    def write(self, sql):
+        self.writes.append(sql)
+        return "DONE"
+
+
+def test_the_plans_are_read_with_the_accounts_bought_on_them_and_the_stage_defaults_to_admins(monkeypatch):
+    from nikatel.services import l2tp_shop
+
+    bot = FakeBot(monkeypatch)
+    ps = l2tp_shop.plans()
+    assert [p["id"] for p in ps] == [1, 2]          # (the order number, then the id)
+    two = ps[1]
+    assert (two["title"], two["days"], two["devices"], two["gb"], two["down"], two["up"], two["price"], two["active"], two["accounts"]) == ("L2TP · 1 month", 30, 2, 100.0, 10.0, 10.0, 150000, True, 3) and two["descr"] == "line one\nline two"
+    assert ps[0]["gb"] is None and ps[0]["down"] is None and ps[0]["active"] is False and ps[0]["accounts"] == 0 and ps[0]["descr"] == ""
+    assert l2tp_shop.stage() == "admin"
+    bot.stage_value = "on"
+    assert l2tp_shop.stage() == "on"
+    bot.stage_value = "nonsense"
+    assert l2tp_shop.stage() == "admin"
+
+
+def test_a_table_the_mini_app_has_not_made_yet_reads_as_nothing(monkeypatch):
+    from nikatel.services import l2tp_shop, shopbot
+
+    def gone(sql):
+        raise RuntimeError("ERROR 1146 (42S02) at line 1: Table 'bot.l2tp_plans' doesn't exist")
+
+    monkeypatch.setattr(shopbot, "query", gone)
+    assert l2tp_shop.plans() == []
+
+
+def test_a_plan_is_written_exactly_and_a_bad_text_never_reaches_the_bot(monkeypatch):
+    from nikatel.services import l2tp_shop
+
+    bot = FakeBot(monkeypatch)
+    l2tp_shop.plan_save(None, "L2TP · 3 months", 90, 3, 300, 20, None, 400000, "a\nb", True, 5)
+    assert bot.writes[-1] == 'INSERT INTO l2tp_plans (title, days, devices, gb, down, up, price, descr, active, sort) VALUES ("L2TP · 3 months", 90, 3, 300, 20, NULL, 400000, CONCAT_WS(CHAR(10), "a", "b"), 1, 5)'
+    l2tp_shop.plan_save(2, "L2TP · 1 month", 30, 2, "", 0, 7.5, 150000, "", False, 0)
+    assert bot.writes[-1] == 'UPDATE l2tp_plans SET title = "L2TP · 1 month", days = 30, devices = 2, gb = NULL, down = NULL, up = 7.5, price = 150000, descr = NULL, active = 0, sort = 0 WHERE id = 2'
+    n = len(bot.writes)
+
+    for kw in ({"title": 'Say "hi"'}, {"title": "a;b"}, {"title": "back\\slash"}, {"title": "it's"}, {"title": "x"}, {"title": "ok name", "descr": "no `tick`"}, {"title": "ok name", "days": 0}, {"title": "ok name", "days": 4000}, {"title": "ok name", "devices": 11},
+               {"title": "ok name", "price": -1}, {"title": "ok name", "price": 10 ** 9}, {"title": "ok name", "gb": 0.001}, {"title": "ok name", "gb": 999999}, {"title": "ok name", "down": 5000}, {"title": "ok name", "price": "abc"}):
+        args = {"title": "ok name", "days": 30, "devices": 1, "gb": None, "down": None, "up": None, "price": 0, "descr": ""}
+        args.update(kw)
+
+        with pytest.raises(ValueError):
+            l2tp_shop.plan_save(None, **args)
+
+    assert len(bot.writes) == n
+
+    with pytest.raises(ValueError, match="no such plan"):
+        l2tp_shop.plan_save(77, "ok name", 30, 1, None, None, None, 0, "")          # (the UPDATE of a plan that is not there changes nothing; the answer says so)
+
+
+def test_a_refusal_of_the_bots_database_comes_back_in_words(monkeypatch):
+    from nikatel.services import l2tp_shop
+
+    bot = FakeBot(monkeypatch)
+    bot.write = lambda sql: "ERROR 1054 (42S22) at line 1: Unknown column 'gb' in 'field list'"
+    monkeypatch.setattr(l2tp_shop.shopbot, "write", bot.write)
+
+    with pytest.raises(ValueError, match="refused"):
+        l2tp_shop.plan_save(None, "ok name", 30, 1, None, None, None, 0, "")
+
+
+def test_a_plan_with_accounts_is_switched_off_never_deleted(monkeypatch):
+    from nikatel.services import l2tp_shop
+
+    bot = FakeBot(monkeypatch)
+
+    with pytest.raises(ValueError, match="switch it off"):
+        l2tp_shop.plan_delete(2)
+
+    l2tp_shop.plan_delete(1)
+    assert bot.writes[-1] == "DELETE FROM l2tp_plans WHERE id = 1"
+    l2tp_shop.plan_active(2, False)
+    assert bot.writes[-1] == "UPDATE l2tp_plans SET active = 0 WHERE id = 2"
+
+    with pytest.raises(ValueError, match="no such plan"):
+        l2tp_shop.plan_active(99, True)
+
+
+def test_who_sees_l2tp_goes_through_the_bots_switches(monkeypatch):
+    from nikatel.services import l2tp_shop
+
+    bot = FakeBot(monkeypatch)
+    assert l2tp_shop.set_stage("agents") == "agents" and bot.states == [{"miniL2tp": "agents"}]
+
+    for bad in ("", "everyone", "ON", "admin;x"):
+        with pytest.raises(ValueError):
+            l2tp_shop.set_stage(bad)
+
+    assert len(bot.states) == 1
+
+
+def test_the_shop_window_reads_the_bot_four_ways_at_the_same_time(monkeypatch):
+    from nikatel.services import l2tp_shop
+
+    bot = FakeBot(monkeypatch)
+    meet = threading.Barrier(4, timeout=5)
+    inner = bot.query
+
+    def query(sql):
+        meet.wait()          # read one after the other (every read of the bot host is an SSH round trip of about two seconds), the first would wait for a second that never starts, and the barrier would break
+        return inner(sql)
+
+    monkeypatch.setattr(l2tp_shop.shopbot, "query", query)
+    o = l2tp_shop.overview()
+    assert o["stage"] == "admin" and len(o["plans"]) == 2 and o["sales"]["total"] == 750000 and len(o["sales"]["orders"]) == 2
+
+
+def test_the_sales_count_only_paid_orders_in_the_money_and_show_every_order(monkeypatch):
+    from nikatel.services import l2tp_shop
+
+    bot = FakeBot(monkeypatch)
+    s = l2tp_shop.sales(now=1_800_000_000)
+    assert (s["today"], s["week"], s["month"], s["total"], s["count"], s["buys"], s["renews"]) == (150000, 450000, 750000, 750000, 5, 3, 2)
+    sql = next(q for q in bot.queries if "COALESCE(SUM(CASE" in q)
+    assert "p.state IN (" in sql and '"paid_with_wallet"' in sql and '"approved"' in sql and '"declined"' not in sql          # (a failed payment is no income)
+    first, second = s["orders"]
+    assert first["name"] == "Sara" and first["paid"] is True and first["plan"] == "L2TP · 1 month" and first["type"] == "BUY_L2TP"
+    assert second["name"] == "kian" and second["paid"] is False and second["plan"] == "" and second["text"] == "renew nikatelshop_4"          # (a plan that is gone: its name is not made up)
+    t0 = 1_800_000_000 + 12600
+    t0 = t0 // 86400 * 86400 - 12600
+    assert f"p.request_date >= {t0}" in sql          # (today starts at midnight in Tehran)
+
+
+def test_the_shop_routes(client, monkeypatch):
+    from nikatel.services import license
+
+    bot = FakeBot(monkeypatch)
+    monkeypatch.setattr(license, "has", lambda f: False)
+    assert client.get("/api/l2tp/shop").status_code == 402 and client.put("/api/l2tp/shop/stage", json={"stage": "on"}).status_code == 402 and client.post("/api/l2tp/plans", json={"title": "ok name"}).status_code == 402          # (the same licence feature as the Shop bot page)
+    assert bot.writes == [] and bot.states == []
+    monkeypatch.setattr(license, "has", lambda f: True)
+
+    r = client.get("/api/l2tp/shop").json()
+    assert r["ok"] and r["stage"] == "admin" and [s["key"] for s in r["stages"]] == ["off", "admin", "agents", "on"] and len(r["plans"]) == 2 and r["sales"]["total"] == 750000
+
+    assert client.put("/api/l2tp/shop/stage", json={"stage": "on"}).json()["stage"] == "on" and bot.states[-1] == {"miniL2tp": "on"}
+    assert client.put("/api/l2tp/shop/stage", json={"stage": "all"}).status_code == 400
+
+    body = {"title": "L2TP · 6 months", "days": 180, "devices": 2, "gb": 600, "price": 800000, "descr": "x"}
+    assert client.post("/api/l2tp/plans", json=body).status_code == 201 and bot.writes[-1].startswith("INSERT INTO l2tp_plans")
+    assert client.put("/api/l2tp/plans/2", json=body).status_code == 200 and bot.writes[-1].endswith("WHERE id = 2")
+    assert client.put("/api/l2tp/plans/2/active", json={"on": False}).json()["ok"] and bot.writes[-1] == "UPDATE l2tp_plans SET active = 0 WHERE id = 2"
+    assert client.delete("/api/l2tp/plans/2").status_code == 400          # (accounts were bought on it)
+    assert client.delete("/api/l2tp/plans/1").status_code == 200
+    assert client.post("/api/l2tp/plans", json={**body, "price": -5}).status_code == 422
+    assert client.post("/api/l2tp/plans", json={**body, "title": 'a"b'}).status_code == 400
+
+    def boom(sql):
+        raise RuntimeError("ERROR 2002 can't connect")
+
+    monkeypatch.setattr(license, "has", lambda f: True)
+    from nikatel.services import shopbot
+
+    monkeypatch.setattr(shopbot, "query", boom)
+    assert client.get("/api/l2tp/shop").status_code == 502          # (the bot's database does not answer: the page says so, not a blank error)
+
+
+def test_the_shop_window_is_wired_and_has_plans_sales_and_the_switch():
+    js = (WEB / "l2tp.js").read_text(encoding="utf-8")
+    css = (WEB / "l2tp.css").read_text(encoding="utf-8")
+    for need in ('showModal("Plans & sales"', "/api/l2tp/shop", "/api/l2tp/shop/stage", "/api/l2tp/plans", "Who sees L2TP in the Mini App", "l2PlanOpen(0)", "＋ New plan", "Switch off", "Only paid orders are counted", "Reading the shop…"):
+        assert need in js, need
+
+    assert "gconfirm(key === \"on\"" in js          # (opening L2TP to the customers asks first)
+    for need in (".l2-plan", ".l2-opt", ".l2-tile", ".l2-ord", ".l2-ta"):
+        assert need in css, need

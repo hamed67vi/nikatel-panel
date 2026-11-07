@@ -5,13 +5,24 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from ..auth import current_user
-from ..services import l2tp
+from ..services import l2tp, l2tp_shop
 from ..ssh import SSHError
 
 router = APIRouter(tags=["l2tp"], dependencies=[Depends(current_user)])
 
-_STATE: dict = {"at": 0.0, "data": None}          # (the page asks every few seconds; the entry is read over SSH, so an answer is kept for 10 s and dropped at once by every change)
+_STATE: dict = {"at": 0.0, "full_at": 0.0, "data": None}          # (the page asks every few seconds; the entry is read over SSH, so an answer is kept for 10 s - 3 s for the light read of an open tab - and dropped at once by every change)
 STATE_TTL = 10.0
+LIVE_TTL = 2.0
+FULL_MAX = 120.0          # (the exit, the units and the tunnel are read again at least this often, even while the open tab only asks for the light read)
+
+
+def _shop_licensed():          # (the shop side reads and writes the shop bot's database: it is behind the same licence feature as the Shop bot page)
+    from ..services import license
+
+    try:
+        license.require("shopbot")
+    except ValueError as e:
+        raise HTTPException(402, str(e))
 
 
 def _wrap(fn, *a, **kw):
@@ -21,18 +32,27 @@ def _wrap(fn, *a, **kw):
         raise HTTPException(400, str(e))
     except SSHError as e:
         raise HTTPException(409 if "read-only" in str(e) else 502, str(e))
+    except RuntimeError as e:          # (the shop bot's database said no, or the bot host did not answer)
+        raise HTTPException(502, str(e)[:200])
 
 
 def _drop():
     _STATE["at"] = 0.0
+    _STATE["full_at"] = 0.0
     _STATE["data"] = None
 
 
 @router.get("/l2tp")
-def overview(fresh: bool = False):
-    """The entry (services, load, pool), its accounts without passwords, the sessions, the exit and the tunnel; each part says why when it cannot be read."""
-    if fresh or _STATE["data"] is None or time.time() - _STATE["at"] > STATE_TTL:
+def overview(fresh: bool = False, live: bool = False):
+    """The entry (services, load, pool), its accounts without passwords, the sessions, the exit and the tunnel; each part says why when it cannot be read.
+    `live` is the light read an open tab makes every few seconds: only the entry is read again (who is connected now), the rest comes from the last full answer."""
+    now = time.time()
+
+    if fresh or _STATE["data"] is None or (live and now - _STATE["full_at"] > FULL_MAX) or (not live and now - _STATE["at"] > STATE_TTL):
         _STATE["data"] = l2tp.state()
+        _STATE["at"] = _STATE["full_at"] = time.time()
+    elif live and now - _STATE["at"] > LIVE_TTL:
+        _STATE["data"] = l2tp.state(base=_STATE["data"])
         _STATE["at"] = time.time()
 
     return {"ok": True, **_STATE["data"]}
@@ -132,3 +152,61 @@ def kick_account(name: str):
 def account_profile(name: str):
     """What a customer needs to connect, and the message to send: the connection name, the address, the user, the password and the shared key."""
     return {"ok": True, **_wrap(l2tp.profile, name)}
+
+
+# ------------------------------------------------------------------ the shop side (1.69.245): what the Mini App sells and what it sold
+@router.get("/l2tp/shop", dependencies=[Depends(_shop_licensed)])
+def shop():
+    """Who sees L2TP in the Mini App, the plans it sells (the switched-off ones too) and the money it made: income today, in 7 days, in 30 days, and the last orders."""
+    return {"ok": True, **_wrap(l2tp_shop.overview)}
+
+
+class StageIn(BaseModel):
+    stage: str = Field(max_length=12)
+
+
+@router.put("/l2tp/shop/stage", dependencies=[Depends(_shop_licensed)])
+def shop_stage(body: StageIn):
+    """Who sees L2TP in the Mini App: off, admins only, admins and partners, or everybody. It takes effect for the customers at once."""
+    return {"ok": True, "stage": _wrap(l2tp_shop.set_stage, body.stage)}
+
+
+class PlanIn(BaseModel):
+    title: str = Field(min_length=2, max_length=80)
+    days: int = Field(30, ge=1, le=l2tp.MAX_DAYS)
+    devices: int = Field(1, ge=1, le=10)
+    gb: float | None = Field(None, ge=0, le=l2tp.MAX_GB)              # the traffic, 0 or empty = no limit
+    down: float | None = Field(None, ge=0, le=l2tp.MAX_MBIT)
+    up: float | None = Field(None, ge=0, le=l2tp.MAX_MBIT)
+    price: int = Field(0, ge=0, le=l2tp_shop.MAX_PRICE)               # toman; 0 = free (a test plan)
+    descr: str = Field("", max_length=500)
+    active: bool = True
+    sort: int = Field(0, ge=-1000, le=1000)
+
+
+@router.post("/l2tp/plans", status_code=201, dependencies=[Depends(_shop_licensed)])
+def add_plan(body: PlanIn):
+    """A new plan for the Mini App. It is on sale at once when it is switched on and the Mini App's stage lets the buyer see L2TP."""
+    return {"ok": True, "plans": _wrap(l2tp_shop.plan_save, None, body.title, body.days, body.devices, body.gb, body.down, body.up, body.price, body.descr, body.active, body.sort)}
+
+
+@router.put("/l2tp/plans/{pid}", dependencies=[Depends(_shop_licensed)])
+def change_plan(pid: int, body: PlanIn):
+    """Change a plan. The accounts already sold keep what they were sold with; the change reaches the next purchase and the renewals of accounts bought on this plan."""
+    return {"ok": True, "plans": _wrap(l2tp_shop.plan_save, pid, body.title, body.days, body.devices, body.gb, body.down, body.up, body.price, body.descr, body.active, body.sort)}
+
+
+class PlanOnIn(BaseModel):
+    on: bool
+
+
+@router.put("/l2tp/plans/{pid}/active", dependencies=[Depends(_shop_licensed)])
+def plan_active(pid: int, body: PlanOnIn):
+    """Switch a plan on or off (an off plan is not offered; the accounts bought on it stay)."""
+    return {"ok": True, "plans": _wrap(l2tp_shop.plan_active, pid, body.on)}
+
+
+@router.delete("/l2tp/plans/{pid}", dependencies=[Depends(_shop_licensed)])
+def delete_plan(pid: int):
+    """Delete a plan nobody bought; a plan with accounts must be switched off instead."""
+    return {"ok": True, "plans": _wrap(l2tp_shop.plan_delete, pid)}

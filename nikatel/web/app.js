@@ -682,7 +682,7 @@ window.nkCombo = async btn => {
 document.addEventListener("mousedown", e => { const s = e.target.closest && e.target.closest("select[data-dd]"); if (s && !s.disabled && e.button === 0) { e.preventDefault(); s.focus(); nkDdOpen(s); } }, true);
 document.addEventListener("keydown", e => { const s = e.target; if (!nkDdEl && s && s.matches && s.matches("select[data-dd]") && ["ArrowDown", "ArrowUp", "Enter", " "].includes(e.key)) { e.preventDefault(); nkDdOpen(s); } }, true);
 /* glass confirm / prompt dialogs (replace the browser's own boxes). They sit above every window. */
-const ASK_VERB = /^(Restore|Forget|Remove|Delete|Reboot|Forget|Update|Install|Restart|Import|Repair|Rebuild|Point|Dump|Clear|Put|Copy|Speed test|Add)\b/i;
+const ASK_VERB = /^(Restore|Forget|Remove|Delete|Reboot|Forget|Update|Install|Restart|Import|Repair|Rebuild|Point|Dump|Clear|Put|Copy|Speed test|Add|Disconnect)\b/i;
 /* The question goes at once but its invisible layer stays for a moment (.ask-out): the second click of a DOUBLE click on OK landed on the page under the button and opened the window of the row there (a server list
    behind a "Remove ...?" box). The focus goes back to what had it, so the keyboard continues where it was. */
 function askLeave(el, opener) {

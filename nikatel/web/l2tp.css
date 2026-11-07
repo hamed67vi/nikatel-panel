@@ -48,11 +48,11 @@
    Every one has the same height, none is cut or laid over its neighbour; the delete turns red only when the pointer is on it. */
 .l2-acts { display: flex; align-items: center; justify-content: flex-end; gap: 6px; }
 .l2-seg { display: inline-flex; flex: none; border: 1px solid var(--l2-line); border-radius: 8px; background: var(--l2-fill); overflow: hidden; box-shadow: 0 1px 0 color-mix(in srgb, #fff 7%, transparent) inset, 0 1px 2px rgba(0, 0, 0, .16); }
-.l2-app .l2-seg > button { appearance: none; font: inherit; font-size: 12px; font-weight: 520; letter-spacing: -.005em; color: inherit; cursor: pointer; height: 26px; min-width: 0; padding: 0 11px; margin: 0; border: 0 !important; border-radius: 0 !important; background-color: transparent; background-image: none !important; box-shadow: none !important; transform: none; white-space: nowrap; transition: background-color .12s ease; }          /* (the panel's own button rules - a pill with a gradient, a border and a shadow - are beaten here on purpose: the three are ONE control) */
-.l2-app .l2-seg > button + button { border-left: 1px solid var(--l2-line) !important; }
-.l2-app .l2-seg > button:hover { background-color: var(--l2-hi); transform: none; }
-.l2-app .l2-seg > button:active { background-color: color-mix(in srgb, currentColor 20%, transparent); }
-.l2-app .l2-ico { appearance: none; display: inline-grid; place-items: center; flex: none; width: 28px; height: 28px; min-width: 0; padding: 0; margin: 0; transform: none; color: var(--l2-mut); cursor: pointer; border-radius: 8px; border: 1px solid var(--l2-line); background-color: var(--l2-fill); background-image: none !important; box-shadow: 0 1px 0 color-mix(in srgb, #fff 7%, transparent) inset, 0 1px 2px rgba(0, 0, 0, .16); transition: background .12s ease, color .12s ease, border-color .12s ease; }
+:is(.l2-app, .l2-dlg) .l2-seg > button { appearance: none; font: inherit; font-size: 12px; font-weight: 520; letter-spacing: -.005em; color: inherit; cursor: pointer; height: 26px; min-width: 0; padding: 0 11px; margin: 0; border: 0 !important; border-radius: 0 !important; background-color: transparent; background-image: none !important; box-shadow: none !important; transform: none; white-space: nowrap; transition: background-color .12s ease; }          /* (the panel's own button rules - a pill with a gradient, a border and a shadow - are beaten here on purpose: the three are ONE control) */
+:is(.l2-app, .l2-dlg) .l2-seg > button + button { border-left: 1px solid var(--l2-line) !important; }
+:is(.l2-app, .l2-dlg) .l2-seg > button:hover { background-color: var(--l2-hi); transform: none; }
+:is(.l2-app, .l2-dlg) .l2-seg > button:active { background-color: color-mix(in srgb, currentColor 20%, transparent); }
+:is(.l2-app, .l2-dlg) .l2-ico { appearance: none; display: inline-grid; place-items: center; flex: none; width: 28px; height: 28px; min-width: 0; padding: 0; margin: 0; transform: none; color: var(--l2-mut); cursor: pointer; border-radius: 8px !important; border: 1px solid var(--l2-line); background-color: var(--l2-fill); background-image: none !important; box-shadow: 0 1px 0 color-mix(in srgb, #fff 7%, transparent) inset, 0 1px 2px rgba(0, 0, 0, .16); transition: background .12s ease, color .12s ease, border-color .12s ease; }
 .l2-ico svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
 .l2-ico:hover:not(:disabled) { color: inherit; background: var(--l2-hi); }
 .l2-ico:active:not(:disabled) { background: color-mix(in srgb, currentColor 20%, transparent); }
@@ -105,4 +105,49 @@
   .l2-two { grid-template-columns: 1fr; }
   .l2-sec { padding: 12px; }
   .l2-act { flex-wrap: wrap; } .l2-act .l2-btn { flex: 1 1 auto; }
+}
+
+/* 1.69.245: the light of a connected account, the tag of an account that cannot connect, the filters, and the shop windows (plans, sales) */
+.l2-dot.l2-live { animation: l2-pulse 2.4s ease-in-out infinite; }
+@keyframes l2-pulse { 0%, 100% { box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 22%, transparent); } 50% { box-shadow: 0 0 0 6px color-mix(in srgb, var(--ok) 6%, transparent); } }
+@media (prefers-reduced-motion: reduce) { .l2-dot.l2-live { animation: none; } }
+.l2-st { font-style: normal; flex: none; padding: 0 8px; border-radius: 999px; font-size: 10.5px; font-weight: 650; color: var(--l2-mut); background: var(--l2-fill); border: 1px solid var(--l2-line); }
+.l2-st.ok { color: var(--ok); background: color-mix(in srgb, var(--ok) 14%, transparent); border-color: color-mix(in srgb, var(--ok) 30%, transparent); }
+.l2-st.warn { color: var(--warn); background: color-mix(in srgb, var(--warn) 14%, transparent); border-color: color-mix(in srgb, var(--warn) 32%, transparent); }
+.l2-st.bad { color: var(--bad); background: color-mix(in srgb, var(--bad) 13%, transparent); border-color: color-mix(in srgb, var(--bad) 32%, transparent); }
+:is(.l2-app, .l2-dlg) .l2-ico.idle { opacity: .6; }
+.l2-filt { display: inline-flex; flex-wrap: wrap; justify-self: start; border: 1px solid var(--l2-line); border-radius: 9px; background: var(--l2-fill); overflow: hidden; box-shadow: 0 1px 0 color-mix(in srgb, #fff 7%, transparent) inset, 0 1px 2px rgba(0, 0, 0, .16); }
+:is(.l2-app, .l2-dlg) .l2-filt > button { appearance: none; font: inherit; font-size: 12px; font-weight: 520; color: inherit; cursor: pointer; height: 28px; min-width: 0; padding: 0 13px; margin: 0; border: 0 !important; border-radius: 0 !important; background-color: transparent; background-image: none !important; box-shadow: none !important; transform: none; white-space: nowrap; display: inline-flex; align-items: center; gap: 7px; transition: background-color .12s ease; }
+:is(.l2-app, .l2-dlg) .l2-filt > button + button { border-left: 1px solid var(--l2-line) !important; }
+:is(.l2-app, .l2-dlg) .l2-filt > button:hover { background-color: var(--l2-fill); transform: none; }
+:is(.l2-app, .l2-dlg) .l2-filt > button.on { background-color: var(--l2-hi); font-weight: 650; }
+.l2-filt > button i { color: var(--l2-mut); font-size: 11px; font-weight: 520; }
+.l2-filt button:focus-visible { outline: 2px solid color-mix(in srgb, var(--acc, currentColor) 65%, transparent); outline-offset: -2px; }
+#modal .modal.l2-modal.l2-wide { width: min(880px, 95vw); }
+.l2-opts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+#modal .l2-dlg .l2-opt { appearance: none; font: inherit; color: inherit; cursor: pointer; text-align: left; display: grid; gap: 3px; align-content: start; height: auto !important; min-height: 0; padding: 10px 12px !important; border-radius: 11px !important; border: 1px solid var(--l2-line) !important; background-color: transparent; background-image: none !important; box-shadow: none !important; transform: none; white-space: normal; overflow: visible; }          /* (the panel's own rule for every button in a window - a pill, 32 px high, one line - is beaten here on purpose: the card holds a name and a sentence) */
+#modal .l2-dlg .l2-opt b { font-size: 12.5px; font-weight: 650; } #modal .l2-dlg .l2-opt small { color: var(--l2-mut); font-size: 11px; line-height: 1.3; }
+#modal .l2-dlg .l2-opt:hover { background-color: var(--l2-fill); }
+#modal .l2-dlg .l2-opt.on { background-color: var(--l2-hi); border-color: color-mix(in srgb, currentColor 45%, transparent) !important; }
+.l2-plan { display: grid; grid-template-columns: minmax(150px, 1.2fr) minmax(220px, 1.6fr) 118px 190px; gap: 10px 14px; align-items: center; padding: 10px 2px; }
+.l2-plan + .l2-plan, .l2-sec .l2-plan:not(:first-of-type) { border-top: 1px solid var(--l2-line); }
+.l2-plan.off .l2-pn b, .l2-plan.off .l2-pf, .l2-plan.off .l2-pp { opacity: .55; }
+.l2-pn { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 8px; min-width: 0; } .l2-pn b { font-size: 13.5px; font-weight: 650; } .l2-pn small { flex-basis: 100%; }
+.l2-pf { display: flex; flex-wrap: wrap; gap: 3px 12px; color: var(--l2-mut); font-size: 12px; }
+.l2-pp { font-weight: 650; font-size: 13px; }
+.l2-plan .l2-acts { justify-content: flex-end; }
+.l2-ta { width: 100%; box-sizing: border-box; min-height: 72px; resize: vertical; font: inherit; color: inherit; padding: 9px 11px; border-radius: 10px; border: 1px solid var(--l2-line); background: color-mix(in srgb, currentColor 4%, transparent); outline: none; }
+.l2-ta:focus { border-color: color-mix(in srgb, currentColor 45%, transparent); box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 8%, transparent); }
+.l2-tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.l2-tile { display: grid; gap: 4px; padding: 10px 14px; border-radius: 12px; border: 1px solid var(--l2-line); background: var(--l2-fill); } .l2-tile small { color: var(--l2-mut); font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em; } .l2-tile b { font-size: 15px; font-weight: 650; letter-spacing: -.02em; }
+.l2-ords { display: grid; max-height: 38vh; overflow-y: auto; }
+.l2-ord { display: grid; grid-template-columns: 140px minmax(120px, 1.2fr) minmax(130px, 1.5fr) 118px 112px; gap: 10px; align-items: center; padding: 7px 4px; font-size: 12px; } .l2-ord + .l2-ord { border-top: 1px solid var(--l2-line); }
+.l2-ord.l2-oh { position: sticky; top: 0; background: var(--l2-fill); color: var(--l2-mut); font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em; }
+.l2-ob { display: grid; min-width: 0; } .l2-ob b, .l2-ob small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 760px) {
+  .l2-opts { grid-template-columns: 1fr 1fr; }
+  .l2-plan { grid-template-columns: 1fr; gap: 6px; }
+  .l2-plan .l2-acts { justify-content: flex-start; }
+  .l2-tiles { grid-template-columns: 1fr 1fr; }
+  .l2-ord { grid-template-columns: 1fr 1fr; gap: 3px 10px; } .l2-ord.l2-oh { display: none; }
 }

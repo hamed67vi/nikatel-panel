@@ -201,6 +201,14 @@ def _read_entry(c: dict, now: float) -> tuple[dict, list, list]:
 
         accounts = [shape_account(a, now, c["bot_prefix"]) for a in p["accounts"] if isinstance(a, dict)]
         sessions = [{"user": str(s.get("user") or ""), "start": s.get("start"), "ifname": str(s.get("ifname") or "")} for s in p["sessions"] if isinstance(s, dict)]
+        first: dict = {}
+
+        for s in sessions:                                                    # (since when an account has a device connected: the oldest session it has now)
+            if s["user"] and isinstance(s["start"], (int, float)):
+                first[s["user"]] = min(first.get(s["user"], s["start"]), s["start"])
+
+        for a in accounts:
+            a["since"] = first.get(a["user"])
     except (RuntimeError, ValueError, OSError) as e:                      # (an unreachable server, a refused login, a server that was removed: the page says it)
         entry["error"] = str(e)[:200]
 
@@ -225,22 +233,26 @@ def _read_exit(c: dict) -> dict:
     return ex
 
 
-def state() -> dict:
+def state(base: dict | None = None) -> dict:
     """The page: the settings, the entry (services, accounts, who is online), the exit and the tunnel between them - each part answers for itself, a part that cannot be read says why and the rest still shows.
-    The entry and the exit are two SSH reads that are made AT THE SAME TIME (1.69.244: one after the other, a slow Iran server held the whole tab for as long as both took - the owner, 2026-11-07: "it loads very late")."""
+    The entry and the exit are two SSH reads that are made AT THE SAME TIME (1.69.244: one after the other, a slow Iran server held the whole tab for as long as both took - the owner, 2026-11-07: "it loads very late").
+    With `base` (a full answer from a moment ago) only the ENTRY is read again and the exit is taken from it: that is the light read the open tab makes every few seconds to show who is connected (1.69.245)."""
     c = conf()
     now = time.time()
     out: dict = {"conf": c, "configured": bool(c["entry_id"]), "entry": None, "exit": None, "tunnel": None, "accounts": [], "sessions": [], "now": int(now)}
+    keep_exit = base is not None and base.get("exit") is not None and base.get("conf", {}).get("exit_id") == c["exit_id"]
 
     with ThreadPoolExecutor(max_workers=2) as pool:
         fe = pool.submit(_read_entry, c, now) if c["entry_id"] else None
-        fx = pool.submit(_read_exit, c) if c["exit_id"] else None
+        fx = pool.submit(_read_exit, c) if c["exit_id"] and not keep_exit else None
 
         if fe is not None:
             out["entry"], out["accounts"], out["sessions"] = fe.result()
 
         if fx is not None:
             out["exit"] = fx.result()
+        elif keep_exit:
+            out["exit"] = base["exit"]
 
     if c["tunnel_id"]:
         with session() as db:
