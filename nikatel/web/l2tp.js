@@ -5,7 +5,7 @@
    Uses the helpers of app.js: $, api, esc, ago, when, renderSub, PAGES, state, toast, showModal, hideModal. */
 const l2 = {d: null, err: "", html: "", cfg: null, e: null, q: "", only: "", view: "", timer: 0, asked: false, fast: 0, at: 0, shop: null, tab: "plans", vis: false};
 const L2_NAME = /^[a-z][a-z0-9_]{2,23}$/;
-const L2_BRAND = "nikatelshop_";          // (the owner, 2026-11-07: the name of every account starts with the shop's name; the shop bot names its accounts the same way)
+const L2_BRAND = "nklt_";          // (the owner, 2026-11-07: the name of every account starts with nklt_ - first it was nikatelshop_; the shop bot names its accounts the same way; the accounts made before keep their names)
 const l2B = n => { n = +n || 0; return n >= 1e9 ? (n / 1e9).toFixed(2) + " GB" : n >= 1e6 ? (n / 1e6).toFixed(1) + " MB" : n >= 1e3 ? Math.round(n / 1e3) + " KB" : n + " B"; };
 const l2Mb = v => v ? (+v) + " Mbit/s" : "—";
 const l2Gb = q => q ? (+(q / 1e9).toFixed(2)) + " GB" : "";
@@ -166,7 +166,7 @@ window.l2NewOpen = () => {
   const body = `<form class="l2-dlg" onsubmit="l2Create(); return false" autocomplete="off">
     <p class="l2-lead">Make a VPN account for a customer. Everything here can be changed later.</p>
     ${l2Sec("Account", `<div class="l2-two">
-      ${l2Field("Username", l2In("n-name", `maxlength="24" placeholder="${L2_BRAND}ali" value="${L2_BRAND}" autocapitalize="off" spellcheck="false" oninput="this.value = this.value.toLowerCase(); l2Sync()"`, "", `<button type="button" class="l2-ghost" onclick="l2Rand()">Random</button>`), "3-24 characters: a-z, 0-9 and _; it starts with the shop's name")}
+      ${l2Field("Username", l2In("n-name", `maxlength="24" placeholder="${L2_BRAND}ali" value="${L2_BRAND}" autocapitalize="off" spellcheck="false" oninput="this.value = this.value.toLowerCase(); l2Sync()"`, "", `<button type="button" class="l2-ghost" onclick="l2Rand()">Random</button>`), "3-24 characters: a-z, 0-9 and _; it starts with nklt_")}
       ${l2Field("Password", l2In("n-pass", `maxlength="64" placeholder="Made for you" spellcheck="false"`, "", `<button type="button" class="l2-ghost" onclick="l2Pw('n-pass')">Generate</button>`), "Leave it empty and a strong one is made")}
     </div>${l2Field("Note", l2In("n-note", `maxlength="80" placeholder="Who it is for (optional)"`, ""), "", "l2-top")}`)}
     ${l2Sec("Limits", `<div class="l2-two">
@@ -180,7 +180,7 @@ window.l2NewOpen = () => {
   </form>`;
   showModal("New account", body, "l2-modal");
   l2Sync();
-  setTimeout(() => { const i = $("#n-name"); if (i) { i.focus(); i.setSelectionRange(i.value.length, i.value.length); } }, 80);          // (the cursor stands after "nikatelshop_": the person types the rest)
+  setTimeout(() => { const i = $("#n-name"); if (i) { i.focus(); i.setSelectionRange(i.value.length, i.value.length); } }, 80);          // (the cursor stands after "nklt_": the person types the rest)
 };
 
 window.l2Create = async () => {

@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.69.247 - L2TP: the username of a new account starts with nklt_
+
+> **In short:** the owner (2026-11-07): "nklt_ should be the start" of the usernames (he had the Mini App page of an account called nikatelshop_3 open). The New account window of the L2TP tab now fills in `nklt_` (and the Random button makes `nklt_` + six characters). Accounts that exist keep their names; the panel knows the shop bot's accounts by their note (`order N user U`), not by their name, so nothing else changes. The shop bot's own naming (`l2tpName` in the Mini App) is the Mini App session's file and was asked to follow.
+>
+> **به زبان ساده:** نام کاربریِ حساب‌های تازه حالا با `nklt_` شروع می‌شود (در پنجرهٔ «New account» و دکمهٔ «Random»). حساب‌های قبلی همان نام را نگه می‌دارند.
+
+- **Where:** `web/l2tp.js` (`L2_BRAND`), `tests/test_l2tp.py`.
+- **Not proved:** the Mini App's own naming (not ours to change).
+
 ## 1.69.246 - L2TP shop window: a warning before a plan is switched off or repriced while accounts renew on it
 
 > **In short:** the Mini App session checked the Plans & sales window of 1.69.245 against its own code and found that two sentences of it were wrong. (1) A plan that is switched OFF blocks more than new sales: the Mini App renews an account only while the plan of that account is on ("the plan of this service is no longer active, buy a new one"). (2) A renewal always uses the plan's CURRENT price, days and traffic, not the copy the account was bought with. So switching a plan off, or changing its price, days or traffic while accounts were bought on it, changes what those customers pay and get on their next renewal, or stops it. The window now says so before it does it, and its texts are corrected.

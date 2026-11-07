@@ -501,7 +501,7 @@ def test_the_account_forms_are_windows_of_their_own_never_a_box_over_the_table()
     assert 'showModal("New account"' in js and "showModal(`Edit · " in js and 'showModal("Servers"' in js and "showModal(`Connection · " in js
     assert "l2-pop" not in js and "l2-pop" not in css and "position: absolute" not in css          # (the owner, 2026-11-07: the box that made an account lay over the table - it is a window now)
     assert "#modal .modal.l2-modal" in css and "l2Sync" in js and "Create account" in js and "Save changes" in js
-    assert 'const L2_BRAND = "nikatelshop_"' in js and 'value="${L2_BRAND}"' in js and "L2_BRAND + Math.random()" in js          # (the owner, 2026-11-07: every username starts with the shop's name: prefilled, and the Random name too)
+    assert 'const L2_BRAND = "nklt_"' in js and 'value="${L2_BRAND}"' in js and "L2_BRAND + Math.random()" in js          # (the owner, 2026-11-07: every username starts with nklt_ - it was nikatelshop_ at first -: prefilled, and the Random name too)
 
 
 def test_the_tab_opens_at_once_and_reads_the_entry_behind_it():
