@@ -97,6 +97,9 @@ DEFAULTS: dict[str, dict[str, Any]] = {
     "reviewer": {"ai": True, "reviews": [], "lessons": [], "seq": 0},
     # the phone assistant (services/commander.py): OFF until the owner switches it on from the page itself (/m); `careful` = every change needs his tap, not only the risky ones
     "commander": {"enabled": False, "careful": False},
+    # the L2TP product (services/l2tp.py): the Iran server that is the entry (the customers connect to it; it holds the accounts), the foreign server that is the exit, the tunnel between them (only to show its state), the connection name the customer sees, the address
+    # shown to the customer (empty = the entry's own address) and the start of the names the shop bot gives its accounts (the page marks them "bot")
+    "l2tp": {"entry_id": 0, "exit_id": 0, "tunnel_id": 0, "title": "Nikatel Shop", "address": "", "bot_prefix": "l2_"},
 }
 
 SECRET_FIELDS = {"telegram": ("token",), "bale": ("token",), "probe": ("api_token",), "ai": ("api_key",), "arvan": ("api_key",), "license": ("token",)}

@@ -1,0 +1,93 @@
+/* The L2TP tab of Network (l2tp.js, 1.69.241): the same quiet glass look as the Field test tab - a slim bar of chips, a table of accounts (cards on a phone), a coloured dot for every state - and the windows of an account (New, Edit, Details, Servers),
+   which are windows of their own, never a box over the table. Colours are the panel's own (--ok, --warn, --bad). */
+.l2-app, .l2-dlg { --l2-line: color-mix(in srgb, currentColor 12%, transparent); --l2-fill: color-mix(in srgb, currentColor 5%, transparent); --l2-mut: color-mix(in srgb, currentColor 58%, transparent); --l2-hi: color-mix(in srgb, currentColor 11%, transparent); }
+.l2-app { display: grid; gap: 10px; font: 12.5px/1.35 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; letter-spacing: -.006em; font-variant-numeric: tabular-nums; }
+.l2-app i, .l2-dlg i { font-style: normal; }
+.l2-app .mut, .l2-dlg .mut { color: var(--l2-mut); }
+.l2-glass { background: var(--l2-fill); border: 1px solid var(--l2-line); border-radius: 14px; -webkit-backdrop-filter: blur(16px) saturate(1.3); backdrop-filter: blur(16px) saturate(1.3);
+  box-shadow: 0 1px 0 color-mix(in srgb, #fff 7%, transparent) inset, 0 8px 22px rgba(0, 0, 0, .13); }
+.l2-sp { flex: 1; }
+.l2-dot { display: inline-block; width: 8px; height: 8px; flex: none; border-radius: 50%; background: var(--unk); }
+.l2-dot.ok { background: var(--ok); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 20%, transparent); }
+.l2-dot.warn { background: var(--warn); box-shadow: 0 0 0 3px color-mix(in srgb, var(--warn) 22%, transparent); }
+.l2-dot.bad { background: var(--bad); box-shadow: 0 0 0 3px color-mix(in srgb, var(--bad) 22%, transparent); }
+.l2-btn { appearance: none; font: inherit; color: inherit; cursor: pointer; padding: 4px 12px; border-radius: 999px; border: 1px solid var(--l2-line); background: var(--l2-fill); white-space: nowrap; }
+.l2-btn:hover, .l2-btn.on { background: var(--l2-hi); }
+.l2-btn.l2-pri { font-weight: 650; border-color: color-mix(in srgb, currentColor 30%, transparent); }
+.l2-btn.l2-del:hover { color: var(--bad); border-color: color-mix(in srgb, var(--bad) 40%, transparent); }
+
+/* the bar */
+.l2-bar { display: flex; align-items: center; gap: 8px 16px; padding: 0 4px; min-height: 30px; flex-wrap: wrap; }
+.l2-chip { display: inline-flex; align-items: center; gap: 7px; }
+.l2-chip b { font-size: 14px; font-weight: 650; letter-spacing: -.02em; }
+.l2-chip small { color: var(--l2-mut); font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em; }
+.l2-q { font: inherit; color: inherit; width: 150px; padding: 4px 11px; border-radius: 999px; border: 1px solid var(--l2-line); background: var(--l2-fill); outline: none; }
+.l2-q:focus { border-color: color-mix(in srgb, currentColor 40%, transparent); }
+
+/* the notes under the bar */
+.l2-notes { display: grid; gap: 4px; }
+.l2-note { display: flex; align-items: center; gap: 9px; padding: 6px 12px; border-radius: 10px; font-size: 12px; border: 1px solid var(--l2-line); }
+.l2-note.bad { color: var(--bad); background: color-mix(in srgb, var(--bad) 10%, transparent); border-color: color-mix(in srgb, var(--bad) 35%, transparent); }
+.l2-note.warn { color: var(--warn); background: color-mix(in srgb, var(--warn) 10%, transparent); border-color: color-mix(in srgb, var(--warn) 35%, transparent); }
+
+/* the table */
+.l2-empty { display: grid; gap: 8px; justify-items: center; padding: 38px 16px; text-align: center; } .l2-empty b { font-size: 14px; } .l2-empty span { color: var(--l2-mut); }
+.l2-tbl { padding: 4px 6px; overflow-x: auto; }
+.l2-th, .l2-tr { display: grid; grid-template-columns: minmax(130px, 1.4fr) 62px minmax(96px, .8fr) minmax(104px, .9fr) minmax(128px, 1fr) 190px; gap: 10px; align-items: center; padding: 7px 8px; min-width: 760px; }          /* (the last column has the width of its five buttons in the header row too, so the columns of both rows line up) */
+.l2-th { color: var(--l2-mut); font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em; border-bottom: 1px solid var(--l2-line); }
+.l2-tr + .l2-tr { border-top: 1px solid var(--l2-line); }
+.l2-tr:hover { background: var(--l2-fill); border-radius: 8px; }
+.l2-n { display: flex; align-items: baseline; gap: 8px; min-width: 0; } .l2-n .l2-dot { align-self: center; } .l2-n b { font-weight: 650; font-size: 13px; flex: none; } .l2-n em { flex: none; } .l2-n small { flex: 1 1 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.l2-on { color: var(--ok); font-weight: 650; }
+.l2-tf { min-width: 0; }
+.l2-meter { display: block; height: 4px; margin-top: 5px; border-radius: 999px; background: var(--l2-fill); border: 1px solid var(--l2-line); overflow: hidden; }
+.l2-meter b { display: block; height: 100%; background: var(--unk); }
+.l2-meter.ok b { background: var(--ok); } .l2-meter.warn b { background: var(--warn); } .l2-meter.bad b { background: var(--bad); }
+.l2-tag { font-style: normal; padding: 0 7px; border-radius: 999px; font-size: 10px; font-weight: 650; text-transform: uppercase; letter-spacing: .05em; color: var(--l2-mut); border: 1px solid var(--l2-line); }
+.l2-acts { display: flex; gap: 4px; justify-content: flex-end; } .l2-acts .l2-btn { padding: 2px 9px; }
+.l2-foot { padding: 0 6px; font-size: 11.5px; }
+
+/* the windows: a lead line, sections with a small heading, fields with a unit and quick choices, a summary line, the buttons at the foot */
+#modal .modal.l2-modal { width: min(660px, 95vw); max-width: 95vw; }
+.l2-dlg { display: grid; gap: 16px; padding: 2px 2px 4px; font: 13px/1.4 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; letter-spacing: -.006em; font-variant-numeric: tabular-nums; }
+.l2-lead { margin: 0; color: var(--l2-mut); font-size: 12.5px; }
+.l2-sec { display: grid; gap: 12px; padding: 14px 16px 16px; border: 1px solid var(--l2-line); border-radius: 14px; background: var(--l2-fill); }
+.l2-sec h4 { margin: 0; color: var(--l2-mut); font-size: 10.5px; font-weight: 650; text-transform: uppercase; letter-spacing: .08em; }
+.l2-two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 18px; }
+.l2-fld { display: grid; gap: 6px; align-content: start; min-width: 0; } .l2-fld.l2-top { margin-top: 2px; }
+.l2-fl { font-size: 12px; font-weight: 600; }
+.l2-fh { color: var(--l2-mut); font-size: 11px; line-height: 1.35; } .l2-fh.bad { color: var(--bad); }
+.l2-in { display: flex; align-items: center; min-width: 0; border: 1px solid var(--l2-line); border-radius: 10px; background: color-mix(in srgb, currentColor 4%, transparent); }
+.l2-in:focus-within { border-color: color-mix(in srgb, currentColor 45%, transparent); box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 8%, transparent); }
+.l2-in input { flex: 1; min-width: 0; font: inherit; color: inherit; padding: 8px 11px; border: 0; background: transparent; outline: none; box-shadow: none; }
+.l2-in input[type=number] { -moz-appearance: textfield; } .l2-in input::-webkit-outer-spin-button, .l2-in input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.l2-in > i { flex: none; padding: 0 11px 0 0; color: var(--l2-mut); font-size: 11.5px; }
+.l2-ghost { appearance: none; flex: none; font: inherit; font-size: 11.5px; color: inherit; cursor: pointer; margin: 3px; padding: 4px 11px; border-radius: 8px; border: 0; background: var(--l2-hi); } .l2-ghost:hover { background: color-mix(in srgb, currentColor 18%, transparent); }
+.l2-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.l2-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.l2-chp { appearance: none; font: inherit; font-size: 11.5px; color: inherit; cursor: pointer; padding: 2px 11px; border-radius: 999px; border: 1px solid var(--l2-line); background: transparent; }
+.l2-chp:hover { background: var(--l2-fill); } .l2-chp.on { background: var(--l2-hi); border-color: color-mix(in srgb, currentColor 38%, transparent); font-weight: 650; }
+.l2-sel { font: inherit; color: inherit; width: 100%; padding: 8px 11px; border-radius: 10px; border: 1px solid var(--l2-line); background: color-mix(in srgb, currentColor 4%, transparent); outline: none; }
+.l2-sum { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 12px; border: 1px solid var(--l2-line); background: var(--l2-fill); font-weight: 600; }
+.l2-act { display: flex; align-items: center; gap: 8px; padding-top: 2px; } .l2-act .l2-btn { padding: 7px 18px; }
+.l2-who { display: flex; align-items: center; gap: 10px; font-size: 15px; } .l2-who b { font-size: 17px; font-weight: 650; }
+.l2-pill { padding: 1px 10px; border-radius: 999px; font-size: 11px; font-weight: 650; } .l2-pill.ok { color: var(--ok); background: color-mix(in srgb, var(--ok) 14%, transparent); } .l2-pill.warn { color: var(--warn); background: color-mix(in srgb, var(--warn) 15%, transparent); } .l2-pill.bad { color: var(--bad); background: color-mix(in srgb, var(--bad) 14%, transparent); }
+.l2-use { display: grid; gap: 4px; padding: 10px 14px; border-radius: 12px; border: 1px solid var(--l2-line); background: var(--l2-fill); } .l2-use .l2-meter { margin-top: 2px; height: 6px; }
+.l2-chk { display: flex; align-items: center; gap: 9px; cursor: pointer; } .l2-chk input { width: 16px; height: 16px; flex: none; }
+.l2-text { width: 100%; box-sizing: border-box; resize: vertical; height: 52vh; min-height: 300px; max-height: 520px; font: 12.5px/1.65 ui-monospace, "SF Mono", Menlo, Consolas, monospace; color: inherit; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--l2-line); background: var(--l2-fill); unicode-bidi: plaintext; white-space: pre-wrap; }          /* (the panel's own textarea rule is one line high: the message needs its whole height) */
+
+@media (max-width: 760px) {
+  .l2-q { width: 110px; }
+  /* a phone: no table to scroll sideways - every account is a card, its figures named in front of them */
+  .l2-tbl { overflow-x: visible; }
+  .l2-th { display: none; }
+  .l2-tr { grid-template-columns: 1fr 1fr; min-width: 0; gap: 6px 12px; padding: 11px 8px; }
+  .l2-tr > .l2-n, .l2-tr > .l2-acts { grid-column: 1 / -1; }
+  .l2-tr > .l2-acts { justify-content: flex-start; flex-wrap: wrap; margin-top: 2px; }
+  .l2-tr > span:nth-child(2)::before { content: "Devices "; } .l2-tr > span:nth-child(3)::before { content: "Speed "; } .l2-tr > span:nth-child(4)::before { content: "Traffic "; } .l2-tr > span:nth-child(5)::before { content: "Ends "; }
+  .l2-tr > span:nth-child(-n+5):not(.l2-n)::before { color: var(--l2-mut); font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em; display: block; }
+  /* the windows: one column */
+  .l2-two { grid-template-columns: 1fr; }
+  .l2-sec { padding: 12px; }
+  .l2-act { flex-wrap: wrap; } .l2-act .l2-btn { flex: 1 1 auto; }
+}

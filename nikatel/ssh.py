@@ -555,6 +555,31 @@ echo "SNI $ip own=$(c '@HOST@') control=$(c example.com)"
     # is the server there at all, and what is it
     "ping": (r"""echo "HOST=$(hostname) $(uname -sr)" """, {}),
 
+    # the L2TP product (services/l2tp.py), a read: is the entry installed, its services, the accounts WITHOUT passwords, the live sessions, the pool and the count - the pre-shared key is dropped here, it never travels with a list
+    "l2tp_state": (r"""NK=/usr/local/sbin/nk-l2tp
+[ -x "$NK" ] || { echo "L2TP none"; exit 0; }
+echo "L2TP ok"
+echo "UNIT strongswan $(systemctl is-active strongswan 2>/dev/null || echo unknown)"
+echo "UNIT xl2tpd $(pgrep -c -x xl2tpd >/dev/null 2>&1 && echo active || echo inactive)"
+echo "UNIT tick $(systemctl is-active nk-l2tp-tick.timer 2>/dev/null || echo unknown)"
+echo "UDP $(ss -lun 2>/dev/null | grep -cE ':(500|4500|1701)\b')"
+echo "LOAD $(cut -d' ' -f1 /proc/loadavg)"
+echo "INFO $($NK info 2>/dev/null | python3 -c 'import json,sys; d=json.load(sys.stdin); d.pop("psk",None); print(json.dumps(d))' 2>/dev/null)"
+echo "LIST $($NK list 2>/dev/null | tr -d '\n')"
+echo "SESS $($NK sessions 2>/dev/null | tr -d '\n')"
+echo DONE
+""", {}),
+
+    # the L2TP product, the foreign end (the exit): the routes it keeps for the entry and that its rules stand
+    "l2tp_exit_state": (r"""[ -x /usr/local/sbin/nk-l2tp-exit ] || { echo "EXIT none"; exit 0; }
+echo "EXIT ok"
+echo "ROUTES $(tr '\n' ';' < /etc/nk-l2tp/exit-routes.conf 2>/dev/null)"
+echo "RULES $(iptables-save 2>/dev/null | grep -c -- '--comment nk-l2tp-exit')"
+echo "FORWARD $(sysctl -n net.ipv4.ip_forward 2>/dev/null)"
+echo "TIMER $(systemctl is-active nk-l2tp-exit.timer 2>/dev/null || echo unknown)"
+echo DONE
+""", {}),
+
     # the shop bot (PHP + MariaDB on the bot server): services, cron, counts, states, logs - as JSON.
     # DB credentials are read on that server from its own env file; nothing secret leaves it.
     # the Mini App installed next to the bot: which files, their fingerprints, the version in index.html, whether the PHP parses, the public URL
@@ -1947,6 +1972,26 @@ echo "RESTORED $(mysql -N -u "$DB_USER" -p"$DB_PASS" "$DB_NAME" -e "SELECT COUNT
     # shop bot: keep only the last 7 dumps of the automatic backup (auto-*.sql.gz)
     "bot_prune_dumps": (r"""ls -1t /opt/nikabot/backups/auto-*.sql.gz 2>/dev/null | tail -n +8 | xargs -r rm -f; echo PRUNED
 """, {}),
+
+    # the L2TP product (services/l2tp.py): ONE command of the account manager on the entry. CMD is one word of a list; B64 is the JSON list of its arguments (names, passwords, numbers) in base64 - they are handed to the manager as separate
+    # arguments (never through a shell) and never appear in this script's text or in the panel's log. The manager prints one JSON line; this prints its last line.
+    "l2tp_cmd": (r"""python3 - '@CMD@' '@B64@' <<'__NK_PY__'
+import base64, json, subprocess, sys
+cmd, raw = sys.argv[1], sys.argv[2]
+try:
+    args = json.loads(base64.b64decode(raw).decode() or "[]")
+    assert isinstance(args, list) and len(args) <= 24 and all(isinstance(a, str) and len(a) <= 200 for a in args)
+except Exception:
+    print(json.dumps({"error": "bad arguments"}))
+    sys.exit(0)
+try:
+    r = subprocess.run(["/usr/local/sbin/nk-l2tp", cmd] + args, capture_output=True, text=True, timeout=40)
+    out = r.stdout.strip()
+    print(out.splitlines()[-1] if out else json.dumps({"error": (r.stderr.strip() or "no answer")[:200]}))
+except Exception as e:
+    print(json.dumps({"error": str(e)[:200]}))
+__NK_PY__
+""", {"CMD": r"^(add|renew|set|del|show|kick|info)$", "B64": r"^[A-Za-z0-9+/=]{0,8000}$"}),
 
     # shop bot: copy every table of the staging database (the real data) over the live one,
     # except the broadcast queues; tables that exist only in one of them are left alone
