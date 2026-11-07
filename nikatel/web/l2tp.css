@@ -33,7 +33,7 @@
 /* the table */
 .l2-empty { display: grid; gap: 8px; justify-items: center; padding: 38px 16px; text-align: center; } .l2-empty b { font-size: 14px; } .l2-empty span { color: var(--l2-mut); }
 .l2-tbl { padding: 4px 6px; overflow-x: auto; }
-.l2-th, .l2-tr { display: grid; grid-template-columns: minmax(130px, 1.4fr) 62px minmax(96px, .8fr) minmax(104px, .9fr) minmax(128px, 1fr) 190px; gap: 10px; align-items: center; padding: 7px 8px; min-width: 760px; }          /* (the last column has the width of its five buttons in the header row too, so the columns of both rows line up) */
+.l2-th, .l2-tr { display: grid; grid-template-columns: minmax(130px, 1.4fr) 62px minmax(96px, .8fr) minmax(104px, .9fr) minmax(128px, 1fr) 236px; gap: 10px; align-items: center; padding: 7px 8px; min-width: 806px; }          /* (the last column has the width of its buttons - the segmented control and the two icon buttons - in the header row too, so the columns of both rows line up) */
 .l2-th { color: var(--l2-mut); font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em; border-bottom: 1px solid var(--l2-line); }
 .l2-tr + .l2-tr { border-top: 1px solid var(--l2-line); }
 .l2-tr:hover { background: var(--l2-fill); border-radius: 8px; }
@@ -44,7 +44,22 @@
 .l2-meter b { display: block; height: 100%; background: var(--unk); }
 .l2-meter.ok b { background: var(--ok); } .l2-meter.warn b { background: var(--warn); } .l2-meter.bad b { background: var(--bad); }
 .l2-tag { font-style: normal; padding: 0 7px; border-radius: 999px; font-size: 10px; font-weight: 650; text-transform: uppercase; letter-spacing: .05em; color: var(--l2-mut); border: 1px solid var(--l2-line); }
-.l2-acts { display: flex; gap: 4px; justify-content: flex-end; } .l2-acts .l2-btn { padding: 2px 9px; }
+/* the work buttons of a row (the owner, 2026-11-07: "make these buttons smart and professional, MacBook style"): ONE segmented control - Details | Renew | Edit, like a Mac toolbar - then two square icon buttons (disconnect, delete).
+   Every one has the same height, none is cut or laid over its neighbour; the delete turns red only when the pointer is on it. */
+.l2-acts { display: flex; align-items: center; justify-content: flex-end; gap: 6px; }
+.l2-seg { display: inline-flex; flex: none; border: 1px solid var(--l2-line); border-radius: 8px; background: var(--l2-fill); overflow: hidden; box-shadow: 0 1px 0 color-mix(in srgb, #fff 7%, transparent) inset, 0 1px 2px rgba(0, 0, 0, .16); }
+.l2-app .l2-seg > button { appearance: none; font: inherit; font-size: 12px; font-weight: 520; letter-spacing: -.005em; color: inherit; cursor: pointer; height: 26px; min-width: 0; padding: 0 11px; margin: 0; border: 0 !important; border-radius: 0 !important; background-color: transparent; background-image: none !important; box-shadow: none !important; transform: none; white-space: nowrap; transition: background-color .12s ease; }          /* (the panel's own button rules - a pill with a gradient, a border and a shadow - are beaten here on purpose: the three are ONE control) */
+.l2-app .l2-seg > button + button { border-left: 1px solid var(--l2-line) !important; }
+.l2-app .l2-seg > button:hover { background-color: var(--l2-hi); transform: none; }
+.l2-app .l2-seg > button:active { background-color: color-mix(in srgb, currentColor 20%, transparent); }
+.l2-app .l2-ico { appearance: none; display: inline-grid; place-items: center; flex: none; width: 28px; height: 28px; min-width: 0; padding: 0; margin: 0; transform: none; color: var(--l2-mut); cursor: pointer; border-radius: 8px; border: 1px solid var(--l2-line); background-color: var(--l2-fill); background-image: none !important; box-shadow: 0 1px 0 color-mix(in srgb, #fff 7%, transparent) inset, 0 1px 2px rgba(0, 0, 0, .16); transition: background .12s ease, color .12s ease, border-color .12s ease; }
+.l2-ico svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.l2-ico:hover:not(:disabled) { color: inherit; background: var(--l2-hi); }
+.l2-ico:active:not(:disabled) { background: color-mix(in srgb, currentColor 20%, transparent); }
+.l2-ico:disabled { opacity: .35; cursor: default; box-shadow: none; }
+.l2-ico.l2-del:hover { color: var(--bad); background: color-mix(in srgb, var(--bad) 13%, transparent); border-color: color-mix(in srgb, var(--bad) 42%, transparent); }
+.l2-seg button:focus-visible, .l2-ico:focus-visible, .l2-btn:focus-visible { outline: 2px solid color-mix(in srgb, var(--acc, currentColor) 65%, transparent); outline-offset: 1px; }
+.l2-seg button:focus-visible { outline-offset: -2px; }
 .l2-foot { padding: 0 6px; font-size: 11.5px; }
 
 /* the windows: a lead line, sections with a small heading, fields with a unit and quick choices, a summary line, the buttons at the foot */

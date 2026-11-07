@@ -14,21 +14,39 @@ const l2DayEnd = s => Math.floor(Date.UTC(+s.slice(0, 4), +s.slice(5, 7) - 1, +s
 const l2Dot = ok => ok === true ? "ok" : ok === false ? "bad" : "warn";
 const l2V = id => { const e = document.getElementById(id); return e ? String(e.value).trim() : ""; };
 const l2Open = () => !!document.querySelector("#modal .modal");
+const l2Here = () => state.page === "tunnels" && !!state.sub && state.sub.tunnels === "l2tp";          // (is this tab still the one on screen: an answer that comes late never draws over another page)
+const L2_KEEP = "nk.l2tp.last";
+const l2Last = () => { try { return JSON.parse(sessionStorage.getItem(L2_KEEP) || "null"); } catch (e) { return null; } };
+const l2Keep = d => { try { sessionStorage.setItem(L2_KEEP, JSON.stringify(d)); } catch (e) { /* no storage (a private window): the tab still works, it only opens without the last answer */ } };
+const L2_ICO = {          // (two line icons of the row buttons, drawn in the colour of the text)
+  out: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>`,
+  bin: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>`,
+};
 
-PAGES.l2tp = async () => {
+PAGES.l2tp = async () => {          // (the tab is drawn AT ONCE - with the last answer if there is one - and the entry is read behind it: it is read over SSH and can take seconds; the owner, 2026-11-07: "it loads very late, the menu must open in a moment", and once the spinner never ended)
   renderSub();
-  await l2Load();
+  l2.err = "";
+  if (!l2.d) l2.d = l2Last();
   l2Draw();
+  l2Pull(true);
   clearInterval(l2.timer);
-  l2.timer = setInterval(async () => {          // (while the tab is open and no window is: the page follows the entry by itself)
-    if (!state.sub || state.sub.tunnels !== "l2tp" || state.page !== "tunnels") { clearInterval(l2.timer); l2.timer = 0; return; }
+  l2.timer = setInterval(() => {          // (while the tab is open and no window is: the page follows the entry by itself)
+    if (!l2Here()) { clearInterval(l2.timer); l2.timer = 0; return; }
     if (l2Open() || document.hidden) return;
-    await l2Load(); l2Draw();
+    l2Pull(false);
   }, 15000);
 };
 
 async function l2Load(fresh) {
-  try { l2.d = await api("/api/l2tp" + (fresh ? "?fresh=1" : "")); l2.err = ""; } catch (e) { l2.err = e.message; }
+  try { l2.d = await api("/api/l2tp" + (fresh ? "?fresh=1" : "")); l2.err = ""; l2Keep(l2.d); } catch (e) { l2.err = e.message; }
+}
+
+async function l2Pull(mark) {          // (a read behind the drawn page; `mark` = the small "reading" chip while it waits - not on the 15 s rounds, a redraw there would take the cursor out of the search box)
+  if (l2.pulling) return;
+  l2.pulling = true; l2.busy = !!mark;
+  if (mark && l2Here()) l2Draw();
+  try { await l2Load(); } finally { l2.pulling = false; l2.busy = false; }
+  if (l2Here()) l2Draw();          // (only if this tab is still the open one: a late answer never draws over another page)
 }
 
 function l2Draw() {
@@ -40,8 +58,8 @@ function l2Draw() {
 
 function l2Page() {
   const d = l2.d;
-  if (l2.err) return `<div class="l2-app"><div class="l2-glass l2-empty"><b>${esc(l2.err)}</b></div></div>`;
-  if (!d) return `<div class="l2-app"><div class="l2-glass l2-empty"><b>Loading…</b></div></div>`;
+  if (!d && l2.err) return `<div class="l2-app"><div class="l2-glass l2-empty"><b>${esc(l2.err)}</b><button class="l2-btn on" onclick="l2Refresh()">Try again</button></div></div>`;
+  if (!d) return `<div class="l2-app"><div class="l2-glass l2-empty"><b>Reading the entry…</b><span>It takes a few seconds the first time.</span></div></div>`;
   return `<div class="l2-app">${l2Bar(d)}${l2Notes(d)}${d.configured ? l2Table(d) : `<div class="l2-glass l2-empty"><b>Choose the servers first</b><span>Pick the Iran server that is the entry and the foreign server that is the exit.</span><button class="l2-btn on" onclick="l2ConfOpen()">Choose servers</button></div>`}</div>`;
 }
 
@@ -53,6 +71,7 @@ function l2Bar(d) {
     ${d.exit ? chip("Exit", ex.ok, ex.ok ? "ready" : "not ready", ex.error || `${ex.rules} rules, routes ${(ex.routes || []).join(" ")}`) : ""}
     ${tu ? chip("Tunnel", tu.state === "up" ? true : tu.state === "down" ? false : null, `${tu.name}${tu.rtt_ms != null ? " · " + Math.round(tu.rtt_ms) + " ms" : ""}${tu.protected ? " · protected" : ""}`, tu.error || "the tunnel between the entry and the exit") : ""}
     ${d.configured ? `<span class="l2-chip"><small>accounts</small><b>${d.accounts.length}</b></span><span class="l2-chip"><small>online</small><b>${d.online}</b></span>` : ""}
+    ${l2.busy ? `<span class="l2-chip" title="The entry is being read over SSH; what is shown is the last answer"><i class="l2-dot warn"></i><small>reading…</small></span>` : ""}
     <span class="l2-sp"></span>
     ${d.configured ? `<input class="l2-q" placeholder="Search" value="${esc(l2.q)}" oninput="l2.q = this.value; l2Redraw()">` : ""}
     ${d.configured ? `<button class="l2-btn${l2.only === "bot" ? " on" : ""}" title="Only the accounts the shop bot made" onclick="l2.only = l2.only === 'bot' ? '' : 'bot'; l2Redraw()">Bot</button>` : ""}
@@ -64,6 +83,7 @@ function l2Bar(d) {
 
 function l2Notes(d) {
   const n = [];
+  if (l2.err) n.push(["warn", `The entry could not be read just now (${l2.err}); this is the last answer. It tries again by itself.`]);
   if (d.entry && d.entry.error) n.push(["bad", `Entry: ${d.entry.error}`]);
   if (d.exit && d.exit.error) n.push(["bad", `Exit: ${d.exit.error}`]);
   if (d.tunnel && d.tunnel.state === "down") n.push(["bad", `The tunnel ${d.tunnel.name} is down: nobody can use the product until it is back.`]);
@@ -83,7 +103,7 @@ function l2Table(d) {
   if (!d.accounts.length) return `<div class="l2-glass l2-empty"><b>No accounts yet</b><span>Make the first one, or the shop bot makes them when a customer buys.</span><button class="l2-btn on" onclick="l2NewOpen()">＋ New account</button></div>`;
   if (!rows.length) return `<div class="l2-glass l2-empty"><b>Nothing matches</b></div>`;
   return `<div class="l2-glass l2-tbl"><div class="l2-th"><span>Account</span><span>Devices</span><span>Speed</span><span>Traffic</span><span>Ends</span><span></span></div>${rows.map(l2Row).join("")}</div>
-    <div class="l2-foot mut">Traffic is download and upload together, counted live for the devices that are online; when it is used up the account is cut within 30 seconds and cannot connect until you raise the limit, reset the count or renew with a new period.</div>`;
+    <div class="l2-foot mut">The dot in front of a name is the account's own state - green: on, yellow: switched off, red: ended or used up - not whether someone is connected; that is the Devices figure (connected now / allowed). The arrow button disconnects the devices that are connected right now; it is grey when none is. Traffic is download and upload together, counted live for the devices that are online; when it is used up the account is cut within 30 seconds and cannot connect until you raise the limit, reset the count or renew with a new period.</div>`;
 }
 
 function l2Row(a) {
@@ -96,7 +116,7 @@ function l2Row(a) {
     <span>${a.down || a.up ? `${l2Mb(a.down)}<i class="mut"> / ${l2Mb(a.up)}</i>` : `<span class="mut">no limit</span>`}</span>
     <span class="l2-tf" title="${esc(`download ${l2B(a.tx)} · upload ${l2B(a.rx)}${a.over ? " · the traffic is used up" : ""}`)}">${traffic}</span>
     <span title="${a.expires ? esc(when(a.expires)) : ""}">${l2Date(a.expires)}<i class="mut"> · ${left}</i></span>
-    <span class="l2-acts"><button class="l2-btn" title="The message to send the customer" onclick="l2Details('${u}')">Details</button><button class="l2-btn" title="Add days" onclick="l2Renew('${u}')">Renew</button><button class="l2-btn" title="Devices, speed, traffic, end date, password, on or off" onclick="l2EditOpen('${u}')">Edit</button><button class="l2-btn" title="Disconnect its devices now" onclick="l2Kick('${u}')">⏏</button><button class="l2-btn l2-del" title="Delete the account" onclick="l2Del('${u}', ${a.bot ? 1 : 0})">✕</button></span></div>`;
+    <span class="l2-acts"><span class="l2-seg"><button type="button" title="The message to send the customer" onclick="l2Details('${u}')">Details</button><button type="button" title="Add days" onclick="l2Renew('${u}')">Renew</button><button type="button" title="Devices, speed, traffic, end date, password, on or off" onclick="l2EditOpen('${u}')">Edit</button></span><button type="button" class="l2-ico" ${a.online ? `title="Disconnect the ${l2Plural(a.online, "device")} connected now (they can connect again)"` : `title="No device is connected now: nothing to disconnect" disabled`} aria-label="Disconnect" onclick="l2Kick('${u}')">${L2_ICO.out}</button><button type="button" class="l2-ico l2-del" title="Delete the account" aria-label="Delete" onclick="l2Del('${u}', ${a.bot ? 1 : 0})">${L2_ICO.bin}</button></span></div>`;
 }
 
 /* ---------------------------------------------------------------- the windows (one look: a quiet lead line, sections with a heading, fields with a unit and quick choices, a summary line, the buttons at the foot) */
@@ -243,12 +263,14 @@ const l2Do = async (path, opts, okText) => {          // (one change: the entry 
   try { const r = await api(path, opts); await l2Load(true); l2.html = ""; l2Draw(); if (okText) toast("✓ " + okText, "ok"); return r; }
   catch (e) { toast("✕ " + e.message, "bad"); return null; }
 };
-window.l2Renew = name => {
-  const v = prompt(`Days to add to ${name}`, "30"); if (v === null) return;
+/* (the owner, 2026-11-07, of the browser's grey "monitor... says" box: "make this box more professional" - the three questions of a row are the panel's own glass windows now, the ones every other page uses: gprompt, glassChoice, gconfirm) */
+window.l2Renew = async name => {
+  const v = await gprompt(`Days to add to ${name}`, "30"); if (v === null) return;
   const days = parseInt(v, 10);
   if (!(days >= 1 && days <= 3650)) { toast("✕ Days is a number from 1 to 3650", "bad"); return; }
-  const reset = confirm(`Start the traffic of ${name} from zero again (a new period)?\n\nOK = yes, count from zero.  Cancel = keep what it has used.`);
+  const reset = await glassChoice(`Count the traffic of ${name} from zero again, as a new period?`, [{v: true, label: "Count from zero", note: "a new period starts"}, {v: false, label: "Keep the count", note: "what it has used stays"}]);
+  if (reset === null) return;          // (Cancel or Esc: nothing is renewed)
   l2Do(`/api/l2tp/accounts/${encodeURIComponent(name)}/renew`, {method: "POST", body: JSON.stringify({days, reset_usage: reset})}, `${name}: ${days} days added${reset ? ", traffic from zero" : ""}`);
 };
-window.l2Kick = name => { if (confirm(`Disconnect the devices of ${name} now? They can connect again.`)) l2Do(`/api/l2tp/accounts/${encodeURIComponent(name)}/kick`, {method: "POST"}, `${name}: disconnected`); };
-window.l2Del = (name, bot) => { if (confirm(`Delete the account ${name}?${bot ? "\n\nThe shop bot made this one: the customer's order will point at an account that is gone." : ""}\n\nIts devices are disconnected and it cannot be brought back.`)) { hideModal(); l2Do(`/api/l2tp/accounts/${encodeURIComponent(name)}`, {method: "DELETE"}, `${name} deleted`); } };
+window.l2Kick = async name => { if (await gconfirm(`Disconnect the devices of ${name} now? They can connect again.`, {danger: false})) l2Do(`/api/l2tp/accounts/${encodeURIComponent(name)}/kick`, {method: "POST"}, `${name}: disconnected`); };
+window.l2Del = async (name, bot) => { if (await gconfirm(`Delete the account ${name}? Its devices are disconnected and it cannot be brought back.${bot ? " The shop bot made this one: the customer's order will point at an account that is gone." : ""}`, {danger: true})) { hideModal(); l2Do(`/api/l2tp/accounts/${encodeURIComponent(name)}`, {method: "DELETE"}, `${name} deleted`); } };

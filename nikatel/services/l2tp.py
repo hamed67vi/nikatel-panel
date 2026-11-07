@@ -8,6 +8,7 @@ import base64
 import json
 import re
 import time
+from concurrent.futures import ThreadPoolExecutor
 
 from ..db import session
 from ..log import get_logger
@@ -182,47 +183,64 @@ def shape_account(a: dict, now: float, prefix: str) -> dict:
             "created": a.get("created"), "last_seen": a.get("last_seen"), "note": str(a.get("note") or "")[:120], "bot": made_by_bot(name, str(a.get("note") or ""), prefix)}
 
 
+def _read_entry(c: dict, now: float) -> tuple[dict, list, list]:
+    """One SSH read of the entry: its state, its accounts and its sessions. It never raises for a server that cannot be reached - the answer says why."""
+    entry: dict = {"ok": False, "error": "", "installed": False}
+    accounts: list = []
+    sessions: list = []
+
+    try:
+        p = parse_state(run_script(_node(c["entry_id"], "entry"), "l2tp_state", timeout=40))
+        entry.update(ok=p["installed"] and p["list_ok"], installed=p["installed"], units=p["units"], udp=p["udp"], load=p["load"], pool=p["info"].get("pool", ""), version=p["info"].get("version"), features=p["info"].get("features", []))
+        entry["quota"] = "quota" in entry["features"]          # (an entry whose manager is older than version 3 cannot keep a traffic quota: the page says so)
+
+        if not p["installed"]:
+            entry["error"] = "the L2TP manager is not installed on this server"
+        elif not p["list_ok"]:
+            entry["error"] = "the manager did not answer"
+
+        accounts = [shape_account(a, now, c["bot_prefix"]) for a in p["accounts"] if isinstance(a, dict)]
+        sessions = [{"user": str(s.get("user") or ""), "start": s.get("start"), "ifname": str(s.get("ifname") or "")} for s in p["sessions"] if isinstance(s, dict)]
+    except (RuntimeError, ValueError, OSError) as e:                      # (an unreachable server, a refused login, a server that was removed: the page says it)
+        entry["error"] = str(e)[:200]
+
+    return entry, accounts, sessions
+
+
+def _read_exit(c: dict) -> dict:
+    """One SSH read of the exit: are its rules, routes and forwarding there."""
+    ex: dict = {"ok": False, "error": "", "installed": False}
+
+    try:
+        p = parse_exit(run_script(_node(c["exit_id"], "exit"), "l2tp_exit_state", timeout=40))
+        ex.update(installed=p["installed"], routes=p["routes"], rules=p["rules"], forward=p["forward"], timer=p["timer"], ok=p["installed"] and p["rules"] > 0 and p["forward"])
+
+        if not p["installed"]:
+            ex["error"] = "the L2TP exit is not installed on this server"
+        elif not ex["ok"]:
+            ex["error"] = "the exit's routes or rules are missing"
+    except (RuntimeError, ValueError, OSError) as e:
+        ex["error"] = str(e)[:200]
+
+    return ex
+
+
 def state() -> dict:
-    """The page: the settings, the entry (services, accounts, who is online), the exit and the tunnel between them - each part answers for itself, a part that cannot be read says why and the rest still shows."""
+    """The page: the settings, the entry (services, accounts, who is online), the exit and the tunnel between them - each part answers for itself, a part that cannot be read says why and the rest still shows.
+    The entry and the exit are two SSH reads that are made AT THE SAME TIME (1.69.244: one after the other, a slow Iran server held the whole tab for as long as both took - the owner, 2026-11-07: "it loads very late")."""
     c = conf()
     now = time.time()
     out: dict = {"conf": c, "configured": bool(c["entry_id"]), "entry": None, "exit": None, "tunnel": None, "accounts": [], "sessions": [], "now": int(now)}
 
-    if c["entry_id"]:
-        entry: dict = {"ok": False, "error": "", "installed": False}
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        fe = pool.submit(_read_entry, c, now) if c["entry_id"] else None
+        fx = pool.submit(_read_exit, c) if c["exit_id"] else None
 
-        try:
-            p = parse_state(run_script(_node(c["entry_id"], "entry"), "l2tp_state", timeout=40))
-            entry.update(ok=p["installed"] and p["list_ok"], installed=p["installed"], units=p["units"], udp=p["udp"], load=p["load"], pool=p["info"].get("pool", ""), version=p["info"].get("version"), features=p["info"].get("features", []))
-            entry["quota"] = "quota" in entry["features"]          # (an entry whose manager is older than version 3 cannot keep a traffic quota: the page says so)
+        if fe is not None:
+            out["entry"], out["accounts"], out["sessions"] = fe.result()
 
-            if not p["installed"]:
-                entry["error"] = "the L2TP manager is not installed on this server"
-            elif not p["list_ok"]:
-                entry["error"] = "the manager did not answer"
-
-            out["accounts"] = [shape_account(a, now, c["bot_prefix"]) for a in p["accounts"] if isinstance(a, dict)]
-            out["sessions"] = [{"user": str(s.get("user") or ""), "start": s.get("start"), "ifname": str(s.get("ifname") or "")} for s in p["sessions"] if isinstance(s, dict)]
-        except (RuntimeError, ValueError, OSError) as e:                      # (an unreachable server, a refused login, a server that was removed: the page says it)
-            entry["error"] = str(e)[:200]
-
-        out["entry"] = entry
-
-    if c["exit_id"]:
-        ex: dict = {"ok": False, "error": "", "installed": False}
-
-        try:
-            p = parse_exit(run_script(_node(c["exit_id"], "exit"), "l2tp_exit_state", timeout=40))
-            ex.update(installed=p["installed"], routes=p["routes"], rules=p["rules"], forward=p["forward"], timer=p["timer"], ok=p["installed"] and p["rules"] > 0 and p["forward"])
-
-            if not p["installed"]:
-                ex["error"] = "the L2TP exit is not installed on this server"
-            elif not ex["ok"]:
-                ex["error"] = "the exit's routes or rules are missing"
-        except (RuntimeError, ValueError, OSError) as e:
-            ex["error"] = str(e)[:200]
-
-        out["exit"] = ex
+        if fx is not None:
+            out["exit"] = fx.result()
 
     if c["tunnel_id"]:
         with session() as db:

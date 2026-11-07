@@ -4,6 +4,7 @@ import json
 import re
 import subprocess
 import sys
+import threading
 from pathlib import Path
 
 import pytest
@@ -491,7 +492,7 @@ def test_every_handler_the_page_writes_into_its_html_exists():
 
     defined = set(re.findall(r"window\.(l2[A-Z]\w*) =", js)) | set(re.findall(r"function (l2[A-Z]\w*)\(", js)) | set(re.findall(r"const (l2[A-Z]\w*) =", js))
     assert used and used <= defined, used - defined
-    assert "this.value = this.value.toLowerCase(); l2Sync()" in js and "state.sub.tunnels !== \"l2tp\"" in js          # (the name is lower-cased as it is typed; the refresh stops when the tab is left)
+    assert "this.value = this.value.toLowerCase(); l2Sync()" in js and 'state.sub.tunnels === "l2tp"' in js and "if (!l2Here()) { clearInterval(l2.timer)" in js          # (the name is lower-cased as it is typed; the refresh stops when the tab is left)
 
 
 def test_the_account_forms_are_windows_of_their_own_never_a_box_over_the_table():
@@ -501,6 +502,38 @@ def test_the_account_forms_are_windows_of_their_own_never_a_box_over_the_table()
     assert "l2-pop" not in js and "l2-pop" not in css and "position: absolute" not in css          # (the owner, 2026-11-07: the box that made an account lay over the table - it is a window now)
     assert "#modal .modal.l2-modal" in css and "l2Sync" in js and "Create account" in js and "Save changes" in js
     assert 'const L2_BRAND = "nikatelshop_"' in js and 'value="${L2_BRAND}"' in js and "L2_BRAND + Math.random()" in js          # (the owner, 2026-11-07: every username starts with the shop's name: prefilled, and the Random name too)
+
+
+def test_the_tab_opens_at_once_and_reads_the_entry_behind_it():
+    js = (WEB / "l2tp.js").read_text(encoding="utf-8")
+    page = js.split("PAGES.l2tp = async () => {", 1)[1].split("\n};", 1)[0]
+    assert "await" not in page          # (the owner, 2026-11-07: "it loads very late, the menu must open in a moment" - the page never waits for the SSH read before it draws)
+    assert page.index("l2Draw();") < page.index("l2Pull(true)") and "l2Last()" in page
+    assert "sessionStorage" in js and "if (mark && l2Here()) l2Draw();" in js and "if (l2Here()) l2Draw();" in js          # (the last answer is kept; a late answer never draws over another page)
+    assert "Reading the entry…" in js and "Try again" in js and "this is the last answer" in js
+
+
+def test_the_row_buttons_are_a_segmented_control_and_two_icon_buttons_and_no_native_dialog():
+    js = (WEB / "l2tp.js").read_text(encoding="utf-8")
+    css = (WEB / "l2tp.css").read_text(encoding="utf-8")
+    assert 'class="l2-seg"' in js and js.count('class="l2-ico') == 2 and ".l2-seg" in css and ".l2-ico" in css and ".l2-ico:disabled" in css          # (the owner, 2026-11-07: "make these buttons smart and professional, MacBook style")
+    assert "No device is connected now: nothing to disconnect" in js and " disabled" in js          # (the arrow button is grey while nobody is connected: it only cuts devices that are connected)
+    assert not re.search(r"(?<![\w.])(confirm|prompt|alert)\(", js)          # (the grey box of the browser is gone: the panel's own glass windows ask)
+    assert "await gconfirm(" in js and "await gprompt(" in js and "await glassChoice(" in js
+
+
+def test_the_entry_and_the_exit_are_read_at_the_same_time(ids, monkeypatch):
+    a, b, t = ids
+    l2tp.set_conf(a, b, t, "Nikatel Shop", "")
+    meet = threading.Barrier(2, timeout=5)
+
+    def script(node, name, params=None, timeout=40):
+        meet.wait()          # read one after the other, the first read would wait for a second one that never starts, and the barrier would break
+        return STATE_OUT if name == "l2tp_state" else EXIT_OUT
+
+    monkeypatch.setattr(l2tp, "run_script", script)
+    s = l2tp.state()
+    assert s["entry"]["ok"] is True and s["exit"]["ok"] is True and s["tunnel"]["name"] == "fa-ia" and len(s["accounts"]) == 4
 
 
 def test_the_new_files_hold_no_secret_or_address_of_ours():
