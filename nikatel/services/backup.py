@@ -1,5 +1,6 @@
-"""Backups, one file per PART: the panel (database, auth, secret key, known hosts) and the shop bot (its database dump). Each part is its own encrypted file and, when
-Telegram is set up, goes to its own topic of the group (until everything is one piece).
+"""Backups, one file per PART: the panel (database, auth, secret key, known hosts), the shop bot (its database dump) and the L2TP entry (its accounts, 1.69.248). Each part is its own encrypted file and, when
+Telegram is set up, goes to its own topic of the group (until everything is one piece). A part may have a schedule of its own: L2TP is saved every hour (the owner, 2026-11-08: "a backup and restore system for the L2TP section,
+and send its backup to a section of that group every hour"), the others follow the one daily schedule.
 
 Encryption is `openssl enc -aes-256-cbc -pbkdf2` with a passphrase the operator sets once (kept in
 <data_dir>/backup.pass, 0600). The same passphrase restores on any machine with openssl - no
@@ -10,6 +11,7 @@ from __future__ import annotations
 
 import base64
 import io
+import json
 import os
 import re
 import sqlite3
@@ -23,12 +25,17 @@ from ..db import session
 from ..log import get_logger
 from ..ssh import SSHError, run_action, run_script
 from . import settings as st
+from . import telegram as tgm
 from .events import emit
 from .telegram import send_file
 
 log = get_logger("backup")
 FILES = ("auth.json", "secret.key", "known_hosts", "backup.pass")
-PARTS = {"panel": ("Panel", "database, settings, SSH keys of the panel"), "bot": ("Shop bot", "the bot database (users, orders, payments, plans)")}
+PARTS = {"panel": ("Panel", "database, settings, SSH keys of the panel"), "bot": ("Shop bot", "the bot database (users, orders, payments, plans)"),
+         "l2tp": ("L2TP", "the accounts of the L2TP entry (names, passwords, devices, end dates, traffic, speeds)")}
+OWN = {"l2tp": {"every_minutes": 60, "send": True}}      # a part with a schedule of its own (minutes) and whether each file goes to Telegram; the other parts follow the one daily schedule
+TOPIC_ONLY = ("l2tp",)                                   # a part that is sent only to a topic of its own: an hourly file must never land on the main page of the group
+TOPIC_RETRY = 6 * 3600                                   # (a topic that could not be made is tried again after this long by the schedule; a click tries at once)
 
 
 def pass_file() -> Path:
@@ -113,15 +120,74 @@ def make_bot_archive() -> bytes:
     return buf.getvalue()
 
 
+def make_l2tp_archive() -> bytes:
+    """tar.gz with the L2TP entry's accounts file as the manager keeps it (passwords included - the file is encrypted before it leaves this function's caller) and a small info file: when, how many, the pool and the shared key
+    (kept for a rebuild of the entry by hand; a restore never changes the key)."""
+    from .. import __version__
+    from . import l2tp
+
+    d = l2tp.backup_data()
+    users = d["state"]["users"]
+    now = int(time.time())
+    parts = (("l2tp-accounts.json", json.dumps(d["state"], indent=1, sort_keys=True).encode()),
+             ("l2tp-info.json", json.dumps({"taken_at": now, "accounts": len(users), "pool": d["pool"], "psk": d["psk"], "panel": __version__}, indent=1).encode()))
+    buf = io.BytesIO()
+
+    with tarfile.open(fileobj=buf, mode="w:gz") as tar:
+        for name, data in parts:
+            info = tarfile.TarInfo(name)
+            info.size, info.mtime, info.mode = len(data), now, 0o600
+            tar.addfile(info, io.BytesIO(data))
+
+    return buf.getvalue()
+
+
 def part_of(name: str) -> str:
-    """The part a backup file belongs to: nikatel-bot-... is the bot; every other file (also the older nikatel-<date>... ones) is the panel."""
-    m = re.match(r"^nikatel-(panel|bot)-", name)
+    """The part a backup file belongs to: nikatel-bot-... is the bot, nikatel-l2tp-... the L2TP entry; every other file (also the older nikatel-<date>... ones) is the panel."""
+    m = re.match(r"^nikatel-(panel|bot|l2tp)-", name)
     return m.group(1) if m else "panel"
 
 
 def parts_conf() -> dict:
     cur = st.get("backup").get("parts") or {}
-    return {k: {"enabled": bool((cur.get(k) or {}).get("enabled", True)), "topic": int((cur.get(k) or {}).get("topic", 0) or 0), "topic_name": str((cur.get(k) or {}).get("topic_name", ""))} for k in PARTS}
+    out = {}
+
+    for k in PARTS:
+        p, d = cur.get(k) or {}, OWN.get(k, {})
+        out[k] = {"enabled": bool(p.get("enabled", True)), "topic": int(p.get("topic", 0) or 0), "topic_name": str(p.get("topic_name", "")),
+                  "every_minutes": int(p.get("every_minutes", d.get("every_minutes", 0)) or 0), "send": bool(p.get("send", d.get("send", True)))}
+
+    return out
+
+
+def part_ready(k: str) -> bool:
+    """Is there anything to save for this part on this panel (L2TP: an entry server is chosen). The panel and the bot always count as ready here - the bot says why itself when it is not set up."""
+    if k == "l2tp":
+        from . import l2tp
+
+        return l2tp.backup_ready()
+
+    return True
+
+
+def part_state(k: str) -> dict:
+    """How the part's own schedule did last: when, whether it worked, what went wrong, whether the file reached Telegram."""
+    m = _marker(f"backup_part_{k}")
+    return {"last_run": int(m.get("at", 0)), "ok": bool(m.get("ok", True)), "error": str(m.get("error", "")), "sent": bool(m.get("sent", False)), "telegram": str(m.get("telegram", ""))}
+
+
+def make_topic(part: str) -> tuple[int, str]:
+    """Make a topic for this part in the Telegram group and remember it: (thread id, "") or (0, why)."""
+    label = PARTS[part][0]
+    tid, why = tgm.create_topic(f"{label} backups")
+
+    if not tid:
+        return 0, why
+
+    parts = st.get("backup").get("parts") or {}
+    parts[part] = {**parts_conf()[part], "topic": tid, "topic_name": f"{label} backups"}
+    st.put("backup", {"parts": parts})
+    return tid, ""
 
 
 def encrypt(data: bytes, passphrase: str) -> bytes:
@@ -146,14 +212,17 @@ def decrypt(data: bytes, passphrase: str) -> bytes:
     return r.stdout
 
 
-def run(send: bool | None = None, part: str = "") -> dict:
-    """Make the backup file of every enabled part (or of one `part`), keep them locally, send each to Telegram (to its own topic when it has one). Returns a summary."""
+def run(send: bool | None = None, part: str = "", auto: str = "") -> dict:
+    """Make the backup file of every enabled part (or of one `part`), keep them locally, send each to Telegram (to its own topic when it has one). Returns a summary.
+    `auto` says who asks: "" = a person (every enabled part that has something to save), "global" = the one daily schedule (the parts that have a schedule of their own are left to it), "part" = such a part's own schedule
+    (quiet - the schedule tells about a failure itself, once in a while - and a topic that could not be made is not asked for again for six hours)."""
     s = get_settings()
     conf = st.get("backup")
 
     if not has_passphrase():
-        with session() as db:
-            emit(db, "warn", "backup", "No backup made: set a backup passphrase in Settings → Backup first.", "")
+        if auto != "part":
+            with session() as db:
+                emit(db, "warn", "backup", "No backup made: set a backup passphrase in Settings → Backup first.", "")
 
         return {"ok": False, "error": "no passphrase set"}
 
@@ -161,14 +230,14 @@ def run(send: bool | None = None, part: str = "") -> dict:
         return {"ok": False, "error": "unknown part"}
 
     pc = parts_conf()
-    chosen = [part] if part else [k for k in PARTS if pc[k]["enabled"]]
+    chosen = [part] if part else [k for k in PARTS if pc[k]["enabled"] and part_ready(k) and not (auto == "global" and pc[k]["every_minutes"])]
     out_dir = s.data_dir.parent / "backups"
     out_dir.mkdir(parents=True, exist_ok=True)
     stamp = time.strftime("%Y%m%d-%H%M%S")
     keep = int(conf.get("keep_days", 14)) * 86400
     do_send = send if send is not None else conf.get("send_telegram")
     results: dict[str, dict] = {}
-    makers = {"panel": make_archive, "bot": make_bot_archive}
+    makers = {"panel": make_archive, "bot": make_bot_archive, "l2tp": make_l2tp_archive}
 
     for k in chosen:
         label = PARTS[k][0]
@@ -178,8 +247,9 @@ def run(send: bool | None = None, part: str = "") -> dict:
         except (RuntimeError, ValueError, SSHError, OSError) as e:
             results[k] = {"ok": False, "error": str(e)[:160]}
 
-            with session() as db:
-                emit(db, "warn", "backup", f"{label} backup not made: {str(e)[:160]}", "")
+            if auto != "part":
+                with session() as db:
+                    emit(db, "warn", "backup", f"{label} backup not made: {str(e)[:160]}", "")
 
             continue
 
@@ -194,12 +264,34 @@ def run(send: bool | None = None, part: str = "") -> dict:
         sent, why = False, "not requested"
 
         if do_send:
-            sent, why = send_file(path.name, blob, f"Nikatel {label} backup {stamp} ({len(blob) // 1024} KB)", thread_id=pc[k]["topic"])
+            tid, blocked = pc[k]["topic"], ""
+
+            if k in TOPIC_ONLY and not tid and tgm.ready():                      # (this part is sent only to a topic of its own: make one, in this group, when it has none)
+                fail = _marker(f"backup_topic_{k}")
+
+                if auto == "part" and time.time() - int(fail.get("at", 0)) < TOPIC_RETRY:
+                    blocked = str(fail.get("why", "")) or "the topic could not be made"
+                else:
+                    tid, why_t = make_topic(k)
+                    blocked = "" if tid else f"the Telegram topic could not be made: {why_t}"
+                    _mark(f"backup_topic_{k}", {} if tid else {"at": int(time.time()), "why": blocked[:200]})
+
+            if blocked:
+                why = blocked
+            else:
+                sent, why = send_file(path.name, blob, f"Nikatel {label} backup {stamp} ({len(blob) // 1024} KB)", thread_id=tid)
+
+                if not sent and k in TOPIC_ONLY and "thread not found" in why.lower():          # (the topic was deleted in Telegram: forget it, the next backup makes a new one)
+                    parts = st.get("backup").get("parts") or {}
+                    parts[k] = {**parts_conf()[k], "topic": 0, "topic_name": ""}
+                    st.put("backup", {"parts": parts})
+                    why += " (the topic is gone: a new one is made at the next backup)"
 
         results[k] = {"ok": True, "file": path.name, "bytes": len(blob), "sent": sent, "telegram": why}
 
-        with session() as db:
-            emit(db, "info", "backup", f"{label} backup {path.name} made ({len(blob) // 1024} KB)" + (", sent to Telegram." if sent else f"; Telegram: {why}."), "")
+        if auto != "part":
+            with session() as db:
+                emit(db, "info", "backup", f"{label} backup {path.name} made ({len(blob) // 1024} KB)" + (", sent to Telegram." if sent else f"; Telegram: {why}."), "")
 
         log.info("backup %s bytes=%s telegram=%s", path.name, len(blob), sent)
 
@@ -242,7 +334,46 @@ def _mark(key: str, value: dict) -> None:
 
 
 def scheduled() -> None:
-    """Job (every 5 minutes): once per local day at the configured hour - or, when `every_minutes` is set, every that many minutes (15, 30, 60 ...).
+    """Job (every 5 minutes): the one daily schedule, then the parts that have a schedule of their own."""
+    _scheduled_global()
+    _scheduled_parts()
+
+
+def _scheduled_parts() -> None:
+    """The parts with a schedule of their own (L2TP: every hour, the owner, 2026-11-08): each is made when its time has come and goes to its own topic of the group. It does not depend on the daily schedule's switch - the part has its own.
+    Without the backup passphrase nothing is made (the L2TP window says so). A try that failed is repeated after 10 minutes; a failure is told in the events once in six hours, not at every try."""
+    if not has_passphrase():
+        return
+
+    now = int(time.time())
+
+    for k, p in parts_conf().items():
+        every = int(p["every_minutes"] or 0)
+
+        if not every or not p["enabled"] or not part_ready(k):
+            continue
+
+        last = _marker(f"backup_part_{k}")
+
+        if now - int(last.get("at", 0)) < (every * 60 - 30 if last.get("ok", True) else 600):          # 30 s of slack: the job ticks every 5 minutes, not to the second
+            continue
+
+        r = run(send=bool(p["send"]), part=k, auto="part")
+        res = (r.get("parts") or {}).get(k) or {}
+        ok = bool(r.get("ok"))
+        mark = {"at": now, "ok": ok, "error": "" if ok else str(r.get("error", ""))[:160], "sent": bool(res.get("sent")), "telegram": str(res.get("telegram", ""))[:160], "warn_at": int(last.get("warn_at", 0))}
+
+        if not ok and now - mark["warn_at"] > 6 * 3600:
+            with session() as db:
+                emit(db, "warn", "backup", f"{PARTS[k][0]} backup not made: {mark['error']}", "")
+
+            mark["warn_at"] = now
+
+        _mark(f"backup_part_{k}", mark)
+
+
+def _scheduled_global() -> None:
+    """The one daily schedule: once per local day at the configured hour - or, when `every_minutes` is set, every that many minutes (15, 30, 60 ...).
     With a short interval the files can still go to Telegram every time, or once a day only (`tg_every`), so the group is not flooded."""
     conf = st.get("backup")
 
@@ -262,7 +393,7 @@ def scheduled() -> None:
 
         daily_due = hour >= int(conf.get("hour", 3)) and last_day != day
         send = bool(conf.get("send_telegram")) and (conf.get("tg_every", "all") != "daily" or daily_due)
-        r = run(send=send)
+        r = run(send=send, auto="global")
         _mark("backup_last_run", {"at": now})
 
         if r.get("ok") and daily_due:
@@ -273,8 +404,9 @@ def scheduled() -> None:
     if hour < int(conf.get("hour", 3)) or last_day == day:
         return
 
-    run()
+    run(auto="global")
     _mark("backup_last_day", {"day": day})
+
 
 def restore(path: Path, passphrase: str, data_dir: Path | None = None) -> list[str]:
     """Unpack a backup into the data dir (service must be stopped). Returns the restored file names."""
@@ -294,6 +426,11 @@ def restore(path: Path, passphrase: str, data_dir: Path | None = None) -> list[s
                 (data_dir / "bot-restore").mkdir(exist_ok=True)
                 (data_dir / "bot-restore" / m.name).write_bytes(data)
                 restored.append("bot-restore/bot.sql.gz (load it with: gunzip < bot.sql.gz | mysql <database>)")
+            elif m.name in ("l2tp-accounts.json", "l2tp-info.json"):          # the L2TP accounts: not a panel file either; put aside - the panel's L2TP page restores them onto the entry
+                (data_dir / "l2tp-restore").mkdir(exist_ok=True)
+                (data_dir / "l2tp-restore" / m.name).write_bytes(data)
+                os.chmod(data_dir / "l2tp-restore" / m.name, 0o600)
+                restored.append(f"l2tp-restore/{m.name} (restore it from the L2TP page of the panel)")
             elif m.name == "nikatel.sql":
                 db_path = data_dir / "nikatel.db"
 
@@ -366,6 +503,17 @@ def read_archive(blob: bytes, passphrase: str = "") -> tuple[str, dict[str, byte
             raise ValueError("this is not a bot database dump")
 
         return "bot", files
+
+    if "l2tp-accounts.json" in files:
+        try:
+            state = json.loads(files["l2tp-accounts.json"])
+        except (ValueError, UnicodeDecodeError) as e:
+            raise ValueError("the L2TP accounts inside are damaged: " + str(e)[:80])
+
+        if not isinstance(state, dict) or not isinstance(state.get("users"), dict):
+            raise ValueError("this is not an L2TP backup")
+
+        return "l2tp", files
 
     raise ValueError("this is not a Nikatel backup")
 
@@ -467,12 +615,42 @@ def restart_soon() -> None:
         raise RuntimeError("the files are staged but the restart failed: " + str(e)[:100] + " - restart the nikatel service by hand")
 
 
-def restore_blob(blob: bytes, passphrase: str = "") -> dict:
-    """The restore the Backups card asks for: any backup file (made here or uploaded). Panel part: staged, then the panel restarts. Bot part: loaded at once."""
+def restore_l2tp(files: dict[str, bytes], mode: str) -> dict:
+    """L2TP part: a fresh encrypted copy of what the entry holds now is kept here first (when the passphrase is set and the entry answers - the entry keeps its own copy of the file in any case), then the accounts of the backup are put on the
+    entry: `missing` = only the accounts it does not have (the default, it removes nothing), `all` = exactly as the backup. The shared key is never changed."""
+    from . import l2tp
+
+    users = json.loads(files["l2tp-accounts.json"])["users"]
+    safety = ""
+
+    if has_passphrase():
+        try:
+            out_dir = get_settings().data_dir.parent / "backups"
+            out_dir.mkdir(parents=True, exist_ok=True)
+            path = out_dir / f"nikatel-l2tp-{time.strftime('%Y%m%d-%H%M%S')}-before-restore.tar.gz.enc"
+            path.write_bytes(encrypt(make_l2tp_archive(), pass_file().read_text().strip()))
+            path.chmod(0o600)
+            safety = path.name
+        except (RuntimeError, ValueError, SSHError, OSError):
+            safety = ""                                                    # (the entry cannot be read now: the restore will say so itself)
+
+    d = l2tp.restore(users, mode or "missing")
+    return {"ok": True, "part": "l2tp", "restarts": False, "added": d.get("added", 0), "updated": d.get("updated", 0), "removed": d.get("removed", 0), "skipped": d.get("skipped", 0),
+            "message": l2tp.restore_text(d) + (f" A copy of it is also kept here as {safety}." if safety else "")}
+
+
+def restore_blob(blob: bytes, passphrase: str = "", mode: str = "") -> dict:
+    """The restore the Backups card asks for: any backup file (made here or uploaded). Panel part: staged, then the panel restarts. Bot part: loaded at once. L2TP part: put on the entry at once (`mode`: missing | all)."""
     if get_settings().read_only:
         raise ValueError("the panel is in read-only mode: a restore is not allowed here")
 
+    if mode not in ("", "missing", "all"):
+        raise ValueError("the way to restore is 'missing' or 'all'")
+
     part, files = read_archive(blob, passphrase)
+
+    if part == "l2tp":
+        return restore_l2tp(files, mode)
 
     if part == "bot":
         note = restore_bot(files["bot.sql.gz"])

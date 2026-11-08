@@ -1,9 +1,10 @@
 /* The L2TP tab of Network (1.69.241; the data comes from services/l2tp.py): the VPN account (L2TP over IPsec, no app on the phone) the shop sells. The entry (an Iran server) holds the accounts, the exit (a foreign server) lets the traffic out,
    a protected tunnel joins them. One bar (entry, exit, tunnel, accounts, online), one table of accounts (cards on a phone), and the work of an account in windows of their own, never over the table: New account, Edit, Details (the message to send a customer)
    and Servers (the gear). Routes: GET /api/l2tp (?fresh=1 = read it all now, ?live=1 = the light read of an open tab: only the entry), GET and PUT /api/l2tp/config, POST /api/l2tp/accounts, POST .../renew, PUT, DELETE and POST .../kick on /api/l2tp/accounts/{name}, GET .../profile;
-   the shop side (1.69.245): GET /api/l2tp/shop, PUT .../shop/stage, POST /api/l2tp/plans, PUT and DELETE .../plans/{id}, PUT .../plans/{id}/active.
+   the shop side (1.69.245): GET /api/l2tp/shop, PUT .../shop/stage, POST /api/l2tp/plans, PUT and DELETE .../plans/{id}, PUT .../plans/{id}/active;
+   backup and restore (1.69.248; the same routes as the Backups card, part "l2tp"): GET /api/settings/backup, POST .../settings/backup/part/l2tp, POST .../backup/now?part=l2tp, POST and DELETE .../backup/topic/l2tp, POST .../backup/restore and .../backup/restore-upload (mode: missing | all), POST .../settings/backup/passphrase.
    Uses the helpers of app.js: $, api, esc, ago, when, renderSub, PAGES, state, toast, showModal, hideModal. */
-const l2 = {d: null, err: "", html: "", cfg: null, e: null, q: "", only: "", view: "", timer: 0, asked: false, fast: 0, at: 0, shop: null, tab: "plans", vis: false};
+const l2 = {d: null, err: "", html: "", cfg: null, e: null, q: "", view: "", timer: 0, asked: false, fast: 0, at: 0, shop: null, tab: "plans", vis: false};
 const L2_NAME = /^[a-z][a-z0-9_]{2,23}$/;
 const L2_BRAND = "nklt_";          // (the owner, 2026-11-07: the name of every account starts with nklt_ - first it was nikatelshop_; the shop bot names its accounts the same way; the accounts made before keep their names)
 const l2B = n => { n = +n || 0; return n >= 1e9 ? (n / 1e9).toFixed(2) + " GB" : n >= 1e6 ? (n / 1e6).toFixed(1) + " MB" : n >= 1e3 ? Math.round(n / 1e3) + " KB" : n + " B"; };
@@ -19,9 +20,12 @@ const l2Here = () => state.page === "tunnels" && !!state.sub && state.sub.tunnel
 const L2_KEEP = "nk.l2tp.last";
 const l2Last = () => { try { return JSON.parse(sessionStorage.getItem(L2_KEEP) || "null"); } catch (e) { return null; } };
 const l2Keep = d => { try { sessionStorage.setItem(L2_KEEP, JSON.stringify(d)); } catch (e) { /* no storage (a private window): the tab still works, it only opens without the last answer */ } };
-const L2_ICO = {          // (two line icons of the row buttons, drawn in the colour of the text)
+const L2_ICO = {          // (the line icons of the buttons, drawn in the colour of the text)
   out: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>`,
   bin: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>`,
+  gear: `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>`,
+  find: `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="20" y1="20" x2="16.5" y2="16.5"/></svg>`,
+  chev: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>`,
 };
 
 PAGES.l2tp = async () => {          // (the tab is drawn AT ONCE - with the last answer if there is one - and the entry is read behind it: it is read over SSH and can take seconds; the owner, 2026-11-07: "it loads very late, the menu must open in a moment", and once the spinner never ended)
@@ -73,20 +77,19 @@ function l2Page() {
 function l2Bar(d) {
   const en = d.entry, ex = d.exit, tu = d.tunnel;
   const chip = (label, ok, text, tip) => `<span class="l2-chip" title="${esc(tip || "")}"><i class="l2-dot ${l2Dot(ok)}"></i><small>${label}</small><b>${esc(text)}</b></span>`;
-  return `<div class="l2-bar">
+  return `<div class="l2-bar l2-glass"><div class="l2-stat">
     ${en ? chip("Entry", en.ok, en.ok ? `${en.units && en.units.strongswan === "active" ? "up" : "check"}${en.load != null ? " · load " + en.load : ""}` : "not ready", en.error || `IPsec ${en.units ? en.units.strongswan : "?"}, L2TP ${en.units ? en.units.xl2tpd : "?"}, timer ${en.units ? en.units.tick : "?"}, pool ${en.pool || "?"}`) : ""}
     ${d.exit ? chip("Exit", ex.ok, ex.ok ? "ready" : "not ready", ex.error || `${ex.rules} rules, routes ${(ex.routes || []).join(" ")}`) : ""}
     ${tu ? chip("Tunnel", tu.state === "up" ? true : tu.state === "down" ? false : null, `${tu.name}${tu.rtt_ms != null ? " · " + Math.round(tu.rtt_ms) + " ms" : ""}${tu.protected ? " · protected" : ""}`, tu.error || "the tunnel between the entry and the exit") : ""}
-    ${d.configured ? `<span class="l2-chip"><small>accounts</small><b>${d.accounts.length}</b></span><span class="l2-chip"><small>online</small><b>${d.online}</b></span>` : ""}
-    ${l2.busy ? `<span class="l2-chip" title="The entry is being read over SSH; what is shown is the last answer"><i class="l2-dot warn"></i><small>reading…</small></span>` : ""}
-    <span class="l2-sp"></span>
-    ${d.configured ? `<input class="l2-q" placeholder="Search" value="${esc(l2.q)}" oninput="l2.q = this.value; l2Redraw()">` : ""}
-    ${d.configured ? `<button class="l2-btn${l2.only === "bot" ? " on" : ""}" title="Only the accounts the shop bot made" onclick="l2.only = l2.only === 'bot' ? '' : 'bot'; l2Redraw()">Bot</button>` : ""}
-    ${d.configured ? `<button class="l2-btn" title="The plans the Mini App sells, who can buy, and the sales" onclick="l2ShopOpen()">Plans &amp; sales</button>` : ""}
-    ${d.configured ? `<button class="l2-btn on l2-pri" onclick="l2NewOpen()">＋ New account</button>` : ""}
-    <button class="l2-btn" title="The entry and the exit, the connection name" onclick="l2ConfOpen()">⚙</button>
-    <button class="l2-btn" title="Read the entry again now" onclick="l2Refresh()">↻</button>
-  </div>`;
+    ${d.configured ? `<span class="l2-chip l2-cnt"><small>accounts</small><b>${d.accounts.length}</b></span><span class="l2-chip"><small>online</small><b>${d.online}</b></span>` : ""}
+    ${l2.busy ? `<span class="l2-chip l2-busy" title="The entry is being read over SSH; what is shown is the last answer"><i class="l2-dot warn"></i><small>reading…</small></span>` : ""}
+  </div><div class="l2-tools">
+    ${d.configured ? `<label class="l2-search" title="Search by name or note">${L2_ICO.find}<input class="l2-q" placeholder="Search" value="${esc(l2.q)}" oninput="l2.q = this.value; l2Redraw()"></label>` : ""}
+    ${d.configured ? l2Filters(d) : ""}
+    ${d.configured ? `<span class="l2-seg l2-tb"><button type="button" title="Back up the accounts (sent to the Telegram group every hour) and restore them" onclick="l2BkOpen()">Backup</button><button type="button" title="The plans the Mini App sells, who can buy, and the sales" onclick="l2ShopOpen()">Plans &amp; sales</button></span>` : ""}
+    ${d.configured ? `<button type="button" class="l2-btn on l2-pri" onclick="l2NewOpen()">＋ New account</button>` : ""}
+    <button type="button" class="l2-ico" title="The entry and the exit, the connection name" aria-label="Servers" onclick="l2ConfOpen()">${L2_ICO.gear}</button>
+  </div></div>`;
 }
 
 function l2Notes(d) {
@@ -101,17 +104,16 @@ function l2Notes(d) {
   return n.length ? `<div class="l2-notes">${n.map(([c, t]) => `<div class="l2-note ${c}"><i class="l2-dot ${c}"></i>${esc(t)}</div>`).join("")}</div>` : "";
 }
 
-const L2_STATE = {expired: ["bad", "Ended"], over: ["bad", "Used up"], disabled: ["warn", "Off"]};          // (what an account that cannot connect is called; an account that can has no tag)
 const l2Soon = a => a.state === "active" && a.days_left != null && a.days_left <= 3;
-const l2Views = [["", "All", () => true], ["online", "Connected", a => a.online > 0], ["soon", "Ending soon", l2Soon], ["ended", "Ended", a => a.state !== "active"]];
+const l2Views = [["", "All", () => true], ["online", "Connected", a => a.online > 0], ["soon", "Ending soon", l2Soon], ["ended", "Ended", a => a.state !== "active"], ["bot", "Shop bot", a => a.bot]];
 
 function l2Rows(d) {
   const q = l2.q.trim().toLowerCase(), v = l2Views.find(x => x[0] === l2.view) || l2Views[0];
-  return d.accounts.filter(a => (!q || a.user.includes(q) || (a.note || "").toLowerCase().includes(q)) && (l2.only !== "bot" || a.bot) && v[2](a));
+  return d.accounts.filter(a => (!q || a.user.includes(q) || (a.note || "").toLowerCase().includes(q)) && v[2](a));
 }
 
-function l2Filters(d) {          // (the owner, 2026-11-07: he wants to see at a glance who is connected, whose time is nearly over, whose is over)
-  return `<div class="l2-filt" role="group" aria-label="Show">${l2Views.map(([k, t, f]) => `<button type="button" class="${l2.view === k ? "on" : ""}" onclick="l2.view = '${k}'; l2Redraw()">${t}<i>${d.accounts.filter(f).length}</i></button>`).join("")}</div>`;
+function l2Filters(d) {          // (the owner, 2026-11-07: he wants to see at a glance who is connected, whose time is nearly over, whose is over; 2026-11-08: "put it in a drop-down box in the top row" - a Mac-style popup button in the bar, the count of each view beside its name)
+  return `<span class="l2-filt" title="Which accounts the table shows"><select aria-label="Show" onchange="l2.view = this.value; l2Redraw()">${l2Views.map(([k, t, f]) => `<option value="${k}"${l2.view === k ? " selected" : ""}>${t} · ${d.accounts.filter(f).length}</option>`).join("")}</select><i>${L2_ICO.chev}</i></span>`;
 }
 
 function l2Since(ts) {
@@ -123,20 +125,22 @@ function l2Since(ts) {
 function l2Table(d) {
   const rows = l2Rows(d);
   if (!d.accounts.length) return `<div class="l2-glass l2-empty"><b>No accounts yet</b><span>Make the first one, or the shop bot makes them when a customer buys.</span><button class="l2-btn on" onclick="l2NewOpen()">＋ New account</button></div>`;
-  return `${l2Filters(d)}${rows.length ? `<div class="l2-glass l2-tbl"><div class="l2-th"><span>Account</span><span>Devices</span><span>Speed</span><span>Traffic</span><span>Ends</span><span></span></div>${rows.map(l2Row).join("")}</div>` : `<div class="l2-glass l2-empty"><b>Nothing matches</b></div>`}
-    <div class="l2-foot mut">The light in front of a name is green while a device is connected to it right now (the Devices figure says how many of the allowed ones); the page follows the entry every few seconds by itself. A tag after the name - Ended, Used up or Off - says the account itself cannot connect. The arrow button disconnects the devices that are connected now; they can connect again at once. Traffic is download and upload together, counted live for the devices that are online; when it is used up the account is cut within 30 seconds and cannot connect until you raise the limit, reset the count or renew with a new period.</div>`;
+  return `${rows.length ? `<div class="l2-glass l2-tbl"><div class="l2-th"><span>Account</span><span>Devices</span><span>Speed</span><span>Traffic</span><span>Ends</span><span></span></div>${rows.map(l2Row).join("")}</div>` : `<div class="l2-glass l2-empty"><b>Nothing matches</b></div>`}`;          // (the owner, 2026-11-08: "this extra explanation goes" - no text under the table; the lights and the buttons explain themselves in their tooltips)
 }
 
+/* (the owner, 2026-11-08, of the rows: "the tags - bot, Ended and the rest - go"; "the state of the subscription shows HERE (the light): connected green, expired red, offline grey"; "the Ends column writes only the days left") */
+const L2_WHY = {over: "The traffic is used up: it cannot connect", expired: "The time is over: it cannot connect", disabled: "Switched off: it cannot connect"};
 function l2Row(a) {
-  const st = L2_STATE[a.state], left = a.days_left == null ? "no end" : a.days_left <= 0 ? "ended" : a.days_left < 1 ? "under 1 day" : `${Math.floor(a.days_left)} days left`;
+  const ended = a.days_left != null && a.days_left <= 0, left = a.days_left == null ? "no end" : ended ? "ended" : a.days_left < 1 ? "under a day" : l2Plural(Math.floor(a.days_left), "day");
   const u = esc(a.user), pct = a.quota ? Math.min(100, Math.round(100 * a.used / a.quota)) : 0, tone = !a.quota ? "" : a.over ? "bad" : pct >= 80 ? "warn" : "ok";
   const traffic = a.quota ? `${l2B(a.used)}<i class="mut"> of ${l2Gb(a.quota)}</i><span class="l2-meter ${tone}"><b style="width:${pct}%"></b></span>` : `${l2B(a.used)}<i class="mut"> · no limit</i>`;
-  const light = a.online > 0 ? `<i class="l2-dot ok l2-live" title="${esc(`Connected now: ${l2Plural(a.online, "device")}${a.since ? " · connected " + l2Since(a.since) : ""}`)}"></i>` : `<i class="l2-dot" title="${st ? esc("Not connected. " + st[1]) : "Not connected"}"></i>`;
-  return `<div class="l2-tr"><span class="l2-n">${light}<b>${u}</b>${st ? `<em class="l2-st ${st[0]}" title="${esc(a.state === "over" ? "the traffic is used up: it cannot connect" : a.state === "expired" ? "the time is over: it cannot connect" : "switched off: it cannot connect")}">${st[1]}</em>` : ""}${a.bot ? `<em class="l2-tag" title="made by the shop bot">bot</em>` : ""}${a.note ? `<small class="mut" title="${esc(a.note)}">${esc(a.note)}</small>` : ""}</span>
+  const light = a.online > 0 ? `<i class="l2-dot ok l2-live" title="${esc(`Connected now: ${l2Plural(a.online, "device")}${a.since ? " · connected " + l2Since(a.since) : ""}`)}"></i>`
+    : `<i class="l2-dot ${a.state === "expired" || a.state === "over" ? "bad" : a.state === "disabled" ? "warn" : "off"}" title="${esc(L2_WHY[a.state] || "Not connected")}"></i>`;
+  return `<div class="l2-tr"><span class="l2-n">${light}<b>${u}</b>${a.note ? `<small class="mut" title="${esc(a.note)}${a.bot ? " (made by the shop bot)" : ""}">${esc(a.note)}</small>` : ""}</span>
     <span class="${a.online ? "l2-on" : ""}"${a.since && a.online ? ` title="${esc("Connected " + l2Since(a.since))}"` : ""}>${a.online}<i class="mut"> / ${a.limit}</i></span>
     <span>${a.down || a.up ? `${l2Mb(a.down)}<i class="mut"> / ${l2Mb(a.up)}</i>` : `<span class="mut">no limit</span>`}</span>
     <span class="l2-tf" title="${esc(`download ${l2B(a.tx)} · upload ${l2B(a.rx)}${a.over ? " · the traffic is used up" : ""}`)}">${traffic}</span>
-    <span title="${a.expires ? esc(when(a.expires)) : ""}">${l2Date(a.expires)}<i class="mut"> · ${left}</i></span>
+    <span class="${ended ? "l2-ended" : l2Soon(a) ? "l2-soon" : ""}" title="${a.expires ? esc("Ends " + when(a.expires)) : "No end date"}">${left}</span>
     <span class="l2-acts"><span class="l2-seg"><button type="button" title="The message to send the customer" onclick="l2Details('${u}')">Details</button><button type="button" title="Add days" onclick="l2Renew('${u}')">Renew</button><button type="button" title="Devices, speed, traffic, end date, password, on or off" onclick="l2EditOpen('${u}')">Edit</button></span><button type="button" class="l2-ico${a.online ? "" : " idle"}" title="${a.online ? `Disconnect the ${l2Plural(a.online, "device")} connected now (they can connect again)` : "Nobody is connected now. Press it anyway to cut a device that connected a moment ago"}" aria-label="Disconnect" onclick="l2Kick('${u}')">${L2_ICO.out}</button><button type="button" class="l2-ico l2-del" title="Delete the account" aria-label="Delete" onclick="l2Del('${u}', ${a.bot ? 1 : 0})">${L2_ICO.bin}</button></span></div>`;
 }
 
@@ -152,7 +156,6 @@ const l2Plural = (n, w) => `${n} ${w}${+n === 1 ? "" : "s"}`;
 window.l2Pick = (ids, v) => { ids.split(",").forEach(id => { const i = document.getElementById(id); if (i) { i.value = v; i.dispatchEvent(new Event("input", {bubbles: true})); } }); l2Sync(); };
 window.l2Pw = id => { const i = document.getElementById(id); if (i) { i.value = l2Gen(); i.type = "text"; } };
 window.l2Rand = () => { const i = document.getElementById("n-name"); if (i) { i.value = L2_BRAND + Math.random().toString(36).slice(2, 8); l2Sync(); } };
-window.l2EndAdd = n => { const i = document.getElementById("e-ends"); if (!i) return; const cur = i.value ? Date.parse(i.value + "T00:00:00Z") : 0, base = Math.max(cur, Date.now()); i.value = new Date(base + n * 86400000).toISOString().slice(0, 10); l2Sync(); };
 window.l2Sync = () => {          // (the chips light up for the value in their field; the summary line says what the window will do)
   document.querySelectorAll("#modal .l2-chp[data-f]").forEach(b => { const ids = b.dataset.f.split(","); b.classList.toggle("on", ids.every(x => { const i = document.getElementById(x); return !!i && String(i.value) === String(b.dataset.v); })); });
   const n = document.getElementById("n-sum");
@@ -201,21 +204,21 @@ window.l2EditOpen = name => {
   const a = (l2.d.accounts || []).find(x => x.user === name); if (!a) return;
   const gb = a.quota ? +(a.quota / 1e9).toFixed(2) : "", ends = l2Day(a.expires), pct = a.quota ? Math.min(100, Math.round(100 * a.used / a.quota)) : 0, tone = !a.quota ? "" : a.over ? "bad" : pct >= 80 ? "warn" : "ok";
   l2.e = {user: a.user, was: {devices: String(a.limit), down: String(a.down || ""), up: String(a.up || ""), gb: String(gb), ends, note: a.note || "", off: a.state === "disabled"}};
-  const body = `<form class="l2-dlg" onsubmit="l2Save(); return false" autocomplete="off">
-    <div class="l2-who"><b>${esc(a.user)}</b>${a.bot ? `<em class="l2-tag" title="made by the shop bot">bot</em>` : ""}<span class="l2-pill ${a.state === "active" ? "ok" : a.state === "disabled" ? "warn" : "bad"}">${a.state === "over" ? "traffic used up" : a.state === "expired" ? "ended" : a.state === "disabled" ? "switched off" : "active"}</span><span class="l2-sp"></span><span class="mut">${a.online} of ${a.limit} online</span></div>
-    <div class="l2-use"><span>Used <b>${esc(l2B(a.used))}</b>${a.quota ? ` of <b>${esc(l2Gb(a.quota))}</b>` : " · no limit"}</span>${a.quota ? `<span class="l2-meter ${tone}"><b style="width:${pct}%"></b></span>` : ""}</div>
+  /* (the owner, 2026-11-08, of this window: "much more compact, and those numbers go" - no quick-number chips, no lines of help under the fields (the help is the tooltip of each field), the used traffic on the name line) */
+  const body = `<form class="l2-dlg l2-cmp" onsubmit="l2Save(); return false" autocomplete="off">
+    <div class="l2-who"><b>${esc(a.user)}</b>${a.bot ? `<em class="l2-tag" title="made by the shop bot">bot</em>` : ""}<span class="l2-pill ${a.state === "active" ? "ok" : a.state === "disabled" ? "warn" : "bad"}">${a.state === "over" ? "traffic used up" : a.state === "expired" ? "ended" : a.state === "disabled" ? "switched off" : "active"}</span><span class="l2-sp"></span><span class="mut" title="${esc(`download ${l2B(a.tx)} · upload ${l2B(a.rx)}`)}">${a.online} of ${a.limit} online · used ${esc(l2B(a.used))}${a.quota ? ` of ${esc(l2Gb(a.quota))}` : ""}</span></div>
+    ${a.quota ? `<span class="l2-meter l2-top0 ${tone}"><b style="width:${pct}%"></b></span>` : ""}
     ${l2Sec("Limits", `<div class="l2-two">
-      ${l2Field("Ends", l2In("e-ends", `type="date" value="${esc(ends)}" oninput="l2Sync()"`, "") + `<span class="l2-chips"><button type="button" class="l2-chp" onclick="l2EndAdd(7)">+7 days</button><button type="button" class="l2-chp" onclick="l2EndAdd(30)">+30 days</button><button type="button" class="l2-chp" onclick="l2EndAdd(90)">+90 days</button></span>`, "The account stops at the end of that day (Tehran)")}
-      ${l2Field("Devices at once", l2In("e-dev", `type="number" min="1" max="10" value="${esc(a.limit)}" oninput="l2Sync()"`, "devices") + l2Chips("e-dev", [[1, "1"], [2, "2"], [3, "3"], [5, "5"]]), "A new device past the limit drops the oldest")}
-      ${l2Field("Traffic", l2In("e-gb", `type="number" min="0" step="1" placeholder="Unlimited" value="${esc(gb)}" oninput="l2Sync()"`, "GB") + l2Chips("e-gb", [["", "∞"], [10, "10"], [50, "50"], [100, "100"], [500, "500"]]) + (a.quota ? `<span class="l2-chips"><button type="button" class="l2-chp" title="Raise the limit by 10 GB" onclick="l2GbAdd(10)">+10 GB</button><button type="button" class="l2-chp" title="Raise the limit by 50 GB" onclick="l2GbAdd(50)">+50 GB</button><button type="button" class="l2-chp" title="Raise the limit by 100 GB" onclick="l2GbAdd(100)">+100 GB</button></span>` : ""), a.quota ? "Download and upload together; the + buttons raise the limit (a top-up)" : "Download and upload together")}
-      ${l2Field("Speed", `<span class="l2-pair">${l2In("e-down", `type="number" min="0" step="0.5" placeholder="∞" value="${esc(a.down || "")}" oninput="l2Sync()"`, "↓ Mbit/s")}${l2In("e-up", `type="number" min="0" step="0.5" placeholder="∞" value="${esc(a.up || "")}" oninput="l2Sync()"`, "↑ Mbit/s")}</span>` + l2Chips("e-down,e-up", [["", "∞"], [3, "3"], [5, "5"], [10, "10"], [20, "20"]]), "Reaches the devices that are online at once")}
+      ${l2Field("Ends", l2In("e-ends", `type="date" value="${esc(ends)}" title="The account stops at the end of that day (Tehran)" oninput="l2Sync()"`, ""))}
+      ${l2Field("Devices at once", l2In("e-dev", `type="number" min="1" max="10" value="${esc(a.limit)}" title="A device past the limit is refused (a device that no longer answers gives its place first)" oninput="l2Sync()"`, "devices"))}
+      ${l2Field("Traffic", l2In("e-gb", `type="number" min="0" step="1" placeholder="Unlimited" value="${esc(gb)}" title="Download and upload together, in GB; empty = no limit" oninput="l2Sync()"`, "GB"))}
+      ${l2Field("Speed", `<span class="l2-pair">${l2In("e-down", `type="number" min="0" step="0.5" placeholder="∞" value="${esc(a.down || "")}" title="Download, Mbit/s; empty = no limit. Reaches the devices that are online at once" oninput="l2Sync()"`, "↓ Mbit/s")}${l2In("e-up", `type="number" min="0" step="0.5" placeholder="∞" value="${esc(a.up || "")}" title="Upload, Mbit/s; empty = no limit" oninput="l2Sync()"`, "↑ Mbit/s")}</span>`)}
     </div>`)}
     ${l2Sec("Access", `<div class="l2-two">
       ${l2Field("New password", l2In("e-pass", `maxlength="64" placeholder="Leave empty to keep" spellcheck="false"`, "", `<button type="button" class="l2-ghost" onclick="l2Pw('e-pass')">Generate</button>`))}
       ${l2Field("Note", l2In("e-note", `maxlength="80" value="${esc(a.note || "")}"`, ""))}
     </div>
-    <label class="l2-chk"><input id="e-reset" type="checkbox"> Count the traffic from zero again <span class="mut">(a new period; used now ${esc(l2B(a.used))})</span></label>
-    <label class="l2-chk"><input id="e-off" type="checkbox" ${a.state === "disabled" ? "checked" : ""}> Switched off <span class="mut">(its devices are cut and it cannot connect)</span></label>`)}
+    <div class="l2-row2"><label class="l2-chk" title="A new period: the traffic is counted from zero again (used now ${esc(l2B(a.used))})"><input id="e-reset" type="checkbox"> Count the traffic from zero</label><label class="l2-chk" title="Its devices are cut and it cannot connect until it is switched on again"><input id="e-off" type="checkbox" ${a.state === "disabled" ? "checked" : ""}> Switched off</label></div>`)}
     ${l2Foot(`<button type="button" class="l2-btn" title="Cut its devices now; they can connect again" onclick="l2Kick('${esc(a.user)}')">⏏ Disconnect devices</button>`, "Save changes")}
   </form>`;
   showModal(`Edit · ${esc(a.user)}`, body, "l2-modal");
@@ -319,7 +322,6 @@ window.l2RenewGo = async () => {
   hideModal(); await l2Load(true); l2.html = ""; l2Draw();
   toast(`✓ ${r.user}: ${days} days added${reset && r.quota ? ", traffic from zero" : ""}${add > 0 && r.quota ? `, +${add} GB` : ""}`, "ok");
 };
-window.l2GbAdd = n => { const i = document.getElementById("e-gb"); if (!i) return; i.value = +((+i.value || 0) + n).toFixed(2); l2Sync(); };          // (Edit: raise the traffic limit by a top-up)
 window.l2Kick = async name => {
   const a = (l2.d.accounts || []).find(x => x.user === name), enc = encodeURIComponent(name);
   const ask = a && a.online ? `Disconnect the ${l2Plural(a.online, "device")} of ${name} now? They can connect again at once.` : `Nobody is connected to ${name} right now. Disconnect anyway, in case a device connected a moment ago?`;
@@ -441,4 +443,107 @@ window.l2PlanSave = async () => {
   }
   try { const r = await api(id ? `/api/l2tp/plans/${id}` : "/api/l2tp/plans", {method: id ? "PUT" : "POST", body: JSON.stringify(body)}); l2.shop.plans = r.plans; } catch (e) { toast("✕ " + e.message, "bad"); return; }
   l2.tab = "plans"; l2ShopDraw(); toast(id ? "✓ Plan saved" : "✓ Plan made", "ok");
+};
+
+/* ---------------------------------------------------------------- backup and restore (1.69.248; the owner, 2026-11-08: "a backup and restore system for the L2TP section, and a section in that group where its backup is sent every hour") */
+const l2Kb = b => b >= 1048576 ? (b / 1048576).toFixed(1) + " MB" : Math.max(1, Math.round(b / 1024)) + " KB";
+const L2_EVERY = [[30, "every 30 minutes"], [60, "every hour"], [180, "every 3 hours"], [360, "every 6 hours"], [720, "every 12 hours"], [1440, "once a day"], [0, "with the daily backup of the panel"]];
+
+window.l2BkOpen = async () => {          // (opens AT ONCE with the last answer, or a line that says it is reading; the list is read behind it)
+  if (l2.bk) l2BkDraw(); else showModal("L2TP backup", `<div class="l2-dlg"><div class="l2-glass l2-empty"><b>Reading the backups…</b></div></div>`, "l2-modal l2-wide");
+  try { l2.bk = await api("/api/settings/backup"); } catch (e) { if (!l2.bk) hideModal(); toast("✕ " + e.message, "bad"); return; }
+  const h = document.querySelector("#modal .modal-head");
+  if (h && h.innerText.startsWith("L2TP backup")) l2BkDraw();
+};
+function l2BkDraw() { showModal("L2TP backup", l2BkBody(), "l2-modal l2-wide"); }
+
+function l2BkBody() {
+  const b = l2.bk, p = b.parts.l2tp, sc = p.sched || {}, files = (b.backups || []).filter(f => f.part === "l2tp").slice(0, 10), last = p.last || files.find(f => !/-before-restore/.test(f.file));
+  const every = L2_EVERY.some(x => x[0] === p.every_minutes) ? L2_EVERY : L2_EVERY.concat([[p.every_minutes, `every ${p.every_minutes} minutes`]]);
+  const notes = [];
+  if (!b.has_passphrase) notes.push(["bad", "No backup password yet: nothing is backed up until you set one below."]);
+  if (!b.telegram_ready) notes.push(["warn", "Telegram is not set up or switched off (Settings → Api & Key): the backups stay on this server only."]);
+  if (sc.last_run && sc.ok === false) notes.push(["bad", `The last try (${ago(sc.last_run)} ago) did not work: ${sc.error || "no reason given"}. It tries again in a few minutes.`]);
+  else if (p.send && b.telegram_ready && sc.last_run && !sc.sent && sc.telegram) notes.push(["warn", `The last file was not sent to the group: ${sc.telegram}`]);
+  const topic = !b.telegram_ready ? `<span class="mut">needs Telegram</span>`
+    : p.topic ? `<span class="l2-st ok" title="Its files go to this topic of the group">topic · ${esc(p.topic_name || "L2TP backups")}</span><button type="button" class="l2-btn" onclick="l2BkTopicOff()">Unlink</button>`
+    : `<button type="button" class="l2-btn" onclick="l2BkTopic()">＋ Make the topic</button><span class="mut">made by itself at the first backup, too</span>`;
+  const pass = b.has_passphrase ? "" : l2Sec("Backup password", `<p class="l2-lead">Every backup holds the account names, passwords and the shared key, so it is locked with a password. You type it only to restore a file made on another panel. Keep it somewhere safe: without it a backup cannot be opened.</p>
+    <div class="l2-bkr">${l2In("bk-pass", `type="text" minlength="12" placeholder="at least 12 characters" autocomplete="off" spellcheck="false"`, "")}<button type="button" class="l2-btn" onclick="l2BkGen()">🎲 Generate</button><button type="button" class="l2-btn on l2-pri" onclick="l2BkPass()">Set the password</button></div>`);
+  const rows = files.map(f => `<div class="l2-bkf"><span class="mut" title="${esc(when(f.at))}">${esc(ago(f.at))} ago</span><span class="mut">${l2Kb(f.bytes)}</span><span class="l2-nm" title="${esc(f.file)}">${esc(f.file)}</span><span class="l2-acts"><a class="l2-btn" href="/api/backup/download/${encodeURIComponent(f.file)}" title="Save this file on your computer">Download</a><button type="button" class="l2-btn" onclick="l2BkRestore('${esc(f.file)}')">Restore</button></span></div>`).join("");
+  return `<div class="l2-dlg">
+    ${notes.length ? `<div class="l2-notes">${notes.map(([c, t]) => `<div class="l2-note ${c}"><i class="l2-dot ${c}"></i>${esc(t)}</div>`).join("")}</div>` : ""}
+    ${l2Sec("By itself", `<div class="l2-two">
+        <label class="l2-chk"><input type="checkbox" ${p.enabled ? "checked" : ""} onchange="l2BkSet({enabled: this.checked})"> Back up by itself</label>
+        ${l2Field("How often", `<select class="l2-sel" onchange="l2BkSet({every_minutes: +this.value})">${every.map(([v, t]) => `<option value="${v}"${v === p.every_minutes ? " selected" : ""}>${t}</option>`).join("")}</select>`)}
+      </div>
+      <label class="l2-chk"><input type="checkbox" ${p.send ? "checked" : ""} onchange="l2BkSet({send: this.checked})"> Send each file to the Telegram group</label>
+      <div class="l2-bkr"><span class="mut">Where in the group</span>${topic}</div>
+      <p class="l2-lead">${last ? `Latest backup ${esc(ago(last.at))} ago, ${l2Kb(last.bytes)}.` : "No backup yet."} Files are kept ${+b.keep_days || 14} days on this server (Settings → Backups → Keep for).</p>`)}
+    ${pass}
+    ${l2Sec("Backups on this server", `${rows ? `<div class="l2-bkfs">${rows}</div>` : `<p class="l2-lead">No file yet. Press Back up now.</p>`}
+      <div class="l2-act"><span class="l2-bkr"><button type="button" class="l2-btn on l2-pri" ${b.has_passphrase ? "" : "disabled"} onclick="l2BkNow()">Back up now</button><button type="button" class="l2-btn" title="A file you downloaded, or got from the Telegram group (.tar.gz.enc)" onclick="document.getElementById('bk-file').click()">📂 Restore from a file…</button><input id="bk-file" type="file" hidden accept=".enc" onchange="l2BkFile(this)"></span><span class="l2-sp"></span><button type="button" class="l2-btn" onclick="closeModal()">Close</button></div>`)}
+    <p class="l2-lead">A restore never changes the shared IPsec key. The shop's own tables (plans, who bought what) are not in this file; the end dates and the order notes of the accounts are.</p>
+  </div>`;
+}
+
+window.l2BkSet = async patch => {
+  try { l2.bk = await api("/api/settings/backup/part/l2tp", {method: "POST", body: JSON.stringify(patch)}); toast("✓ Saved", "ok"); } catch (e) { toast("✕ " + e.message, "bad"); try { l2.bk = await api("/api/settings/backup"); } catch (x) { /* the window is drawn again with the last answer */ } }
+  l2BkDraw();
+};
+window.l2BkNow = async () => {
+  const p = l2.bk.parts.l2tp; toast("Backing up…");
+  try {
+    const r = await api(`/api/backup/now?part=l2tp&send=${p.send ? "true" : "false"}`, {method: "POST"});
+    toast(`✓ ${r.file} · ${l2Kb(r.bytes)}` + (r.sent ? " · sent to the group" : p.send ? " · not sent: " + r.telegram : ""), r.sent || !p.send ? "ok" : "bad");
+  } catch (e) { toast("✕ " + e.message, "bad"); }
+  try { l2.bk = await api("/api/settings/backup"); } catch (e) { /* the last answer stays */ }
+  l2BkDraw();
+};
+window.l2BkTopic = async () => {
+  toast("Making the topic…");
+  try { l2.bk = await api("/api/backup/topic/l2tp", {method: "POST"}); toast("✓ Topic made: the backups go there", "ok"); } catch (e) { toast("✕ " + e.message, "bad"); }
+  l2BkDraw();
+};
+window.l2BkTopicOff = async () => {
+  if (!(await gconfirm("Unlink the topic? The next backup makes a new topic (this one stays in Telegram).", {danger: false}))) return;
+  try { l2.bk = await api("/api/backup/topic/l2tp", {method: "DELETE"}); } catch (e) { toast("✕ " + e.message, "bad"); }
+  l2BkDraw();
+};
+window.l2BkGen = () => { const a = new Uint8Array(15); crypto.getRandomValues(a); const i = document.getElementById("bk-pass"); if (!i) return; i.value = [...a].map(x => "abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789".charAt(x % 54)).join("").replace(/(.{5})/g, "$1-").replace(/-$/, ""); i.focus(); i.select(); toast("Copy this password somewhere safe, then press Set", "ok"); };
+window.l2BkPass = async () => {
+  const v = l2V("bk-pass"); if (v.length < 12) { toast("✕ At least 12 characters", "bad"); return; }
+  try { await api("/api/settings/backup/passphrase", {method: "POST", body: JSON.stringify({passphrase: v})}); l2.bk = await api("/api/settings/backup"); toast("✓ Backup password set - keep it somewhere safe", "ok"); } catch (e) { toast("✕ " + e.message, "bad"); }
+  l2BkDraw();
+};
+
+window.l2BkFile = inp => { const f = inp.files[0]; if (!f) return; if (f.size > 120e6) { toast("✕ The file is too big for a backup", "bad"); return; } f.arrayBuffer().then(buf => l2BkRestore(f.name, buf)); };
+window.l2BkRestore = (file, blob) => {          // (the way to restore is chosen in a window of its own; `blob` = a file from the computer)
+  l2.rs = {file, blob: blob || null, mode: "missing"};
+  const body = `<form class="l2-dlg" onsubmit="l2BkGo(); return false">
+    <p class="l2-lead">From <b>${esc(file)}</b>. Choose what to put back on the entry.</p>
+    ${l2Sec("What to restore", `<div class="l2-opts l2-o2">
+      <button type="button" class="l2-opt on" data-m="missing" onclick="l2BkMode('missing')"><b>Only the accounts that are gone</b><small>Puts back the accounts the entry does not have now. Nothing that exists is changed or removed. An account you deleted on purpose after this backup comes back too.</small></button>
+      <button type="button" class="l2-opt" data-m="all" onclick="l2BkMode('all')"><b>Everything as in the backup</b><small>Every account gets its password, end date, devices, traffic and speed from the backup, and the accounts made after it are removed. Use it to go back in time.</small></button>
+    </div>`)}
+    ${l2Field("Password of the file", l2In("bk-pw", `type="password" placeholder="Only when it was made with another panel's backup password" autocomplete="off"`, ""), "", "l2-top")}
+    <p class="l2-lead">The entry keeps a copy of its accounts first, and one is kept here too. The shared IPsec key is not touched.</p>
+    ${l2Foot(`<button type="button" class="l2-btn" onclick="l2BkOpen()">‹ Backup</button>`, "Restore")}
+  </form>`;
+  showModal("Restore · L2TP", body, "l2-modal l2-wide");
+};
+window.l2BkMode = m => { if (!l2.rs) return; l2.rs.mode = m; document.querySelectorAll("#modal .l2-opt[data-m]").forEach(x => x.classList.toggle("on", x.dataset.m === m)); };
+window.l2BkGo = async () => {
+  const r = l2.rs; if (!r) return;
+  const pw = l2V("bk-pw");
+  if (r.mode === "all" && !(await gconfirm("Make the accounts on the entry exactly as in this backup? The accounts made after it are removed and their devices disconnected; the others get their old passwords, end dates and traffic back. The entry keeps a copy first.", {danger: true}))) return;
+  try {
+    toast("Restoring…");
+    const x = r.blob ? await api("/api/backup/restore-upload", {method: "POST", headers: {"Content-Type": "application/octet-stream", "X-Backup-Passphrase": pw, "X-Backup-Mode": r.mode}, body: r.blob})
+      : await api("/api/backup/restore", {method: "POST", body: JSON.stringify({file: r.file, passphrase: pw, mode: r.mode})});
+    hideModal(); l2.rs = null; await l2Load(true); l2.html = ""; l2Draw(); toast("✓ " + x.message, "ok");
+  } catch (e) {
+    if (/passphrase/i.test(e.message)) { toast("✕ The saved backup password does not open this file: type the password it was made with", "bad"); const i = document.getElementById("bk-pw"); if (i) { i.focus(); i.select(); } return; }
+    toast("✕ " + e.message, "bad");
+  }
 };

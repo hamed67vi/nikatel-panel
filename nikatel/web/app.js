@@ -4525,7 +4525,7 @@ PAGES.settings = async () => {
     + fRow("Send to Telegram", sSel("tg", tgOpts, bk.send_telegram ? (bk.tg_every || "all") : "off", "data-dd"))
     + `<div class="bk1-r bk1-x"><button class="pri sm" type="submit">Save</button></div></form>`;
   const backups = sFrame("Backups", "Encrypted copies of the panel: kept here and sent to Telegram.", bk.has_passphrase ? '<span class="pill ok">🔒 encrypted</span>' : '<span class="pill err">no passphrase</span>',
-    `<div class="bk1">${Object.entries(bk.parts).filter(([k]) => k !== "bot").map(part).join("")}${passRow}${sched}</div>`);
+    `<div class="bk1">${Object.entries(bk.parts).filter(([k]) => k === "panel").map(part).join("")}${passRow}${sched}</div>`);          /* (the shop bot's backup is on the Shop bot page and the L2TP accounts' on the L2TP tab - 1.69.248) */
 
   /* Api & Key (the owner, 2026-10-16: "every part of the API tab one box, compact"): each connection by an API key is ONE box - a head (a tile, the name, its state, the buttons) and one or two rows under it: this panel's API with its tokens, the AI assistant, Telegram, the probe, the DNS accounts, the Marzban / PasarGuard panels */
   const prOn = !!pr.state.active && !pr.state.fails, st = ai_.status || {};

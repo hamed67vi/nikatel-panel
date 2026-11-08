@@ -34,6 +34,11 @@ def _conf(require_enabled: bool) -> tuple[str, str] | None:
     return c["token"], c["chat_id"]
 
 
+def ready() -> bool:
+    """Is Telegram switched on with a usable token and chat (so a file can be sent)?"""
+    return _conf(True) is not None
+
+
 def send_text(text: str, require_enabled: bool = True) -> tuple[bool, str]:
     conf = _conf(require_enabled)
 

@@ -11,18 +11,32 @@
 .l2-dot.ok { background: var(--ok); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 20%, transparent); }
 .l2-dot.warn { background: var(--warn); box-shadow: 0 0 0 3px color-mix(in srgb, var(--warn) 22%, transparent); }
 .l2-dot.bad { background: var(--bad); box-shadow: 0 0 0 3px color-mix(in srgb, var(--bad) 22%, transparent); }
+.l2-dot.off { background: color-mix(in srgb, currentColor 28%, transparent); }          /* (1.69.248: a valid account with no device connected - grey, no halo) */
+.l2-ended { color: var(--bad); font-weight: 600; } .l2-soon { color: var(--warn); font-weight: 600; }          /* (the Ends column: the days left; red when over, amber when three days or fewer) */
 .l2-btn { appearance: none; font: inherit; color: inherit; cursor: pointer; padding: 4px 12px; border-radius: 999px; border: 1px solid var(--l2-line); background: var(--l2-fill); white-space: nowrap; }
 .l2-btn:hover, .l2-btn.on { background: var(--l2-hi); }
 .l2-btn.l2-pri { font-weight: 650; border-color: color-mix(in srgb, currentColor 30%, transparent); }
 .l2-btn.l2-del:hover { color: var(--bad); border-color: color-mix(in srgb, var(--bad) 40%, transparent); }
 
-/* the bar */
-.l2-bar { display: flex; align-items: center; gap: 8px 16px; padding: 0 4px; min-height: 30px; flex-wrap: wrap; }
-.l2-chip { display: inline-flex; align-items: center; gap: 7px; }
-.l2-chip b { font-size: 14px; font-weight: 650; letter-spacing: -.02em; }
-.l2-chip small { color: var(--l2-mut); font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em; }
-.l2-q { font: inherit; color: inherit; width: 150px; padding: 4px 11px; border-radius: 999px; border: 1px solid var(--l2-line); background: var(--l2-fill); outline: none; }
-.l2-q:focus { border-color: color-mix(in srgb, currentColor 40%, transparent); }
+/* the bar (1.69.248; the owner, 2026-11-08: "make this box professional, MacBook style", "the refresh button goes - the page refreshes by itself", "the Bot button goes", "the filters in a drop-down box in the top row"):
+   ONE glass toolbar like a Mac window's - the state of the entry, the exit and the tunnel with the counts on the left; on the right the search field, the Show popup, a segmented Backup | Plans & sales, the blue New account and the gear - every control 28 px high */
+.l2-app { container-type: inline-size; }
+.l2-bar { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px 16px; padding: 8px 12px; }          /* (the state on the left in a column that gives way, the controls in a column of their own: a longer tunnel name or the "reading…" chip never moves a button) */
+.l2-stat { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 18px; min-width: 0; min-height: 28px; }
+.l2-chip { display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; }
+.l2-chip b { font-size: 13.5px; font-weight: 650; letter-spacing: -.02em; }
+.l2-chip small { color: var(--l2-mut); font-size: 10px; text-transform: uppercase; letter-spacing: .07em; }
+.l2-cnt { padding-left: 16px; border-left: 1px solid var(--l2-line); }
+.l2-busy small { text-transform: none; letter-spacing: 0; }
+.l2-tools { display: flex; align-items: center; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }          /* (every control has a FIXED width, so the row never shifts when a view with a longer name is chosen or the counts change) */
+@container (max-width: 1340px) { .l2-bar { grid-template-columns: minmax(0, 1fr); } .l2-tools { justify-content: flex-start; } }          /* (a narrower page: the state on its own line, the controls on the line under it, always in the same order and place) */
+.l2-search { display: inline-flex; align-items: center; flex: none; gap: 7px; width: 172px; height: 28px; box-sizing: border-box; padding: 0 10px; border-radius: 8px; border: 1px solid var(--l2-line); background: color-mix(in srgb, currentColor 4%, transparent); box-shadow: inset 0 1px 2px rgba(0, 0, 0, .12); cursor: text; }
+.l2-search svg { width: 13px; height: 13px; flex: none; fill: none; stroke: var(--l2-mut); stroke-width: 1.9; stroke-linecap: round; }
+.l2-search:focus-within { border-color: color-mix(in srgb, currentColor 42%, transparent); box-shadow: inset 0 1px 2px rgba(0, 0, 0, .12), 0 0 0 3px color-mix(in srgb, currentColor 8%, transparent); }
+:is(.l2-app) .l2-search .l2-q { flex: 1 1 auto; width: 100% !important; min-width: 0; height: auto !important; min-height: 0; font: inherit; font-size: 12.5px; line-height: 26px; color: inherit; padding: 0 !important; margin: 0; border: 0 !important; border-radius: 0 !important; background: transparent !important; outline: none !important; box-shadow: none !important; }          /* (the panel's own input look - a dark pill with its own padding - is beaten here: the field is the whole search box, not a box inside it) */
+:is(.l2-app) .l2-seg.l2-tb { height: 28px; box-sizing: border-box; border-radius: 8px; } :is(.l2-app) .l2-seg.l2-tb > button { height: 26px; padding: 0 13px; }          /* (28 px with its border, like every other control of the bar) */
+:is(.l2-app) .l2-bar .l2-btn.l2-pri { height: 28px; box-sizing: border-box; padding: 0 14px; border-radius: 8px; font-size: 12px; background: var(--acc, color-mix(in srgb, currentColor 18%, transparent)); color: #fff; border-color: transparent; box-shadow: 0 1px 0 color-mix(in srgb, #fff 18%, transparent) inset, 0 1px 2px rgba(0, 0, 0, .2); }
+:is(.l2-app) .l2-bar .l2-btn.l2-pri:hover { filter: brightness(1.08); }
 
 /* the notes under the bar */
 .l2-notes { display: grid; gap: 4px; }
@@ -92,7 +106,8 @@
 .l2-text { width: 100%; box-sizing: border-box; resize: vertical; height: 52vh; min-height: 300px; max-height: 520px; font: 12.5px/1.65 ui-monospace, "SF Mono", Menlo, Consolas, monospace; color: inherit; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--l2-line); background: var(--l2-fill); unicode-bidi: plaintext; white-space: pre-wrap; }          /* (the panel's own textarea rule is one line high: the message needs its whole height) */
 
 @media (max-width: 760px) {
-  .l2-q { width: 110px; }
+  .l2-bar { padding: 8px 10px; } .l2-stat { gap: 4px 12px; } .l2-cnt { padding-left: 12px; }
+  .l2-search { width: 132px; } .l2-filt { width: 142px; }
   /* a phone: no table to scroll sideways - every account is a card, its figures named in front of them */
   .l2-tbl { overflow-x: visible; }
   .l2-th { display: none; }
@@ -116,13 +131,23 @@
 .l2-st.warn { color: var(--warn); background: color-mix(in srgb, var(--warn) 14%, transparent); border-color: color-mix(in srgb, var(--warn) 32%, transparent); }
 .l2-st.bad { color: var(--bad); background: color-mix(in srgb, var(--bad) 13%, transparent); border-color: color-mix(in srgb, var(--bad) 32%, transparent); }
 :is(.l2-app, .l2-dlg) .l2-ico.idle { opacity: .6; }
-.l2-filt { display: inline-flex; flex-wrap: wrap; justify-self: start; border: 1px solid var(--l2-line); border-radius: 9px; background: var(--l2-fill); overflow: hidden; box-shadow: 0 1px 0 color-mix(in srgb, #fff 7%, transparent) inset, 0 1px 2px rgba(0, 0, 0, .16); }
-:is(.l2-app, .l2-dlg) .l2-filt > button { appearance: none; font: inherit; font-size: 12px; font-weight: 520; color: inherit; cursor: pointer; height: 28px; min-width: 0; padding: 0 13px; margin: 0; border: 0 !important; border-radius: 0 !important; background-color: transparent; background-image: none !important; box-shadow: none !important; transform: none; white-space: nowrap; display: inline-flex; align-items: center; gap: 7px; transition: background-color .12s ease; }
-:is(.l2-app, .l2-dlg) .l2-filt > button + button { border-left: 1px solid var(--l2-line) !important; }
-:is(.l2-app, .l2-dlg) .l2-filt > button:hover { background-color: var(--l2-fill); transform: none; }
-:is(.l2-app, .l2-dlg) .l2-filt > button.on { background-color: var(--l2-hi); font-weight: 650; }
-.l2-filt > button i { color: var(--l2-mut); font-size: 11px; font-weight: 520; }
-.l2-filt button:focus-visible { outline: 2px solid color-mix(in srgb, var(--acc, currentColor) 65%, transparent); outline-offset: -2px; }
+/* the Show popup of the bar (1.69.248: a Mac popup button - the name of the view and its count, a chevron on the right; the browser's own list opens under it) */
+.l2-filt { display: inline-flex; align-items: center; flex: none; width: 160px; height: 28px; box-sizing: border-box; padding-right: 8px; border: 1px solid var(--l2-line); border-radius: 8px; background: var(--l2-fill); box-shadow: 0 1px 0 color-mix(in srgb, #fff 7%, transparent) inset, 0 1px 2px rgba(0, 0, 0, .16); }
+:is(.l2-app, .l2-dlg) .l2-filt select { appearance: none; -webkit-appearance: none; flex: 1 1 auto; width: 100% !important; font: inherit; font-size: 12px; font-weight: 520; color: inherit; height: 100% !important; min-height: 0; min-width: 0; padding: 0 22px 0 11px !important; margin: 0; border: 0 !important; border-radius: 8px; background: transparent !important; outline: none; box-shadow: none !important; cursor: pointer; text-overflow: ellipsis; }
+.l2-filt > i { display: inline-grid; margin-left: -18px; pointer-events: none; } .l2-filt > i svg { width: 12px; height: 12px; fill: none; stroke: var(--l2-mut); stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }          /* (the chevron sits over the select's own right padding - no absolute positioning: nothing on this page floats over anything) */
+.l2-filt:hover { background: var(--l2-hi); }
+.l2-filt:focus-within { outline: 2px solid color-mix(in srgb, var(--acc, currentColor) 65%, transparent); outline-offset: 1px; }
+/* the compact Edit window (1.69.248; the owner: "much more compact, and those numbers go") */
+.l2-dlg.l2-cmp { gap: 10px; }
+.l2-cmp .l2-who { font-size: 13px; } .l2-cmp .l2-who b { font-size: 15px; } .l2-cmp .l2-who .mut { font-size: 12px; }
+.l2-cmp .l2-meter.l2-top0 { margin: -4px 0 0; height: 5px; }
+.l2-cmp .l2-sec { gap: 8px; padding: 10px 12px 12px; }
+.l2-cmp .l2-two { gap: 8px 12px; }
+.l2-cmp .l2-fld { gap: 4px; } .l2-cmp .l2-fl { font-size: 11.5px; }
+.l2-cmp .l2-in input { padding: 6px 10px; } .l2-cmp .l2-in > i { padding-right: 9px; font-size: 11px; }
+.l2-cmp .l2-ghost { margin: 2px; padding: 3px 10px; }
+.l2-row2 { display: flex; flex-wrap: wrap; gap: 6px 22px; padding-top: 2px; font-size: 12.5px; }
+.l2-cmp .l2-act { padding-top: 0; } .l2-cmp .l2-act .l2-btn { padding: 6px 15px; }
 #modal .modal.l2-modal.l2-wide { width: min(880px, 95vw); }
 .l2-opts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
 #modal .l2-dlg .l2-opt { appearance: none; font: inherit; color: inherit; cursor: pointer; text-align: left; display: grid; gap: 3px; align-content: start; height: auto !important; min-height: 0; padding: 10px 12px !important; border-radius: 11px !important; border: 1px solid var(--l2-line) !important; background-color: transparent; background-image: none !important; box-shadow: none !important; transform: none; white-space: normal; overflow: visible; }          /* (the panel's own rule for every button in a window - a pill, 32 px high, one line - is beaten here on purpose: the card holds a name and a sentence) */
@@ -144,7 +169,14 @@
 .l2-ord { display: grid; grid-template-columns: 140px minmax(120px, 1.2fr) minmax(130px, 1.5fr) 118px 112px; gap: 10px; align-items: center; padding: 7px 4px; font-size: 12px; } .l2-ord + .l2-ord { border-top: 1px solid var(--l2-line); }
 .l2-ord.l2-oh { position: sticky; top: 0; background: var(--l2-fill); color: var(--l2-mut); font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em; }
 .l2-ob { display: grid; min-width: 0; } .l2-ob b, .l2-ob small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.l2-opts.l2-o2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.l2-bkr { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; } .l2-bkr .l2-in { flex: 1 1 220px; }
+.l2-bkfs { display: grid; max-height: 34vh; overflow-y: auto; }
+.l2-bkf { display: grid; grid-template-columns: 86px 66px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 7px 2px; font-size: 12px; } .l2-bkf + .l2-bkf { border-top: 1px solid var(--l2-line); }
+.l2-bkf .l2-nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11.5px; }
+.l2-bkf .l2-acts { justify-content: flex-end; } .l2-bkf a.l2-btn { text-decoration: none; display: inline-flex; align-items: center; }
 @media (max-width: 760px) {
+  .l2-bkf { grid-template-columns: 1fr 1fr; gap: 3px 10px; } .l2-bkf .l2-nm { grid-column: 1 / -1; order: 3; } .l2-bkf .l2-acts { grid-column: 1 / -1; order: 4; justify-content: flex-start; }
   .l2-opts { grid-template-columns: 1fr 1fr; }
   .l2-plan { grid-template-columns: 1fr; gap: 6px; }
   .l2-plan .l2-acts { justify-content: flex-start; }

@@ -580,6 +580,33 @@ echo "TIMER $(systemctl is-active nk-l2tp-exit.timer 2>/dev/null || echo unknown
 echo DONE
 """, {}),
 
+    # the L2TP product, the BACKUP read (services/backup.py): the manager's accounts file as it is (WITH the passwords - it goes straight into an encrypted backup and nowhere else), the shared key and the pool. A read: nothing is changed.
+    # "L2TP none" = no manager here; "ERROR ..." = the file is not readable; a missing file is an entry with no account yet. Values travel in base64, one line each.
+    "l2tp_backup": (r"""[ -x /usr/local/sbin/nk-l2tp ] || { echo "L2TP none"; exit 0; }
+echo "L2TP ok"
+python3 - <<'__NK_PY__'
+import base64, json
+def b64(b):
+    return base64.b64encode(b).decode()
+try:
+    try:
+        d = json.loads(open("/var/lib/nk-l2tp/accounts.json", "rb").read())
+    except FileNotFoundError:
+        d = {"users": {}}
+    assert isinstance(d, dict) and isinstance(d.get("users", {}), dict)
+    d.setdefault("users", {})
+    print("ACCOUNTS", b64(json.dumps(d, sort_keys=True, separators=(",", ":")).encode()))
+except Exception as e:
+    print("ERROR", str(e)[:100].replace("\n", " "))
+for key, path in (("PSK", "/etc/nk-l2tp/psk"), ("POOL", "/etc/nk-l2tp/pool")):
+    try:
+        print(key, b64(open(path, "rb").read().strip()))
+    except OSError:
+        print(key, "")
+__NK_PY__
+echo DONE
+""", {}),
+
     # the shop bot (PHP + MariaDB on the bot server): services, cron, counts, states, logs - as JSON.
     # DB credentials are read on that server from its own env file; nothing secret leaves it.
     # the Mini App installed next to the bot: which files, their fingerprints, the version in index.html, whether the PHP parses, the public URL
@@ -1992,6 +2019,130 @@ except Exception as e:
     print(json.dumps({"error": str(e)[:200]}))
 __NK_PY__
 """, {"CMD": r"^(add|renew|set|del|show|kick|info)$", "B64": r"^[A-Za-z0-9+/=]{0,8000}$"}),
+
+    # the L2TP product, RESTORE from a backup (services/l2tp.py `restore`): the accounts of a backup (base64 of {"users": {...}}) are checked one by one against the manager's own rules, the file now on the entry is kept first as
+    # accounts.json.before-restore-<time> (the last 6 stay), then, under the manager's own lock, MODE=missing puts back only the accounts the entry does not have, MODE=all makes the entry's accounts exactly the backup's (the others are removed, a
+    # session of a removed account is ended). The shared key is NEVER touched. The manager writes its files itself (save + chap-secrets), so nothing here edits them by hand. It prints one JSON line.
+    "l2tp_restore": (r"""T=$(mktemp /tmp/l2restore.XXXXXX)
+trap 'rm -f "$T"' EXIT
+base64 -d > "$T" <<'NIKATEL_B64'
+@B64@
+NIKATEL_B64
+python3 - '@MODE@' "$T" <<'__NK_PY__'
+import importlib.machinery, importlib.util, json, os, re, shutil, sys, time
+mode, path = sys.argv[1], sys.argv[2]
+def out(d):
+    print(json.dumps(d))
+    sys.exit(0)
+try:
+    spec = importlib.util.spec_from_loader("nk", importlib.machinery.SourceFileLoader("nk", "/usr/local/sbin/nk-l2tp"))
+    m = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(m)
+    users = json.load(open(path))["users"]
+    assert isinstance(users, dict)
+except Exception as e:
+    out({"error": "the backup could not be read: " + str(e)[:100]})
+LIM = 4102444800
+def num(v, lo, hi):
+    return isinstance(v, int) and not isinstance(v, bool) and lo <= v <= hi
+def clean(name, a):
+    if not (isinstance(name, str) and m.NAME.match(name) and isinstance(a, dict)):
+        return None
+    pw = a.get("password")
+    if not (isinstance(pw, str) and m.PASS.match(pw)) or not num(a.get("limit", 1), 1, 10):
+        return None
+    r = {"password": pw, "limit": a.get("limit", 1), "note": ""}
+    exp = a.get("expires")
+    if exp is not None and not num(exp, 0, LIM):
+        return None
+    r["expires"] = exp
+    for k in ("created", "last_seen", "last_limit_hit"):
+        if a.get(k) is not None:
+            if not num(a[k], 0, LIM):
+                return None
+            r[k] = a[k]
+    for k in ("rx", "tx"):
+        if not num(a.get(k, 0), 0, 10 ** 16):
+            return None
+        r[k] = a.get(k, 0)
+    if a.get("quota"):
+        if not num(a["quota"], 1, 10 ** 15):
+            return None
+        r["quota"] = a["quota"]
+    if a.get("limit_hits"):
+        if not num(a["limit_hits"], 0, 10 ** 9):
+            return None
+        r["limit_hits"] = a["limit_hits"]
+    note = a.get("note", "")
+    if not isinstance(note, str) or len(note) > 200 or re.search(r"[\x00-\x1f\x7f]", note):
+        return None
+    r["note"] = note
+    if a.get("disabled"):
+        r["disabled"] = True
+    sp = a.get("speed")
+    if sp:
+        if not isinstance(sp, dict):
+            return None
+        s = {}
+        for k in ("down", "up"):
+            v = sp.get(k)
+            if v is None:
+                s[k] = None
+            elif isinstance(v, (int, float)) and not isinstance(v, bool) and 0.1 <= v <= 1000:
+                s[k] = round(float(v), 3)
+            else:
+                return None
+        if s["down"] or s["up"]:
+            r["speed"] = s
+    return r
+good, bad = {}, []
+for n, a in users.items():
+    c = clean(n, a)
+    if c is None:
+        bad.append(str(n)[:30])
+    else:
+        good[n] = c
+if users and not good:
+    out({"error": "none of the accounts in the backup is valid"})
+if mode == "all" and not good:
+    out({"error": "the backup holds no account: nothing was changed (a restore of all accounts from an empty backup would remove every account)"})
+added = updated = removed = 0
+safety = ""
+try:
+    with m.locked():
+        st = m.load()
+        cur = st["users"]
+        if os.path.exists(m.STATE):
+            safety = "accounts.json.before-restore-%d" % int(time.time())
+            shutil.copy2(m.STATE, os.path.join(m.DIR, safety))
+            os.chmod(os.path.join(m.DIR, safety), 0o600)
+            for p in sorted(x for x in os.listdir(m.DIR) if x.startswith("accounts.json.before-restore-"))[:-6]:
+                os.unlink(os.path.join(m.DIR, p))
+        if mode == "all":
+            for n in list(cur):
+                if n not in good:
+                    del cur[n]
+                    removed += 1
+            for n, a in good.items():
+                if n in cur:
+                    updated += 1
+                else:
+                    added += 1
+                cur[n] = a
+        else:
+            for n, a in good.items():
+                if n not in cur:
+                    cur[n] = a
+                    added += 1
+        m.save(st)
+        m.write_chap(st)
+        if removed and hasattr(m, "_drop_inactive"):
+            m._drop_inactive(st)
+except Exception as e:
+    out({"error": "the restore stopped: " + str(e)[:120]})
+out({"ok": True, "mode": mode, "added": added, "updated": updated, "removed": removed, "skipped": len(bad), "skipped_names": bad[:5], "safety": safety, "total": len(st["users"])})
+__NK_PY__
+""", {"MODE": r"^(missing|all)$", "B64": r"^[A-Za-z0-9+/=]{16,8000000}$"}),
 
     # shop bot: copy every table of the staging database (the real data) over the live one,
     # except the broadcast queues; tables that exist only in one of them are left alone

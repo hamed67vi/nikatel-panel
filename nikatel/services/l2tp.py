@@ -468,6 +468,105 @@ def profile(name: str) -> dict:
     return d
 
 
+# ------------------------------------------------------------------ backup and restore (the encrypted file itself is made by services/backup.py)
+MAX_BACKUP_B64 = 6_000_000                                          # (the action takes up to 8 MB of base64)
+
+
+def parse_backup(out: str) -> dict:
+    """The output of the `l2tp_backup` read: the manager's accounts (a dict name -> account, WITH passwords), the shared key and the pool. Raises RuntimeError with a sentence when the entry has no manager or its file cannot be read."""
+    got: dict = {"installed": False, "state": None, "psk": "", "pool": "", "error": ""}
+
+    for ln in out.splitlines():
+        key, _, rest = ln.partition(" ")
+        rest = rest.strip()
+
+        if key == "L2TP":
+            got["installed"] = rest == "ok"
+        elif key == "ERROR":
+            got["error"] = rest[:120]
+        elif key in ("ACCOUNTS", "PSK", "POOL"):
+            try:
+                text = base64.b64decode(rest, validate=True).decode() if rest else ""
+            except (ValueError, UnicodeDecodeError):
+                got["error"] = f"the {key.lower()} line is damaged"
+                continue
+
+            if key == "ACCOUNTS":
+                v = _json(text)
+                got["state"] = v if isinstance(v, dict) and isinstance(v.get("users"), dict) else None
+            else:
+                got[key.lower()] = text.strip()
+
+    if not got["installed"]:
+        raise RuntimeError("the L2TP manager is not installed on the entry server")
+
+    if got["state"] is None:
+        raise RuntimeError("the entry's accounts could not be read" + (f": {got['error']}" if got["error"] else ""))
+
+    return got
+
+
+def backup_data() -> dict:
+    """The entry's accounts and shared key as the entry holds them (for the encrypted backup). Raises RuntimeError with a sentence when they cannot be read."""
+    c = conf()
+
+    if not c["entry_id"]:
+        raise RuntimeError("choose the L2TP entry server first (the gear on the L2TP page)")
+
+    try:
+        return parse_backup(run_script(_node(c["entry_id"], "entry"), "l2tp_backup", timeout=60))
+    except ValueError as e:                                             # (a server that was removed from the panel)
+        raise RuntimeError(str(e))
+
+
+def backup_ready() -> bool:
+    """Is there an entry to back up at all (a panel that does not use L2TP has nothing to save)."""
+    return bool(conf()["entry_id"])
+
+
+def restore(users: dict, mode: str) -> dict:
+    """Put the accounts of a backup on the entry. `missing` adds only the accounts the entry does not have; `all` makes the entry's accounts exactly the backup's. The entry keeps the file it had (accounts.json.before-restore-*), the
+    shared key is never changed. Returns what was done, in numbers."""
+    why = "the way to restore is 'missing' (only the accounts that are gone) or 'all' (everything as the backup)" if mode not in ("missing", "all") else "" if isinstance(users, dict) else "the backup holds no accounts"
+
+    if why:
+        raise ValueError(why)
+
+    b64 = base64.b64encode(json.dumps({"users": users}, separators=(",", ":")).encode()).decode()
+
+    if len(b64) > MAX_BACKUP_B64:
+        raise ValueError("the backup holds too many accounts for one restore")
+
+    raw = run_action(_node(conf()["entry_id"], "entry"), "l2tp_restore", {"MODE": mode, "B64": b64}, timeout=180)
+    lines = [ln for ln in raw.strip().splitlines() if ln.strip()]
+    d = _json(lines[-1]) if lines else None
+
+    if not isinstance(d, dict):
+        d = {"error": "the entry did not answer in the expected way"}
+
+    if d.get("error"):
+        raise RuntimeError(str(d["error"]))
+
+    log.info("l2tp: restore (%s) added %s updated %s removed %s skipped %s", mode, d.get("added"), d.get("updated"), d.get("removed"), d.get("skipped"))
+    return d
+
+
+def restore_text(d: dict) -> str:
+    """What a restore did, in one sentence for the owner."""
+    bits = [f"{d.get('added', 0)} account(s) put back"]
+
+    if d.get("updated"):
+        bits.append(f"{d['updated']} set as in the backup")
+
+    if d.get("removed"):
+        bits.append(f"{d['removed']} removed (they were not in the backup)")
+
+    if d.get("skipped"):
+        bits.append(f"{d['skipped']} skipped (not valid: {', '.join(d.get('skipped_names') or [])})")
+
+    return "L2TP restored: " + ", ".join(bits) + f". The entry has {d.get('total', '?')} accounts now." + (f" What it held before is kept there as {d['safety']}." if d.get("safety") else "")
+
+
 def _date(ts) -> str:
     return time.strftime("%Y-%m-%d", time.gmtime(float(ts) + TEHRAN)) if ts else ""
 

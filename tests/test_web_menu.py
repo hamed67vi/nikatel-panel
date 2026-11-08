@@ -866,10 +866,10 @@ def test_the_shop_bot_is_seen_nowhere_in_the_menu_and_the_backup_password_is_a_s
     app, css = _web("app.js"), _web("lab.css")
     assert 'const SET_OFF = new Set(["bot"]);' in app and "settings: Object.entries(SET_TABS).filter(([k]) => !SET_OFF.has(k)).map(([k, v]) => [k, navPlain(v[0]), TAB_SVG[k] || SI.gear])};" in app
     assert 'const cur = SET_TABS[state.stab] && !SET_OFF.has(state.stab) ? state.stab : "account";' in app and 'function tabSet(k) { if (SET_OFF.has(k)) return;' in app and "Object.entries(SET_TABS).filter(([k]) => !SET_OFF.has(k)).map(([k, v]) => `<button class=\"${k === cur ? \"on\" : \"\"}\" onclick=\"setTab('${k}')\">" in app
-    assert 'Object.entries(bk.parts).filter(([k]) => k !== "bot").map(part).join("")' in app and "the shop bot: kept here" not in app
+    assert 'Object.entries(bk.parts).filter(([k]) => k === "panel").map(part).join("")' in app and "the shop bot: kept here" not in app          # (1.69.248: the L2TP part has its own window on the L2TP tab, so the card shows the panel's row only)
     assert 'const passRow = `<div class="bk1-r bk1-k' in app and "pgSw(!!bk.has_passphrase, \"bkPassToggle(this)\"" in app and "window.bkPassToggle = el =>" in app and 'id="bpw-form"' in app
     assert '<form class="bk1-sc bk-sched" onsubmit="return saveBackup(event)">' in app and 'name="enabled" title="Automatic backups"' in app and "html body #page .bk1 { border: 1px solid var(--uk-line); border-radius: 18px;" in css and "html body #page .bk1 .bk1-r { display: grid;" in css          # (1.59.0) the owner: "make it a box and one piece, unified, MacBook style": ONE box, a row each for the panel, the password and the schedule, a hairline between them
-    assert '`<div class="bk1">${Object.entries(bk.parts).filter(([k]) => k !== "bot").map(part).join("")}${passRow}${sched}</div>`' in app and 'class="sl bpw"' not in app
+    assert '`<div class="bk1">${Object.entries(bk.parts).filter(([k]) => k === "panel").map(part).join("")}${passRow}${sched}</div>`' in app and 'class="sl bpw"' not in app
 
 
 def test_the_api_tab_of_settings_gathers_every_api_connection():

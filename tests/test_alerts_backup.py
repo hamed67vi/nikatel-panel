@@ -242,7 +242,7 @@ def test_backup_runs_every_n_minutes_and_sends_to_telegram_once_a_day(client, mo
 
     st.put("backup", {"enabled": True, "every_minutes": 15, "hour": 3, "send_telegram": True, "tg_every": "daily"})
     calls = []
-    monkeypatch.setattr(bk, "run", lambda send=None, part="": calls.append(send) or {"ok": True})
+    monkeypatch.setattr(bk, "run", lambda send=None, part="", **kw: calls.append(send) or {"ok": True})
     monkeypatch.setattr(bk, "local_day", lambda now, tz: ("2026-10-11", 9), raising=False)
     monkeypatch.setattr("nikatel.services.report.local_day", lambda now, tz: ("2026-10-11", 9))
     bk.scheduled()

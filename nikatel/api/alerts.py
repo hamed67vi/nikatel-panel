@@ -205,11 +205,12 @@ def _backup_view() -> dict:
     parts = {}
 
     for k, (label, what) in backup.PARTS.items():
-        last = next((f for f in files if f["part"] == k), None)
-        ready = bool(shopbot.conf().get("host")) if k == "bot" else True
-        parts[k] = {**pc[k], "label": label, "what": what, "last": last, "ready": ready}
+        last = next((f for f in files if f["part"] == k and "-before-restore" not in f["file"]), None)          # (the copy a restore keeps of what ran before is not "the latest backup")
+        ready = bool(shopbot.conf().get("host")) if k == "bot" else backup.part_ready(k)
+        parts[k] = {**pc[k], "label": label, "what": what, "last": last, "ready": ready, "sched": backup.part_state(k) if pc[k]["every_minutes"] else None}
 
-    return {**{k: v for k, v in conf.items() if k != "parts"}, "parts": parts, "has_passphrase": backup.has_passphrase(), "backups": files[:12],
+    shown = sorted((f for k in backup.PARTS for f in [x for x in files if x["part"] == k][:12]), key=lambda x: x["at"], reverse=True)          # (the newest of every part: an hourly part must not push the others out of the list)
+    return {**{k: v for k, v in conf.items() if k != "parts"}, "parts": parts, "has_passphrase": backup.has_passphrase(), "backups": shown,
             "telegram_ready": bool(tg.get("enabled") and telegram.valid_token(tg.get("token", "")) and telegram.valid_chat(tg.get("chat_id", "")))}
 
 
@@ -227,7 +228,9 @@ def backup_put(body: BackupIn):
 
 
 class PartIn(BaseModel):
-    enabled: bool
+    enabled: bool | None = None
+    every_minutes: int | None = Field(None, ge=0, le=1440)          # a part with a schedule of its own (L2TP): 0 = with the daily backup, else every N minutes (15 or more)
+    send: bool | None = None                                         # that part: does each file go to Telegram
 
 
 def _part(part: str) -> str:
@@ -239,10 +242,27 @@ def _part(part: str) -> str:
 
 @router.post("/settings/backup/part/{part}")
 def backup_part(part: str, body: PartIn):
-    """Switch one part on or off."""
+    """Switch one part on or off; for a part with a schedule of its own also how often and whether its files go to Telegram."""
     _part(part)
+    cur = {**backup.parts_conf()[part]}
+
+    if body.every_minutes is not None:
+        if part not in backup.OWN:
+            raise HTTPException(400, "this part follows the one daily schedule")
+
+        if 0 < body.every_minutes < 15:
+            raise HTTPException(400, "a backup every 15 minutes at most")
+
+        cur["every_minutes"] = body.every_minutes
+
+    if body.enabled is not None:
+        cur["enabled"] = body.enabled
+
+    if body.send is not None:
+        cur["send"] = body.send
+
     parts = st.get("backup").get("parts") or {}
-    parts[part] = {**backup.parts_conf()[part], "enabled": body.enabled}
+    parts[part] = cur
     st.put("backup", {"parts": parts})
     return {"ok": True, **_backup_view()}
 
@@ -250,18 +270,12 @@ def backup_part(part: str, body: PartIn):
 @router.post("/backup/topic/{part}")
 def backup_topic(part: str):
     """Make a topic (a separate page) for this part in the Telegram group; its backups go there."""
-    from ..services import telegram
-
     _part(part)
-    label = backup.PARTS[part][0]
-    tid, why = telegram.create_topic(f"{label} backups")
+    tid, why = backup.make_topic(part)
 
     if not tid:
         raise HTTPException(400, why or "Telegram did not create the topic")
 
-    parts = st.get("backup").get("parts") or {}
-    parts[part] = {**backup.parts_conf()[part], "topic": tid, "topic_name": f"{label} backups"}
-    st.put("backup", {"parts": parts})
     return {"ok": True, **_backup_view()}
 
 
@@ -300,11 +314,12 @@ def backup_now(send: bool = True, part: str = ""):
 class RestoreIn(BaseModel):
     file: str = Field(min_length=1, max_length=120)
     passphrase: str = Field(default="", max_length=200)
+    mode: str = Field(default="", pattern=r"^(|missing|all)$")          # an L2TP backup: only the accounts that are gone (the default), or everything as the backup
 
 
-def _restore(blob: bytes, passphrase: str) -> dict:
+def _restore(blob: bytes, passphrase: str, mode: str = "") -> dict:
     try:
-        return backup.restore_blob(blob, passphrase)
+        return backup.restore_blob(blob, passphrase, mode)
     except (ValueError, RuntimeError, SSHError) as e:
         raise HTTPException(400, str(e))
 
@@ -317,7 +332,7 @@ def backup_restore(body: RestoreIn):
     if "/" in body.file or not body.file.startswith("nikatel-") or not p.is_file():
         raise HTTPException(404, "no such backup")
 
-    return _restore(p.read_bytes(), body.passphrase)
+    return _restore(p.read_bytes(), body.passphrase, body.mode)
 
 
 @router.post("/backup/restore-upload")
@@ -340,7 +355,12 @@ async def backup_restore_upload(request: Request):
     if not blob:
         raise HTTPException(400, "no file received")
 
-    return await run_in_threadpool(_restore, blob, request.headers.get("x-backup-passphrase", ""))
+    mode = request.headers.get("x-backup-mode", "")
+
+    if mode not in ("", "missing", "all"):
+        raise HTTPException(400, "the way to restore is 'missing' or 'all'")
+
+    return await run_in_threadpool(_restore, blob, request.headers.get("x-backup-passphrase", ""), mode)
 
 
 @router.get("/backup/download/{name}")

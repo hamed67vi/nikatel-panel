@@ -516,7 +516,7 @@ def test_the_tab_opens_at_once_and_reads_the_entry_behind_it():
 def test_the_row_buttons_are_a_segmented_control_and_two_icon_buttons_and_no_native_dialog():
     js = (WEB / "l2tp.js").read_text(encoding="utf-8")
     css = (WEB / "l2tp.css").read_text(encoding="utf-8")
-    assert 'class="l2-seg"' in js and js.count('class="l2-ico') == 3 and ".l2-seg" in css and ".l2-ico" in css and ".l2-ico:disabled" in css          # (the owner, 2026-11-07: "make these buttons smart and professional, MacBook style"; the third is the delete of a plan in the shop window)
+    assert 'class="l2-seg"' in js and js.count('class="l2-ico') == 4 and ".l2-seg" in css and ".l2-ico" in css and ".l2-ico:disabled" in css          # (the owner, 2026-11-07: "make these buttons smart and professional, MacBook style"; the third is the delete of a plan in the shop window, the fourth the gear of the bar - 1.69.248)
     assert "Nobody is connected now" in js and '" idle"' in js and ".l2-ico.idle" in css          # (1.69.245: the arrow button is muted while nobody is connected but still works - the picture could be a few seconds old)
     assert not re.search(r"(?<![\w.])(confirm|prompt|alert)\(", js)          # (the grey box of the browser is gone: the panel's own glass windows ask)
     assert "await gconfirm(" in js and "gprompt(" not in js and "glassChoice(" not in js          # (the renewal is a window of its own now: time and traffic together)
@@ -582,16 +582,30 @@ def test_the_page_shows_who_is_connected_by_a_light_and_follows_the_entry():
     css = (WEB / "l2tp.css").read_text(encoding="utf-8")
     assert "l2-dot ok l2-live" in js and "Connected now:" in js and ".l2-dot.l2-live" in css and "prefers-reduced-motion" in css          # (the owner, 2026-11-07: after Disconnect "the light must change, and show Connected again when the phone connects")
     assert "?live=1" in js and "l2.fast = Date.now() + 45000" in js and "visibilitychange" in js          # (the light read; close after a Disconnect; at once when the owner comes back to the window)
-    assert 'const L2_STATE = {expired: ["bad", "Ended"], over: ["bad", "Used up"], disabled: ["warn", "Off"]}' in js and "l2-st" in css
+    row = js[js.index("function l2Row("):js.index("/* ------")]
+    assert 'const L2_WHY = {over: "The traffic is used up: it cannot connect"' in js and "l2-st" in css          # (the words of a light's tooltip; the l2-st pill is still the shop windows')
+    assert 'class="l2-dot ${a.state === "expired" || a.state === "over" ? "bad" : a.state === "disabled" ? "warn" : "off"}"' in row and ".l2-dot.off" in css          # (the owner, 2026-11-08: the light IS the state - connected green, over red, switched off amber, offline grey)
+    assert "l2-tag" not in row and "l2-st" not in row and "L2_STATE" not in js          # ("the tags - bot, Ended and the rest - go")
+    assert "l2Date(a.expires)" not in row and 'l2Plural(Math.floor(a.days_left), "day")' in row and "l2-ended" in row and ".l2-ended" in css          # ("the Ends column writes only the days left")
+    assert 'class="l2-foot' not in js          # ("this extra explanation goes")
     assert "l2Filters(d)" in js and 'l2Views = [["", "All"' in js and ".l2-filt" in css          # (All / Connected / Ending soon / Ended, each with its count)
     assert "typing >= 0" in js          # (the cursor stays in the search box while the figures move)
+    bar = js[js.index("function l2Bar("):js.index("function l2Notes(")]
+    assert 'class="l2-bar l2-glass"' in bar and "l2.view = this.value" in js and ".l2-filt select" in css and 'class="l2-seg l2-tb"' in bar and "l2BkOpen()" in bar and "l2ShopOpen()" in bar and "L2_ICO.gear" in bar          # (1.69.248, the owner: "this box professional, MacBook style" - one glass toolbar; the views are a popup in it)
+    assert "↻" not in js and ">Bot<" not in js and "l2.only" not in js and "l2Refresh()" not in bar and '["bot", "Shop bot"' in js          # (the owner, 2026-11-08: "this button goes, the page refreshes by itself" and "this one too" (Bot) - the shop bot's accounts are a view of the popup instead)
+    assert "l2Filters(d)" not in js[js.index("function l2Table("):js.index("function l2Row(")]          # (the filters left the table for the bar)
+    assert "container-type: inline-size" in css and "grid-template-columns: minmax(0, 1fr) auto" in css and "@container (max-width: 1340px)" in css and ".l2-filt { display: inline-flex; align-items: center; flex: none; width: 160px" in css          # (the owner, 2026-11-08: "it must be responsive, and the buttons must keep their place" - a grid with the controls in a column of their own, every control a fixed width)
 
 
 def test_the_renewal_is_a_window_of_its_own_with_time_and_traffic_together():
     js = (WEB / "l2tp.js").read_text(encoding="utf-8")
+    css = (WEB / "l2tp.css").read_text(encoding="utf-8")
     assert 'showModal(`Renew · ' in js and "l2RenewGo" in js and "Count the traffic from zero again" in js and "Add more traffic" in js
     assert "/renew`, {method: \"POST\", body: JSON.stringify({days, reset_usage: reset})}" in js and "gb: +((r.quota / 1e9) + add).toFixed(2)" in js          # (the top-up raises the limit of the account by that much)
-    assert "l2GbAdd(10)" in js and "x.kicked ?" in js          # (+10 GB in Edit; the Disconnect says how many devices it cut, or that nobody was connected)
+    assert "x.kicked ?" in js          # (the Disconnect says how many devices it cut, or that nobody was connected)
+    edit = js[js.index("window.l2EditOpen ="):js.index("window.l2Save =")]
+    assert 'class="l2-dlg l2-cmp"' in edit and "l2Chips(" not in edit and "l2GbAdd" not in js and "l2EndAdd" not in js and 'class="l2-fh"' not in edit and ".l2-cmp" in css          # (1.69.248, the owner, of the Edit window: "much more compact, and those numbers go" - no quick-number chips, the help is the tooltip of each field)
+    assert 'title="The account stops at the end of that day (Tehran)"' in edit and "of ${a.limit} online · used" in edit
 
 
 # ---- the shop side
