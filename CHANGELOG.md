@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.69.249 - L2TP shop window: a plan can be marked sold out
+
+> **In short:** the owner (2026-11-08): "the plans we added are not here and cannot be managed" and, to the follow-up, "yes, build it". The Plans & sales window of the L2TP tab now reads and sets the Mini App's own **sold out** flag of a plan (the column `soldout` of `l2tp_plans`, which the Mini App session described): a sold-out plan stays in the Mini App's list as «ناموجود», nobody can buy it, and the accounts bought on it can still be renewed - unlike a plan that is **switched off**, which leaves the list and stops the renewal of its accounts too. Each plan row has a Sold out / Available button beside Switch off, a tag when it is sold out (its price struck through) and a Test tag on a free plan (the Mini App hides free plans from the customers). The editor never touches the flag. A bot copy whose table has no such column yet reads its plans as available.
+>
+> **به زبان ساده:** در پنجرهٔ Plans & sales هر پلن یک دکمهٔ «Sold out» دارد: پلن در مینی‌اپ می‌ماند و «ناموجود» نشان داده می‌شود، کسی نمی‌تواند بخرد، ولی تمدیدِ حساب‌های آن ادامه دارد (برخلاف «Switch off» که تمدید را هم می‌بندد). پلن رایگان با برچسب Test مشخص است.
+
+> **Also:** the owner (2026-11-08, of the rows of the L2TP tab): "that extra text in front of the accounts must not show" - the note of an account (`order 8 user …`) is no longer written beside its name; it is the tooltip of the name, and the search box still finds it.
+>
+> **هم:** یادداشتِ کنار نامِ حساب‌ها (order … user …) دیگر در جدول نوشته نمی‌شود؛ با نگه‌داشتنِ موس روی نام دیده می‌شود و جستجو همچنان آن را پیدا می‌کند.
+
+- **Where:** `services/l2tp_shop.py` (`plans` reads `soldout`, `plan_soldout`), `api/l2tp.py` (`PUT /l2tp/plans/{pid}/soldout`), `web/l2tp.js` + `web/l2tp.css` (the plan row, the account row), `tests/test_l2tp.py`, `ARCHITECTURE.md`.
+- **Not proved:** against the real bot's database (the panel's Shop bot setting still points at the staging copy until the owner confirms the switch in the Mini App session); the flag's effect in the Mini App is the Mini App's own.
+
 ## 1.69.248 - L2TP: a backup (every hour, into its own topic of the Telegram group) and a restore
 
 > **In short:** the owner (2026-11-08): "make a backup and restore system for the L2TP section in the panel, and make a section for its backup in that group, send a backup every 1 hour". The L2TP tab has a **Backup** window. Every hour the accounts of the entry (names, passwords, devices, end dates, traffic, speeds, notes) are read over SSH (`l2tp_backup`, a reviewed read), packed, encrypted with the panel's backup password (the same `openssl` file as the panel's and the bot's) and sent to a topic of its own - "L2TP backups" - in the Telegram group; the panel makes the topic itself the first time when there is none, and an hourly file never goes to the main page of the group. A restore (`l2tp_restore`, a reviewed action) checks every account against the manager's own rules, keeps the file the entry has as `accounts.json.before-restore-*` (the last six stay), then writes through the manager itself under its lock: **only the accounts that are gone** (the default; nothing that exists is changed or removed) or **everything as in the backup** (the accounts made after it are removed, their sessions ended; an empty backup is refused). The shared IPsec key is never changed by a restore.

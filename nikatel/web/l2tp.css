@@ -131,6 +131,14 @@
 .l2-st.warn { color: var(--warn); background: color-mix(in srgb, var(--warn) 14%, transparent); border-color: color-mix(in srgb, var(--warn) 32%, transparent); }
 .l2-st.bad { color: var(--bad); background: color-mix(in srgb, var(--bad) 13%, transparent); border-color: color-mix(in srgb, var(--bad) 32%, transparent); }
 :is(.l2-app, .l2-dlg) .l2-ico.idle { opacity: .6; }
+/* the two tabs of the shop window (Plans | Sales): a segmented control with the count beside each name (1.69.249: their own class - the bar's .l2-filt became the Show popup) */
+.l2-tabs { display: inline-flex; flex-wrap: wrap; justify-self: start; border: 1px solid var(--l2-line); border-radius: 9px; background: var(--l2-fill); overflow: hidden; box-shadow: 0 1px 0 color-mix(in srgb, #fff 7%, transparent) inset, 0 1px 2px rgba(0, 0, 0, .16); }
+:is(.l2-app, .l2-dlg) .l2-tabs > button { appearance: none; font: inherit; font-size: 12px; font-weight: 520; color: inherit; cursor: pointer; height: 28px; min-width: 0; padding: 0 13px; margin: 0; border: 0 !important; border-radius: 0 !important; background-color: transparent; background-image: none !important; box-shadow: none !important; transform: none; white-space: nowrap; display: inline-flex; align-items: center; gap: 7px; transition: background-color .12s ease; }
+:is(.l2-app, .l2-dlg) .l2-tabs > button + button { border-left: 1px solid var(--l2-line) !important; }
+:is(.l2-app, .l2-dlg) .l2-tabs > button:hover { background-color: var(--l2-fill); transform: none; }
+:is(.l2-app, .l2-dlg) .l2-tabs > button.on { background-color: var(--l2-hi); font-weight: 650; }
+.l2-tabs > button i { color: var(--l2-mut); font-size: 11px; font-weight: 520; }
+.l2-tabs button:focus-visible { outline: 2px solid color-mix(in srgb, var(--acc, currentColor) 65%, transparent); outline-offset: -2px; }
 /* the Show popup of the bar (1.69.248: a Mac popup button - the name of the view and its count, a chevron on the right; the browser's own list opens under it) */
 .l2-filt { display: inline-flex; align-items: center; flex: none; width: 160px; height: 28px; box-sizing: border-box; padding-right: 8px; border: 1px solid var(--l2-line); border-radius: 8px; background: var(--l2-fill); box-shadow: 0 1px 0 color-mix(in srgb, #fff 7%, transparent) inset, 0 1px 2px rgba(0, 0, 0, .16); }
 :is(.l2-app, .l2-dlg) .l2-filt select { appearance: none; -webkit-appearance: none; flex: 1 1 auto; width: 100% !important; font: inherit; font-size: 12px; font-weight: 520; color: inherit; height: 100% !important; min-height: 0; min-width: 0; padding: 0 22px 0 11px !important; margin: 0; border: 0 !important; border-radius: 8px; background: transparent !important; outline: none; box-shadow: none !important; cursor: pointer; text-overflow: ellipsis; }
@@ -157,6 +165,7 @@
 .l2-plan { display: grid; grid-template-columns: minmax(150px, 1.2fr) minmax(220px, 1.6fr) 118px 190px; gap: 10px 14px; align-items: center; padding: 10px 2px; }
 .l2-plan + .l2-plan, .l2-sec .l2-plan:not(:first-of-type) { border-top: 1px solid var(--l2-line); }
 .l2-plan.off .l2-pn b, .l2-plan.off .l2-pf, .l2-plan.off .l2-pp { opacity: .55; }
+.l2-plan.sold .l2-pp { text-decoration: line-through; text-decoration-color: color-mix(in srgb, currentColor 45%, transparent); }          /* (1.69.249: a sold-out plan - its price struck through, the rest as it is: it is still in the Mini App's list) */
 .l2-pn { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 8px; min-width: 0; } .l2-pn b { font-size: 13.5px; font-weight: 650; } .l2-pn small { flex-basis: 100%; }
 .l2-pf { display: flex; flex-wrap: wrap; gap: 3px 12px; color: var(--l2-mut); font-size: 12px; }
 .l2-pp { font-weight: 650; font-size: 13px; }

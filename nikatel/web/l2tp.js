@@ -136,7 +136,7 @@ function l2Row(a) {
   const traffic = a.quota ? `${l2B(a.used)}<i class="mut"> of ${l2Gb(a.quota)}</i><span class="l2-meter ${tone}"><b style="width:${pct}%"></b></span>` : `${l2B(a.used)}<i class="mut"> · no limit</i>`;
   const light = a.online > 0 ? `<i class="l2-dot ok l2-live" title="${esc(`Connected now: ${l2Plural(a.online, "device")}${a.since ? " · connected " + l2Since(a.since) : ""}`)}"></i>`
     : `<i class="l2-dot ${a.state === "expired" || a.state === "over" ? "bad" : a.state === "disabled" ? "warn" : "off"}" title="${esc(L2_WHY[a.state] || "Not connected")}"></i>`;
-  return `<div class="l2-tr"><span class="l2-n">${light}<b>${u}</b>${a.note ? `<small class="mut" title="${esc(a.note)}${a.bot ? " (made by the shop bot)" : ""}">${esc(a.note)}</small>` : ""}</span>
+  return `<div class="l2-tr"><span class="l2-n">${light}<b title="${esc(a.note ? a.note + (a.bot ? " (made by the shop bot)" : "") : "")}">${u}</b></span>
     <span class="${a.online ? "l2-on" : ""}"${a.since && a.online ? ` title="${esc("Connected " + l2Since(a.since))}"` : ""}>${a.online}<i class="mut"> / ${a.limit}</i></span>
     <span>${a.down || a.up ? `${l2Mb(a.down)}<i class="mut"> / ${l2Mb(a.up)}</i>` : `<span class="mut">no limit</span>`}</span>
     <span class="l2-tf" title="${esc(`download ${l2B(a.tx)} · upload ${l2B(a.rx)}${a.over ? " · the traffic is used up" : ""}`)}">${traffic}</span>
@@ -348,17 +348,18 @@ function l2ShopDraw() { showModal("Plans & sales", l2ShopBody(), "l2-modal l2-wi
 function l2ShopBody() {
   const s = l2.shop, tab = l2.tab === "sales" ? "sales" : "plans";
   const stage = l2Sec("Who sees L2TP in the Mini App", `<div class="l2-opts">${s.stages.map(o => `<button type="button" class="l2-opt${s.stage === o.key ? " on" : ""}" onclick="l2Stage('${o.key}')"><b>${esc(o.label)}</b><small>${esc(o.note)}</small></button>`).join("")}</div>`);
-  const tabs = `<div class="l2-filt" role="group"><button type="button" class="${tab === "plans" ? "on" : ""}" onclick="l2.tab = 'plans'; l2ShopDraw()">Plans<i>${s.plans.length}</i></button><button type="button" class="${tab === "sales" ? "on" : ""}" onclick="l2.tab = 'sales'; l2ShopDraw()">Sales<i>${s.sales.count}</i></button></div>`;
+  const tabs = `<div class="l2-tabs" role="group"><button type="button" class="${tab === "plans" ? "on" : ""}" onclick="l2.tab = 'plans'; l2ShopDraw()">Plans<i>${s.plans.length}</i></button><button type="button" class="${tab === "sales" ? "on" : ""}" onclick="l2.tab = 'sales'; l2ShopDraw()">Sales<i>${s.sales.count}</i></button></div>`;
   return `<div class="l2-dlg">${stage}${tabs}${tab === "plans" ? l2PlansSec(s) : l2SalesSec(s.sales)}<div class="l2-act"><span class="l2-sp"></span><button type="button" class="l2-btn" onclick="closeModal()">Close</button></div></div>`;
 }
 
 function l2PlansSec(s) {
-  const rows = s.plans.map(p => `<div class="l2-plan${p.active ? "" : " off"}"><div class="l2-pn"><b>${esc(p.title)}</b>${p.active ? "" : `<em class="l2-st warn" title="Not offered to anybody">Off</em>`}<small class="mut">${p.accounts ? l2Plural(p.accounts, "account") + " bought" : "nobody bought it yet"}</small></div>
+  /* (1.69.249: the Mini App's own "sold out" flag - the plan stays in its list as «ناموجود», nobody can buy it, its accounts can still be renewed; the owner, 2026-11-08: the plans must be managed from here) */
+  const rows = s.plans.map(p => `<div class="l2-plan${p.active ? "" : " off"}${p.soldout ? " sold" : ""}"><div class="l2-pn"><b>${esc(p.title)}</b>${p.active ? "" : `<em class="l2-st warn" title="Not offered to anybody, and its accounts cannot be renewed">Off</em>`}${p.soldout ? `<em class="l2-st" title="Listed as «ناموجود»: nobody can buy it; the accounts bought on it can still be renewed">Sold out</em>` : ""}${!p.price ? `<em class="l2-st" title="A free plan is a test plan: the Mini App hides it from the customers">Test</em>` : ""}<small class="mut">${p.accounts ? l2Plural(p.accounts, "account") + " bought" : "nobody bought it yet"}</small></div>
       <div class="l2-pf"><span>${l2Plural(p.days, "day")}</span><span>${l2Plural(p.devices, "device")}</span><span>${p.gb ? +p.gb + " GB" : "unlimited traffic"}</span><span>${p.down || p.up ? `${+p.down || "∞"} / ${+p.up || "∞"} Mbit/s` : "no speed limit"}</span></div>
       <div class="l2-pp">${p.price ? esc(l2Toman(p.price)) : "Free"}</div>
-      <div class="l2-acts"><span class="l2-seg"><button type="button" onclick="l2PlanOpen(${p.id})">Edit</button><button type="button" onclick="l2PlanOn(${p.id}, ${p.active ? 0 : 1})">${p.active ? "Switch off" : "Switch on"}</button></span><button type="button" class="l2-ico l2-del" title="${p.accounts ? "Accounts were bought on this plan: it cannot be deleted (switching it off stops their renewal too)" : "Delete the plan"}" aria-label="Delete" onclick="l2PlanDel(${p.id})">${L2_ICO.bin}</button></div></div>`).join("");
+      <div class="l2-acts"><span class="l2-seg"><button type="button" onclick="l2PlanOpen(${p.id})">Edit</button><button type="button" title="${p.soldout ? "Offer it again" : "Keep it in the list as «ناموجود»: nobody can buy it, its accounts can still be renewed"}" onclick="l2PlanSold(${p.id}, ${p.soldout ? 0 : 1})">${p.soldout ? "Available" : "Sold out"}</button><button type="button" title="${p.active ? "Take it out of the list: nobody can buy it and its accounts cannot be renewed" : "Offer it again"}" onclick="l2PlanOn(${p.id}, ${p.active ? 0 : 1})">${p.active ? "Switch off" : "Switch on"}</button></span><button type="button" class="l2-ico l2-del" title="${p.accounts ? "Accounts were bought on this plan: it cannot be deleted (switching it off stops their renewal too)" : "Delete the plan"}" aria-label="Delete" onclick="l2PlanDel(${p.id})">${L2_ICO.bin}</button></div></div>`).join("");
   return l2Sec("Plans", `${rows || `<p class="l2-lead">No plan yet. A plan is what a customer buys: time, devices, traffic, speed and a price.</p>`}<div class="l2-act"><span class="l2-sp"></span><button type="button" class="l2-btn on l2-pri" onclick="l2PlanOpen(0)">＋ New plan</button></div>
-    <p class="l2-lead">A renewal in the Mini App always uses the plan's CURRENT price, time and traffic: a change here reaches the next purchase and every renewal of the accounts bought on that plan (a running account keeps its own end date and limit until then). A plan that is switched off cannot be bought, and its accounts cannot be renewed.</p>`);
+    <p class="l2-lead">A renewal in the Mini App always uses the plan's CURRENT price, time and traffic: a change here reaches the next purchase and every renewal of the accounts bought on that plan (a running account keeps its own end date and limit until then). <b>Sold out</b> keeps the plan in the list as «ناموجود»: nobody can buy it, its accounts can still be renewed. <b>Switched off</b> takes it out of the list: nobody can buy it, and its accounts cannot be renewed. A free plan is a test plan the customers do not see.</p>`);
 }
 
 function l2SalesSec(x) {
@@ -381,6 +382,12 @@ window.l2PlanOn = async (id, on) => {
   if (!on && p && p.accounts && !(await gconfirm(`Switch off "${p.title}"? ${l2Plural(p.accounts, "account")} ${p.accounts === 1 ? "was" : "were"} bought on it: while it is off nobody can buy it and ${p.accounts === 1 ? "that account cannot" : "those accounts cannot"} be renewed in the Mini App. Continue?`, {danger: false}))) return;
   try { const r = await api(`/api/l2tp/plans/${id}/active`, {method: "PUT", body: JSON.stringify({on: !!on})}); l2.shop.plans = r.plans; } catch (e) { toast("✕ " + e.message, "bad"); return; }
   l2ShopDraw(); toast(on ? "✓ The plan is on sale" : "✓ The plan is off", "ok");
+};
+window.l2PlanSold = async (id, on) => {
+  const p = l2.shop.plans.find(x => x.id === id); if (!p) return;
+  if (on && !(await gconfirm(`Mark "${p.title}" as sold out? It stays in the Mini App's list as «ناموجود»: nobody can buy it, and ${p.accounts ? `the ${l2Plural(p.accounts, "account")} bought on it can still be renewed` : "the accounts bought on it can still be renewed"}. Continue?`, {danger: false}))) return;
+  try { const r = await api(`/api/l2tp/plans/${id}/soldout`, {method: "PUT", body: JSON.stringify({on: !!on})}); l2.shop.plans = r.plans; } catch (e) { toast("✕ " + e.message, "bad"); return; }
+  l2ShopDraw(); toast(on ? "✓ Sold out: nobody can buy it, renewals go on" : "✓ The plan is available again", "ok");
 };
 window.l2PlanDel = async id => {
   const p = l2.shop.plans.find(x => x.id === id); if (!p) return;

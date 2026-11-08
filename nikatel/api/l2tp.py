@@ -206,6 +206,12 @@ def plan_active(pid: int, body: PlanOnIn):
     return {"ok": True, "plans": _wrap(l2tp_shop.plan_active, pid, body.on)}
 
 
+@router.put("/l2tp/plans/{pid}/soldout", dependencies=[Depends(_shop_licensed)])
+def plan_soldout(pid: int, body: PlanOnIn):
+    """Mark a plan sold out or available again. A sold-out plan stays in the Mini App's list as «ناموجود»: nobody can buy it, but the accounts bought on it can still be renewed."""
+    return {"ok": True, "plans": _wrap(l2tp_shop.plan_soldout, pid, body.on)}
+
+
 @router.delete("/l2tp/plans/{pid}", dependencies=[Depends(_shop_licensed)])
 def delete_plan(pid: int):
     """Delete a plan nobody bought; a plan with accounts cannot be deleted."""

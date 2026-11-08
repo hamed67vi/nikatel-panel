@@ -588,6 +588,7 @@ def test_the_page_shows_who_is_connected_by_a_light_and_follows_the_entry():
     assert "l2-tag" not in row and "l2-st" not in row and "L2_STATE" not in js          # ("the tags - bot, Ended and the rest - go")
     assert "l2Date(a.expires)" not in row and 'l2Plural(Math.floor(a.days_left), "day")' in row and "l2-ended" in row and ".l2-ended" in css          # ("the Ends column writes only the days left")
     assert 'class="l2-foot' not in js          # ("this extra explanation goes")
+    assert '<small class="mut"' not in row and "<b title=\"${esc(a.note" in row          # (1.69.249, the owner: "that extra text in front of the accounts must not show" - the note is the tooltip of the name only; the search still finds it)
     assert "l2Filters(d)" in js and 'l2Views = [["", "All"' in js and ".l2-filt" in css          # (All / Connected / Ending soon / Ended, each with its count)
     assert "typing >= 0" in js          # (the cursor stays in the search box while the figures move)
     bar = js[js.index("function l2Bar("):js.index("function l2Notes(")]
@@ -617,8 +618,8 @@ class FakeBot:
 
         self.writes, self.queries, self.states = [], [], []
         self.plans = plans if plans is not None else [
-            {"id": "2", "title": "L2TP · 1 month", "days": "30", "devices": "2", "down": "10.0", "up": "10.0", "price": "150000", "descr": "line one\nline two", "active": "1", "sort": "1", "gb": "100.00"},
-            {"id": "1", "title": "L2TP test", "days": "7", "devices": "1", "down": "NULL", "up": "NULL", "price": "0", "descr": "NULL", "active": "0", "sort": "0", "gb": "NULL"}]
+            {"id": "2", "title": "L2TP · 1 month", "days": "30", "devices": "2", "down": "10.0", "up": "10.0", "price": "150000", "descr": "line one\nline two", "active": "1", "sort": "1", "gb": "100.00", "soldout": "1"},
+            {"id": "1", "title": "L2TP test", "days": "7", "devices": "1", "down": "NULL", "up": "NULL", "price": "0", "descr": "NULL", "active": "0", "sort": "0", "gb": "NULL", "soldout": "0"}]
         self.on_plan = accounts_on_plan if accounts_on_plan is not None else {2: 3}
         self.stage_value = stage_value
         monkeypatch.setattr(shopbot, "query", self.query)
@@ -660,6 +661,7 @@ def test_the_plans_are_read_with_the_accounts_bought_on_them_and_the_stage_defau
     two = ps[1]
     assert (two["title"], two["days"], two["devices"], two["gb"], two["down"], two["up"], two["price"], two["active"], two["accounts"]) == ("L2TP · 1 month", 30, 2, 100.0, 10.0, 10.0, 150000, True, 3) and two["descr"] == "line one\nline two"
     assert ps[0]["gb"] is None and ps[0]["down"] is None and ps[0]["active"] is False and ps[0]["accounts"] == 0 and ps[0]["descr"] == ""
+    assert two["soldout"] is True and ps[0]["soldout"] is False and "p.soldout" in bot.queries[-1]          # (1.69.249: the Mini App's sold-out flag is read with the plan)
     assert l2tp_shop.stage() == "admin"
     bot.stage_value = "on"
     assert l2tp_shop.stage() == "on"
@@ -675,6 +677,32 @@ def test_a_table_the_mini_app_has_not_made_yet_reads_as_nothing(monkeypatch):
 
     monkeypatch.setattr(shopbot, "query", gone)
     assert l2tp_shop.plans() == []
+
+
+def test_a_bot_copy_without_the_soldout_column_reads_its_plans_as_available(monkeypatch):
+    from nikatel.services import l2tp_shop, shopbot
+
+    asked = []
+
+    def old_table(sql):
+        asked.append(sql)
+
+        if "p.soldout" in sql:
+            raise RuntimeError("ERROR 1054 (42S22) at line 1: Unknown column 'p.soldout' in 'field list'")
+
+        return [{"id": "4", "title": "old", "days": "30", "devices": "1", "down": "NULL", "up": "NULL", "price": "1000", "descr": "NULL", "active": "1", "sort": "0", "gb": "NULL", "accounts": "0"}]
+
+    monkeypatch.setattr(shopbot, "query", old_table)
+    ps = l2tp_shop.plans()
+    assert len(asked) == 2 and ps[0]["soldout"] is False and ps[0]["id"] == 4          # (asked again without the column; any other refusal is raised as it is)
+
+    def other(sql):
+        raise RuntimeError("ERROR 1045 (28000): Access denied")
+
+    monkeypatch.setattr(shopbot, "query", other)
+
+    with pytest.raises(RuntimeError, match="Access denied"):
+        l2tp_shop.plans()
 
 
 def test_a_plan_is_written_exactly_and_a_bad_text_never_reaches_the_bot(monkeypatch):
@@ -795,6 +823,11 @@ def test_the_shop_routes(client, monkeypatch):
     assert client.post("/api/l2tp/plans", json=body).status_code == 201 and bot.writes[-1].startswith("INSERT INTO l2tp_plans")
     assert client.put("/api/l2tp/plans/2", json=body).status_code == 200 and bot.writes[-1].endswith("WHERE id = 2")
     assert client.put("/api/l2tp/plans/2/active", json={"on": False}).json()["ok"] and bot.writes[-1] == "UPDATE l2tp_plans SET active = 0 WHERE id = 2"
+    assert client.put("/api/l2tp/plans/2/soldout", json={"on": True}).json()["plans"][1]["soldout"] is True and bot.writes[-1] == "UPDATE l2tp_plans SET soldout = 1 WHERE id = 2"          # (1.69.249)
+    assert client.put("/api/l2tp/plans/2/soldout", json={"on": False}).status_code == 200 and bot.writes[-1] == "UPDATE l2tp_plans SET soldout = 0 WHERE id = 2"
+    assert client.put("/api/l2tp/plans/9/soldout", json={"on": True}).status_code == 400          # (no such plan)
+    edit = [w for w in bot.writes if w.startswith("UPDATE l2tp_plans SET title")][-1]
+    assert "soldout" not in edit and "soldout" not in [w for w in bot.writes if w.startswith("INSERT")][-1]          # (the editor never touches the flag)
     assert client.delete("/api/l2tp/plans/2").status_code == 400          # (accounts were bought on it)
     assert client.delete("/api/l2tp/plans/1").status_code == 200
     assert client.post("/api/l2tp/plans", json={**body, "price": -5}).status_code == 422
@@ -813,8 +846,11 @@ def test_the_shop_routes(client, monkeypatch):
 def test_the_shop_window_is_wired_and_has_plans_sales_and_the_switch():
     js = (WEB / "l2tp.js").read_text(encoding="utf-8")
     css = (WEB / "l2tp.css").read_text(encoding="utf-8")
-    for need in ('showModal("Plans & sales"', "/api/l2tp/shop", "/api/l2tp/shop/stage", "/api/l2tp/plans", "Who sees L2TP in the Mini App", "l2PlanOpen(0)", "＋ New plan", "Switch off", "Only paid orders are counted", "Reading the shop…", "first a top-up of the wallet"):
+    for need in ('showModal("Plans & sales"', "/api/l2tp/shop", "/api/l2tp/shop/stage", "/api/l2tp/plans", "Who sees L2TP in the Mini App", "l2PlanOpen(0)", "＋ New plan", "Switch off", "Only paid orders are counted", "Reading the shop…", "first a top-up of the wallet",
+                 "window.l2PlanSold = async (id, on) =>", "/soldout`", ">Sold out</em>", "p.soldout ? 0 : 1", "can still be renewed"):          # (1.69.249: the Mini App's sold-out flag, set from the row - never from the editor)
         assert need in js, need
+
+    assert "soldout" not in js.split("window.l2PlanSave = async () => {", 1)[1].split("\n};", 1)[0] and ".l2-plan.sold" in css
 
     assert "gconfirm(key === \"on\"" in js          # (opening L2TP to the customers asks first)
     for need in (".l2-plan", ".l2-opt", ".l2-tile", ".l2-ord", ".l2-ta"):

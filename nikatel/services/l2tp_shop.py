@@ -133,13 +133,24 @@ def shape_plan(r: dict) -> dict:
     descr = str(r.get("descr") or "")          # (mysql prints an empty description as the word NULL)
     return {"id": pid, "title": str(r.get("title") or ""), "days": int(r.get("days") or 0), "devices": int(r.get("devices") or 1), "gb": gb if gb else None,
             "down": _num(r.get("down")) or None, "up": _num(r.get("up")) or None, "price": int(r.get("price") or 0), "descr": "" if descr == "NULL" else descr,
-            "active": str(r.get("active")) == "1", "sort": int(r.get("sort") or 0), "accounts": int(r.get("accounts") or 0)}
+            "active": str(r.get("active")) == "1", "soldout": str(r.get("soldout")) == "1", "sort": int(r.get("sort") or 0), "accounts": int(r.get("accounts") or 0)}
+
+
+PLAN_COLS = "p.id, p.title, p.days, p.devices, p.down, p.up, p.price, p.descr, p.active, p.sort, p.gb"
+ACCOUNTS_SUB = "(SELECT COUNT(*) FROM l2tp_accounts a WHERE a.plan_id = p.id AND a.status = 1) AS accounts"
 
 
 def plans() -> list[dict]:
-    """Every plan, the switched-off ones too, with the number of live accounts that were bought on it (ONE query: every read of the bot host is an SSH round trip of about two seconds)."""
-    rows = _query("SELECT p.id, p.title, p.days, p.devices, p.down, p.up, p.price, p.descr, p.active, p.sort, p.gb, "
-                  "(SELECT COUNT(*) FROM l2tp_accounts a WHERE a.plan_id = p.id AND a.status = 1) AS accounts FROM l2tp_plans p ORDER BY p.sort, p.id")
+    """Every plan, the switched-off and the sold-out ones too, with the number of live accounts that were bought on it (ONE query: every read of the bot host is an SSH round trip of about two seconds).
+    `soldout` (1.69.249) is the Mini App's own column: a sold-out plan stays in its list as «ناموجود», cannot be bought, and the accounts bought on it can still be renewed; a bot copy whose table has no such column yet reads as not sold out."""
+    try:
+        rows = _query(f"SELECT {PLAN_COLS}, p.soldout, {ACCOUNTS_SUB} FROM l2tp_plans p ORDER BY p.sort, p.id")
+    except RuntimeError as e:
+        if "soldout" not in str(e) and "1054" not in str(e):
+            raise
+
+        rows = _query(f"SELECT {PLAN_COLS}, {ACCOUNTS_SUB} FROM l2tp_plans p ORDER BY p.sort, p.id")
+
     return [shape_plan(r) for r in rows]
 
 
@@ -243,6 +254,20 @@ def plan_active(pid: int, on: bool) -> list[dict]:
     if not any(p["id"] == pid for p in now):
         raise ValueError("no such plan")
 
+    return now
+
+
+def plan_soldout(pid: int, on: bool) -> list[dict]:
+    """Mark a plan sold out, or available again (1.69.249; the owner: the plans must be managed from the panel). SOLD OUT in the Mini App: the plan stays in the list, greyed, as «ناموجود»; nobody can buy it; the accounts
+    bought on it can still be renewed (unlike a plan that is switched OFF). The editor never touches this flag; this is the only place that does."""
+    pid = _int(pid, "the plan", 1, 2_000_000_000)
+    _done(shopbot.write(f"UPDATE l2tp_plans SET soldout = {1 if on else 0} WHERE id = {pid}"))
+    now = plans()
+
+    if not any(p["id"] == pid for p in now):
+        raise ValueError("no such plan")
+
+    log.info("l2tp shop: plan %s is %s", pid, "sold out" if on else "available again")
     return now
 
 
