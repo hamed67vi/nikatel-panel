@@ -7,6 +7,7 @@ from __future__ import annotations
 import base64
 import json
 import re
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 
@@ -229,30 +230,99 @@ def _read_exit(c: dict) -> dict:
             ex["error"] = "the exit's routes or rules are missing"
     except (RuntimeError, ValueError, OSError) as e:
         ex["error"] = str(e)[:200]
+        ex["silent"] = True                                                   # (the server itself could not be asked: the next read does not wait for it)
 
     return ex
+
+
+# The exit never holds the page (1.69.250). The owner, 2026-11-09: "I want to delete these accounts, they are not deleted" - they WERE deleted, but the exit server was off for the night, its SSH read took 30 seconds
+# to give up, and the tab waited for it after every change (and when it opened), so the deleted rows stayed on the screen. Now the exit is read by a thread of its own, one read at a time: the page waits a few seconds
+# for it; an exit that is slower answers into the NEXT read, and one that did not answer the last time is waited for only a moment.
+EXIT_WAIT = 6.0
+EXIT_WAIT_SILENT = 1.0
+SILENT = "the server does not answer (the panel keeps trying)"
+_EXIT: dict = {"id": 0, "job": None, "last": None}
+_EXIT_LOCK = threading.Lock()
+
+
+def forget_exit() -> None:
+    """Another exit was chosen (or a test starts): what was known of the old one is dropped."""
+    with _EXIT_LOCK:
+        _EXIT.update(id=0, job=None, last=None)
+
+
+def _exit_job(c: dict, job: dict) -> None:
+    try:
+        ex = _read_exit(c)
+    except Exception as e:  # thread boundary: a read that breaks in a way nobody thought of must still end its job, or the exit would never be read again
+        log.exception("l2tp: the read of the exit broke")
+        ex = {"ok": False, "error": str(e)[:200] or type(e).__name__, "installed": False, "silent": True}
+
+    with _EXIT_LOCK:
+        job["out"] = ex
+
+        if _EXIT["job"] is job:
+            _EXIT["job"] = None
+            _EXIT["last"] = ex
+
+    job["done"].set()
+
+
+def _exit_known(c: dict) -> dict | None:
+    """The newest answer of this exit, if there is one (an answer that came after the page stopped waiting is seen by the next light read)."""
+    with _EXIT_LOCK:
+        return _EXIT["last"] if _EXIT["id"] == c["exit_id"] else None
+
+
+def _exit_view(c: dict) -> dict:
+    """The exit's state for a full read: a read is started unless one is already on its way, and the page waits for it only so long."""
+    with _EXIT_LOCK:
+        if _EXIT["id"] != c["exit_id"]:
+            _EXIT.update(id=c["exit_id"], job=None, last=None)
+
+        job, last = _EXIT["job"], _EXIT["last"]
+
+        if job is None:
+            job = _EXIT["job"] = {"done": threading.Event(), "out": None}
+            threading.Thread(target=_exit_job, args=(dict(c), job), name="l2tp-exit", daemon=True).start()
+
+    silent = bool(last and last.get("silent"))
+
+    if job["done"].wait(EXIT_WAIT_SILENT if silent else EXIT_WAIT):
+        return job["out"]
+
+    if silent:
+        return last
+
+    late = {"ok": False, "error": SILENT, "installed": False, "silent": True}
+
+    with _EXIT_LOCK:
+        if _EXIT["job"] is job:                                               # (still being read: the next read waits only a moment for it)
+            _EXIT["last"] = late
+
+    return late
 
 
 def state(base: dict | None = None) -> dict:
     """The page: the settings, the entry (services, accounts, who is online), the exit and the tunnel between them - each part answers for itself, a part that cannot be read says why and the rest still shows.
     The entry and the exit are two SSH reads that are made AT THE SAME TIME (1.69.244: one after the other, a slow Iran server held the whole tab for as long as both took - the owner, 2026-11-07: "it loads very late").
-    With `base` (a full answer from a moment ago) only the ENTRY is read again and the exit is taken from it: that is the light read the open tab makes every few seconds to show who is connected (1.69.245)."""
+    With `base` (a full answer from a moment ago) only the ENTRY is read again and the exit is taken from it: that is the light read the open tab makes every few seconds to show who is connected (1.69.245).
+    The exit never holds the answer for long (1.69.250, `_exit_view`): an exit that is off costs the page a moment, not the 30 seconds its SSH read takes to give up."""
     c = conf()
     now = time.time()
     out: dict = {"conf": c, "configured": bool(c["entry_id"]), "entry": None, "exit": None, "tunnel": None, "accounts": [], "sessions": [], "now": int(now)}
     keep_exit = base is not None and base.get("exit") is not None and base.get("conf", {}).get("exit_id") == c["exit_id"]
 
-    with ThreadPoolExecutor(max_workers=2) as pool:
+    with ThreadPoolExecutor(max_workers=1) as pool:
         fe = pool.submit(_read_entry, c, now) if c["entry_id"] else None
-        fx = pool.submit(_read_exit, c) if c["exit_id"] and not keep_exit else None
+
+        if keep_exit:
+            out["exit"] = _exit_known(c) or base["exit"]
+        elif c["exit_id"]:
+            out["exit"] = _exit_view(c)                                       # (its own thread, at the same time as the entry's read)
 
         if fe is not None:
             out["entry"], out["accounts"], out["sessions"] = fe.result()
-
-        if fx is not None:
-            out["exit"] = fx.result()
-        elif keep_exit:
-            out["exit"] = base["exit"]
 
     if c["tunnel_id"]:
         with session() as db:

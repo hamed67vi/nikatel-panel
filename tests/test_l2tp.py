@@ -5,6 +5,7 @@ import re
 import subprocess
 import sys
 import threading
+import time
 from pathlib import Path
 
 import pytest
@@ -80,6 +81,15 @@ class Fake:
 
     def actions(self):
         return [c for c in self.calls if c[0] == "action"]
+
+
+@pytest.fixture(autouse=True)
+def _nothing_kept_from_the_test_before():          # (the page's kept answer and what is known of the exit live in the module: every test starts and ends without them)
+    from nikatel.api import l2tp as api
+
+    api._drop()
+    yield
+    api._drop()
 
 
 @pytest.fixture
@@ -535,6 +545,96 @@ def test_the_entry_and_the_exit_are_read_at_the_same_time(ids, monkeypatch):
     monkeypatch.setattr(l2tp, "run_script", script)
     s = l2tp.state()
     assert s["entry"]["ok"] is True and s["exit"]["ok"] is True and s["tunnel"]["name"] == "fa-ia" and len(s["accounts"]) == 4
+
+
+# ------------------------------------------------------------------ 1.69.250: an exit that is off never holds the page; a deleted row leaves at once
+def test_an_exit_that_does_not_answer_never_holds_the_page(ids, monkeypatch):
+    """The owner, 2026-11-09: "I want to delete these accounts, they are not deleted" - they were, but the exit server was off for the night, its read took 30 s to give up, and the tab waited for it after every change."""
+    a, b, t = ids
+    l2tp.set_conf(a, b, t, "Nikatel Shop", "")
+    release, asked = threading.Event(), []
+
+    def script(node, name, params=None, timeout=40):
+        if name == "l2tp_state":
+            return STATE_OUT
+
+        asked.append(name)
+        release.wait(30)          # the exit hangs like a server that is off
+        raise SSHError("ssh connection lost (Connection timed out)")
+
+    monkeypatch.setattr(l2tp, "run_script", script)
+    monkeypatch.setattr(l2tp, "EXIT_WAIT", 0.3)
+    monkeypatch.setattr(l2tp, "EXIT_WAIT_SILENT", 0.05)
+    t0 = time.time()
+    s = l2tp.state()
+    assert time.time() - t0 < 10 and s["entry"]["ok"] and len(s["accounts"]) == 4          # the entry's table is there, the page did not wait for the exit
+    assert s["exit"]["ok"] is False and s["exit"]["silent"] and s["exit"]["error"] == l2tp.SILENT
+
+    s2 = l2tp.state()
+    assert asked == ["l2tp_exit_state"] and s2["exit"]["silent"]          # (the read that hangs is still on its way: no second one is started beside it)
+
+    release.set()          # the read gives up at last
+
+    for _ in range(200):
+        if l2tp._EXIT["job"] is None:
+            break
+
+        time.sleep(0.05)
+
+    known = l2tp._exit_known(l2tp.conf())
+    assert known["silent"] and "Connection timed out" in known["error"]
+    assert l2tp.state(base=s2)["exit"]["error"] == known["error"]          # (the light read shows the answer that came after the page stopped waiting)
+    assert l2tp._exit_known({"exit_id": b + 1000}) is None          # (never the answer of another server)
+
+    monkeypatch.setattr(l2tp, "EXIT_WAIT_SILENT", 10.0)
+    monkeypatch.setattr(l2tp, "run_script", lambda node, name, params=None, timeout=40: STATE_OUT if name == "l2tp_state" else EXIT_OUT)          # the server is back
+    s3 = l2tp.state()
+    assert s3["exit"]["ok"] is True and not s3["exit"].get("silent") and s3["exit"]["rules"] == 11
+
+    l2tp.forget_exit()
+    assert l2tp._exit_known(l2tp.conf()) is None
+
+
+def test_after_a_change_of_an_account_only_the_entry_is_read_again(client, ids, monkeypatch):
+    a, b, t = ids
+    fake = Fake(monkeypatch)
+    conf = {"entry_id": a, "exit_id": b, "tunnel_id": t, "title": "Nikatel Shop"}
+    client.put("/api/l2tp/config", json=conf)
+    assert client.get("/api/l2tp").status_code == 200
+
+    def scripts():
+        return sorted(c[1] for c in fake.calls if c[0] == "script")
+
+    fake.calls.clear()
+    assert client.delete("/api/l2tp/accounts/alice").status_code == 200
+    r = client.get("/api/l2tp?live=1").json()
+    assert scripts() == ["l2tp_state"] and r["exit"]["ok"] and r["tunnel"]["name"] == "fa-ia"          # (the exit and the tunnel did not change with the account: they are not asked again)
+
+    fake.calls.clear()
+    assert client.post("/api/l2tp/accounts/bob/renew", json={"days": 30}).status_code == 200
+    assert client.get("/api/l2tp").status_code == 200 and scripts() == ["l2tp_state"]          # (the plain read too)
+
+    fake.calls.clear()
+    client.get("/api/l2tp")
+    assert scripts() == []          # (and then it is kept again)
+
+    client.put("/api/l2tp/config", json=conf)          # the servers themselves were set: everything is read
+    fake.calls.clear()
+    assert client.get("/api/l2tp").status_code == 200 and scripts() == ["l2tp_exit_state", "l2tp_state"]
+
+
+def test_a_deleted_row_leaves_the_table_at_once():
+    js = (WEB / "l2tp.js").read_text(encoding="utf-8")
+    css = (WEB / "l2tp.css").read_text(encoding="utf-8")
+    dele = js.split("window.l2Del = async", 1)[1].split("\n};", 1)[0]
+    assert "l2.going = name" in dele and "l2.gone[name] = Date.now() + 15000; l2Hide(l2.d);" in dele and dele.index("l2.gone[name]") < dele.index("await l2Again()")          # (out of the table first, the read after it)
+    assert dele.index('toast(`✓ ${name} deleted`') < dele.index("await l2Again()") and "if (l2.going ||" in dele          # (said the moment the entry answers; one delete at a time)
+    assert "l2Hide(await api(" in js and "d.accounts.filter(a => !g[a.user])" in js          # (a read that was on its way with the old list cannot bring the row back)
+    assert 'l2.going === a.user ? " l2-going" : ""' in js and ".l2-tr.l2-going" in css and "pointer-events: none" in css
+    assert "const l2Again = async () => { await l2Load(false, true);" in js          # (after a change of an account the entry alone is read)
+    do = js.split("const l2Do = async", 1)[1].split("\n};", 1)[0]
+    assert "l2Load(true)" not in do and "await l2Again()" in do and do.index("toast(") < do.index("await l2Again()")
+    assert js.count("await l2Load(true)") == 3          # (everything is read again only when the servers are set, after a restore, and by l2Refresh)
 
 
 def test_the_new_files_hold_no_secret_or_address_of_ours():

@@ -4,7 +4,7 @@
    the shop side (1.69.245): GET /api/l2tp/shop, PUT .../shop/stage, POST /api/l2tp/plans, PUT and DELETE .../plans/{id}, PUT .../plans/{id}/active;
    backup and restore (1.69.248; the same routes as the Backups card, part "l2tp"): GET /api/settings/backup, POST .../settings/backup/part/l2tp, POST .../backup/now?part=l2tp, POST and DELETE .../backup/topic/l2tp, POST .../backup/restore and .../backup/restore-upload (mode: missing | all), POST .../settings/backup/passphrase.
    Uses the helpers of app.js: $, api, esc, ago, when, renderSub, PAGES, state, toast, showModal, hideModal. */
-const l2 = {d: null, err: "", html: "", cfg: null, e: null, q: "", view: "", timer: 0, asked: false, fast: 0, at: 0, shop: null, tab: "plans", vis: false};
+const l2 = {d: null, err: "", html: "", cfg: null, e: null, q: "", view: "", timer: 0, asked: false, fast: 0, at: 0, shop: null, tab: "plans", vis: false, going: "", gone: {}};
 const L2_NAME = /^[a-z][a-z0-9_]{2,23}$/;
 const L2_BRAND = "nklt_";          // (the owner, 2026-11-07: the name of every account starts with nklt_ - first it was nikatelshop_; the shop bot names its accounts the same way; the accounts made before keep their names)
 const l2B = n => { n = +n || 0; return n >= 1e9 ? (n / 1e9).toFixed(2) + " GB" : n >= 1e6 ? (n / 1e6).toFixed(1) + " MB" : n >= 1e3 ? Math.round(n / 1e3) + " KB" : n + " B"; };
@@ -45,8 +45,17 @@ PAGES.l2tp = async () => {          // (the tab is drawn AT ONCE - with the last
 };
 
 async function l2Load(fresh, live) {
-  try { l2.d = await api("/api/l2tp" + (fresh ? "?fresh=1" : live ? "?live=1" : "")); l2.err = ""; l2Keep(l2.d); } catch (e) { l2.err = e.message; }
+  try { l2.d = l2Hide(await api("/api/l2tp" + (fresh ? "?fresh=1" : live ? "?live=1" : ""))); l2.err = ""; l2Keep(l2.d); } catch (e) { l2.err = e.message; }
 }
+/* (the owner, 2026-11-09: "I want to delete these accounts, they are not deleted" - they were, but the row stayed on the screen for half a minute: the page read EVERYTHING again after a change and the exit server was off.
+   1.69.250: a deleted row leaves the table the moment the entry says it is gone; an answer that was already on its way with the old list cannot bring it back; and after a change of an account the entry ALONE is read again) */
+const l2Hide = d => {
+  const now = Date.now(), g = l2.gone;
+  Object.keys(g).forEach(k => { if (g[k] < now) delete g[k]; });
+  if (d && d.accounts && Object.keys(g).length) d.accounts = d.accounts.filter(a => !g[a.user]);
+  return d;
+};
+const l2Again = async () => { await l2Load(false, true); l2.html = ""; l2Draw(); };
 
 async function l2Pull(mark, live) {          // (a read behind the drawn page; `mark` = the small "reading" chip while it waits - not on the rounds, a redraw there would take the cursor out of the search box)
   if (l2.pulling) return;
@@ -136,7 +145,7 @@ function l2Row(a) {
   const traffic = a.quota ? `${l2B(a.used)}<i class="mut"> of ${l2Gb(a.quota)}</i><span class="l2-meter ${tone}"><b style="width:${pct}%"></b></span>` : `${l2B(a.used)}<i class="mut"> · no limit</i>`;
   const light = a.online > 0 ? `<i class="l2-dot ok l2-live" title="${esc(`Connected now: ${l2Plural(a.online, "device")}${a.since ? " · connected " + l2Since(a.since) : ""}`)}"></i>`
     : `<i class="l2-dot ${a.state === "expired" || a.state === "over" ? "bad" : a.state === "disabled" ? "warn" : "off"}" title="${esc(L2_WHY[a.state] || "Not connected")}"></i>`;
-  return `<div class="l2-tr"><span class="l2-n">${light}<b title="${esc(a.note ? a.note + (a.bot ? " (made by the shop bot)" : "") : "")}">${u}</b></span>
+  return `<div class="l2-tr${l2.going === a.user ? " l2-going" : ""}"><span class="l2-n">${light}<b title="${esc(a.note ? a.note + (a.bot ? " (made by the shop bot)" : "") : "")}">${u}</b></span>
     <span class="${a.online ? "l2-on" : ""}"${a.since && a.online ? ` title="${esc("Connected " + l2Since(a.since))}"` : ""}>${a.online}<i class="mut"> / ${a.limit}</i></span>
     <span>${a.down || a.up ? `${l2Mb(a.down)}<i class="mut"> / ${l2Mb(a.up)}</i>` : `<span class="mut">no limit</span>`}</span>
     <span class="l2-tf" title="${esc(`download ${l2B(a.tx)} · upload ${l2B(a.rx)}${a.over ? " · the traffic is used up" : ""}`)}">${traffic}</span>
@@ -195,7 +204,8 @@ window.l2Create = async () => {
   if (l2V("n-down") !== "") body.down = +l2V("n-down");
   if (l2V("n-up") !== "") body.up = +l2V("n-up");
   try { await api("/api/l2tp/accounts", {method: "POST", body: JSON.stringify(body)}); } catch (e) { toast("✕ " + e.message, "bad"); return; }
-  await l2Load(true); l2.html = ""; l2Draw(); toast("✓ Account made", "ok");
+  delete l2.gone[name];          // (a name that was deleted a moment ago and is made again shows at once)
+  await l2Again(); toast("✓ Account made", "ok");
   l2Details(name);          // (the window of the new account is replaced by its details: the message to send)
 };
 
@@ -238,7 +248,7 @@ window.l2Save = async () => {
   if (l2V("e-note") !== w.note) body.note = l2V("e-note");
   if (!Object.keys(body).length) { hideModal(); return; }
   try { await api(`/api/l2tp/accounts/${encodeURIComponent(e.user)}`, {method: "PUT", body: JSON.stringify(body)}); } catch (x) { toast("✕ " + x.message, "bad"); return; }
-  hideModal(); await l2Load(true); l2.html = ""; l2Draw(); toast(`✓ ${e.user} saved`, "ok");
+  hideModal(); await l2Again(); toast(`✓ ${e.user} saved`, "ok");
 };
 
 /* Details: the message for the customer */
@@ -283,8 +293,8 @@ window.l2SaveConf = async () => {
 window.l2Redraw = () => { l2.html = ""; l2Draw(); };          // (l2Draw gives the cursor back to the search box when it was in it)
 window.l2Refresh = async () => { await l2Load(true); l2.html = ""; l2Draw(); toast("✓ Read again", "ok"); };
 
-const l2Do = async (path, opts, okText) => {          // (one change: the entry is read again at once, so the table is the truth; `okText` may be a function of the answer)
-  try { const r = await api(path, opts); await l2Load(true); l2.html = ""; l2Draw(); if (okText) toast("✓ " + (typeof okText === "function" ? okText(r) : okText), "ok"); return r; }
+const l2Do = async (path, opts, okText) => {          // (one change: it is said the moment the entry answers, then the entry is read again, so the table is the truth; `okText` may be a function of the answer)
+  try { const r = await api(path, opts); if (okText) toast("✓ " + (typeof okText === "function" ? okText(r) : okText), "ok"); await l2Again(); return r; }
   catch (e) { toast("✕ " + e.message, "bad"); return null; }
 };
 /* (the owner, 2026-11-07, of the browser's grey "monitor... says" box: "make this box more professional" - the questions of a row are the panel's own glass windows now, the ones every other page uses: gconfirm, and a window of its own for the renewal) */
@@ -318,8 +328,8 @@ window.l2RenewGo = async () => {
   try {
     await api(`/api/l2tp/accounts/${enc}/renew`, {method: "POST", body: JSON.stringify({days, reset_usage: reset})});
     if (add > 0 && r.quota) await api(`/api/l2tp/accounts/${enc}`, {method: "PUT", body: JSON.stringify({gb: +((r.quota / 1e9) + add).toFixed(2)})});
-  } catch (e) { toast("✕ " + e.message, "bad"); await l2Load(true); l2.html = ""; l2Draw(); return; }
-  hideModal(); await l2Load(true); l2.html = ""; l2Draw();
+  } catch (e) { toast("✕ " + e.message, "bad"); await l2Again(); return; }
+  hideModal(); await l2Again();
   toast(`✓ ${r.user}: ${days} days added${reset && r.quota ? ", traffic from zero" : ""}${add > 0 && r.quota ? `, +${add} GB` : ""}`, "ok");
 };
 window.l2Kick = async name => {
@@ -329,7 +339,18 @@ window.l2Kick = async name => {
   const r = await l2Do(`/api/l2tp/accounts/${enc}/kick`, {method: "POST"}, x => x.kicked ? `${name}: ${l2Plural(x.kicked, "device")} disconnected - ${x.kicked === 1 ? "it" : "they"} can connect again` : `${name}: nobody was connected`);
   if (r) l2.fast = Date.now() + 45000;          // (for the next 45 seconds the page follows the entry closely: the light goes out now, and comes back when the phone connects again)
 };
-window.l2Del = async (name, bot) => { if (await gconfirm(`Delete the account ${name}? Its devices are disconnected and it cannot be brought back.${bot ? " The shop bot made this one: the customer's order will point at an account that is gone." : ""}`, {danger: true})) { hideModal(); l2Do(`/api/l2tp/accounts/${encodeURIComponent(name)}`, {method: "DELETE"}, `${name} deleted`); } };
+window.l2Del = async (name, bot) => {
+  if (l2.going || !(await gconfirm(`Delete the account ${name}? Its devices are disconnected and it cannot be brought back.${bot ? " The shop bot made this one: the customer's order will point at an account that is gone." : ""}`, {danger: true}))) return;
+  hideModal();
+  l2.going = name; l2.html = ""; l2Draw();          // (the row dims while the entry is asked: the press was taken, a second one is not needed)
+  try {
+    await api(`/api/l2tp/accounts/${encodeURIComponent(name)}`, {method: "DELETE"});
+    l2.gone[name] = Date.now() + 15000; l2Hide(l2.d);          // (gone from the table now, whatever a read that was already on its way still says)
+    toast(`✓ ${name} deleted`, "ok");
+  } catch (e) { toast("✕ " + e.message, "bad"); }
+  l2.going = ""; l2.html = ""; l2Draw();
+  await l2Again();
+};
 
 /* ---------------------------------------------------------------- the shop side (1.69.245): who sees L2TP in the Mini App, the plans it sells, the sales (the owner, 2026-11-07: "make creating, editing, managing the purchase and the renewal of L2TP complete") */
 const l2Toman = n => (+n || 0).toLocaleString("en-US") + " toman";

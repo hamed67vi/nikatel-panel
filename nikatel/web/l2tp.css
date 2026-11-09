@@ -51,6 +51,7 @@
 .l2-th { color: var(--l2-mut); font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em; border-bottom: 1px solid var(--l2-line); }
 .l2-tr + .l2-tr { border-top: 1px solid var(--l2-line); }
 .l2-tr:hover { background: var(--l2-fill); border-radius: 8px; }
+.l2-tr.l2-going { opacity: .42; pointer-events: none; transition: opacity .15s; }          /* (1.69.250: a row that is being deleted dims at once and takes no second press) */
 .l2-n { display: flex; align-items: baseline; gap: 8px; min-width: 0; } .l2-n .l2-dot { align-self: center; } .l2-n b { font-weight: 650; font-size: 13px; flex: none; } .l2-n em { flex: none; } .l2-n small { flex: 1 1 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .l2-on { color: var(--ok); font-weight: 650; }
 .l2-tf { min-width: 0; }

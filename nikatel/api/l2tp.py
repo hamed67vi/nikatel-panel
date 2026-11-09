@@ -36,22 +36,27 @@ def _wrap(fn, *a, **kw):
         raise HTTPException(502, str(e)[:200])
 
 
-def _drop():
+def _drop():          # (the servers themselves were changed: nothing that was read is kept)
     _STATE["at"] = 0.0
     _STATE["full_at"] = 0.0
     _STATE["data"] = None
+    l2tp.forget_exit()
+
+
+def _changed():          # (an ACCOUNT was changed - 1.69.250: the next read asks the entry again at once, and only the entry; the exit and the tunnel did not change with it, and waiting for them is what kept a deleted row on the screen)
+    _STATE["at"] = 0.0
 
 
 @router.get("/l2tp")
 def overview(fresh: bool = False, live: bool = False):
     """The entry (services, load, pool), its accounts without passwords, the sessions, the exit and the tunnel; each part says why when it cannot be read.
-    `live` is the light read an open tab makes every few seconds: only the entry is read again (who is connected now), the rest comes from the last full answer."""
+    `live` is the light read an open tab makes every few seconds: only the entry is read again (who is connected now), the rest comes from the last full answer. The read after a change of an account is that light read too."""
     now = time.time()
 
-    if fresh or _STATE["data"] is None or (live and now - _STATE["full_at"] > FULL_MAX) or (not live and now - _STATE["at"] > STATE_TTL):
+    if fresh or _STATE["data"] is None or now - _STATE["full_at"] > (FULL_MAX if live else STATE_TTL):
         _STATE["data"] = l2tp.state()
         _STATE["at"] = _STATE["full_at"] = time.time()
-    elif live and now - _STATE["at"] > LIVE_TTL:
+    elif now - _STATE["at"] > (LIVE_TTL if live else STATE_TTL):
         _STATE["data"] = l2tp.state(base=_STATE["data"])
         _STATE["at"] = time.time()
 
@@ -95,7 +100,7 @@ class NewIn(BaseModel):
 def add_account(body: NewIn):
     """A new account. The answer carries its password once; it can be read again from the account's details."""
     r = _wrap(l2tp.add, body.name, body.days, body.devices, body.down, body.up, body.password, body.note, body.gb)
-    _drop()
+    _changed()
     return {"ok": True, **r}
 
 
@@ -108,7 +113,7 @@ class RenewIn(BaseModel):
 def renew_account(name: str, body: RenewIn):
     """Add days to an account, from today or from its end date when that is later; an account that was switched off comes back, and the traffic can start again from zero."""
     r = _wrap(l2tp.renew, name, body.days, body.reset_usage)
-    _drop()
+    _changed()
     return {"ok": True, **r}
 
 
@@ -128,7 +133,7 @@ class ChangeIn(BaseModel):
 def change_account(name: str, body: ChangeIn):
     """Change what is given and nothing else: the password, the devices, the speed (0 = no limit), the traffic in GB (0 = no limit), the end date, on or off, the note; a speed change reaches the devices that are online at once."""
     r = _wrap(l2tp.change, name, body.password, body.devices, body.down, body.up, body.disabled, body.note, body.gb, body.reset_usage, body.expires)
-    _drop()
+    _changed()
     return {"ok": True, **r}
 
 
@@ -136,7 +141,7 @@ def change_account(name: str, body: ChangeIn):
 def delete_account(name: str):
     """Delete an account; its sessions are cut."""
     r = _wrap(l2tp.remove, name)
-    _drop()
+    _changed()
     return {"ok": True, **r}
 
 
@@ -144,7 +149,7 @@ def delete_account(name: str):
 def kick_account(name: str):
     """Disconnect the account's devices now (it can connect again)."""
     r = _wrap(l2tp.kick, name)
-    _drop()
+    _changed()
     return {"ok": True, **r}
 
 
