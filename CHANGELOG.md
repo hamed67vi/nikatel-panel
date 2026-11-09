@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.69.251 - L2TP tab: the state strip names the servers and shows the backup
+
+> **In short:** the owner (2026-11-09), of the row "● ENTRY up · load 0.19 ● EXIT ready ● TUNNEL … · protected | ACCOUNTS 2 ONLINE 0": "make this part more professional", and the same day: "I did not find the L2TP backup in the panel". The strip is now a row of **cells** with a hairline between them, a small caption over each value. Entry and Exit show the **name of the server** beside its light, then one quiet fact (the load; "ready", or "no answer" / "not ready" in red); Tunnel shows its name, its delay, and a small **lock** when it is protected (it used to be the word "protected"); Accounts and Online are figures, Online green when somebody is connected. A new last cell, **Backup**, says when the accounts were last backed up and how often ("12 min ago · hourly"; amber when it is off, late or not sent to the group, red when there is no backup password or the last try failed) - a press opens the backup window. The Backup button of the toolbar stays.
+>
+> On Settings → Backups, where he had looked for it, a row **L2TP accounts** says that this backup lives on the L2TP tab, shows the latest file, and its Open button goes there and opens the window.
+>
+> **به زبان ساده:** نوارِ وضعیتِ تبِ L2TP مرتب‌تر شد: هر بخش یک خانه با عنوانِ کوچک است؛ نامِ سرورِ ورودی و خروجی کنارِ چراغشان نوشته می‌شود، تونل با تأخیر و یک قفلِ کوچک (محافظت‌شده)، و تعدادِ حساب‌ها و آنلاین‌ها به‌صورتِ عدد. یک خانهٔ «Backup» هم اضافه شد که می‌گوید آخرین بکاپ کی گرفته شده و با کلیک پنجرهٔ بکاپ باز می‌شود. در Settings → Backups هم یک ردیف «L2TP accounts» هست که با دکمهٔ Open همان پنجره را باز می‌کند.
+
 ## 1.69.250 - L2TP tab: a deleted account leaves the table at once; an exit that is off never holds the page
 
 > **In short:** the owner (2026-11-09): "I want to delete these accounts, they are not deleted". They **were** deleted - the entry answered each Delete in a second - but the rows stayed on the screen for half a minute, so it looked as if nothing had happened (and a second press said "no such account"). The cause: after every change the tab read **everything** again, and the exit server was switched off for the night; its SSH read takes 30 seconds to give up, and the table waited for it. The same wait held the tab every time it was opened and every two minutes while it stayed open.

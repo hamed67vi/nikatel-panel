@@ -4,7 +4,7 @@
    the shop side (1.69.245): GET /api/l2tp/shop, PUT .../shop/stage, POST /api/l2tp/plans, PUT and DELETE .../plans/{id}, PUT .../plans/{id}/active;
    backup and restore (1.69.248; the same routes as the Backups card, part "l2tp"): GET /api/settings/backup, POST .../settings/backup/part/l2tp, POST .../backup/now?part=l2tp, POST and DELETE .../backup/topic/l2tp, POST .../backup/restore and .../backup/restore-upload (mode: missing | all), POST .../settings/backup/passphrase.
    Uses the helpers of app.js: $, api, esc, ago, when, renderSub, PAGES, state, toast, showModal, hideModal. */
-const l2 = {d: null, err: "", html: "", cfg: null, e: null, q: "", view: "", timer: 0, asked: false, fast: 0, at: 0, shop: null, tab: "plans", vis: false, going: "", gone: {}};
+const l2 = {d: null, err: "", html: "", cfg: null, e: null, q: "", view: "", timer: 0, asked: false, fast: 0, at: 0, shop: null, tab: "plans", vis: false, going: "", gone: {}, bk: null, bkAt: 0};
 const L2_NAME = /^[a-z][a-z0-9_]{2,23}$/;
 const L2_BRAND = "nklt_";          // (the owner, 2026-11-07: the name of every account starts with nklt_ - first it was nikatelshop_; the shop bot names its accounts the same way; the accounts made before keep their names)
 const l2B = n => { n = +n || 0; return n >= 1e9 ? (n / 1e9).toFixed(2) + " GB" : n >= 1e6 ? (n / 1e6).toFixed(1) + " MB" : n >= 1e3 ? Math.round(n / 1e3) + " KB" : n + " B"; };
@@ -26,6 +26,7 @@ const L2_ICO = {          // (the line icons of the buttons, drawn in the colour
   gear: `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>`,
   find: `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="20" y1="20" x2="16.5" y2="16.5"/></svg>`,
   chev: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>`,
+  lock: `<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>`,
 };
 
 PAGES.l2tp = async () => {          // (the tab is drawn AT ONCE - with the last answer if there is one - and the entry is read behind it: it is read over SSH and can take seconds; the owner, 2026-11-07: "it loads very late, the menu must open in a moment", and once the spinner never ended)
@@ -34,10 +35,12 @@ PAGES.l2tp = async () => {          // (the tab is drawn AT ONCE - with the last
   if (!l2.d) l2.d = l2Last();
   l2Draw();
   l2Pull(true);
+  l2BkPeek();
   clearInterval(l2.timer);
   l2.timer = setInterval(() => {          // (while the tab is open and no window is: the page follows the entry by itself - the light read, only the entry, a few seconds after the last one; right after a Disconnect it follows closely, so the light is seen to go out and to come back when the phone connects again)
     if (!l2Here()) { clearInterval(l2.timer); l2.timer = 0; return; }
     if (l2Open() || document.hidden) return;
+    l2BkPeek();
     if (Date.now() - l2.at < (Date.now() < l2.fast ? 900 : 4500)) return;
     l2Pull(false, true);
   }, 1000);
@@ -83,14 +86,40 @@ function l2Page() {
   return `<div class="l2-app">${l2Bar(d)}${l2Notes(d)}${d.configured ? l2Table(d) : `<div class="l2-glass l2-empty"><b>Choose the servers first</b><span>Pick the Iran server that is the entry and the foreign server that is the exit.</span><button class="l2-btn on" onclick="l2ConfOpen()">Choose servers</button></div>`}</div>`;
 }
 
+/* the state strip (1.69.251; the owner, 2026-11-09, of the row "● ENTRY up · load 0.19 ● EXIT ready ● TUNNEL …": "make this part more professional"): cells with a hairline between them - a small caption over the value. The value is the NAME of the server
+   (or of the tunnel) beside its light, then ONE quiet fact (the load, the delay); a small lock says the tunnel is protected; the two counts are figures, Online green when somebody is connected; the last cell is the backup of the accounts -
+   when the last one was made - and a press opens its window (the owner, the same day: "I did not find the L2TP backup in the panel") */
+async function l2BkPeek() {          // (the backup's state for the strip: read behind the page, at most every two minutes; the backup window keeps the same answer fresh while it is used)
+  if (Date.now() - l2.bkAt < 120000) return;
+  l2.bkAt = Date.now();
+  try { l2.bk = await api("/api/settings/backup"); if (l2Here() && !l2Open()) l2Draw(); } catch (e) { /* the cell keeps what it showed */ }
+}
+
+function l2BkCell() {
+  const b = l2.bk, p = b && b.parts && b.parts.l2tp, sc = (p && p.sched) || {};
+  const last = p && (p.last || (b.backups || []).find(f => f.part === "l2tp" && !/-before-restore/.test(f.file)));
+  const every = p ? (p.every_minutes === 60 ? "hourly" : p.every_minutes >= 60 && p.every_minutes % 60 === 0 ? `every ${p.every_minutes / 60} h` : `every ${p.every_minutes} min`) : "";
+  const stale = !last || Date.now() / 1000 - last.at > Math.max(2 * ((p && p.every_minutes) || 60) * 60, 1800);
+  const unsent = !!(p && p.send && b.telegram_ready && sc.last_run && !sc.sent && sc.telegram);
+  const ok = !p ? null : !b.has_passphrase || sc.ok === false ? false : !p.enabled || stale || unsent ? null : true;
+  const main = !p ? "Backups" : last ? `${ago(last.at)} ago` : "none yet";
+  const sub = !p ? "" : !b.has_passphrase ? "no password" : !p.enabled ? "off" : unsent ? "not sent" : every;
+  const tip = !p ? "Back up the accounts and restore them" : !b.has_passphrase ? "No backup password yet: nothing is backed up. Press to set one." : sc.ok === false ? `The last try did not work: ${sc.error || "no reason given"}`
+    : unsent ? `The last file was made but not sent to the Telegram group: ${sc.telegram}` : !p.enabled ? "The backup by itself is switched off. Press to open it." : `The accounts are backed up ${every}${p.send ? " and sent to the Telegram group" : ""}. Press to open, back up now or restore.`;
+  return `<button type="button" class="l2-cell l2-cellb" title="${esc(tip)}" onclick="l2BkOpen()"><small>Backup</small><span class="l2-cv"><i class="l2-dot ${l2Dot(ok)}"></i><b>${esc(main)}</b>${sub ? `<em${ok === false ? ' class="bad"' : ""}>${esc(sub)}</em>` : ""}</span></button>`;
+}
+
 function l2Bar(d) {
-  const en = d.entry, ex = d.exit, tu = d.tunnel;
-  const chip = (label, ok, text, tip) => `<span class="l2-chip" title="${esc(tip || "")}"><i class="l2-dot ${l2Dot(ok)}"></i><small>${label}</small><b>${esc(text)}</b></span>`;
+  const en = d.entry, ex = d.exit, tu = d.tunnel, nm = d.names || {};
+  const cell = (label, ok, main, sub, tip, extra = "") => `<span class="l2-cell" title="${esc(tip || "")}"><small>${label}</small><span class="l2-cv"><i class="l2-dot ${l2Dot(ok)}"></i><b>${esc(main)}</b>${sub ? `<em${ok === false ? ' class="bad"' : ""}>${esc(sub)}</em>` : ""}${extra}</span></span>`;
+  const num = (label, n, cls = "") => `<span class="l2-cell l2-num${cls}"><small>${label}</small><b>${n}</b></span>`;
+  const enUp = en && en.ok ? (en.units && en.units.strongswan === "active" ? true : null) : false, tuOk = tu ? (tu.state === "up" ? true : tu.state === "down" ? false : null) : null;
   return `<div class="l2-bar l2-glass"><div class="l2-stat">
-    ${en ? chip("Entry", en.ok, en.ok ? `${en.units && en.units.strongswan === "active" ? "up" : "check"}${en.load != null ? " · load " + en.load : ""}` : "not ready", en.error || `IPsec ${en.units ? en.units.strongswan : "?"}, L2TP ${en.units ? en.units.xl2tpd : "?"}, timer ${en.units ? en.units.tick : "?"}, pool ${en.pool || "?"}`) : ""}
-    ${d.exit ? chip("Exit", ex.ok, ex.ok ? "ready" : "not ready", ex.error || `${ex.rules} rules, routes ${(ex.routes || []).join(" ")}`) : ""}
-    ${tu ? chip("Tunnel", tu.state === "up" ? true : tu.state === "down" ? false : null, `${tu.name}${tu.rtt_ms != null ? " · " + Math.round(tu.rtt_ms) + " ms" : ""}${tu.protected ? " · protected" : ""}`, tu.error || "the tunnel between the entry and the exit") : ""}
-    ${d.configured ? `<span class="l2-chip l2-cnt"><small>accounts</small><b>${d.accounts.length}</b></span><span class="l2-chip"><small>online</small><b>${d.online}</b></span>` : ""}
+    ${en ? cell("Entry", enUp, nm.entry || "Entry", enUp === false ? "not ready" : enUp === null ? "check services" : en.load != null ? `load ${en.load}` : "up", en.error || `IPsec ${en.units ? en.units.strongswan : "?"}, L2TP ${en.units ? en.units.xl2tpd : "?"}, timer ${en.units ? en.units.tick : "?"}, pool ${en.pool || "?"}`) : ""}
+    ${d.exit ? cell("Exit", ex.ok, nm.exit || "Exit", ex.ok ? "ready" : ex.silent ? "no answer" : "not ready", ex.error || `${ex.rules} rules, routes ${(ex.routes || []).join(" ")}`) : ""}
+    ${tu ? cell("Tunnel", tuOk, tu.name, tu.state === "up" ? (tu.rtt_ms != null ? `${Math.round(tu.rtt_ms)} ms` : "up") : tu.state || "unknown", tu.error || "the tunnel between the entry and the exit", tu.protected ? `<i class="l2-lock" title="Protected: the Doctor never moves or replaces this tunnel">${L2_ICO.lock}</i>` : "") : ""}
+    ${d.configured ? `<span class="l2-nums">${num("Accounts", d.accounts.length)}${num("Online", d.online, d.online ? " on" : "")}</span>` : ""}
+    ${d.configured ? l2BkCell() : ""}
     ${l2.busy ? `<span class="l2-chip l2-busy" title="The entry is being read over SSH; what is shown is the last answer"><i class="l2-dot warn"></i><small>reading…</small></span>` : ""}
   </div><div class="l2-tools">
     ${d.configured ? `<label class="l2-search" title="Search by name or note">${L2_ICO.find}<input class="l2-q" placeholder="Search" value="${esc(l2.q)}" oninput="l2.q = this.value; l2Redraw()"></label>` : ""}

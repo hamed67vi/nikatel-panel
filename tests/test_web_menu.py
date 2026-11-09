@@ -869,7 +869,8 @@ def test_the_shop_bot_is_seen_nowhere_in_the_menu_and_the_backup_password_is_a_s
     assert 'Object.entries(bk.parts).filter(([k]) => k === "panel").map(part).join("")' in app and "the shop bot: kept here" not in app          # (1.69.248: the L2TP part has its own window on the L2TP tab, so the card shows the panel's row only)
     assert 'const passRow = `<div class="bk1-r bk1-k' in app and "pgSw(!!bk.has_passphrase, \"bkPassToggle(this)\"" in app and "window.bkPassToggle = el =>" in app and 'id="bpw-form"' in app
     assert '<form class="bk1-sc bk-sched" onsubmit="return saveBackup(event)">' in app and 'name="enabled" title="Automatic backups"' in app and "html body #page .bk1 { border: 1px solid var(--uk-line); border-radius: 18px;" in css and "html body #page .bk1 .bk1-r { display: grid;" in css          # (1.59.0) the owner: "make it a box and one piece, unified, MacBook style": ONE box, a row each for the panel, the password and the schedule, a hairline between them
-    assert '`<div class="bk1">${Object.entries(bk.parts).filter(([k]) => k === "panel").map(part).join("")}${passRow}${sched}</div>`' in app and 'class="sl bpw"' not in app
+    assert '`<div class="bk1">${Object.entries(bk.parts).filter(([k]) => k === "panel").map(part).join("")}${l2Bk}${passRow}${sched}</div>`' in app and 'class="sl bpw"' not in app
+    assert "<b>L2TP accounts</b>" in app and "go('tunnels', 'l2tp'); setTimeout(() => l2BkOpen(), 400)" in app          # (1.69.251, the owner: "I did not find the L2TP backup in the panel" - he looked on this card: a row says where it lives and opens it)
 
 
 def test_the_api_tab_of_settings_gathers_every_api_connection():

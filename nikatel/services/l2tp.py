@@ -324,12 +324,17 @@ def state(base: dict | None = None) -> dict:
         if fe is not None:
             out["entry"], out["accounts"], out["sessions"] = fe.result()
 
-    if c["tunnel_id"]:
-        with session() as db:
-            t = db.get(Tunnel, c["tunnel_id"])
+    with session() as db:
+        out["names"] = {}                                                     # (1.69.251: the strip names the servers - "pnt-a", not "Entry up")
 
-            if t is not None:
-                out["tunnel"] = {"id": t.id, "name": t.name, "state": t.state, "rtt_ms": t.rtt_ms, "since": t.state_since, "protected": is_protected(t), "error": t.last_error or ""}
+        for k in ("entry", "exit"):
+            s = db.get(Server, c[f"{k}_id"]) if c[f"{k}_id"] else None
+            out["names"][k] = s.name if s is not None else ""
+
+        t = db.get(Tunnel, c["tunnel_id"]) if c["tunnel_id"] else None
+
+        if t is not None:
+            out["tunnel"] = {"id": t.id, "name": t.name, "state": t.state, "rtt_ms": t.rtt_ms, "since": t.state_since, "protected": is_protected(t), "error": t.last_error or ""}
 
     out["online"] = len(out["sessions"])
     return out

@@ -637,6 +637,31 @@ def test_a_deleted_row_leaves_the_table_at_once():
     assert js.count("await l2Load(true)") == 3          # (everything is read again only when the servers are set, after a restore, and by l2Refresh)
 
 
+# ------------------------------------------------------------------ 1.69.251: the state strip names the servers and has a cell for the backup
+def test_the_state_names_the_servers(ready):
+    s = l2tp.state()
+    assert s["names"] == {"entry": "iran-a", "exit": "foreign-a"} and s["tunnel"]["name"] == "fa-ia"
+    assert l2tp.state(base=s)["names"] == s["names"]          # (the light read too)
+
+
+def test_the_strip_is_cells_with_the_names_a_lock_the_counts_and_the_backup():
+    """The owner, 2026-11-09: "make this part more professional" (the row of chips) and "I did not find the L2TP backup in the panel"."""
+    js = (WEB / "l2tp.js").read_text(encoding="utf-8")
+    css = (WEB / "l2tp.css").read_text(encoding="utf-8")
+    bar = js[js.index("function l2Bar("):js.index("function l2Notes(")]
+    assert 'nm.entry || "Entry"' in bar and 'nm.exit || "Exit"' in bar and "d.names || {}" in bar          # (the value is the server's own name; an answer kept from before the update still draws)
+    assert 'class="l2-cell"' in bar and "L2_ICO.lock" in bar and '" · protected"' not in bar and '"check services"' in bar and 'ex.silent ? "no answer"' in bar
+    assert 'num("Accounts", d.accounts.length)' in bar and 'num("Online", d.online, d.online ? " on" : "")' in bar and "l2BkCell()" in bar
+    cell = js[js.index("function l2BkCell("):js.index("function l2Bar(")]
+    assert 'onclick="l2BkOpen()"' in cell and "<small>Backup</small>" in cell and "ago(last.at)" in cell and '"no password"' in cell and '"not sent"' in cell and "-before-restore" in cell
+    assert "async function l2BkPeek()" in js and "Date.now() - l2.bkAt < 120000" in js and js.count("l2BkPeek();") == 2          # (read behind the page when the tab opens and on its rounds, at most every two minutes)
+    page = js.split("PAGES.l2tp = async () => {", 1)[1].split("\n};", 1)[0]
+    assert "await" not in page and "l2BkPeek();" in page
+    for rule in (".l2-cell {", ".l2-cell > small {", ".l2-cv > b {", ".l2-lock svg {", ".l2-num.on > b { color: var(--ok); }", ":is(.l2-app) .l2-cellb {", ".l2-stat > .l2-cell:first-child {"):
+        assert rule in css, rule
+    assert "position: absolute" not in css and ".l2-cnt" not in css
+
+
 def test_the_new_files_hold_no_secret_or_address_of_ours():
     for f in ("l2tp.js", "l2tp.css"):
         text = (WEB / f).read_text(encoding="utf-8")
@@ -695,7 +720,7 @@ def test_the_page_shows_who_is_connected_by_a_light_and_follows_the_entry():
     assert 'class="l2-bar l2-glass"' in bar and "l2.view = this.value" in js and ".l2-filt select" in css and 'class="l2-seg l2-tb"' in bar and "l2BkOpen()" in bar and "l2ShopOpen()" in bar and "L2_ICO.gear" in bar          # (1.69.248, the owner: "this box professional, MacBook style" - one glass toolbar; the views are a popup in it)
     assert "↻" not in js and ">Bot<" not in js and "l2.only" not in js and "l2Refresh()" not in bar and '["bot", "Shop bot"' in js          # (the owner, 2026-11-08: "this button goes, the page refreshes by itself" and "this one too" (Bot) - the shop bot's accounts are a view of the popup instead)
     assert "l2Filters(d)" not in js[js.index("function l2Table("):js.index("function l2Row(")]          # (the filters left the table for the bar)
-    assert "container-type: inline-size" in css and "grid-template-columns: minmax(0, 1fr) auto" in css and "@container (max-width: 1340px)" in css and ".l2-filt { display: inline-flex; align-items: center; flex: none; width: 160px" in css          # (the owner, 2026-11-08: "it must be responsive, and the buttons must keep their place" - a grid with the controls in a column of their own, every control a fixed width)
+    assert "container-type: inline-size" in css and "grid-template-columns: minmax(0, 1fr) auto" in css and "@container (max-width: 1480px)" in css and ".l2-filt { display: inline-flex; align-items: center; flex: none; width: 160px" in css          # (the owner, 2026-11-08: "it must be responsive, and the buttons must keep their place" - a grid with the controls in a column of their own, every control a fixed width)
 
 
 def test_the_renewal_is_a_window_of_its_own_with_time_and_traffic_together():
