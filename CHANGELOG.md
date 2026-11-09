@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.69.252 - Telegram: the panel says when Telegram refuses the bot
+
+> **In short:** the owner (2026-11-09): "no backup is sent to the bot". The backups were made every hour - but Telegram had refused the panel's bot for ten days (`Unauthorized`: every alert, report and backup, 494 times that day), and the Settings box still said **● sending**. It looked only at whether a token was *saved*, never at what Telegram *answered*.
+>
+> The panel now keeps Telegram's last definite answer - delivered, or refused for a reason that is about the bot or the chat itself (a token that is not accepted, a bot that was removed from the chat, a chat Telegram does not know) - with since when and how many times in a row. It is kept in a small file beside the database, written only when the answer changes, so a restart does not turn the box green again. A network error and a refusal that is about one message (a topic that is gone, too many requests) do not change it; saving another token or another chat starts clean.
+>
+> Where it shows: **Settings → Api & Key → Telegram bot** - the pill is "✕ rejected" in red (it was "● sending"), and a red line over the fields says that nothing is delivered, since when, why in plain words, and what to do (the token from @BotFather, Save, Test). "● sending" is shown only when Telegram really took the last message; a token that was saved and never tried says "saved · not tried yet". **Settings → Backups** carries a red "✕ Telegram rejects the bot" pill. **L2TP tab**: the Backup cell is red with "not sent" (it was amber), and its window says in red that the files are made and kept on the server but none reaches the group.
+>
+> **به زبان ساده:** وقتی تلگرام رباتِ پنل را رد می‌کند (مثلاً توکن باطل شده)، پنل دیگر «● sending» نشان نمی‌دهد. در Settings → Api & Key → Telegram bot با رنگِ قرمز می‌نویسد «rejected»، می‌گوید از چه زمانی هیچ پیامی نرسیده، چرا، و چه باید کرد. کارتِ Backups و خانهٔ Backup در تبِ L2TP هم همین را قرمز نشان می‌دهند.
+
 ## 1.69.251 - L2TP tab: the state strip names the servers and shows the backup
 
 > **In short:** the owner (2026-11-09), of the row "● ENTRY up · load 0.19 ● EXIT ready ● TUNNEL … · protected | ACCOUNTS 2 ONLINE 0": "make this part more professional", and the same day: "I did not find the L2TP backup in the panel". The strip is now a row of **cells** with a hairline between them, a small caption over each value. Entry and Exit show the **name of the server** beside its light, then one quiet fact (the load; "ready", or "no answer" / "not ready" in red); Tunnel shows its name, its delay, and a small **lock** when it is protected (it used to be the word "protected"); Accounts and Online are figures, Online green when somebody is connected. A new last cell, **Backup**, says when the accounts were last backed up and how often ("12 min ago · hourly"; amber when it is off, late or not sent to the group, red when there is no backup password or the last try failed) - a press opens the backup window. The Backup button of the toolbar stays.

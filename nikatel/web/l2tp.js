@@ -95,16 +95,19 @@ async function l2BkPeek() {          // (the backup's state for the strip: read 
   try { l2.bk = await api("/api/settings/backup"); if (l2Here() && !l2Open()) l2Draw(); } catch (e) { /* the cell keeps what it showed */ }
 }
 
+const l2TgDown = (b, p) => !!(b && p && p.send && b.telegram_ready && b.telegram_state && b.telegram_state.ok === false);          // (Telegram refuses the bot or the chat itself: no file can reach the group, whatever the last backup said)
+
 function l2BkCell() {
   const b = l2.bk, p = b && b.parts && b.parts.l2tp, sc = (p && p.sched) || {};
   const last = p && (p.last || (b.backups || []).find(f => f.part === "l2tp" && !/-before-restore/.test(f.file)));
   const every = p ? (p.every_minutes === 60 ? "hourly" : p.every_minutes >= 60 && p.every_minutes % 60 === 0 ? `every ${p.every_minutes / 60} h` : `every ${p.every_minutes} min`) : "";
   const stale = !last || Date.now() / 1000 - last.at > Math.max(2 * ((p && p.every_minutes) || 60) * 60, 1800);
-  const unsent = !!(p && p.send && b.telegram_ready && sc.last_run && !sc.sent && sc.telegram);
-  const ok = !p ? null : !b.has_passphrase || sc.ok === false ? false : !p.enabled || stale || unsent ? null : true;
+  const tgDown = l2TgDown(b, p), unsent = tgDown || !!(p && p.send && b.telegram_ready && sc.last_run && !sc.sent && sc.telegram);
+  const ok = !p ? null : !b.has_passphrase || sc.ok === false || unsent ? false : !p.enabled || stale ? null : true;          // (1.69.252: a file that did not reach the group is RED - the owner expects it there)
   const main = !p ? "Backups" : last ? `${ago(last.at)} ago` : "none yet";
   const sub = !p ? "" : !b.has_passphrase ? "no password" : !p.enabled ? "off" : unsent ? "not sent" : every;
   const tip = !p ? "Back up the accounts and restore them" : !b.has_passphrase ? "No backup password yet: nothing is backed up. Press to set one." : sc.ok === false ? `The last try did not work: ${sc.error || "no reason given"}`
+    : tgDown ? `Telegram refuses the panel's bot (${b.telegram_state.why}): the backups are made and kept on this server, none reaches the group. Settings → Api & Key → Telegram bot.`
     : unsent ? `The last file was made but not sent to the Telegram group: ${sc.telegram}` : !p.enabled ? "The backup by itself is switched off. Press to open it." : `The accounts are backed up ${every}${p.send ? " and sent to the Telegram group" : ""}. Press to open, back up now or restore.`;
   return `<button type="button" class="l2-cell l2-cellb" title="${esc(tip)}" onclick="l2BkOpen()"><small>Backup</small><span class="l2-cv"><i class="l2-dot ${l2Dot(ok)}"></i><b>${esc(main)}</b>${sub ? `<em${ok === false ? ' class="bad"' : ""}>${esc(sub)}</em>` : ""}</span></button>`;
 }
@@ -520,8 +523,9 @@ function l2BkBody() {
   const notes = [];
   if (!b.has_passphrase) notes.push(["bad", "No backup password yet: nothing is backed up until you set one below."]);
   if (!b.telegram_ready) notes.push(["warn", "Telegram is not set up or switched off (Settings → Api & Key): the backups stay on this server only."]);
+  if (l2TgDown(b, p)) notes.push(["bad", `Telegram refuses the panel's bot (“${b.telegram_state.why}”, since ${when(b.telegram_state.since)}): the backups are made every time and kept on this server, but none reaches the group. Put a valid bot token in Settings → Api & Key → Telegram bot, press Test there, then Back up now here.`]);
   if (sc.last_run && sc.ok === false) notes.push(["bad", `The last try (${ago(sc.last_run)} ago) did not work: ${sc.error || "no reason given"}. It tries again in a few minutes.`]);
-  else if (p.send && b.telegram_ready && sc.last_run && !sc.sent && sc.telegram) notes.push(["warn", `The last file was not sent to the group: ${sc.telegram}`]);
+  else if (!l2TgDown(b, p) && p.send && b.telegram_ready && sc.last_run && !sc.sent && sc.telegram) notes.push(["bad", `The last file was not sent to the group: ${sc.telegram}`]);
   const topic = !b.telegram_ready ? `<span class="mut">needs Telegram</span>`
     : p.topic ? `<span class="l2-st ok" title="Its files go to this topic of the group">topic · ${esc(p.topic_name || "L2TP backups")}</span><button type="button" class="l2-btn" onclick="l2BkTopicOff()">Unlink</button>`
     : `<button type="button" class="l2-btn" onclick="l2BkTopic()">＋ Make the topic</button><span class="mut">made by itself at the first backup, too</span>`;

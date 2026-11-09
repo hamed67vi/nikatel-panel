@@ -12,6 +12,7 @@ from ..db import session
 from ..models import Maintenance
 from ..services import backup, report
 from ..services import settings as st
+from ..services import telegram as tg_state
 from ..services.telegram import send_text, valid_chat, valid_token
 from ..ssh import SSHError
 
@@ -27,8 +28,8 @@ class TelegramIn(BaseModel):
 
 @router.get("/settings/telegram")
 def telegram_get():
-    """The Telegram bot and chat the alerts go to (the token is masked)."""
-    return {"ok": True, **st.public("telegram")}
+    """The Telegram bot and chat the alerts go to (the token is masked), and `state`: what Telegram answered the last time - delivered, refused (why, since when, how many times in a row) or nothing sent yet."""
+    return {"ok": True, **st.public("telegram"), "state": tg_state.state()}
 
 
 @router.put("/settings/telegram")
@@ -40,8 +41,13 @@ def telegram_put(body: TelegramIn):
     if body.chat_id and not valid_chat(body.chat_id):
         raise HTTPException(400, "the chat id is a number (negative for groups/channels) or @channelname")
 
+    old = st.get("telegram")
     st.put("telegram", {"enabled": body.enabled, "token": body.token, "chat_id": body.chat_id})
-    return {"ok": True, **st.public("telegram")}
+
+    if (body.token and body.token != old.get("token")) or body.chat_id != old.get("chat_id"):          # (another bot or another chat: what the old ones were answered says nothing about these)
+        tg_state.forget()
+
+    return {"ok": True, **st.public("telegram"), "state": tg_state.state()}
 
 
 @router.post("/settings/telegram/test")
@@ -211,7 +217,8 @@ def _backup_view() -> dict:
 
     shown = sorted((f for k in backup.PARTS for f in [x for x in files if x["part"] == k][:12]), key=lambda x: x["at"], reverse=True)          # (the newest of every part: an hourly part must not push the others out of the list)
     return {**{k: v for k, v in conf.items() if k != "parts"}, "parts": parts, "has_passphrase": backup.has_passphrase(), "backups": shown,
-            "telegram_ready": bool(tg.get("enabled") and telegram.valid_token(tg.get("token", "")) and telegram.valid_chat(tg.get("chat_id", "")))}
+            "telegram_ready": bool(tg.get("enabled") and telegram.valid_token(tg.get("token", "")) and telegram.valid_chat(tg.get("chat_id", ""))),
+            "telegram_state": telegram.state()}          # (1.69.252: "ready" only says a token is saved - this says what Telegram ANSWERS)
 
 
 @router.get("/settings/backup")
