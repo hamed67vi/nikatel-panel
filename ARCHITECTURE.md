@@ -229,7 +229,7 @@ page, `go(page, tab)` opens a page on a tab, `NAV_ALIAS` keeps the old page name
 owner (`NIKATEL_LICENSE=owner`), licensed (a token under Settings → About, checked with the vendor's Ed25519
 public key, cached a minute) and free (no token: Backhaul TCP Mux only). The gates: `builder.start_build`,
 `build_other.start_build`, `tunnel_test.compare_start`, `autopilot._recommend_now`, `ai.ask`,
-`failover.has_key` and the `/api/shopbot` router (402). The check is honest about its limits -
+`failover.has_key` and the `/api/shopbot` and `/api/l2tp` routers (402). The check is honest about its limits -
 `docs/licensing.md` explains why the valuable parts (metered AI, releases) belong on the license server.
 
 ## 2c. The shop bot and its Mini App

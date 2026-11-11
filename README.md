@@ -158,7 +158,7 @@ blocks them on every commit and in CI. Details and what to do when something is 
 The panel runs in one of three modes (Settings → About → License): **owner** (`NIKATEL_LICENSE=owner`, everything),
 **licensed** (a signed `NK1.` token, Ed25519, bound to an install or floating) and the **free tier** (Backhaul TCP Mux
 tunnels and every read-only page). The features a token switches on: `tunnels` (every engine), `ai`, `failover`
-(ArvanCloud DNS), `shopbot`. What the check in the panel does and does not protect, and the license server that
+(ArvanCloud DNS), `shopbot`, `l2tp` (the L2TP VPN product). What the check in the panel does and does not protect, and the license server that
 carries the real weight (metered AI, releases): [`docs/licensing.md`](docs/licensing.md).
 
 ## Documentation

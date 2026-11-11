@@ -25,7 +25,8 @@ log = get_logger("license")
 FEATURES = {"tunnels": "every tunnel engine and transport (BackPack, Paqet, Chisel, the other Backhaul transports)",
             "ai": "the AI assistant (Fix with AI, Explain, the Tunnel Doctor's advice)",
             "failover": "the ArvanCloud DNS failover and IP switch",
-            "shopbot": "the shop bot pages and the Mini App"}
+            "shopbot": "the shop bot pages and the Mini App",
+            "l2tp": "the L2TP VPN product: its tab, its accounts and their backup, and what it sells in the shop"}
 FREE_TUNNEL_KINDS = {"tcpmux"}          # the free tier: Backhaul TCP Mux over GRE
 VENDOR_PUBKEY_HEX = ""                   # the vendor's Ed25519 public key (32 bytes, hex); empty = no token can be valid, only the owner mode or the free tier
 _CACHE: dict = {"token": None, "at": 0.0, "res": None}

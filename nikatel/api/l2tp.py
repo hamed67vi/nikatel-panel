@@ -8,7 +8,17 @@ from ..auth import current_user
 from ..services import l2tp, l2tp_shop
 from ..ssh import SSHError
 
-router = APIRouter(tags=["l2tp"], dependencies=[Depends(current_user)])
+
+def _l2tp_licensed():          # (the owner, 2026-11-11: "the L2TP parts are disabled for the others": the whole tab is a licensed feature; the owner's own panel has every feature)
+    from ..services import license
+
+    try:
+        license.require("l2tp")
+    except ValueError as e:
+        raise HTTPException(402, str(e))
+
+
+router = APIRouter(tags=["l2tp"], dependencies=[Depends(current_user), Depends(_l2tp_licensed)])
 
 _STATE: dict = {"at": 0.0, "full_at": 0.0, "data": None}          # (the page asks every few seconds; the entry is read over SSH, so an answer is kept for 10 s - 3 s for the light read of an open tab - and dropped at once by every change)
 STATE_TTL = 10.0

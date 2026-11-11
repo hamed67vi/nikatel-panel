@@ -160,12 +160,22 @@ def parts_conf() -> dict:
     return out
 
 
+def part_on(k: str) -> bool:
+    """Does this install have this part at all: the L2TP part belongs to the license feature `l2tp` (no row in the Backups card, no hourly file, no manual run where it is not licensed)."""
+    if k == "l2tp":
+        from . import license
+
+        return license.has("l2tp")
+
+    return True
+
+
 def part_ready(k: str) -> bool:
     """Is there anything to save for this part on this panel (L2TP: an entry server is chosen). The panel and the bot always count as ready here - the bot says why itself when it is not set up."""
     if k == "l2tp":
         from . import l2tp
 
-        return l2tp.backup_ready()
+        return part_on(k) and l2tp.backup_ready()
 
     return True
 
@@ -226,7 +236,7 @@ def run(send: bool | None = None, part: str = "", auto: str = "") -> dict:
 
         return {"ok": False, "error": "no passphrase set"}
 
-    if part and part not in PARTS:
+    if part and (part not in PARTS or not part_on(part)):
         return {"ok": False, "error": "unknown part"}
 
     pc = parts_conf()

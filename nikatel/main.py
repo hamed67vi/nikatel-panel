@@ -127,6 +127,10 @@ def _index_html() -> str:
 
         html = html.replace(f"/static/{name}", f"/static/{name}?v={stamp}")
 
+    from .services import license
+
+    sections = [k for k, on in (("l2tp", license.has("l2tp")), ("finance", get_settings().finance)) if on]          # (the optional sections of THIS install: the page draws only these - web/app.js, SECTIONS)
+    html = html.replace('<html lang="en">', f'<html lang="en" data-sections="{",".join(sections)}">', 1)
     return html
 
 
@@ -225,8 +229,9 @@ def _register_jobs() -> None:
     jobs.register("livebw", 5, livebw.run)                      # what the users use of each tunnel RIGHT NOW: the counters of its card on the Iran server, every 5 s while the page looks at the tunnels, every 30 s otherwise (services/livebw.py)
     jobs.register("alerts", 5, alerts.run)                      # every 5 s: the states the checkers wrote become one DOWN / UP message once they held for down_seconds / up_seconds (was every 60 s, after 3 checks and 4 minutes down, 10 minutes up); a message Telegram did not take is sent again (services/alerts.py)
     jobs.register("report", 300, report.run)
-    jobs.register("cost-rates", 600, costs.run_rates)           # the Costs page: today's dollar, euro and lira from chand.online by themselves (a read every 30 minutes, retried after 5 when it failed; the owner can switch it off)
-    jobs.register("cost-warm", 120, costs.run_warm)           # the Finance page: the current month is made ahead, so the page opens at once
+    if get_settings().finance:          # (switched off by default, 2026-11-11: no rate is read from the web and no month is made ahead for a page nobody can open)
+        jobs.register("cost-rates", 600, costs.run_rates)           # the Costs page: today's dollar, euro and lira from chand.online by themselves (a read every 30 minutes, retried after 5 when it failed; the owner can switch it off)
+        jobs.register("cost-warm", 120, costs.run_warm)           # the Finance page: the current month is made ahead, so the page opens at once
     jobs.register("backup", 300, backup.scheduled)
     jobs.register("repair", 5, autopilot.repair_cycle)          # the plain restarts and the climb of a cut tunnel every 5 s, and at once when a tunnel is cut or a repair ends (was every 20 s: each hand-off waited ten to twenty seconds); the look at lossy tunnels every five minutes (one job, not three)
     jobs.register("sentinel", 5, sentinel.run)                  # every 5 s (was 10: measured on the test servers, a cut was called down 8-10 s after it happened and nearly all of that was the wait for the next tick), ONE light command per server over the shared SSH connection: are the units active, is the GRE card up, does the GRE peer answer - a tunnel that is up and loses one of them is checked at once, not at the next turn of the minute cycle (services/sentinel.py)

@@ -12,6 +12,15 @@ from nikatel.models import Panel, Server
 from nikatel.services import costs
 from nikatel.services.panels import PanelError
 
+
+@pytest.fixture(autouse=True)
+def _finance_on(monkeypatch, fresh_db):
+    """Finance is switched off on every panel (the owner, 2026-11-11; tests/test_sections_off.py): the tests of its page and its API run with the switch on (NIKATEL_FINANCE=true)."""
+    from nikatel.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "finance", True)
+
+
 WEB = Path(__file__).resolve().parent.parent / "nikatel" / "web"
 D = dt.date
 UTC = dt.timezone.utc

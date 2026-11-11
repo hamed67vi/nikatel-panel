@@ -22,12 +22,12 @@ one carries weight:
 | tier | how it is set | what is on |
 |---|---|---|
 | **free** | nothing (no token) | Backhaul · TCP Mux over GRE (one engine, the one that works on most routes), every read-only part of the panel |
-| **licensed** | a token under Settings → About → License | the features named in the token: `tunnels` (every engine and transport), `ai`, `failover` (ArvanCloud DNS), `shopbot` |
+| **licensed** | a token under Settings → About → License | the features named in the token: `tunnels` (every engine and transport), `ai`, `failover` (ArvanCloud DNS), `shopbot`, `l2tp` (the L2TP VPN product: its tab, its accounts and their backup) |
 | **owner** | `NIKATEL_LICENSE=owner` in `/etc/nikatel/nikatel.env` | everything, no token - the vendor's own installs |
 
 Where the gate sits: `builder.start_build` (a transport other than tcpmux), `build_other.start_build`
 (BackPack, Paqet, Chisel), `tunnel_test.compare_start` (the kinds that may be tried), `autopilot._recommend_now`
-(the smart repair only tries licensed kinds), `ai.ask`, `failover.has_key`, the whole `/api/shopbot` router (402).
+(the smart repair only tries licensed kinds), `ai.ask`, `failover.has_key`, the whole `/api/shopbot` and `/api/l2tp` routers (402).
 Every refusal is one sentence that names Settings → About → License.
 
 ## The token

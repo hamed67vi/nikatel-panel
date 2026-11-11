@@ -40,6 +40,9 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     # the license mode: "owner" on the vendor's own installs (every feature on, no token); empty = a token from Settings → About → License or the free tier
     license: str = ""
+    # the Finance page (income, expenses, what one GB costs) is switched off for everyone (the owner, 2026-11-11: "disable it for us too, do not show it at all"): no page, no menu item, no
+    # /api/costs, no background job. NIKATEL_FINANCE=true brings it back (its data was not touched).
+    finance: bool = False
     # the public demo: invented data, no sign-in, every change refused (see services/demo.py); never on a real install
     demo: bool = False
     # addresses of reverse proxies in front of the panel (comma separated) whose X-Forwarded-For / -Proto are believed, besides the local machine

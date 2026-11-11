@@ -5,10 +5,17 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from ..auth import current_user
+from ..config import get_settings
 from ..services import costs
 from ..services.panels import PanelError
 
-router = APIRouter(tags=["costs"], dependencies=[Depends(current_user)])
+
+def _finance_on():          # (the owner, 2026-11-11: Finance is not shown for anyone; NIKATEL_FINANCE=true brings it back)
+    if not get_settings().finance:
+        raise HTTPException(404, "Finance is switched off on this panel")
+
+
+router = APIRouter(tags=["costs"], dependencies=[Depends(current_user), Depends(_finance_on)])
 
 MonthQ = Annotated[str, Query(pattern=r"^(\d{4}-\d{2})?$", description="1405-08 (Jalali) or 2026-10 (Gregorian); empty = this month")]
 

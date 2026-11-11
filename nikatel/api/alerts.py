@@ -211,11 +211,14 @@ def _backup_view() -> dict:
     parts = {}
 
     for k, (label, what) in backup.PARTS.items():
+        if not backup.part_on(k):
+            continue
+
         last = next((f for f in files if f["part"] == k and "-before-restore" not in f["file"]), None)          # (the copy a restore keeps of what ran before is not "the latest backup")
         ready = bool(shopbot.conf().get("host")) if k == "bot" else backup.part_ready(k)
         parts[k] = {**pc[k], "label": label, "what": what, "last": last, "ready": ready, "sched": backup.part_state(k) if pc[k]["every_minutes"] else None}
 
-    shown = sorted((f for k in backup.PARTS for f in [x for x in files if x["part"] == k][:12]), key=lambda x: x["at"], reverse=True)          # (the newest of every part: an hourly part must not push the others out of the list)
+    shown = sorted((f for k in backup.PARTS if backup.part_on(k) for f in [x for x in files if x["part"] == k][:12]), key=lambda x: x["at"], reverse=True)          # (the newest of every part: an hourly part must not push the others out of the list)
     return {**{k: v for k, v in conf.items() if k != "parts"}, "parts": parts, "has_passphrase": backup.has_passphrase(), "backups": shown,
             "telegram_ready": bool(tg.get("enabled") and telegram.valid_token(tg.get("token", "")) and telegram.valid_chat(tg.get("chat_id", ""))),
             "telegram_state": telegram.state()}          # (1.69.252: "ready" only says a token is saved - this says what Telegram ANSWERS)
@@ -241,7 +244,7 @@ class PartIn(BaseModel):
 
 
 def _part(part: str) -> str:
-    if part not in backup.PARTS:
+    if part not in backup.PARTS or not backup.part_on(part):
         raise HTTPException(404, "no such backup part")
 
     return part
