@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.69.255 - Installs are paused: the installer refuses a new install
+
+> **In short:** the owner (2026-11-11, translated from Persian): "for now nobody should be allowed to install the script". `install.sh` now refuses a NEW install, at once and before it touches anything on the machine. A machine that already has the panel can still upgrade, and the panel's own **Settings ??? Update** is not affected (it never runs the installer).
+>
+> **???? ???????? ????????:** ?????? ???????? ?????? ???? ?????????????? ?????????? ???????? ???????? ??????????????? ?????????? ???????????? ??????????????????? ?????????? ???????? ?? ?????????? Update ???? ?????? ?????????????.
+
+**What changed.** `install.sh`: a marked block (`# >>> install-pause`) right after the options are read and before the root check, the package install, the clone and the service: when `NIKATEL_ALLOW_INSTALL` is not `1` and `/opt/nikatel/src/.git` does not exist it stops with "installs of the Nikatel panel are paused for now - nothing was changed on this machine". `README.md` says so under "Install". `.github/workflows/ci.yml`: the CI install and upgrade steps set `NIKATEL_ALLOW_INSTALL=1`. **Lift it:** delete the block (or set `NIKATEL_ALLOW_INSTALL=1` for one run).
+
+**What it is not.** A script check cannot stop someone who already cloned the repository or reads the script - the repository is public. It stops the one-line `curl ... | bash` install, which is what people use.
+
+**Proved:** `tests/test_install_paused.py` (the block is refused without `.git`, passes with it, passes with the switch only when it is exactly `1`, sits before anything is touched, the CI lines carry the switch, the whole file is valid bash).
+
 ## 1.69.254 - L2TP is a licensed feature, Finance is switched off for everyone
 
 > **In short:** the owner (2026-11-11), about the version that is on GitHub: "I want the version that is on GitHub to be usable by others - the L2TP parts and Finance disabled for the others", and: "disable the Finance section for us too, do not show it at all". Two changes.

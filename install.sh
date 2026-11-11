@@ -44,6 +44,15 @@ ask()  { # ask VAR "question" "default"
     eval "$var=\"\${ans:-$def}\""
 }
 
+# >>> install-pause
+# Installs are PAUSED (the owner, 2026-11-11: "for now nobody should be allowed to install the script"). A NEW install is refused here, before anything on
+# the machine is touched; running the installer again on a machine that already has the panel (an upgrade) still works. To lift the pause: delete this
+# block, or set NIKATEL_ALLOW_INSTALL=1 (the CI run and the maintainers do).
+if [ "${NIKATEL_ALLOW_INSTALL:-}" != "1" ] && [ ! -d "$SRC/.git" ]; then
+    die "installs of the Nikatel panel are paused for now - nothing was changed on this machine"
+fi
+# <<< install-pause
+
 [ "$(id -u)" = 0 ] || die "run as root (sudo -i)"
 command -v apt-get >/dev/null || die "this installer supports Debian/Ubuntu"
 

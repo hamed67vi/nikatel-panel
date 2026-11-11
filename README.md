@@ -33,6 +33,8 @@ dry-runnable, logged and rate-limited.
 
 ## Install
 
+> **Installs are paused for now.** The installer refuses a new install. Machines that already run the panel can still upgrade (re-run the installer, or **Settings ??? Update**).
+
 One line, Debian / Ubuntu, as root:
 
 ```bash

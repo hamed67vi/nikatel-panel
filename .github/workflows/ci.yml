@@ -94,14 +94,14 @@ jobs:
         run: |
           git checkout -q -B ci-install
           sudo git config --global --add safe.directory "*"
-          sudo NIKATEL_REPO="$GITHUB_WORKSPACE" bash install.sh --yes --branch ci-install --port 9443 --password "ci-test-password-1"
+          sudo NIKATEL_ALLOW_INSTALL=1 NIKATEL_REPO="$GITHUB_WORKSPACE" bash install.sh --yes --branch ci-install --port 9443 --password "ci-test-password-1"
       - name: the panel answers
         run: |
           for i in $(seq 1 45); do curl -sk https://127.0.0.1:9443/api/health | grep -q '"ok":true' && { curl -sk https://127.0.0.1:9443/api/health; exit 0; }; sleep 2; done
           sudo journalctl -u nikatel -n 60 --no-pager; exit 1
       - name: upgrade in place
         run: |
-          sudo NIKATEL_REPO="$GITHUB_WORKSPACE" bash install.sh --yes --branch ci-install --port 9443
+          sudo NIKATEL_ALLOW_INSTALL=1 NIKATEL_REPO="$GITHUB_WORKSPACE" bash install.sh --yes --branch ci-install --port 9443
           for i in $(seq 1 45); do curl -sk https://127.0.0.1:9443/api/health | grep -q '"ok":true' && exit 0; sleep 2; done
           sudo journalctl -u nikatel -n 60 --no-pager; exit 1
 
