@@ -349,6 +349,18 @@ def diagnose(tunnel_id: int, max_age: int = 20) -> dict:
     if det.get("data_code"):
         findings.append({"ok": det.get("data_code") != "000", "text": f"On the Iran server: port {facts['user_port']} " + (f"answers (HTTP {det.get('data_code')})" if det.get("data_code") != "000" else "does not answer through the tunnel")})
 
+    from .tunnels import tcp_finding
+
+    tf = tcp_finding(det.get("tcpi"), int(time.time()))          # (1.69.256) what the TCP connections of the tunnel count: segments sent again = a path that loses packets
+
+    if tf is not None:
+        findings.append(tf)
+
+    bl = (rec.get("bw") or {}).get("bloat")          # (1.69.256) the latency under load, from the last speed test (no extra volume: the pings went beside it)
+
+    if bl and int(time.time()) - int(bl.get("at") or 0) < 12 * 3600:
+        findings.append({"ok": bl.get("level") == "ok", "text": str(bl.get("text") or "")})
+
     if "port_open" in facts:
         findings.append({"ok": facts["port_open"] is not False, "text": f"Control port {info['port']} is " + ("reachable from the other side" if facts["port_open"] is not False else "BLOCKED from the other side")})
 

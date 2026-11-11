@@ -68,6 +68,10 @@ ENGINE_GAP = 6 * 3600           # the engine of a slow tunnel is restarted at mo
 ENGINE_FIXED = 0.8           # ... and it is fixed when the test after it gives this share of the usual level
 FIRST_BATCH = 4              # tunnels that were never measured: this many in one turn of the job (the first round after an update would take twenty minutes at one a minute)
 _LOCK = threading.Lock()
+BLOAT_FRESH = 12 * 3600       # (1.69.256) a reading of the latency under load is told this long
+BLOAT_WARN, BLOAT_WARN_MS = 2.0, 60.0      # the median rtt while the speed test ran: this many times the idle one AND this many ms more = the line queues packets when it is full
+BLOAT_BAD, BLOAT_BAD_MS = 3.0, 150.0       # ... and this much = a strong bufferbloat (a ping of 30 ms that is 300 under a full download)
+BLOAT_LOST_WARN, BLOAT_LOST_BAD = 5.0, 20.0      # % of the pings sent during the test that got no answer at all
 _RUNNING: set[int] = set()         # the tunnel the job is measuring (one at a time)
 _MEASURING: set[int] = set()       # every tunnel being measured now (the job or a click: never two at once on the same tunnel)
 
@@ -303,7 +307,33 @@ def _live_peak(tunnel_id: int, now: int) -> float | None:
     return max(rx) if len(rx) >= 5 else None
 
 
-def _store(tunnel_id: int, down: float, up: float | None, how: str, ping: float | None, loss: float | None = None) -> tuple[dict, str] | None:
+def bloat(idle: float | None, loaded: float | None, lost_pct: float | None = 0.0) -> dict | None:
+    """Pure (1.69.256): is the latency worse while the line is FULL? `idle` = the ping of the test before its streams, `loaded` = the median of the pings that went beside the download (probe_run, no extra volume: a few hundred bytes).
+    {"level": ok | warn | bad, "extra": ms, "text": the sentence the Doctor says} - None when one of the two numbers is missing. A diagnosis only: nothing is moved or restarted because of it."""
+    if idle is None or loaded is None:
+        return None
+
+    idle, loaded, lost = max(float(idle), 1.0), float(loaded), float(lost_pct or 0.0)
+    extra = loaded - idle
+    level = "bad" if (loaded >= BLOAT_BAD * idle and extra >= BLOAT_BAD_MS) or lost >= BLOAT_LOST_BAD else "warn" if (loaded >= BLOAT_WARN * idle and extra >= BLOAT_WARN_MS) or lost >= BLOAT_LOST_WARN else "ok"
+    head = f"Latency under load: {idle:.0f} ms idle, {loaded:.0f} ms while the speed test ran ({extra:+.0f} ms)"
+    tail = f"; {lost:.0f} % of the pings sent during the test got no answer" if lost >= BLOAT_LOST_WARN else ""
+    why = {"ok": " - the line holds up when it is full", "warn": " - the line queues packets when it is full (bufferbloat): a big download makes every other request wait",
+           "bad": " - strong bufferbloat: when the line is full every request waits behind the queue"}[level]
+    return {"level": level, "extra": round(extra, 1), "text": head + why + tail}
+
+
+def bloat_of(d: dict | None, now: int) -> dict | None:
+    """The reading of `bloat` for the record of a tunnel, from what a probe said (`latency_ms` = idle, `loaded_ms` = under load), with its time; None when the probe had no pings beside its streams."""
+    b = bloat((d or {}).get("latency_ms"), (d or {}).get("loaded_ms"), (d or {}).get("loaded_lost_pct"))
+
+    if b is None:
+        return None
+
+    return {**b, "at": now, "idle": float(d["latency_ms"]), "loaded": float(d["loaded_ms"]), "p95": d.get("loaded_p95_ms")}
+
+
+def _store(tunnel_id: int, down: float, up: float | None, how: str, ping: float | None, loss: float | None = None, bloat: dict | None = None) -> tuple[dict, str] | None:
     now = int(time.time())
     live = _live_peak(tunnel_id, now) if down < SLOW_MBPS else None
 
@@ -316,6 +346,11 @@ def _store(tunnel_id: int, down: float, up: float | None, how: str, ping: float 
         rec = dict(t.record or {})
         bw, change = add_sample(rec.get("bw"), now, down, up, how, ping, loss, live=live)
         bw = carry_notes(rec.get("bw"), bw, change)
+        kept = bloat or (rec.get("bw") or {}).get("bloat")          # (1.69.256: the last reading of the latency under load stays until a speed test gives a new one)
+
+        if kept:
+            bw["bloat"] = kept
+
 
         if bw["next_at"] == now + INTERVAL:               # the usual rhythm: a few minutes different for every tunnel, so that they do not all fall in one minute
             bw["next_at"] += (tunnel_id * 97) % 600
@@ -342,7 +377,7 @@ def note_quality(tunnel_id: int, q: dict) -> None:
     if q.get("down_mbps") is None:
         return
 
-    res = _store(tunnel_id, float(q["down_mbps"]), None if q.get("up_mbps") is None else float(q["up_mbps"]), "door", q.get("latency_ms"))
+    res = _store(tunnel_id, float(q["down_mbps"]), None if q.get("up_mbps") is None else float(q["up_mbps"]), "door", q.get("latency_ms"), bloat=bloat_of(q, int(time.time())))
 
     if res and res[1] in ("drop", "slow"):
         _investigate_later(tunnel_id)
@@ -463,7 +498,7 @@ def _measure(tunnel_id: int) -> tuple[dict, str]:
             if d.get("error") or d.get("down_mbps") is None:
                 raise RuntimeError("the sink does not answer through the link: " + str(d.get("error") or "no data")[:100])
 
-    res = _store(tunnel_id, float(d["down_mbps"]), None, "link", d.get("latency_ms"), d.get("udp_loss_pct"))
+    res = _store(tunnel_id, float(d["down_mbps"]), None, "link", d.get("latency_ms"), d.get("udp_loss_pct"), bloat_of(d, int(time.time())))
 
     if res is None:
         raise ValueError("tunnel not found")
@@ -651,6 +686,8 @@ def _facts(tunnel_id: int) -> dict:
         bw = dict((t.record or {}).get("bw") or {})
         d = dict(t.detail or {})
         loss = d.get("loss_pct")
+        bl = bw.get("bloat")
+        fresh_bloat = bl if bl and now - int(bl.get("at") or 0) < BLOAT_FRESH else None          # (1.69.256: the latency under load of the last speed test)
         rx = sorted(c.rx_mbps for c in db.scalars(select(TunnelCheck).where(TunnelCheck.tunnel_id == t.id, TunnelCheck.ts >= now - 900).order_by(TunnelCheck.ts.desc()).limit(10)) if c.rx_mbps is not None)
         live = rx[len(rx) // 2] if len(rx) >= 5 else None       # what comes to the Iran server through the link: the MIDDLE of the last ten minutes (one minute that holds a test of the panel itself, a few seconds of 500 Mb/s, must not make the tunnel look full of users)
         rtts = sorted(x for x in db.scalars(select(TunnelCheck.rtt_ms).where(TunnelCheck.tunnel_id == t.id, TunnelCheck.ts >= now - 7 * 86400, TunnelCheck.ok.is_(True))) if x is not None)          # (one column, not a whole row object per check)
@@ -676,7 +713,7 @@ def _facts(tunnel_id: int) -> dict:
             return {"total": len(rows), "dropped": sum(1 for x in rows if ((x.record or {}).get("bw") or {}).get("state") in ("drop", "slow"))}
 
         return {"name": t.name, "state": bw.get("state"), "now": bw.get("down"), "ref": (bw.get("drop") or {}).get("from") or bw.get("ref"), "loss": loss, "live": live, "iran": sides["iran"], "foreign": sides["foreign"],
-                "rtt": t.rtt_ms, "rtt_ref": rtts[len(rtts) // 2] if len(rtts) >= 20 else None, "same_iran": share(Tunnel.iran_server_id, t.iran_server_id), "same_foreign": share(Tunnel.foreign_server_id, t.foreign_server_id), "same_kind": same_kind}
+                "rtt": t.rtt_ms, "rtt_ref": rtts[len(rtts) // 2] if len(rtts) >= 20 else None, "same_iran": share(Tunnel.iran_server_id, t.iran_server_id), "same_foreign": share(Tunnel.foreign_server_id, t.foreign_server_id), "same_kind": same_kind, "bloat": fresh_bloat}
 
 
 def _engine_fix(tunnel_id: int, say) -> None:
@@ -755,6 +792,9 @@ def _say_checks(say, f: dict) -> None:
 
     if f["rtt"] is not None:
         say(("✕ " if f["rtt_ref"] and f["rtt"] >= 1.5 * f["rtt_ref"] else "✓ ") + f"The delay is {f['rtt']:.0f} ms" + (f" (usually {f['rtt_ref']:.0f})" if f["rtt_ref"] else ""))
+
+    if f.get("bloat"):
+        say(("✓ " if f["bloat"]["level"] == "ok" else "✕ ") + str(f["bloat"]["text"]))
 
     if f["live"] is not None:
         say(f"Users are carrying {f['live']:.0f} Mb/s through it right now.")

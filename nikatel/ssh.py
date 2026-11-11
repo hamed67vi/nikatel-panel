@@ -265,6 +265,34 @@ if UDPN > 0 and "error" not in out:
             out["udp_loss_pct"] = round((UDPN - len(got)) * 100.0 / UDPN, 1)
     except Exception:
         pass
+LOADED = []; LOST = [0]
+def loaded_pings(stop, t_begin):
+    # (1.69.256) the latency UNDER LOAD: while the download streams run, one more connection to the same door sends a 7-byte echo every 0.1 s - a few hundred bytes in all, nothing is added to the volume of the test (MOVED counts the streams only).
+    # The pings of the first 0.7 s (the streams are still opening) are not kept. A line that queues packets when it is full (bufferbloat) answers these slowly; one that does not, answers as it did when it was idle.
+    s = None; i = 0
+    while not stop.is_set():
+        t = time.time(); keep = t - t_begin >= 0.7
+        try:
+            if s is None:
+                s = socket.create_connection((H, P), timeout=min(6, TO * 2 + 1)); s.sendall(KEY + b"E")
+            s.settimeout(TO); s.sendall(b"load%03d" % (i % 1000)); d = s.recv(16)
+            if not d:
+                raise OSError("closed")
+            if keep:
+                LOADED.append((time.time() - t) * 1000)
+        except Exception:
+            if keep:
+                LOST[0] += 1
+            try:
+                s.close()
+            except Exception:
+                pass
+            s = None
+        i += 1; stop.wait(0.1)
+    try:
+        s.close()
+    except Exception:
+        pass
 def run(mode, results, i):
     rate = 0.0; got = 0
     try:
@@ -310,9 +338,18 @@ if SECS > 0 and "error" not in out:
             continue
         res = [0.0] * N
         th = [threading.Thread(target=run, args=(mode, res, i)) for i in range(N)]
+        stop = threading.Event(); lp = None
+        if mode == b"D":
+            lp = threading.Thread(target=loaded_pings, args=(stop, time.time()), daemon=True); lp.start()
         [x.start() for x in th]; [x.join() for x in th]
+        if lp is not None:
+            stop.set(); lp.join(3)
         out[key] = round(sum(res), 1)
         out[key.replace("mbps", "streams")] = [round(x, 1) for x in res]
+if len(LOADED) >= 5:
+    LOADED.sort()
+    out["loaded_ms"] = round(LOADED[len(LOADED) // 2], 1); out["loaded_p95_ms"] = round(LOADED[max(int(len(LOADED) * 0.95) - 1, 0)], 1)
+    out["loaded_n"] = len(LOADED); out["loaded_lost_pct"] = round(LOST[0] * 100.0 / (len(LOADED) + LOST[0]), 1)
 if SECS > 0 and "error" not in out and MOVED:
     # the wire (1.69.223): what crossed the card while the streams ran, and the rate it ran at just before and just after; the panel works out what the tunnel costs (overhead.wire_ratio)
     C1 = card(); T1 = time.time()
@@ -427,6 +464,9 @@ if [ -n "@PEER@" ]; then
   echo "PEER @PEER@ $(echo "$P" | awk -F/ '/^rtt/{print $5}') $(echo "$P" | grep -o '[0-9]*% packet loss' | cut -d% -f1)"
 fi
 for p in @PORTS@; do echo "LISTEN $p $(ss -ltnH 2>/dev/null | grep -c ":$p ")"; done
+# (1.69.256) what the TCP connections of this tunnel say about the path, from `ss -ti` - a READ, no traffic at all: the connections that are open to the peer of the tunnel (Iran side only; the peer is the other end of the link or the foreign
+# server's address). "TCPI <connections> <segments sent again> <segments sent> <mean rtt ms> <max rtt ms>"; nothing is printed when there is no such connection or `ss` cannot say.
+if [ -n "@PEER@" ] && command -v ss >/dev/null 2>&1; then timeout 3 ss -tinH state established dst '@PEER@' 2>/dev/null | awk '/rtt:/ { n++; for (i = 1; i <= NF; i++) { if ($i ~ /^rtt:/) { split(substr($i, 5), a, "/"); r += a[1]; if (a[1] + 0 > m) m = a[1] + 0 } else if ($i ~ /^segs_out:/) s += substr($i, 10); else if ($i ~ /^retrans:/) { split(substr($i, 9), b, "/"); t += b[2] } } } END { if (n > 0) printf "TCPI %d %d %d %.1f %.1f\n", n, t, s, r / n, m }'; fi
 # the FOREIGN side, the ports the tunnel delivers to: does anything LISTEN on each (TCP or UDP)? "TLISTEN <port> <1|0>". One `ss` for all of them; nothing is printed when `ss` is missing or says nothing (a server always listens on SSH), so a tool that is not there never reads as "no service".
 if [ -n "@TARGETS@" ] && command -v ss >/dev/null 2>&1; then ss -ltunH 2>/dev/null | awk -v ports='@TARGETS@' 'BEGIN{n=split(ports,a," "); for(i=1;i<=n;i++) want[a[i]]=1} {c++; m=split($(NF-1),x,":"); p=x[m]; if (p in want) l[p]=1} END{if (c>0) for(i=1;i<=n;i++) print "TLISTEN", a[i], ((a[i] in l) ? 1 : 0)}'; fi
 wait

@@ -182,6 +182,7 @@ class Side:
     now: int = 0
     error: str = ""
     wg_age: int | None = None    # a WireGuard link: seconds since the last handshake (-1 = none yet), None = not a WireGuard link / not asked
+    tcpi: tuple | None = None    # (1.69.256) the TCP connections to the peer, read from `ss -ti`: (connections, segments sent again, segments sent, mean rtt ms, max rtt ms); None = none open, or not asked
 
 
 def parse_side(out: str) -> Side:
@@ -226,10 +227,55 @@ def parse_side(out: str) -> Side:
                     s.data_ms = round(float(p[3]) * 1000, 1)
                 except ValueError:
                     s.data_ms = None
+        elif p[0] == "TCPI" and len(p) >= 6:
+            try:
+                s.tcpi = (int(p[1]), int(p[2]), int(p[3]), float(p[4]), float(p[5]))
+            except ValueError:
+                s.tcpi = None
         elif p[0] == "NOW" and len(p) >= 2:
             s.now = int(p[1])
 
     return s
+
+
+TCPI_MIN_SEGS = 200          # fewer segments than this between two checks say nothing about a ratio
+RETR_WARN = 2.0              # % of the segments that were sent AGAIN: one or two in a hundred is already a lot for TCP - the path loses packets
+TCPI_FRESH = 900             # a reading older than this is not told
+
+
+def tcp_read(prev: dict | None, cur: tuple | None, now: int) -> dict | None:
+    """Pure: the reading of the TCP connections to the peer for the detail of a check - (1.69.256, no traffic: `ss -ti` only reads what the kernel counts). `pct` = the share of the segments that were sent again BETWEEN the previous check and
+    this one, when the counters only grew (the same connections, enough segments, the checks close together); None otherwise - a connection that was made again starts its counters at zero, and a ratio over nothing is no ratio."""
+    if not cur or cur[0] <= 0:
+        return None
+
+    n, retr, segs, rtt, rtt_max = cur
+    out = {"n": n, "retr": retr, "segs": segs, "rtt": rtt, "rtt_max": rtt_max, "at": now, "pct": None}
+    p = prev or {}
+
+    if p.get("at") and 0 < now - int(p["at"]) <= MAX_RATE_GAP and retr >= int(p.get("retr") or 0) and segs >= int(p.get("segs") or 0) and segs - int(p.get("segs") or 0) >= TCPI_MIN_SEGS:
+        out["pct"] = round((retr - int(p.get("retr") or 0)) * 100.0 / (segs - int(p["segs"])), 2)
+
+    return out
+
+
+def tcp_finding(tcpi: dict | None, now: int) -> dict | None:
+    """Pure: the line of the Doctor's findings about the TCP connections of a tunnel, or None (no reading, or an old one). Segments sent again are the proof of a path that LOSES packets (a queue that is too long shows as a long rtt instead)."""
+    if not tcpi or not tcpi.get("n") or now - int(tcpi.get("at") or 0) > TCPI_FRESH:
+        return None
+
+    pct, since = tcpi.get("pct"), "in the last minute"
+
+    if pct is None and tcpi.get("segs"):
+        pct, since = round(int(tcpi.get("retr") or 0) * 100.0 / int(tcpi["segs"]), 2), "since these connections opened"
+
+    if pct is None:
+        return None
+
+    many = int(tcpi["n"])
+    word = f"{many} TCP connection{'s' if many != 1 else ''} to the peer, RTT {float(tcpi.get('rtt') or 0):.0f} ms (at most {float(tcpi.get('rtt_max') or 0):.0f})"
+    bad = pct >= RETR_WARN
+    return {"ok": not bad, "text": f"{word}: {pct:g} % of the segments were sent again {since}" + (" - the path loses packets" if bad else "")}
 
 
 STALE_HANDSHAKE = 300         # a WireGuard link renews its handshake about every two minutes while it is used (and the keepalive every 25 s keeps it used): older than this, there is no session
@@ -787,6 +833,7 @@ def _check_tunnel(tunnel_id: int, fresh_ext: bool = False, quick: bool = False) 
             tcp_rtt = None
     now = int(time.time())
     rx, tx = throughput(prev, iran.now, iran.rx_bytes, iran.tx_bytes)      # what crossed the card between two checks
+    tcpi = tcp_read(prev.get("tcpi"), iran.tcpi, now)          # (1.69.256: what the open TCP connections to the peer count - a read, no traffic)
     prev_ns = dict(prev.get("no_service") or {})
     ns = no_service(prev_ns, plan.targets, foreign.target_listen, now)      # does anything listen where the tunnel delivers (a look at the foreign server; the state of the tunnel is not touched)
 
@@ -839,7 +886,7 @@ def _check_tunnel(tunnel_id: int, fresh_ext: bool = False, quick: bool = False) 
                     "rx_bytes": iran.rx_bytes, "tx_bytes": iran.tx_bytes, "now": iran.now,
                     "iran_error": iran.error, "foreign_error": foreign.error, "streak": streak,
                     "data_seen": data_seen, "data_fails": data_fails, "data_code": iran.data_code, "data_ms": iran.data_ms,
-                    "ext": ({"code": ext[0], "ms": ext[1], "from": ext[2]} if ext is not None else None), "ext_seen": ext_seen, "ext_fails": ext_fails}
+                    "ext": ({"code": ext[0], "ms": ext[1], "from": ext[2]} if ext is not None else None), "ext_seen": ext_seen, "ext_fails": ext_fails, "tcpi": tcpi}
         if not sb:          # (a standby is looked at every few seconds: its history is not kept, it would only fill the table)
             db.add(TunnelCheck(tunnel_id=t.id, ts=now, ok=raw == "up", rtt_ms=iran.rtt_ms, rx_mbps=rx, tx_mbps=tx, error=reason[:300]))
 
