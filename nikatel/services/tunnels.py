@@ -627,6 +627,43 @@ def throughput(prev: dict, now: int | None, rx_bytes: int | None, tx_bytes: int 
 
 _CHECKING: set[int] = set()
 _CK_LOCK = threading.Lock()
+_GOING: dict[str, list[float]] = {}          # tunnels whose removal runs right now: name -> start times (a rebuild removes a name that is built again at once, so a name can be there twice)
+_GOING_LOCK = threading.Lock()
+GOING_MAX = 900                              # a removal that never reported back (a crashed thread) must not keep a tunnel quiet for ever
+
+
+def removal_started(name: str) -> None:
+    """A removal of this tunnel begins (services/builder.delete_tunnel). It stops the services on the Iran end FIRST: a check that came a second later read "unit inactive" and called the tunnel down, and the Doctor
+    started a repair of a tunnel that was being taken away - the owner, 2026-11-11: a red "Repair of us-a did not help" at the second he removed it (the same ~18 times in five days, one for every removal of
+    a live tunnel). A tunnel that is being removed is not judged, not repaired and not announced."""
+    with _GOING_LOCK:
+        _GOING.setdefault(name, []).append(time.time())
+
+
+def removal_ended(name: str) -> None:
+    with _GOING_LOCK:
+        marks = _GOING.get(name) or []
+
+        if marks:
+            marks.pop(0)
+
+        if not marks:
+            _GOING.pop(name, None)
+
+
+def being_removed(name: str) -> bool:
+    """True while a removal of this tunnel runs (a mark older than GOING_MAX does not count: a removal that crashed must not silence a tunnel for ever)."""
+    now = time.time()
+
+    with _GOING_LOCK:
+        marks = [m for m in (_GOING.get(name) or []) if now - m < GOING_MAX]
+
+        if marks:
+            _GOING[name] = marks
+        else:
+            _GOING.pop(name, None)
+
+        return bool(marks)
 HANDED: set[str] = set()      # the tunnels whose users' ports are on their warm standby right now (services/standby.py keeps it): the same request from another Iran server would be answered by the STANDBY, so such a tunnel
                               # is judged without that look - by its units, its link, its ports and the request on the server itself (which the handover does not redirect)
 
@@ -671,6 +708,10 @@ def _check_tunnel(tunnel_id: int, fresh_ext: bool = False, quick: bool = False) 
             return
 
         tname, sb = t.name, is_standby(t)
+
+        if being_removed(tname):          # its removal has begun: nothing is asked of its servers and nothing is judged (see removal_started)
+            return
+
         plan = plan_for(t)
         iran_node = Node(t.iran.host, t.iran.ssh_user, t.iran.ssh_port)
         foreign_node = Node(t.foreign.host, t.foreign.ssh_user, t.foreign.ssh_port)
@@ -752,7 +793,7 @@ def _check_tunnel(tunnel_id: int, fresh_ext: bool = False, quick: bool = False) 
     with session() as db:
         t = db.get(Tunnel, tunnel_id)
 
-        if t is None:
+        if t is None or being_removed(t.name):          # (gone meanwhile, or its removal began while the servers were asked: what they said is the removal's, not a fault)
             return
 
         old = t.state

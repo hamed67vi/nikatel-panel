@@ -31,6 +31,7 @@ from .events import emit
 from .tunnels import (
     Plan,
     _query,
+    being_removed,
     check_tunnel,
     external_probe_one,
     judge,
@@ -95,7 +96,7 @@ def _recheck(tunnel_id: int, plan: Plan, iran_host: str, owner_id: int, tries: i
         with session() as db:
             t = db.get(Tunnel, tunnel_id)
 
-            if t is None:
+            if t is None or being_removed(t.name):          # (gone, or its removal is running: the services were stopped by it - that is not a fault to mend)
                 return "removed", "the tunnel was removed meanwhile"
 
             state, why = t.state, t.last_error or ""
@@ -204,6 +205,21 @@ def _say(aid: int, line: str, done: bool | None = None, ok: bool | None = None) 
     log.info("fix #%s: %s", aid, line)
 
 
+def _removed_now(tunnel_id: int, name: str) -> bool:
+    """The tunnel is gone, or its removal is running."""
+    with session() as db:
+        if db.get(Tunnel, tunnel_id) is None:
+            return True
+
+    return being_removed(name)
+
+
+def _removed_end(aid: int) -> None:
+    """A repair of a tunnel that is removed meanwhile ends HERE, quietly: no "did not help" (nothing failed - the owner took the tunnel away, 2026-11-11), and it is not counted against the hourly budget."""
+    _skip(aid)
+    _say(aid, "The tunnel was removed meanwhile: nothing more to repair.", done=True, ok=True)
+
+
 def _fix_worker(tunnel_id: int, aid: int, dry_run: bool, source: str) -> None:
     try:
         _fix(tunnel_id, aid, dry_run, source)
@@ -232,6 +248,10 @@ def _fix(tunnel_id: int, aid: int, dry_run: bool, source: str) -> None:
         foreign_node = Node(t.foreign.host, t.foreign.ssh_user, t.foreign.ssh_port)
         iran_host, owner_id = t.iran.host, t.iran_server_id
         off = servers_off(t)
+
+    if _removed_now(tunnel_id, name):          # (a removal stops the services first: the check that saw them stopped started this repair)
+        _removed_end(aid)
+        return
 
     if off:          # (a server that is off: neither server is asked - an SSH question to a server that is off costs its whole timeout - and nothing is restarted; the owner, 2026-10-24: the Doctor must not do extra work for it)
         _skip(aid)
@@ -307,6 +327,10 @@ def _fix(tunnel_id: int, aid: int, dry_run: bool, source: str) -> None:
         _say(aid, "Dry run finished: nothing was changed.", done=True, ok=True)
         return
 
+    if _removed_now(tunnel_id, name):          # (the questions to the servers took seconds: the removal may have begun meanwhile)
+        _removed_end(aid)
+        return
+
     with session() as db:
         emit(db, "warn", "actions", f"Repair of {label} started ({source}): {reason}", name)
 
@@ -314,6 +338,10 @@ def _fix(tunnel_id: int, aid: int, dry_run: bool, source: str) -> None:
 
     for st_ in steps:
         node = iran_node if st_["side"] == "iran" else foreign_node
+
+        if _removed_now(tunnel_id, name):
+            _removed_end(aid)
+            return
 
         try:
             out = run_action(node, st_["action"], {"UNITS": " ".join(st_["units"])})
@@ -328,6 +356,10 @@ def _fix(tunnel_id: int, aid: int, dry_run: bool, source: str) -> None:
 
         now_state, now_reason = _recheck(tunnel_id, plan, iran_host, owner_id)
 
+        if now_state == "removed":
+            _removed_end(aid)
+            return
+
         if now_state == "up":
             _say(aid, "Checked again: the tunnel works.", done=True, ok=True)
 
@@ -340,6 +372,10 @@ def _fix(tunnel_id: int, aid: int, dry_run: bool, source: str) -> None:
 
     if batch:
         now_state, now_reason = _recheck(tunnel_id, plan, iran_host, owner_id, tries=6)
+
+        if now_state == "removed":
+            _removed_end(aid)
+            return
 
         if now_state == "up":
             _say(aid, "Checked again: the tunnel works.", done=True, ok=True)
@@ -421,7 +457,7 @@ def auto_repair() -> None:
         if len(_RUNNING) >= 4:                       # servers coming back together: a few restarts at a time, the rest next minute
             break
 
-        if name in muted or now - since < grace_for(why, DOWN_GRACE) or name in _RUNNING or recent_fixes(name, max(3600, now - since + 60)) >= 1:        # ONE plain restart per cut (a second one only delayed the smart repair by a minute and a half in a real test)
+        if name in muted or being_removed(name) or now - since < grace_for(why, DOWN_GRACE) or name in _RUNNING or recent_fixes(name, max(3600, now - since + 60)) >= 1:        # ONE plain restart per cut (a second one only delayed the smart repair by a minute and a half in a real test)
             continue
 
         log.info("auto repair of %s (down for %ss)", name, now - since)

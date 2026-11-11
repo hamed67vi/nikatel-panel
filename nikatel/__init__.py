@@ -1,3 +1,3 @@
 """Nikatel panel."""
 
-__version__ = "1.69.252"
+__version__ = "1.69.253"

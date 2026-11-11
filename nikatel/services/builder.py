@@ -32,7 +32,14 @@ from . import linkmodels
 from . import settings as st
 from .events import emit
 from .trash import snapshot as trash_snapshot
-from .tunnels import check_tunnel, parse_side, servers_off_of, sname
+from .tunnels import (
+    check_tunnel,
+    parse_side,
+    removal_ended,
+    removal_started,
+    servers_off_of,
+    sname,
+)
 
 log = get_logger("builder")
 GRE_HOLD_WAIT = 10
@@ -1397,6 +1404,23 @@ def _build(b: Build) -> None:
 
 # ------------------------------------------------------------------ delete / rebuild
 def delete_tunnel(tunnel_id: int, keep_record: bool = False, trash: bool = False, skip_offline: bool = False) -> list[str]:
+    """Remove the tunnel from both servers (see `_delete_tunnel`). While it runs the tunnel is marked "being removed" (`services/tunnels.removal_started`): the check, the Doctor and the events leave it alone - the removal
+    stops the Iran service first, and what a check read a second later was no fault (the owner, 2026-11-11: a red "Repair of us-a did not help" at the second he removed it)."""
+    with session() as db:
+        t = db.get(Tunnel, tunnel_id)
+        marked = t.name if t is not None else ""
+
+    if marked:
+        removal_started(marked)
+
+    try:
+        return _delete_tunnel(tunnel_id, keep_record, trash, skip_offline)
+    finally:
+        if marked:
+            removal_ended(marked)
+
+
+def _delete_tunnel(tunnel_id: int, keep_record: bool = False, trash: bool = False, skip_offline: bool = False) -> list[str]:
     """Remove the tunnel from both servers (and the row). Returns per-side results. `trash`: keep a copy first, so that it can be restored.
     `skip_offline`: a server that is off is not asked over SSH (a 90 s timeout per tunnel would make a failover of ten tunnels wait a quarter of an hour).
     (1.69.226) A PROTECTED tunnel (`models.is_protected`) is never removed - not by the Doctor, the janitor, a move or a rebuild, and not by the page: the owner turns the protection off first. Every caller already
