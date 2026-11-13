@@ -329,3 +329,133 @@ def test_a_failover_that_moved_nothing_marks_its_target_and_one_that_moved_somet
     monkeypatch.setattr("nikatel.services.builder.follow_move", lambda name, custom=False: name)
     assert failover._work(8, {**plan_to(ids, "a"), "id": "t-2"}) is True
     assert ids["a"] not in failover.bad_targets()
+
+
+# ------------------------------------------------------------------ faster: the DNS follows early, the type is built at once
+def dead_server_with(n):
+    with session() as db:
+        dead = Server(name="dead", host="203.0.113.10", role="iran", online=False)
+        a = Server(name="alpha", host="203.0.113.51", role="iran", online=True)
+        f = Server(name="fx", host="203.0.113.200", role="foreign", online=True)
+        db.add_all([dead, a, f])
+        db.flush()
+        ts = [Tunnel(name=f"d-t{k}", type="backhaul", transport="tcpmux", iran_server_id=dead.id, foreign_server_id=f.id, state="down", forwarded_ports=[8000 + k]) for k in range(1, n + 1)]
+        db.add_all(ts)
+        db.flush()
+        return {"dead": dead.id, "a": a.id, "f": f.id, "t": [x.id for x in ts]}
+
+
+def dead_plan(ids, dns):
+    return {"server_id": ids["dead"], "server": "dead", "ip": "203.0.113.10", "reason": "down", "why": "the server does not answer", "whole": True, "pulled": [], "problems": [], "id": "t-9",
+            "tunnels": [{"id": i, "name": f"d-t{k}"} for k, i in enumerate(ids["t"], 1)], "dns": dns, "left_alone": [], "target": {"id": ids["a"], "name": "alpha", "ip": "203.0.113.51"}}
+
+
+def rec(name, serves):
+    return {"id": name, "fqdn": f"{name}.example.test", "domain": "example.test", "account": "arvan", "serves": serves, "configs": []}
+
+
+def test_a_dns_record_follows_as_soon_as_every_tunnel_it_serves_has_moved(monkeypatch):
+    import threading
+
+    ids = dead_server_with(2)
+    t1, t2 = ids["t"]
+    monkeypatch.setattr(failover, "_notice", lambda text: None)
+    monkeypatch.setattr(autopilot, "_say", lambda aid, line, done=None, ok=None: None)
+    monkeypatch.setattr(autopilot, "_snapshot", lambda tid: {"id": tid, "name": f"d-t{tid}", "foreign_id": ids["f"], "foreign_name": "fx", "type": "backhaul", "transport": "tcpmux", "record": {}, "port": 9900})
+    monkeypatch.setattr(failover, "_best_kind", lambda *a, **k: "tcpmux")
+    monkeypatch.setattr("nikatel.services.builder.follow_move", lambda name, custom=False: name)
+    first_dns = threading.Event()
+    applied, order = [], []
+
+    def replace(aid, tunnel_id, iran_id, foreign_id, kind, why, skip_offline=False, **kw):
+        if tunnel_id == t2:
+            assert first_dns.wait(10), "the record of the first tunnel was not re-pointed before the second tunnel was built"          # (the second build starts only after the first record followed)
+
+        order.append(("built", tunnel_id))
+        return True
+
+    def apply(aid, pp):
+        names = [d["id"] for d in pp["dns"]]
+        applied.append(names)
+        order.append(("dns", names))
+
+        if names == ["r1"]:
+            first_dns.set()
+
+        return [{"fqdn": d["fqdn"], "account": "arvan"} for d in pp["dns"]], [], []
+
+    monkeypatch.setattr(autopilot, "_replace", replace)
+    monkeypatch.setattr(failover, "_apply_dns", apply)
+    dns = [rec("r1", [t1]), rec("r2", [t2]), rec("r3", [t1, t2]), rec("r4", [])]
+    # r1 serves only the first tunnel, r2 only the second, r3 both, r4 none (a record of the whole server)
+    assert failover._work(7, dead_plan(ids, dns)) is True
+    assert applied == [["r1"], ["r2", "r3"], ["r4"]]                           # r1 as soon as t1 moved; r2 and r3 as soon as t2 moved (r3 needs both); r4 (tied to no tunnel) at the end
+    assert order.index(("dns", ["r1"])) < order.index(("built", t2)) < order.index(("dns", ["r2", "r3"]))
+    hist = failover._state()["history"][-1]
+    assert hist["moved"] == 2 and hist["ok"] is True and sorted(d["fqdn"] for d in hist["dns"]) == [f"r{k}.example.test" for k in (1, 2, 3, 4)]      # (the history holds every record once)
+
+
+def test_a_partial_move_keeps_the_early_records_and_leaves_the_rest_alone(monkeypatch):
+    ids = dead_server_with(2)
+    t1, t2 = ids["t"]
+    monkeypatch.setattr(failover, "_notice", lambda text: None)
+    said = []
+    monkeypatch.setattr(autopilot, "_say", lambda aid, line, done=None, ok=None: said.append(line))
+    monkeypatch.setattr(autopilot, "_snapshot", lambda tid: {"id": tid, "name": f"d-t{tid}", "foreign_id": ids["f"], "foreign_name": "fx", "type": "backhaul", "transport": "tcpmux", "record": {}, "port": 9900})
+    monkeypatch.setattr(failover, "_best_kind", lambda *a, **k: "tcpmux")
+    monkeypatch.setattr("nikatel.services.builder.follow_move", lambda name, custom=False: name)
+    monkeypatch.setattr(autopilot, "_replace", lambda aid, tunnel_id, *a, **k: tunnel_id == t1)          # (the second tunnel does not come up)
+    calls = []
+    monkeypatch.setattr(failover, "_apply_dns", lambda aid, pp: (calls.append([d["id"] for d in pp["dns"]]), ([{"fqdn": d["fqdn"], "account": "arvan"} for d in pp["dns"]], [], []))[1])
+    dns = [rec("r1", [t1]), rec("r2", [t2]), rec("r3", [t1, t2]), rec("r4", [])]
+    assert failover._work(7, dead_plan(ids, dns)) is False
+    assert calls == [["r1"], []]                                               # r1 followed early; at the end nothing else qualifies (r2 and r3 serve the tunnel that did not move, r4 serves nothing)
+    hist = failover._state()["history"][-1]
+    assert hist["moved"] == 1 and [d["fqdn"] for d in hist["dns"]] == ["r1.example.test"]
+    assert any("only the 1 DNS record(s)" in x for x in said) and any("r2.example.test" in x and "left alone" in x for x in said)
+
+
+def test_a_tunnel_is_built_as_the_type_it_has_when_the_doctors_order_puts_it_first(monkeypatch):
+    from nikatel.services import knowledge
+
+    monkeypatch.setattr(failover, "PICK_BEST", True)
+    said = []
+    monkeypatch.setattr(autopilot, "_say", lambda aid, line, done=None, ok=None: said.append(line))
+    snap = {"name": "d-t1", "foreign_id": 3, "foreign_name": "fx", "type": "backhaul", "transport": "tcpmux", "record": {}}
+    target = {"id": 4, "name": "alpha"}
+    monkeypatch.setattr(knowledge, "plan_for", lambda *a, **k: (["tcpmux", "paqet"], []))
+    assert failover._fast_kind(1, snap, target) == "tcpmux" and "built at once" in said[-1]
+    monkeypatch.setattr(knowledge, "plan_for", lambda *a, **k: (["chisel:fwd", "tcpmux"], []))
+    assert failover._fast_kind(1, snap, target) == ""                           # another type comes first: the test runs as before
+    monkeypatch.setattr(knowledge, "plan_for", lambda *a, **k: ([], []))
+    assert failover._fast_kind(1, snap, target) == ""
+    monkeypatch.setattr(knowledge, "plan_for", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("no knowledge")))
+    assert failover._fast_kind(1, snap, target) == ""                           # a look that fails does not stop a move
+    monkeypatch.setattr(knowledge, "plan_for", lambda *a, **k: (["tcpmux"], []))
+    monkeypatch.setattr(failover, "FAST_KIND", False)
+    assert failover._fast_kind(1, snap, target) == ""
+    monkeypatch.setattr(failover, "FAST_KIND", True)
+    monkeypatch.setattr(failover, "PICK_BEST", False)
+    assert failover._fast_kind(1, snap, target) == ""
+
+
+def test_the_type_built_at_once_that_does_not_come_up_is_followed_by_the_test_and_a_second_build(monkeypatch):
+    ids = dead_server_with(1)
+    monkeypatch.setattr(failover, "_notice", lambda text: None)
+    said = []
+    monkeypatch.setattr(autopilot, "_say", lambda aid, line, done=None, ok=None: said.append(line))
+    monkeypatch.setattr(autopilot, "_snapshot", lambda tid: {"id": tid, "name": "d-t1", "foreign_id": ids["f"], "foreign_name": "fx", "type": "backhaul", "transport": "tcpmux", "record": {}, "port": 9900})
+    monkeypatch.setattr(failover, "_fast_kind", lambda aid, snap, target: "tcpmux")
+    tested, built = [], []
+    monkeypatch.setattr(failover, "_best_kind", lambda *a, **k: tested.append(1) or "paqet")
+    monkeypatch.setattr(autopilot, "_replace", lambda aid, tid, iran, foreign, kind, why, skip_offline=False, **kw: built.append(kind) or kind == "paqet")
+    monkeypatch.setattr("nikatel.services.builder.follow_move", lambda name, custom=False: name)
+    monkeypatch.setattr(failover, "_apply_dns", lambda aid, pp: ([], [], []))
+    assert failover._work(7, dead_plan(ids, [])) is True
+    assert built == ["tcpmux", "paqet"] and tested == [1] and any("did not build" in x and "tested now" in x for x in said)
+    built.clear()
+    tested.clear()
+    monkeypatch.setattr(failover, "_fast_kind", lambda aid, snap, target: "")        # (nothing known: tested first, built once - as before)
+    failover._state()["history"].clear()
+    assert failover._work(8, {**dead_plan(ids, []), "id": "t-10"}) is True
+    assert built == ["paqet"] and tested == [1]

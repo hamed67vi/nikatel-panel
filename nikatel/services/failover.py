@@ -1138,6 +1138,31 @@ def _best_kind(aid: int, snap: dict, target: dict, cache: dict, first_ok: bool =
     autopilot._say(aid, f"{snap['name']}: the best type here is {best['kind']} (score {best.get('score')})" + (f", not {old}." if best["kind"] != old else "."))
     return best["kind"]
 
+FAST_KIND = True     # (1.69.262) a dead server's tunnel is built as the type it has, without a test first, when nothing in the Doctor's knowledge puts another type before it
+
+
+def _fast_kind(aid: int, snap: dict, target: dict) -> str:
+    """The type to build AT ONCE for a tunnel of a server that is off: the type it has now, when the Doctor's own order for the new pair puts that type FIRST (`knowledge.plan_for`: nothing known against it, nothing known
+    better). A test of a type is a temporary tunnel of about a minute, one at a time for the whole panel - on 2026-11-13 it was a third of every tunnel's move. '' = test as before (another type comes first, or nothing is known)."""
+    if not FAST_KIND or not PICK_BEST:
+        return ""
+
+    from . import knowledge
+
+    old = autopilot.kind_of(snap["type"], snap["transport"], snap["record"])
+
+    try:
+        kinds, _notes = knowledge.plan_for(target["id"], snap["foreign_id"], old, False, True)
+    except Exception:      # noqa: BLE001 - a look at what is known that fails must not stop a move: the test runs as before
+        return ""
+
+    if kinds and kinds[0] == old:
+        autopilot._say(aid, f"{snap['name']}: {old} is built at once - it comes first in the Doctor's order for {target['name']} and {snap.get('foreign_name') or 'the foreign server'} (the server is off: no test first).")
+        return old
+
+    return ""
+
+
 def _current_ips(d: dict) -> list[str] | None:
     """(1.69.243) What the record points at RIGHT NOW, read from its provider (the plan holds what it pointed at when the plan was made, and another story may have moved it since). None when it cannot be read: then the plan's word stands."""
     try:
@@ -1263,6 +1288,10 @@ def _work(aid: int, p: dict, finish: bool = True) -> bool:
     gone: list[int] = []                              # the tunnels that were not on this server any more when their turn came: another story moved them (1.69.243)
     built: list[tuple[int, str, dict]] = []          # (old tunnel id, temp name, snapshot) while both run
     pairs: dict = {}                                  # (target, foreign) -> the test of the tunnel types of that pair
+    dns_left = list(p["dns"])                         # (1.69.262) the records not re-pointed yet: a record follows as soon as EVERY tunnel it serves has moved, not after the last tunnel of the server
+    early: tuple[list, list, list] = ([], [], [])     # what those early records did: done, errors, logged
+    carried: set[int] = set()                         # the tunnels of this server that have moved so far
+    dns_lock = threading.Lock()
 
     def dead_one(t: dict) -> tuple[str, dict | None]:
         """One tunnel of a server that is off: what is left of it there, and its name when it was moved. The tunnels of one server go together (1.69.230: they were built one after the other)."""
@@ -1282,13 +1311,32 @@ def _work(aid: int, p: dict, finish: bool = True) -> bool:
                 if row is not None and row.iran is not None and (row.iran.online is False or is_cut(row.iran)):
                     left = _leftover({**snap, "port": row.port}, p["server_id"])
 
-            kind = _best_kind(aid, snap, p["target"], pairs, first_ok=True)      # (a dead server: the first type that connects, in the Doctor's order - no time for a full comparison)
+            fast = _fast_kind(aid, snap, p["target"])
+            kind = fast or _best_kind(aid, snap, p["target"], pairs, first_ok=True)      # (a dead server: the first type that connects, in the Doctor's order - no time for a full comparison)
+            ok = autopilot._replace(aid, t["id"], p["target"]["id"], snap["foreign_id"], kind, f"Failover: {p['why']}.", skip_offline=True)
 
-            if autopilot._replace(aid, t["id"], p["target"]["id"], snap["foreign_id"], kind, f"Failover: {p['why']}.", skip_offline=True):
+            if not ok and fast:                                                  # (1.69.262: the type built without a test did not come up: the types are tested now, as before)
+                autopilot._say(aid, f"{snap['name']}: {fast} did not build on {p['target']['name']}: the types are tested now.")
+                kind = _best_kind(aid, snap, p["target"], pairs, first_ok=True)
+                ok = autopilot._replace(aid, t["id"], p["target"]["id"], snap["foreign_id"], kind, f"Failover: {p['why']}.", skip_offline=True)
+
+            if ok:
                 new = builder.follow_move(snap["name"], bool((snap.get("record") or {}).get("custom_name")))          # (1.69.243: the rebuilt tunnel runs on the new Iran server: a name the panel made follows it)
 
                 if new != snap["name"]:
                     autopilot._say(aid, f"{snap['name']}: renamed {new} (it runs on {p['target']['name']} now).")
+
+                with dns_lock:                                                   # (1.69.262: the records that serve only tunnels that have moved follow NOW - the configs behind them are back after the TTL, not after the slowest tunnel)
+                    carried.add(t["id"])
+                    follow, stay = _follows(dns_left, carried | set(gone))
+                    dns_left[:] = stay
+
+                    if follow:
+                        d_, e_, l_ = _apply_dns(aid, {**p, "dns": follow})
+                        early[0].extend(d_)
+                        early[1].extend(e_)
+                        early[2].extend(l_)
+                        _follow_later(p, d_)
 
                 return new, left
         except (ValueError, RuntimeError) as e:
@@ -1349,14 +1397,17 @@ def _work(aid: int, p: dict, finish: bool = True) -> bool:
     if built and all_done and _not_carrying(aid, built):
         all_done = False                               # (the branch below takes the new halves away again and leaves the DNS alone)
 
-    done_dns, errors, logged = [], [], []
+    done_dns, errors, logged = list(early[0]), list(early[1]), list(early[2])
 
     if not all_done and not src_on:                    # the old tunnels are gone already: the ones that moved are where they go; the records that serve only them follow (1.69.243)
-        follow, stay = _follows(p["dns"], set(moved_ids) | set(gone))
-        autopilot._say(aid, f"{moved} of {total} tunnels moved" + (f" ({len(gone)} more were taken by another move)" if gone else "") + f": only the {len(follow)} DNS record(s) that serve nothing but tunnels that moved follow them (records must not point at a server that does not carry all of their tunnels).")
-        done_dns, errors, logged = _apply_dns(aid, {**p, "dns": follow})
+        follow, stay = _follows(dns_left, set(moved_ids) | set(gone))
+        autopilot._say(aid, f"{moved} of {total} tunnels moved" + (f" ({len(gone)} more were taken by another move)" if gone else "") + f": only the {len(follow) + len(done_dns)} DNS record(s) that serve nothing but tunnels that moved follow them (records must not point at a server that does not carry all of their tunnels).")
+        d_, e_, l_ = _apply_dns(aid, {**p, "dns": follow})
+        done_dns += d_
+        errors += e_
+        logged += l_
         _say_left(aid, {**p, "left_alone": [{"fqdn": d["fqdn"], "tunnels": d.get("serves") or []} for d in stay]})
-        _follow_later(p, done_dns)
+        _follow_later(p, d_)
     elif not all_done:
         autopilot._say(aid, f"{moved} of {total} tunnels moved: the DNS is NOT changed (records must not point at a server that does not carry all of their tunnels).")
 
@@ -1374,9 +1425,12 @@ def _work(aid: int, p: dict, finish: bool = True) -> bool:
         moved = 0
         built = []
     else:
-        done_dns, errors, logged = _apply_dns(aid, p)
+        d_, e_, l_ = _apply_dns(aid, {**p, "dns": dns_left})          # (what is left: the records that did not follow early - a whole move's records that serve no tunnel, or all of them when the old server was on)
+        done_dns += d_
+        errors += e_
+        logged += l_
         _say_left(aid, p)
-        _follow_later(p, done_dns)
+        _follow_later(p, d_)
 
         if built:
             if done_dns:
