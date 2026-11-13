@@ -99,7 +99,11 @@ DEFAULTS: dict[str, dict[str, Any]] = {
     "commander": {"enabled": False, "careful": False},
     # the L2TP product (services/l2tp.py): the Iran server that is the entry (the customers connect to it; it holds the accounts), the foreign server that is the exit, the tunnel between them (only to show its state), the connection name the customer sees, the address
     # shown to the customer (empty = the entry's own address) and the start of the names the shop bot gives its accounts (the page marks them "bot")
-    "l2tp": {"entry_id": 0, "exit_id": 0, "tunnel_id": 0, "title": "Nikatel Shop", "address": "", "bot_prefix": "l2_"},
+    # direct_id (1.69.257): the optional second entry with a direct address (a foreign server that is an entry and the way out at once; its accounts are mirrored from the entry)
+    "l2tp": {"entry_id": 0, "exit_id": 0, "tunnel_id": 0, "direct_id": 0, "title": "Nikatel Shop", "address": "", "bot_prefix": "l2_"},
+    # the L2TP watch (services/l2tpwatch.py, 1.69.257): the entry, the exit, the tunnel between them, the direct server and the accounts mirror looked at every two minutes and put right; done: repair key -> times of its runs (24 h),
+    # told: finding key -> when its "needs a hand" event was last sent, flags: part -> what the Doctor page shows (state, text, since, tries, next), seen: the last look (at, ok, the state of every part)
+    "l2tpwatch": {"on": True, "done": {}, "told": {}, "flags": {}, "seen": {}},
 }
 
 SECRET_FIELDS = {"telegram": ("token",), "bale": ("token",), "probe": ("api_token",), "ai": ("api_key",), "arvan": ("api_key",), "license": ("token",)}

@@ -89,7 +89,11 @@ html body #page .dx-iss.warp { flex-wrap: wrap; }
 html body #page .dx-wt { margin-left: auto; color: var(--mut); font-size: 12.5px; text-align: right; }
 html body #page .dx-iss b { font-weight: 700; color: var(--text); }
 html body #page .dx-tag { font-size: 11px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; }
-html body #page .dx-tag.err { color: #ff7a85; } html body #page .dx-tag.warn { color: #ffb84d; }
+html body #page .dx-tag.err { color: #ff7a85; } html body #page .dx-tag.warn { color: #ffb84d; } html body #page .dx-tag.ok { color: #34d399; }
+/* the L2TP watch (1.69.257): the product's line - a light for every part - and a line per finding under it */
+html body #page .dx-iss.l2tp { flex-wrap: wrap; } html body #page .dx-iss.l2tp.fine { background: rgba(52, 211, 153, .07); } html body #page .dx-iss.l2tp.working { background: rgba(255, 184, 77, .1); }
+html body #page .dx-l2p { display: inline-flex; align-items: center; gap: 5px; margin-left: 10px; color: var(--mut); font-size: 12px; } html body #page .dx-l2p i { width: 7px; height: 7px; border-radius: 50%; background: #34d399; box-shadow: 0 0 0 2px rgba(52, 211, 153, .2); }
+html body #page .dx-l2p.warn i { background: #ffb84d; box-shadow: 0 0 0 2px rgba(255, 184, 77, .22); } html body #page .dx-l2p.bad i { background: #ff7a85; box-shadow: 0 0 0 2px rgba(255, 122, 133, .22); }
 html body #page .dx-tl { display: flex; flex-wrap: wrap; gap: 4px; margin-left: auto; }
 html body #page .ap-tasks .ap-thead { padding: 8px 10px 4px; }
 html body #page .ap-tasks .ap-ttabs { gap: 4px; }

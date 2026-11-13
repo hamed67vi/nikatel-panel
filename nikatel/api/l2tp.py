@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from ..auth import current_user
-from ..services import l2tp, l2tp_shop
+from ..services import l2tp, l2tp_shop, l2tpwatch
 from ..ssh import SSHError
 
 
@@ -70,7 +70,7 @@ def overview(fresh: bool = False, live: bool = False):
         _STATE["data"] = l2tp.state(base=_STATE["data"])
         _STATE["at"] = time.time()
 
-    return {"ok": True, **_STATE["data"]}
+    return {"ok": True, **_STATE["data"], "watch": l2tpwatch.view()}          # (1.69.257: what the L2TP watch saw and did, for the strip's Doctor cell - a settings read, never an SSH read)
 
 
 @router.get("/l2tp/config")
@@ -83,14 +83,15 @@ class ConfIn(BaseModel):
     entry_id: int = Field(0, ge=0)
     exit_id: int = Field(0, ge=0)
     tunnel_id: int = Field(0, ge=0)
+    direct_id: int = Field(0, ge=0)          # (1.69.257) the optional second entry with a direct address: a foreign server that is an entry and the way out at once
     title: str = Field("Nikatel Shop", min_length=1, max_length=40)
     address: str = Field("", max_length=253)
 
 
 @router.put("/l2tp/config")
 def put_config(body: ConfIn):
-    """Choose the entry (an Iran server), the exit (a foreign server), the tunnel between them and the connection name the customer sees."""
-    c = _wrap(l2tp.set_conf, body.entry_id, body.exit_id, body.tunnel_id, body.title, body.address)
+    """Choose the entry (an Iran server), the exit (a foreign server), the tunnel between them, the optional direct server and the connection name the customer sees."""
+    c = _wrap(l2tp.set_conf, body.entry_id, body.exit_id, body.tunnel_id, body.title, body.address, body.direct_id)
     _drop()
     return {"ok": True, "conf": c}
 

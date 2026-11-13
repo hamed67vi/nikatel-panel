@@ -21,6 +21,7 @@ from ..db import session
 from ..log import get_logger
 from ..models import Panel, Server, Tunnel, is_temp
 from . import dnscache, panels, userq
+from . import settings as st
 
 log = get_logger("purpose")
 EVERY = 600
@@ -78,14 +79,46 @@ def tunnel_purposes(hosts: list[dict], tunnels: list[dict], servers: list[dict],
     return {tid: sorted(v) for tid, v in out.items()}
 
 
-def store(got: dict[int, list[str]]) -> int:
-    """Write the purposes into the record of every tunnel (the key goes when a tunnel has none any more); returns how many rows changed."""
+def l2tp_tunnel_id() -> int:
+    """The tunnel the L2TP product rides on (settings `l2tp`), 0 when none is chosen."""
+    return int(st.get("l2tp").get("tunnel_id") or 0)
+
+
+def store(got: dict[int, list[str]], l2tp_id: int | None = None) -> int:
+    """Write the purposes into the record of every tunnel (the key goes when a tunnel has none any more); returns how many rows changed.
+    The tunnel of the L2TP product carries "l2tp" besides (1.69.257; the owner, 2026-11-13: "the L2TP tunnel must be marked here") - it is not a host of a panel, it comes from the product's settings."""
     changed = 0
+    l2 = l2tp_tunnel_id() if l2tp_id is None else l2tp_id
 
     with session() as db:
         for t in db.scalars(select(Tunnel)):
             rec = dict(t.record or {})
-            want = got.get(t.id) or []
+            want = sorted(set(got.get(t.id) or []) | ({"l2tp"} if t.id == l2 else set()))
+
+            if (rec.get("purpose") or []) == want:
+                continue
+
+            rec.pop("purpose", None)
+
+            if want:
+                rec["purpose"] = want
+
+            t.record = rec
+            changed += 1
+
+    return changed
+
+
+def label_l2tp() -> int:
+    """Only the "l2tp" label: put on the product's tunnel, taken off any other, the labels of the hosts left as they are (the gear of the L2TP tab calls it, and every look of the job). Returns how many rows changed."""
+    changed = 0
+    l2 = l2tp_tunnel_id()
+
+    with session() as db:
+        for t in db.scalars(select(Tunnel)):
+            rec = dict(t.record or {})
+            have = [p for p in (rec.get("purpose") or []) if p != "l2tp"]
+            want = sorted(set(have) | ({"l2tp"} if t.id == l2 else set()))
 
             if (rec.get("purpose") or []) == want:
                 continue
@@ -131,6 +164,9 @@ def run() -> None:
 
     records = list(dnscache.CACHE.get("rows") or [])
     hosts = _read_hosts()
+
+    if label_l2tp():
+        log.info("purpose: the L2TP tunnel relabelled")
 
     if not hosts or not records:
         return

@@ -620,6 +620,26 @@ echo "TIMER $(systemctl is-active nk-l2tp-exit.timer 2>/dev/null || echo unknown
 echo DONE
 """, {}),
 
+    # the L2TP product, the WATCH read of an entry (services/l2tpwatch.py; the direct server is an entry too): what a connection needs - the services, the three UDP ports, where the entry sends its customers (exit.conf and the
+    # route table 250), whether that far end answers through the tunnel, the accounts mirror's last word and its timer, the manager's facts without the key, and how many devices are connected. A read: nothing is changed.
+    "l2tp_watch": (r"""NK=/usr/local/sbin/nk-l2tp
+[ -x "$NK" ] || { echo "L2TP none"; exit 0; }
+echo "L2TP ok"
+echo "UNIT strongswan $(systemctl is-active strongswan 2>/dev/null || echo unknown)"
+echo "UNIT xl2tpd $(pgrep -c -x xl2tpd >/dev/null 2>&1 && echo active || echo inactive)"
+echo "UNIT tick $(systemctl is-active nk-l2tp-tick.timer 2>/dev/null || echo unknown)"
+echo "UDP $(ss -lun 2>/dev/null | grep -oE ':(500|4500|1701)\b' | tr -d ':' | sort -u | tr '\n' ' ')"
+e=$(sed -n 's/^EXIT_IP=//p' /etc/nk-l2tp/exit.conf 2>/dev/null | head -1)
+echo "EXITIP $e"
+echo "ROUTE $(ip route show table 250 2>/dev/null | grep -m1 '^default via' | awk '{print $3}')"
+[ -n "$e" ] && echo "PING $(ping -c 1 -W 1 "$e" >/dev/null 2>&1 && echo ok || echo no)"
+echo "MIRRORTIMER $(systemctl is-active nk-l2tp-mirror.timer 2>/dev/null || echo none)"
+echo "MIRROR $(head -c 300 /run/nk-l2tp/mirror.last 2>/dev/null | tr -d '\n')"
+echo "INFO $($NK info 2>/dev/null | python3 -c 'import json,sys; d=json.load(sys.stdin); d.pop("psk",None); print(json.dumps(d))' 2>/dev/null)"
+echo "SESSIONS $($NK sessions 2>/dev/null | python3 -c 'import json,sys; print(len(json.load(sys.stdin)["sessions"]))' 2>/dev/null)"
+echo DONE
+""", {}),
+
     # the L2TP product, the BACKUP read (services/backup.py): the manager's accounts file as it is (WITH the passwords - it goes straight into an encrypted backup and nowhere else), the shared key and the pool. A read: nothing is changed.
     # "L2TP none" = no manager here; "ERROR ..." = the file is not readable; a missing file is an entry with no account yet. Values travel in base64, one line each.
     "l2tp_backup": (r"""[ -x /usr/local/sbin/nk-l2tp ] || { echo "L2TP none"; exit 0; }
@@ -2183,6 +2203,28 @@ except Exception as e:
 out({"ok": True, "mode": mode, "added": added, "updated": updated, "removed": removed, "skipped": len(bad), "skipped_names": bad[:5], "safety": safety, "total": len(st["users"])})
 __NK_PY__
 """, {"MODE": r"^(missing|all)$", "B64": r"^[A-Za-z0-9+/=]{16,8000000}$"}),
+
+    # the L2TP product, the REPAIRS of the watch (services/l2tpwatch.py) on an entry (or the direct server) - one word each, nothing of the owner's travels in them:
+    # tick = the entry's own 30-second tick now (firewall rules, the route to the exit, expiry); restart = the IPsec and L2TP services and the tick timer; route = the entry sends its customers to this inner address of the exit
+    # (the tunnel was rebuilt and its far end changed); mirror = the accounts mirror's timer and one run of it now
+    "l2tp_heal": (r"""case '@MODE@' in
+  tick) /usr/local/sbin/nk-l2tp-tick >/dev/null 2>&1; echo "HEAL tick route=$(ip route show table 250 2>/dev/null | grep -m1 '^default via' | awk '{print $3}')";;
+  restart) systemctl restart strongswan >/dev/null 2>&1; systemctl restart xl2tpd >/dev/null 2>&1; pgrep -x xl2tpd >/dev/null 2>&1 || systemctl start xl2tpd >/dev/null 2>&1; systemctl enable --now nk-l2tp-tick.timer >/dev/null 2>&1; sleep 2
+    echo "HEAL restart strongswan=$(systemctl is-active strongswan 2>/dev/null || echo unknown) xl2tpd=$(pgrep -c -x xl2tpd 2>/dev/null) tick=$(systemctl is-active nk-l2tp-tick.timer 2>/dev/null || echo unknown) udp=$(ss -lun 2>/dev/null | grep -oE ':(500|4500|1701)\b' | tr -d ':' | sort -u | tr '\n' ' ')";;
+  route) [ -n '@IP@' ] || { echo "HEAL route no-ip"; exit 0; }; /usr/local/sbin/nk-l2tp-route set '@IP@' >/dev/null 2>&1; echo "HEAL route $(ip route show table 250 2>/dev/null | grep -m1 '^default via' | awk '{print $3}')";;
+  mirror) systemctl enable --now nk-l2tp-mirror.timer >/dev/null 2>&1; systemctl start nk-l2tp-mirror.service >/dev/null 2>&1; echo "HEAL mirror $(head -c 200 /run/nk-l2tp/mirror.last 2>/dev/null | tr -d '\n')";;
+esac
+""", {"MODE": r"^(tick|restart|route|mirror)$", "IP": r"^(\d{1,3}(\.\d{1,3}){3})?$"}),
+
+    # the same on the EXIT: reconcile = its rules, routes and timer put back as its file says; add = the pool of the entry routed to this inner address of the entry (the tunnel was rebuilt and the entry's inner address changed)
+    "l2tp_exit_heal": (r"""[ -x /usr/local/sbin/nk-l2tp-exit ] || { echo "HEAL exit none"; exit 0; }
+case '@MODE@' in
+  reconcile) /usr/local/sbin/nk-l2tp-exit reconcile >/dev/null 2>&1;;
+  add) /usr/local/sbin/nk-l2tp-exit add '@POOL@' '@IP@' >/dev/null 2>&1;;
+esac
+systemctl enable --now nk-l2tp-exit.timer >/dev/null 2>&1
+echo "HEAL exit rules=$(iptables-save 2>/dev/null | grep -c -- '--comment nk-l2tp-exit') routes=$(tr '\n' ';' < /etc/nk-l2tp/exit-routes.conf 2>/dev/null) forward=$(sysctl -n net.ipv4.ip_forward 2>/dev/null)"
+""", {"MODE": r"^(reconcile|add)$", "POOL": r"^(\d{1,3}(\.\d{1,3}){3}/\d{1,2})?$", "IP": r"^(\d{1,3}(\.\d{1,3}){3})?$"}),
 
     # shop bot: copy every table of the staging database (the real data) over the live one,
     # except the broadcast queues; tables that exist only in one of them are left alone

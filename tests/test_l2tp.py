@@ -640,7 +640,7 @@ def test_a_deleted_row_leaves_the_table_at_once():
 # ------------------------------------------------------------------ 1.69.251: the state strip names the servers and has a cell for the backup
 def test_the_state_names_the_servers(ready):
     s = l2tp.state()
-    assert s["names"] == {"entry": "iran-a", "exit": "foreign-a"} and s["tunnel"]["name"] == "fa-ia"
+    assert s["names"] == {"entry": "iran-a", "exit": "foreign-a", "direct": ""} and s["tunnel"]["name"] == "fa-ia"
     assert l2tp.state(base=s)["names"] == s["names"]          # (the light read too)
 
 
@@ -720,7 +720,7 @@ def test_the_page_shows_who_is_connected_by_a_light_and_follows_the_entry():
     assert 'class="l2-bar l2-glass"' in bar and "l2.view = this.value" in js and ".l2-filt select" in css and 'class="l2-seg l2-tb"' in bar and "l2BkOpen()" in bar and "l2ShopOpen()" in bar and "L2_ICO.gear" in bar          # (1.69.248, the owner: "this box professional, MacBook style" - one glass toolbar; the views are a popup in it)
     assert "↻" not in js and ">Bot<" not in js and "l2.only" not in js and "l2Refresh()" not in bar and '["bot", "Shop bot"' in js          # (the owner, 2026-11-08: "this button goes, the page refreshes by itself" and "this one too" (Bot) - the shop bot's accounts are a view of the popup instead)
     assert "l2Filters(d)" not in js[js.index("function l2Table("):js.index("function l2Row(")]          # (the filters left the table for the bar)
-    assert "container-type: inline-size" in css and "grid-template-columns: minmax(0, 1fr) auto" in css and "@container (max-width: 1480px)" in css and ".l2-filt { display: inline-flex; align-items: center; flex: none; width: 160px" in css          # (the owner, 2026-11-08: "it must be responsive, and the buttons must keep their place" - a grid with the controls in a column of their own, every control a fixed width)
+    assert "container-type: inline-size" in css and "grid-template-columns: minmax(0, 1fr) auto" in css and "@container (max-width: 1580px)" in css and ".l2-filt { display: inline-flex; align-items: center; flex: none; width: 160px" in css          # (the owner, 2026-11-08: "it must be responsive, and the buttons must keep their place" - a grid with the controls in a column of their own, every control a fixed width)
 
 
 def test_the_renewal_is_a_window_of_its_own_with_time_and_traffic_together():

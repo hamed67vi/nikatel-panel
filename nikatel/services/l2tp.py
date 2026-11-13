@@ -52,8 +52,9 @@ def choices() -> dict:
                 "tunnels": [{"id": t.id, "name": t.name, "iran": t.iran.name if t.iran else "", "foreign": t.foreign.name if t.foreign else ""} for t in tunnels]}
 
 
-def set_conf(entry_id: int, exit_id: int, tunnel_id: int, title: str, address: str) -> dict:
-    """Which servers carry the product and how the customer sees it. The entry must be an Iran server, the exit a foreign one (0 = not told)."""
+def set_conf(entry_id: int, exit_id: int, tunnel_id: int, title: str, address: str, direct_id: int = 0) -> dict:
+    """Which servers carry the product and how the customer sees it. The entry must be an Iran server, the exit a foreign one (0 = not told); `direct_id` (1.69.257) = the optional second entry with a direct
+    address, a foreign server that is an entry and the way out at once. The tunnel's row in the Tunnel manager is labelled L2TP at once."""
     title = _clean_text(title, "the connection name", 1, 40)
     address = str(address or "").strip()
 
@@ -67,16 +68,25 @@ def set_conf(entry_id: int, exit_id: int, tunnel_id: int, title: str, address: s
             if s is None or s.role != "iran":
                 raise ValueError("the entry must be one of your Iran servers")
 
-        if exit_id:
-            s = db.get(Server, exit_id)
+        for sid, what in ((exit_id, "the exit"), (direct_id, "the direct server")):
+            if sid:
+                s = db.get(Server, sid)
 
-            if s is None or s.role != "foreign":
-                raise ValueError("the exit must be one of your foreign servers")
+                if s is None or s.role != "foreign":
+                    raise ValueError(f"{what} must be one of your foreign servers")
+
+        if direct_id and direct_id == entry_id:
+            raise ValueError("the direct server cannot be the entry itself")
 
         if tunnel_id and db.get(Tunnel, tunnel_id) is None:
             raise ValueError("no such tunnel")
 
-    return st.put("l2tp", {"entry_id": int(entry_id), "exit_id": int(exit_id), "tunnel_id": int(tunnel_id), "title": title, "address": address})
+    c = st.put("l2tp", {"entry_id": int(entry_id), "exit_id": int(exit_id), "tunnel_id": int(tunnel_id), "direct_id": int(direct_id), "title": title, "address": address})
+
+    from . import purpose
+
+    purpose.label_l2tp()
+    return c
 
 
 def _node(sid: int, what: str) -> Node:
@@ -327,8 +337,8 @@ def state(base: dict | None = None) -> dict:
     with session() as db:
         out["names"] = {}                                                     # (1.69.251: the strip names the servers - "pnt-a", not "Entry up")
 
-        for k in ("entry", "exit"):
-            s = db.get(Server, c[f"{k}_id"]) if c[f"{k}_id"] else None
+        for k in ("entry", "exit", "direct"):
+            s = db.get(Server, c.get(f"{k}_id") or 0) if c.get(f"{k}_id") else None
             out["names"][k] = s.name if s is not None else ""
 
         t = db.get(Tunnel, c["tunnel_id"]) if c["tunnel_id"] else None

@@ -112,6 +112,16 @@ function l2BkCell() {
   return `<button type="button" class="l2-cell l2-cellb" title="${esc(tip)}" onclick="l2BkOpen()"><small>Backup</small><span class="l2-cv"><i class="l2-dot ${l2Dot(ok)}"></i><b>${esc(main)}</b>${sub ? `<em${ok === false ? ' class="bad"' : ""}>${esc(sub)}</em>` : ""}</span></button>`;
 }
 
+/* the L2TP watch's cell (1.69.257; the owner, 2026-11-13: "the Doctor must always check the health of the config, the server and its tunnel, and fix any problem"): healthy / mending / needs a hand, when it last looked; a press opens the Tunnel Doctor page, where every finding is a line */
+function l2WatchCell(w) {
+  const bad = (w.flags || []).filter(f => f.level === "bad"), hand = (w.flags || []).filter(f => f.state === "hand");
+  const ok = w.ok === false ? false : w.ok ? true : null;
+  const main = w.ok === false ? (hand.length ? "needs a hand" : "mending") : w.ok ? "healthy" : "not looked yet";
+  const sub = (w.flags || []).length ? `${w.flags.length} to mend` : w.at ? `${ago(w.at)} ago` : "";
+  const tip = (w.flags || []).length ? w.flags.map(f => f.text).join("\n") : "The L2TP watch looks at the entry, the exit, the tunnel, the direct server and the accounts mirror every two minutes and repairs what it can. Press for the Tunnel Doctor page.";
+  return `<button type="button" class="l2-cell l2-cellb" title="${esc(tip)}" onclick="go('tunnels', 'repairs')"><small>Doctor</small><span class="l2-cv"><i class="l2-dot ${l2Dot(ok)}"></i><b>${esc(main)}</b>${sub ? `<em${bad.length ? ' class="bad"' : ""}>${esc(sub)}</em>` : ""}</span></button>`;
+}
+
 function l2Bar(d) {
   const en = d.entry, ex = d.exit, tu = d.tunnel, nm = d.names || {};
   const cell = (label, ok, main, sub, tip, extra = "") => `<span class="l2-cell" title="${esc(tip || "")}"><small>${label}</small><span class="l2-cv"><i class="l2-dot ${l2Dot(ok)}"></i><b>${esc(main)}</b>${sub ? `<em${ok === false ? ' class="bad"' : ""}>${esc(sub)}</em>` : ""}${extra}</span></span>`;
@@ -123,6 +133,7 @@ function l2Bar(d) {
     ${tu ? cell("Tunnel", tuOk, tu.name, tu.state === "up" ? (tu.rtt_ms != null ? `${Math.round(tu.rtt_ms)} ms` : "up") : tu.state || "unknown", tu.error || "the tunnel between the entry and the exit", tu.protected ? `<i class="l2-lock" title="Protected: the Doctor never moves or replaces this tunnel">${L2_ICO.lock}</i>` : "") : ""}
     ${d.configured ? `<span class="l2-nums">${num("Accounts", d.accounts.length)}${num("Online", d.online, d.online ? " on" : "")}</span>` : ""}
     ${d.configured ? l2BkCell() : ""}
+    ${d.configured && d.watch && d.watch.on ? l2WatchCell(d.watch) : ""}
     ${l2.busy ? `<span class="l2-chip l2-busy" title="The entry is being read over SSH; what is shown is the last answer"><i class="l2-dot warn"></i><small>reading…</small></span>` : ""}
   </div><div class="l2-tools">
     ${d.configured ? `<label class="l2-search" title="Search by name or note">${L2_ICO.find}<input class="l2-q" placeholder="Search" value="${esc(l2.q)}" oninput="l2.q = this.value; l2Redraw()"></label>` : ""}
@@ -304,7 +315,8 @@ window.l2ConfOpen = async () => {
     ${l2Sec("Servers", `<div class="l2-two">
       ${l2Field("Entry (Iran server)", `<select id="l2c-entry" class="l2-sel">${opt(ch.iran, v.entry_id, "— choose —")}</select>`, "The customers connect to it; it holds the accounts")}
       ${l2Field("Exit (foreign server)", `<select id="l2c-exit" class="l2-sel">${opt(ch.foreign, v.exit_id, "— not told —")}</select>`, "The traffic leaves the internet from here")}
-    </div>${l2Field("Tunnel between them", `<select id="l2c-tun" class="l2-sel">${`<option value="0"${!v.tunnel_id ? " selected" : ""}>— not told —</option>` + ch.tunnels.map(t => `<option value="${t.id}"${t.id === v.tunnel_id ? " selected" : ""}>${esc(t.name)} (${esc(t.iran)} ⇄ ${esc(t.foreign)})</option>`).join("")}</select>`, "Only to show its state here; keep it Protected", "l2-top")}`)}
+    </div>${l2Field("Tunnel between them", `<select id="l2c-tun" class="l2-sel">${`<option value="0"${!v.tunnel_id ? " selected" : ""}>— not told —</option>` + ch.tunnels.map(t => `<option value="${t.id}"${t.id === v.tunnel_id ? " selected" : ""}>${esc(t.name)} (${esc(t.iran)} ⇄ ${esc(t.foreign)})</option>`).join("")}</select>`, "Its row in the Tunnel manager is marked L2TP; the watch keeps it Protected", "l2-top")}
+    ${l2Field("Direct server (optional)", `<select id="l2c-direct" class="l2-sel">${opt(ch.foreign, v.direct_id || 0, "— none —")}</select>`, "A foreign server that is an entry with a direct address and the way out at once; its accounts are mirrored from the entry every minute", "l2-top")}`)}
     ${l2Sec("What the customer sees", `<div class="l2-two">
       ${l2Field("Connection name", l2In("l2c-title", `maxlength="40" value="${esc(v.title)}"`, ""), "The name of the VPN on the phone")}
       ${l2Field("Server address", l2In("l2c-addr", `maxlength="253" placeholder="the entry's own address" value="${esc(v.address)}"`, ""), "A name or an IP; empty = the entry's own address")}
@@ -315,7 +327,7 @@ window.l2ConfOpen = async () => {
 };
 
 window.l2SaveConf = async () => {
-  const body = {entry_id: +l2V("l2c-entry") || 0, exit_id: +l2V("l2c-exit") || 0, tunnel_id: +l2V("l2c-tun") || 0, title: l2V("l2c-title"), address: l2V("l2c-addr")};
+  const body = {entry_id: +l2V("l2c-entry") || 0, exit_id: +l2V("l2c-exit") || 0, tunnel_id: +l2V("l2c-tun") || 0, direct_id: +l2V("l2c-direct") || 0, title: l2V("l2c-title"), address: l2V("l2c-addr")};
   if (!body.entry_id) { toast("✕ Choose the Iran server that is the entry.", "bad"); return; }
   try { await api("/api/l2tp/config", {method: "PUT", body: JSON.stringify(body)}); } catch (e) { toast("✕ " + e.message, "bad"); return; }
   hideModal(); await l2Load(true); l2.html = ""; l2Draw(); toast("✓ Saved", "ok");
