@@ -34,7 +34,7 @@ def free(monkeypatch):
 
 
 def sections_of(client) -> str:
-    return re.search(r'<html lang="en" data-sections="([^"]*)">', client.get("/").text).group(1)
+    return re.search(r'<html lang="en" data-sections="([^"]*)"[^>]*>', client.get("/").text).group(1)
 
 
 # ------------------------------------------------------------------ L2TP is a license feature
@@ -140,7 +140,7 @@ def test_the_server_tells_the_page_which_optional_sections_this_install_has(clie
 
 def test_the_page_draws_the_l2tp_tab_and_the_finance_item_only_for_the_sections_it_was_given():
     assert 'const SECTIONS = new Set(String(document.documentElement.dataset.sections || "").split(",").filter(Boolean));' in APP
-    assert 'const L2TP_UI = SECTIONS.has("l2tp");' in APP and 'const COSTS_UI = SECTIONS.has("finance");' in APP
+    assert 'const L2TP_UI = SECTIONS.has("l2tp") && !LITE;' in APP and 'const COSTS_UI = SECTIONS.has("finance");' in APP
     sub = APP.split("const SUB = {", 1)[1].split("\n};", 1)[0]
     assert '...(L2TP_UI ? [["l2tp", "🔐 L2TP"' in sub and sub.count('["l2tp", "🔐 L2TP"') == 1       # the tab is in the list only when the section is on
     assert 'page === "costs" && !COSTS_UI' in APP and 'alias === "costs" && !COSTS_UI' in APP              # a saved page or an address of the hidden page opens the Dashboard / is put right

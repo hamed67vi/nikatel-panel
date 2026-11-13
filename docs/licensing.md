@@ -30,6 +30,10 @@ Where the gate sits: `builder.start_build` (a transport other than tcpmux), `bui
 (the smart repair only tries licensed kinds), `ai.ask`, `failover.has_key`, the whole `/api/shopbot` and `/api/l2tp` routers (402).
 Every refusal is one sentence that names Settings → About → License.
 
+## Editions
+
+The panel has two editions (`NIKATEL_EDITION`, default `auto`). **Full** is everything the panel does. **Lite** is the limited edition for the installs of others: the left menu has **Servers**, **Network** (Tunnel manager, Tunnel Doctor, CDN) and **Settings** (Security, Backups, Api & Key, Appearance, About & update) - the Dashboard is in the menu, grey and shut, and there is no Panel (PasarGuard / Marzban), Field test, L2TP, Finance or Shop bot; the Settings boxes of those sections (the panels, the PasarGuard updates) are not drawn. `auto` is full on the vendor's own installs (`NIKATEL_LICENSE=owner`) and lite on every other one; `NIKATEL_EDITION=full` or `lite` decides by hand. The edition only chooses what the page draws: the routes of the other sections stay (the pages that remain use some of them), and the tunnel engine, the Doctor and the background jobs are the same in both.
+
 ## The token
 
 `NK1.<base64url(payload)>.<base64url(Ed25519 signature)>`

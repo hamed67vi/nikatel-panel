@@ -131,7 +131,8 @@ def _index_html() -> str:
     from .services import license
 
     sections = [k for k, on in (("l2tp", license.has("l2tp")), ("finance", get_settings().finance)) if on]          # (the optional sections of THIS install: the page draws only these - web/app.js, SECTIONS)
-    html = html.replace('<html lang="en">', f'<html lang="en" data-sections="{",".join(sections)}">', 1)
+    edition = ' data-edition="lite"' if license.lite() else ""          # (the limited edition: the page draws only Servers, Network and the Settings that belong to them)
+    html = html.replace('<html lang="en">', f'<html lang="en" data-sections="{",".join(sections)}"{edition}>', 1)
     return html
 
 

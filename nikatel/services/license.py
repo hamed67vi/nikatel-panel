@@ -115,6 +115,17 @@ def has(feature: str) -> bool:
     return feature in features()
 
 
+def lite() -> bool:
+    """True when this install is the limited edition (the owner, 2026-11-13): only Servers, Network (Tunnel manager, Tunnel Doctor, CDN) and the Settings that belong to them are in the panel.
+    NIKATEL_EDITION=lite / full decides; the default, "auto", is full on the owner's own installs (NIKATEL_LICENSE=owner) and lite on every other one."""
+    ed = str(get_settings().edition or "auto").strip().lower()
+
+    if ed in ("lite", "full"):
+        return ed == "lite"
+
+    return str(get_settings().license or "").strip().lower() != "owner"
+
+
 def require(feature: str) -> None:
     """Raise ValueError with a plain sentence when the feature is not licensed."""
     if not has(feature):

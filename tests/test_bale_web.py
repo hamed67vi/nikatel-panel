@@ -19,7 +19,7 @@ def test_the_page_loads_the_file_after_app_js_and_stamps_it(client):
 
 def test_settings_draws_the_box_in_the_api_list_and_loads_it():
     app = (WEB / "app.js").read_text(encoding="utf-8")
-    assert "${tgBox}${window.baleBoxHtml ? baleBoxHtml() : \"\"}${probeBox}" in app          # right after the Telegram bot: the two are the same kind of connection
+    assert "${tgBox}${!LITE && window.baleBoxHtml ? baleBoxHtml() : \"\"}${probeBox}" in app          # right after the Telegram bot: the two are the same kind of connection
     assert '  if ($("#bale-box") && window.baleLoad) baleLoad();' in app
     assert "window.baleBoxHtml = " in JS and "window.baleLoad = " in JS and 'id="bale-box"' in JS
     assert 'name="support"' in JS and 'support: f.get("support") === "on"' in JS

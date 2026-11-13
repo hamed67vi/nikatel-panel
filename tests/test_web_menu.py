@@ -64,7 +64,7 @@ def test_every_tab_a_pg_file_registers_has_a_place_on_the_panel_page_or_in_serve
 
 
 def test_the_groups_of_the_menu_are_built_from_the_tabs_of_their_pages():
-    built = re.search(r'return \{nodes: of\("nodes"\), tunnels: of\("tunnels"\), pgpanel: of\("pgpanel"\), settings: Object\.entries\(SET_TABS\)', APP)
+    built = re.search(r'return \{nodes: of\("nodes"\), tunnels: of\("tunnels"\), pgpanel: LITE \? \[\] : of\("pgpanel"\), settings: Object\.entries\(SET_TABS\)', APP)
     assert built, "navTabs() no longer returns nodes, tunnels, pgpanel and settings"
     menu = {p for p, _ in LINK.findall(NAV)}
     assert {"nodes", "tunnels", "pgpanel", "settings"} <= menu
@@ -840,7 +840,7 @@ def test_the_doctor_page_after_the_picture_and_the_tab_switch_that_does_not_jump
 def test_about_and_update_after_the_picture_four_fixed_boxes_and_the_security_button():
     """The owner, 2026-10-16: "build these, all the boxes fixed" (the picture of About & update) and "a button Sign out of other devices under the password boxes"."""
     app, upd, css = _web("app.js"), _web("pg_update.js"), _web("lab.css")
-    assert '`<div class="abt-wrap"><div class="abt-grid${LICENSE_UI ? "" : " abt-nolic"}">`' in app and 'id="about-hero"' in app and 'id="about-pill"' in app and 'id="lic-head"' in app and 'id="eng-box"' in app and "${window.pgUpdBody ? pgUpdBody() : \"\"}</div>`" in app and '<div class="abt-foot"' in app and 'id="abt-env"' not in app and '"Works by", "API based"' in app and "Parallel SSH" not in app
+    assert '`<div class="abt-wrap"><div class="abt-grid${LICENSE_UI ? "" : " abt-nolic"}">`' in app and 'id="about-hero"' in app and 'id="about-pill"' in app and 'id="lic-head"' in app and 'id="eng-box"' in app and "${!LITE && window.pgUpdBody ? pgUpdBody() : \"\"}</div>`" in app and '<div class="abt-foot"' in app and 'id="abt-env"' not in app and '"Works by", "API based"' in app and "Parallel SSH" not in app
     assert 'pgupd: ["🧩 PasarGuard"' not in app and "pgUpdCard" not in app and 'if (state.stab === "update") { aboutLoad(); enginesLoad(); if (LICENSE_UI) licLoad(); if (window.pgUpdLoad) pgUpdLoad(); }' in app and "pgupd: SI.box" not in app
     assert 'window.pgUpdBody = () => `<div class="abt-card abt-pg">' in upd and "window.pgUpdCard" not in upd and 'id="pgu-pill"' in upd and 'id="pgu-box"' in upd
     assert "grid-template-rows: 156px 316px;" in css and "html body #page .abt-foot {" in css and 'html body #page .sf[data-name="About & update"] > h3 { display: none; }' in css and "html body #page .tcr-list {" in css
@@ -878,7 +878,7 @@ def test_the_api_tab_of_settings_gathers_every_api_connection():
     the state of the AI key, the Telegram bot, the probe, the DNS accounts and the panels, each with the way to its place; the AI assistant card stays under it."""
     app = _web("app.js")
     assert 'ai: ["🔌 Api & Key",' in app and '["Api & Key"]],' in app and "ai: SI.link," in app
-    assert 'sFrame("Api & Key", "This panel' in app and "async function apiLoad() {" in app and 'window.apiGo = n =>' not in app and 'const tokBox = abBox({icon: SI.key, title: "API tokens"' in app and 'const instBox = abBox({icon: SI.down, title: "Install a probe"' in app and '<div class="ab-list">${apiBox}${tokBox}${aiBox}${tgBox}${window.baleBoxHtml ? baleBoxHtml() : ""}${probeBox}${instBox}${dnsBox}${panelsBox}</div>' in app and "const abBox = o =>" in app
+    assert 'sFrame("Api & Key", LITE ? "This panel' in app and "async function apiLoad() {" in app and 'window.apiGo = n =>' not in app and 'const tokBox = abBox({icon: SI.key, title: "API tokens"' in app and 'const instBox = abBox({icon: SI.down, title: "Install a probe"' in app and '<div class="ab-list">${apiBox}${tokBox}${aiBox}${tgBox}${!LITE && window.baleBoxHtml ? baleBoxHtml() : ""}${probeBox}${instBox}${dnsBox}${LITE ? "" : panelsBox}</div>' in app and "const abBox = o =>" in app
     assert '  const s = await api("/api/auth/security");' in app and '${gR}${gP}</div>${gW}`;' in app and '"narrow");\n    apiLoad();' in app and 'toast("Token revoked", "ok"); apiLoad();' in app
     assert 'const aiBody = sCat(' not in app and 'title: "Use"' not in app and '${backups}${apiFrame}${shop}' in app and 'window.aiSave = async (e, pid) =>' in app and 'window.saveAi' not in app and 'f.enabled.checked' not in app and 'onsubmit="return aiSave(event, \'${c.id}\')"' in app and 'id="${f.id}"' in app
     assert 'title: "Telegram bot", pill: tg.has_token' in app and 'form: {id: "tg-form", submit: "saveTelegram(event)"}' in app and 'alerts: ["🔔 Alerts"' not in app and 'const tgOn = !!(tg.enabled && tg.has_token && tg.chat_id);' in app and 'window.alertsWin = async kind =>' in app and "alertsWin('rules')" in app and "alertsWin('report')" in app and "alertsWin('windows')" in app and 'async function setData() {' in app and '${security}${backups}' in app
@@ -1685,7 +1685,7 @@ def test_every_section_has_its_own_address_and_it_costs_the_panel_nothing(tmp_pa
     driver = tmp_path / "route.js"
     driver.write_text(
         "const SUB = {tunnels: [['list', 'a'], ['repairs', 'b'], ['dns', 'c'], ['gateway', 'd', '', 'off']], nodes: [['lab', 'a'], ['add', 'b', '', 'act']], pgpanel: [['settings', 'a'], ['users', 'b']]};\n"
-        "const SET_TABS = {account: 1, backup: 1, ai: 1, bot: 1, look: 1, update: 1}, SET_OFF = new Set(['bot']), NAV_ALIAS = {servers: 'nodes', actions: 'tunnels/repairs'}, PAGES = {dashboard: 1, nodes: 1, tunnels: 1, pgpanel: 1, settings: 1, bot: 1}, SHOPBOT_UI = false;\n"
+        "const SET_TABS = {account: 1, backup: 1, ai: 1, bot: 1, look: 1, update: 1}, SET_OFF = new Set(['bot']), NAV_ALIAS = {servers: 'nodes', actions: 'tunnels/repairs'}, PAGES = {dashboard: 1, nodes: 1, tunnels: 1, pgpanel: 1, settings: 1, bot: 1}, SHOPBOT_UI = false, LITE = false, LITE_OFF = new Set();\n"
         "const state = {page: 'dashboard', stab: 'account', sub: {}}; const sub = p => state.sub[p] || (SUB[p] || [])[0][0];\n"
         "const loc = {hash: ''}; global.location = loc; const hist = []; global.history = {pushState: (a, b, h) => { hist.push(['push', h]); loc.hash = h; }, replaceState: (a, b, h) => { hist.push(['replace', h]); loc.hash = h; }};\n"
         "const went = []; const go = (page, tab) => { went.push([page, tab]); const t = NAV_ALIAS[page] ? NAV_ALIAS[page].split('/') : [page, tab]; state.page = t[0]; if (t[0] === 'settings') { if (tab) state.stab = tab; } else if (tab || t[1]) state.sub[t[0]] = tab || t[1]; routeWrite(); };\n"
