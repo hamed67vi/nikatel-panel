@@ -617,7 +617,7 @@ function nkDdIc(name, title, g) {      // the little picture of an item (the own
     if (/UDP/i.test(title)) return ["wifi", ""];
     return ["swap", ""];
   }
-  if (name === "iran_id" || name === "foreign_id") return [/Smart/i.test(title) ? "spark" : "server", /Smart/i.test(title) ? "blue" : ""];
+  if (name === "iran_id" || name === "foreign_id") return ["server", ""];
   if (name === "model") return ["cube", ""];
   return null;
 }
@@ -1906,7 +1906,7 @@ async function buildFormHtml() {
   return `<form class="frm build" onsubmit="return startBuild(event)" oninput="bkKeep(this)">
     <div class="sgrid bld-grid">
       <div class="sbox"><h5><i>🖧</i>Servers</h5>
-        ${fl(`Iran <a class="bf-auto" onclick="autoIran(this.closest('form'))" title="Ping the foreign server from every Iran server, look at load and how many tunnels each one carries, pick the best">auto</a>`, `<select name="iran_id" required data-dd data-ddw="340" onchange="bkCheck(this.closest('form'))"><optgroup label="Automatic"><option value="0" ${String(v.iran_id) === "0" ? "selected" : ""}>✨ Smart — the best one</option></optgroup>${opt("iran", "iran_id") ? `<optgroup label="Iran servers">${opt("iran", "iran_id")}</optgroup>` : ""}</select>`)}
+        ${fl(`Iran <a class="bf-auto" onclick="autoIran(this.closest('form'))" title="Ping the foreign server from every Iran server, look at load and how many tunnels each one carries, pick the best">auto</a>`, `<select name="iran_id" required data-dd data-ddw="340" onchange="bkCheck(this.closest('form'))">${opt("iran", "iran_id") ? `<optgroup label="Iran servers">${opt("iran", "iran_id")}</optgroup>` : ""}</select>`)}
         ${fl("Foreign", `<select name="foreign_id" required data-dd data-ddw="340" onchange="bkCheck(this.closest('form'))">${opt("foreign", "foreign_id") ? `<optgroup label="Foreign servers">${opt("foreign", "foreign_id")}</optgroup>` : ""}</select>`)}
         <div id="auto-iran" class="mut bf-note"></div></div>
       <div class="sbox"><h5><i>⇄</i>Tunnel</h5>
@@ -1977,7 +1977,7 @@ function bkCheckRender(form) {
   const inConf = new Set(c.conflicts.map(t => t.id));      // a tunnel already offered below (same foreign server) is not offered twice
   const busy = c.busy.filter(b => !(b.id && inConf.has(b.id))).map(b => b.id
     ? `<div class="bconf"><label class="chk"><input type="checkbox" name="replace_${b.id}" ${bk.chk["replace_" + b.id] ? "checked" : ""} onchange="bkBtn(this.closest('form'))"> ⚠ Port ${b.ports.join(", ")} is used on ${esc(c.iran)} by ${esc(b.tunnel)} (${esc(b.state)}) — replace it: it is removed first${(b.all_ports || []).length > b.ports.length ? ` (its other ports ${b.all_ports.filter(x => !b.ports.includes(x)).join(", ")} stop too)` : ""}, restorable for 30 days from <i>Recently removed</i></label></div>`
-    : `<div class="err">⛔ Port ${b.port} is already used on ${esc(c.iran)} by ${esc(b.by + (b.state ? ", " + b.state : ""))}. Choose another Iran server (or ✨ Smart) or another port.</div>`).join("");
+    : `<div class="err">⛔ Port ${b.port} is already used on ${esc(c.iran)} by ${esc(b.by + (b.state ? ", " + b.state : ""))}. Choose another Iran server or another port.</div>`).join("");
   /* ONE card for "this port already goes to the foreign server through another tunnel" (the owner, 2026-10-24: "I did not understand - combine these options so they are not mistaken"): what is found, the replacement as ONE tick per tunnel, and - indented under it, only while a tunnel is being replaced - what happens to the CDN names */
   const dns = bk.arvan ? `<label class="chk sub" title="The configs of your users reach the servers through these CDN names: after the move they reach the new Iran server."><input type="checkbox" name="dns_follow" checked> And move its CDN names to the new Iran server <small class="mut">${bk.arvanMode === "auto" ? "(automatic)" : "(asks first on Tunnels → CDN)"}</small></label>` : "";
   const conf = c.conflicts.length ? `<div class="bconf bgroup"><div class="bg-h">⚠ Port ${[...new Set(c.conflicts.flatMap(t => t.ports))].join(", ")} already goes to this foreign server through another tunnel</div>${c.conflicts.map(t => `<label class="chk"><input type="checkbox" name="replace_${t.id}" ${t.replaceable ? "checked" : ""} onchange="bkBtn(this.closest('form'))"> Replace <b>${esc(t.name)}</b> (${esc(t.iran)}, ${esc(stName(t.state))}${t.state !== "up" && t.since ? " for " + ago(t.since) : ""}): the old tunnel is removed first and the new one takes its place</label>`).join("")}${dns}</div>` : "";  const stale = (c.stale || []).map(s => `<div class="bconf"><label class="chk"><input type="checkbox" name="stale_${esc(s.unit)}" checked> ⚠ Port ${s.port} on ${esc(c.iran)} is held by an old tunnel (${esc(s.unit)}): ${esc(s.why)} — remove it and use the port</label></div>`).join("");
@@ -2032,14 +2032,7 @@ window.startTest = async e => {
   if (bk.kind === "auto") { box.innerHTML = `<div class="fx-line plan"><b>›</b>${bk.transport === "trident" ? "Trident" : "Best of the day"} is chosen when you press Build; to test one type between these two servers, pick that type.</div>`; return; }
   let iranId = +f.get("iran_id") || 0;
   try {
-    if (!iranId) {   // Smart: the Iran servers are tested one after the other, best first; a poor one is left for the next
-      box.innerHTML = '<div class="fx-line run"><i></i>Smart test: starting…</div>';
-      const r = await api("/api/tunnels/smart-test", {method: "POST", body: JSON.stringify({foreign_id: +f.get("foreign_id"), ports: f.get("ports") || "", kind})});
-      const s = await followStory(r.id, box, 900);
-      const win = s && (s.story || []).slice().reverse().find(l => l.startsWith("Best server: "));
-      if (win) { const name = win.replace("Best server: ", ""), sel = form.querySelector("[name=iran_id]"), opt = [...sel.options].find(o => o.textContent.trim().startsWith(name + " ")); if (opt) { sel.value = opt.value; bkKeep(form); } }
-      return;
-    }
+    if (!iranId) { box.innerHTML = '<div class="err">Choose an Iran server first.</div>'; return; }
     box.innerHTML = '<div class="fx-line run"><i></i>Building a temporary tunnel…</div>';
     const r = await api("/api/tunnel-test/compare", {method: "POST", body: JSON.stringify({iran_id: iranId, foreign_id: +f.get("foreign_id"), kinds: [kind]})}); tt.job = {id: r.id, kinds: [kind], results: [], current: kind, done: false}; bkRun({type: "test", id: r.id});
     box.innerHTML = '<div class="fx-line run"><i></i>Testing this pair: building a temporary tunnel, measuring it, removing it…</div>';   // the window stays here: the progress and the result are shown in it
