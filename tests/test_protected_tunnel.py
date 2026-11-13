@@ -87,7 +87,7 @@ def test_the_menu_and_the_row_carry_the_mark():
     assert 'labIt((t.record || {}).protected ? "Remove protection…" : "Protect from the Doctor…", "shield"' in menu and "protectTunnel(t.id, t.name, !(t.record || {}).protected)" in menu
     assert menu.index("Protect from the Doctor") < menu.index('labIt("Remove tunnel…"')          # (Remove stays the last item, in red)
     assert "window.protectTunnel = async (id, name, on) =>" in app and 'api(`/api/tunnels/${id}/protected`, {method: "PUT", body: JSON.stringify({on})})' in app
-    assert '<span class="purpose lock"' in app and ">PROTECTED</span>" in app.split("const purposeTags = t =>", 1)[1].split("\n", 1)[0]
+    assert '<span class="purpose lock"' not in app and "PROTECTED" not in app.split("const purposeTags = t =>", 1)[1].split("\n", 1)[0]          # (the owner, 2026-11-13: no PROTECTED tag in the Tunnel manager list; the tunnels stay protected)
     assert ".purpose.lock {" in css
 
 
