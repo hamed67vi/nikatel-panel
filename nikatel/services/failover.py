@@ -733,8 +733,7 @@ def _did_something(h: dict) -> bool:
     return bool(h.get("moved") or h.get("gone") or h.get("ok"))
 
 
-RETRY_FAILED = 600        # (1.69.260) a failover of a dead server that moved NOTHING is tried again after this long - on another target, the one that took nothing is left out (it was six hours of nothing: 2026-11-13) ...
-FAIL_TRIES = 4            # ... at most this many times in six hours (then a human looks: the Telegram notice and the story of each try say why)
+RETRY_STEPS = (60, 120, 240, 480, 600)       # (1.69.261) a failover of a dead server that moved NOTHING is tried again after ONE minute - on another target: the one that took nothing is left out (it was six hours of nothing: 2026-11-13) - then after 2, 4, 8 and at most 10 minutes (counted over six hours). The FIRST move of a server that went off still waits OFF_WAIT only.
 BAD_TARGET_TTL = 7200     # an Iran server that took not one tunnel of a failover, or cannot be pushed a file, is not picked as a target for this long
 PUSH_OK_TTL = 300         # the answer of the push probe is kept this long (a bad one: PUSH_BAD_TTL)
 PUSH_BAD_TTL = 120
@@ -744,7 +743,7 @@ _PUSH: dict[int, tuple[bool, str, float]] = {}
 
 def _busy(s: dict, sid: int, now: int) -> bool:
     """A failover of this server that DID something ran in the last 6 hours (or a plan still waits) - unless its tunnels have gone BACK to it since (1.69.230: a server that came back, got its tunnels again and went off a second
-    time was not replaced for six hours). A failover that did nothing (1.69.260) holds the next try back for RETRY_FAILED seconds only, and stops after FAIL_TRIES of them."""
+    time was not replaced for six hours). A failover that did nothing (1.69.260) holds the next try back for a minute first (RETRY_STEPS: longer after each one that fails again, at most ten minutes) - it never stops trying."""
     if any(p["server_id"] == sid and p.get("reason") != "replace" for p in s["pending"]):
         return True
 
@@ -752,7 +751,7 @@ def _busy(s: dict, sid: int, now: int) -> bool:
     last = max((h["at"] for h in mine if _did_something(h)), default=0)
     back = max((h["at"] for h in s["history"] if h.get("reason") == "return" and (h.get("target") or {}).get("id") == sid), default=0)
     fails = [h["at"] for h in mine if not _did_something(h)]
-    return bool(last) and back < last or bool(fails) and (now - max(fails) < RETRY_FAILED or len(fails) >= FAIL_TRIES)
+    return bool(last) and back < last or bool(fails) and now - max(fails) < RETRY_STEPS[min(len(fails), len(RETRY_STEPS)) - 1]
 
 
 def bad_targets(now: float | None = None) -> frozenset:

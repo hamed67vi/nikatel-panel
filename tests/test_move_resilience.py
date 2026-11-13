@@ -172,19 +172,24 @@ def test_every_file_copy_of_the_panel_goes_through_copy_file():
 
 
 # ------------------------------------------------------------------ failover: _busy
-def test_a_failover_that_moved_nothing_is_tried_again_in_ten_minutes_not_in_six_hours():
+def test_a_failover_that_moved_nothing_is_tried_again_after_a_minute_not_in_six_hours():
     now = int(time.time())
-    fail = {"server_id": 5, "reason": "down", "at": now - 300, "moved": 0, "gone": 0, "ok": False}
-    assert failover._busy({"pending": [], "history": [fail]}, 5, now) is True                  # five minutes ago: wait a little
-    fail["at"] = now - failover.RETRY_FAILED - 5
-    assert failover._busy({"pending": [], "history": [fail]}, 5, now) is False                 # ten minutes ago: again (on another target)
+    fail = {"server_id": 5, "reason": "down", "at": now - 30, "moved": 0, "gone": 0, "ok": False}
+    assert failover._busy({"pending": [], "history": [fail]}, 5, now) is True                  # half a minute ago: not yet
+    fail["at"] = now - 65
+    assert failover._busy({"pending": [], "history": [fail]}, 5, now) is False                 # a minute ago: again (on another target)
 
 
-def test_a_server_whose_failovers_fail_again_and_again_is_left_to_a_human_after_four_tries():
+def test_a_server_whose_failovers_fail_again_and_again_is_tried_less_and_less_often_but_never_given_up():
     now = int(time.time())
-    tries = [{"server_id": 5, "reason": "down", "at": now - 3600 * k // 2 - 700, "moved": 0, "gone": 0, "ok": False} for k in range(failover.FAIL_TRIES)]
-    assert failover._busy({"pending": [], "history": tries[:-1]}, 5, now) is False
-    assert failover._busy({"pending": [], "history": tries}, 5, now) is True
+
+    for n, gap in ((1, 60), (2, 120), (3, 240), (4, 480), (5, 600), (9, 600)):
+        tries = [{"server_id": 5, "reason": "down", "at": now - 3000 - 100 * k, "moved": 0, "gone": 0, "ok": False} for k in range(n - 1)] + [{"server_id": 5, "reason": "down", "at": now - gap + 5, "moved": 0, "gone": 0, "ok": False}]
+        assert failover._busy({"pending": [], "history": tries}, 5, now) is True, n               # just inside the wait of the n-th failure
+        tries[-1]["at"] = now - gap - 5
+        assert failover._busy({"pending": [], "history": tries}, 5, now) is False, n              # just after it: tried again
+
+    assert failover.RETRY_STEPS[0] == 60 and max(failover.RETRY_STEPS) == 600 and not hasattr(failover, "FAIL_TRIES")
 
 
 def test_a_failover_that_moved_something_still_holds_for_six_hours():
@@ -319,7 +324,7 @@ def test_a_failover_that_moved_nothing_marks_its_target_and_one_that_moved_somet
     hist = failover._state()["history"]
     assert hist[-1]["moved"] == 0 and hist[-1]["ok"] is False and ids["a"] in failover.bad_targets()
     assert failover._busy(failover._state(), ids["dead"], int(time.time())) is True            # (a moment ago: wait)
-    assert failover._busy(failover._state(), ids["dead"], int(time.time()) + failover.RETRY_FAILED + 5) is False      # (and then it is tried again - on another target: plan_dead leaves `a` out)
+    assert failover._busy(failover._state(), ids["dead"], int(time.time()) + failover.RETRY_STEPS[0] + 5) is False      # (and then it is tried again - on another target: plan_dead leaves `a` out)
     monkeypatch.setattr(autopilot, "_replace", lambda *a, **k: True)
     monkeypatch.setattr("nikatel.services.builder.follow_move", lambda name, custom=False: name)
     assert failover._work(8, {**plan_to(ids, "a"), "id": "t-2"}) is True
