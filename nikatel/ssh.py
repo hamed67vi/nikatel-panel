@@ -546,6 +546,20 @@ done
 echo "UP $(cut -d' ' -f1 /proc/uptime)"
 """, {"IFACES": r"^([A-Za-z0-9][A-Za-z0-9._-]{0,14}( [A-Za-z0-9][A-Za-z0-9._-]{0,14}){0,39})?$",
       "SOCKS": r"^((s\d{1,5}|d\d{1,5}@\d{1,3}(\.\d{1,3}){3}|u\d{1,5}(,\d{1,5}){0,15})( (s\d{1,5}|d\d{1,5}@\d{1,3}(\.\d{1,3}){3}|u\d{1,5}(,\d{1,5}){0,15})){0,39})?$"}),
+    # read-only: the WIRE METER (services/wiremeter.py, 1.69.266): exactly `iface_counters` (the same cards and connections, the same names and limits), and after each card line its packet counters
+    # "PK <card> <rx_packets> <tx_packets>": the header a link adds is paid per packet. One light command per Iran server, a few times every ten minutes.
+    "wire_counters": (r"""for i in @IFACES@; do [ -r /sys/class/net/$i/statistics/rx_bytes ] && echo "IF $i $(cat /sys/class/net/$i/statistics/rx_bytes) $(cat /sys/class/net/$i/statistics/tx_bytes)" && echo "PK $i $(cat /sys/class/net/$i/statistics/rx_packets) $(cat /sys/class/net/$i/statistics/tx_packets)"; done
+for sp in @SOCKS@; do
+  case "$sp" in
+    s*) f="( sport = :${sp#s} )" ;;
+    u*) f="("; o=""; for p in $(echo "${sp#u}" | tr ',' ' '); do f="$f $o sport = :$p"; o="or"; done; f="$f )" ;;
+    *) p=${sp#d}; f="( dport = :${p%@*} and dst ${p#*@} )" ;;
+  esac
+  ss -tniH "$f" 2>/dev/null | awk -v sp="$sp" '/^ESTAB/ { loc = $4; rem = $5; next } /bytes_/ { a = ""; r = ""; for (i = 1; i <= NF; i++) { if ($i ~ /^bytes_acked:/) { split($i, x, ":"); a = x[2] } if ($i ~ /^bytes_received:/) { split($i, x, ":"); r = x[2] } } if (loc != "" && a != "" && r != "") print "SOCK " sp " " loc " " rem " " a " " r; loc = "" }'
+done
+echo "UP $(cut -d' ' -f1 /proc/uptime)"
+""", {"IFACES": r"^([A-Za-z0-9][A-Za-z0-9._-]{0,14}( [A-Za-z0-9][A-Za-z0-9._-]{0,14}){0,39})?$",
+      "SOCKS": r"^((s\d{1,5}|d\d{1,5}@\d{1,3}(\.\d{1,3}){3}|u\d{1,5}(,\d{1,5}){0,15})( (s\d{1,5}|d\d{1,5}@\d{1,3}(\.\d{1,3}){3}|u\d{1,5}(,\d{1,5}){0,15})){0,39})?$"}),
 
     # read-only: the byte counters of ONE network card and the uptime - the Live window (services/livebw.py `sample`), asked once a second while the window is open. IFACE "auto" = the card of the default route
     # (the one nload shows). "IF <card> <rx_bytes> <tx_bytes>" (nothing when the card does not exist), "UP <seconds>" (the clock of the rate).

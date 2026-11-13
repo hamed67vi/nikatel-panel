@@ -69,6 +69,7 @@ from .services import (
     userq,
     warpwatch,
     weather,
+    wiremeter,
     witness,
 )
 
@@ -248,6 +249,7 @@ def _register_jobs() -> None:
     jobs.register("userq", 300, userq.run)                      # what the USERS get through every tunnel: the probe's tests of the configs that ride it, each against its own week; the grade of the tunnel, a look by the Doctor when it falls (services/userq.py)
     jobs.register("comeback", 60, comeback.run)                 # a cut tunnel that was swapped to an emergency type: its old type is tested again with growing waits (5, 10, 20 ... min) and the tunnel goes back when it is clearly better (services/comeback.py)
     jobs.register("knowledge", 600, knowledge.run)            # what the Doctor KNOWS about every pair of servers: the night survey of the tunnel types, one pair at a time, when nothing else needs the servers (services/knowledge.py)
+    jobs.register("wiremeter", wiremeter.EVERY, wiremeter.run)    # what every tunnel costs on the wire against what its users move: three light reads of an Iran server every 10 minutes, nothing is changed (1.69.266)
     jobs.register("bandwidth", 60, bandwidth.run)               # the bandwidth of every tunnel: one light measurement per minute at most (two connections, 120 MB at most; through the door for BackPack / Paqet / Chisel), each tunnel about every 4 hours (1.69.226; was 90 minutes) and not at all while its own users carry 60 % of its usual level; a drop is looked at by the Doctor (services/bandwidth.py)
     jobs.register("temp-purge", 600, tunnel_test.purge_stale)
     jobs.register("housekeeping", 6 * 3600, housekeeping.run)   # old events and finished repair stories go; the write-ahead log is folded back
