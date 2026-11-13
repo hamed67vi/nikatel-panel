@@ -19,7 +19,6 @@ import json
 import random
 import re
 import secrets
-import subprocess
 import time
 import uuid
 
@@ -37,8 +36,7 @@ from ..models import (
     ServerSample,
     Tunnel,
 )
-from ..ssh import Node, SSHError, run_action, run_script
-from ..ssh import target as ssh_target
+from ..ssh import Node, SSHError, copy_file, run_action, run_script
 from . import (
     autopilot,
     builder,
@@ -818,13 +816,12 @@ def apply_hub(aid: int, server_id: int) -> bool:
             raise RuntimeError("the panel has no Xray binary cached; run scripts/fetch-xray.sh on the panel server")
 
         autopilot._say(aid, f"relay {name}: installing Xray (about 35 MB over SSH)…")
-        s = get_settings()
-        opts = ["-i", str(s.ssh_key), "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=accept-new", "-o", f"UserKnownHostsFile={s.known_hosts}", "-o", "ConnectTimeout=15"]
         run_action(node, "xrelay_mkdir")
-        r = subprocess.run(["scp", *opts, "-P", str(node.port), "--", str(binary), f"{ssh_target(node)}:{RELAY_DIR}/xray.new"], capture_output=True, text=True, timeout=400, check=False)
 
-        if r.returncode != 0:
-            raise RuntimeError("could not copy Xray to the relay: " + r.stderr.strip()[:140])
+        try:
+            copy_file(node, binary, f"{RELAY_DIR}/xray.new", timeout=400)
+        except SSHError as e:
+            raise RuntimeError("could not copy Xray to the relay: " + str(e)[:140]) from e
 
         ver = (re.search(r"VER (.+)", run_action(node, "xrelay_install_bin", timeout=60)) or [None, ""])[1].strip()
 

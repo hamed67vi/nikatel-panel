@@ -34,6 +34,7 @@ from ..config import get_settings
 from ..db import session
 from ..log import get_logger
 from ..models import Config, Panel, Server, Tunnel, is_protected
+from ..ssh import Node, SSHError, push_probe
 from . import arvan, autopilot, dnsprov, telegram
 from . import settings as st
 from .events import emit
@@ -558,7 +559,7 @@ def plan_for(server_id: int) -> dict:
 
 def plan_dead(server_id: int) -> dict:
     """Phase one of the plan of a dead server in an outage (the Doctor makes it for every dead server at the same time): all of `plan_for` except the target, which `assign_target` picks next, one plan at a time."""
-    return _make_plan(server_id, None, "down", defer=True)
+    return _make_plan(server_id, None, "down", defer=True, exclude=bad_targets())
 
 
 def simulate(off_ids: list[int]) -> dict:
@@ -688,11 +689,12 @@ def _state() -> dict:
     s.setdefault("history", [])
     s.setdefault("dns_log", [])
     s.setdefault("tried", {})
+    s.setdefault("bad", {})
     return s
 
 
 def _save(s: dict) -> None:
-    st.put("failover", {"seen": s["seen"], "pending": s["pending"], "history": s["history"][-30:], "dns_log": s["dns_log"][-100:], "tried": s.get("tried") or {}})
+    st.put("failover", {"seen": s["seen"], "pending": s["pending"], "history": s["history"][-30:], "dns_log": s["dns_log"][-100:], "tried": s.get("tried") or {}, "bad": s.get("bad") or {}})
 
 
 def state() -> dict:
@@ -723,14 +725,116 @@ def _describe(p: dict) -> str:
             f" ({', '.join(d['fqdn'] for d in p['dns']) or 'none'}) at {tgt['ip'] if tgt else '—'}")
 
 
+def _did_something(h: dict) -> bool:
+    """A finished failover that moved a tunnel, found one already taken by another move, or ended well. A record without the counts (an old one) is counted as done, as it always was."""
+    if "moved" not in h:
+        return True
+
+    return bool(h.get("moved") or h.get("gone") or h.get("ok"))
+
+
+RETRY_FAILED = 600        # (1.69.260) a failover of a dead server that moved NOTHING is tried again after this long - on another target, the one that took nothing is left out (it was six hours of nothing: 2026-11-13) ...
+FAIL_TRIES = 4            # ... at most this many times in six hours (then a human looks: the Telegram notice and the story of each try say why)
+BAD_TARGET_TTL = 7200     # an Iran server that took not one tunnel of a failover, or cannot be pushed a file, is not picked as a target for this long
+PUSH_OK_TTL = 300         # the answer of the push probe is kept this long (a bad one: PUSH_BAD_TTL)
+PUSH_BAD_TTL = 120
+PUSH_CHECK = True         # the push probe before a move (tests switch it off: it needs SSH; tests/test_move_resilience.py turns it on with a stub)
+_PUSH: dict[int, tuple[bool, str, float]] = {}
+
+
 def _busy(s: dict, sid: int, now: int) -> bool:
-    """A failover of this server ran in the last 6 hours (or a plan still waits) - unless its tunnels have gone BACK to it since (1.69.230: a server that came back, got its tunnels again and went off a second time was not replaced for six hours)."""
+    """A failover of this server that DID something ran in the last 6 hours (or a plan still waits) - unless its tunnels have gone BACK to it since (1.69.230: a server that came back, got its tunnels again and went off a second
+    time was not replaced for six hours). A failover that did nothing (1.69.260) holds the next try back for RETRY_FAILED seconds only, and stops after FAIL_TRIES of them."""
     if any(p["server_id"] == sid and p.get("reason") != "replace" for p in s["pending"]):
         return True
 
-    last = max((h["at"] for h in s["history"] if h["server_id"] == sid and h.get("reason") == "down" and now - h["at"] < 6 * 3600), default=0)
+    mine = [h for h in s["history"] if h["server_id"] == sid and h.get("reason") == "down" and now - h["at"] < 6 * 3600]
+    last = max((h["at"] for h in mine if _did_something(h)), default=0)
     back = max((h["at"] for h in s["history"] if h.get("reason") == "return" and (h.get("target") or {}).get("id") == sid), default=0)
-    return bool(last) and back < last
+    fails = [h["at"] for h in mine if not _did_something(h)]
+    return bool(last) and back < last or bool(fails) and (now - max(fails) < RETRY_FAILED or len(fails) >= FAIL_TRIES)
+
+
+def bad_targets(now: float | None = None) -> frozenset:
+    """The Iran servers that are not a target now: a failover moved nothing to them lately, or the panel cannot push a file to them."""
+    now = time.time() if now is None else now
+
+    with _STATE_LOCK:
+        bad = dict(_state().get("bad") or {})
+
+    return frozenset(int(k) for k, v in bad.items() if now - float((v or {}).get("at") or 0) < BAD_TARGET_TTL)
+
+
+def mark_bad_target(target_id: int, why: str, now: float | None = None) -> None:
+    with _STATE_LOCK:
+        s = _state()
+        s.setdefault("bad", {})[str(target_id)] = {"at": int(time.time() if now is None else now), "why": str(why)[:200]}
+        _save(s)
+
+
+def clear_bad_target(target_id: int) -> None:
+    with _STATE_LOCK:
+        s = _state()
+
+        if s.get("bad", {}).pop(str(target_id), None) is not None:
+            _save(s)
+
+
+def target_pushable(target_id: int, now: float | None = None) -> tuple[bool, str]:
+    """Can the panel push a file to this Iran server? (1.69.260: a build copies binaries there; on 2026-11-13 the server picked for a dead server's tunnels answered every command and stalled every copy, and the
+    move failed three times in a row on it.) A 1 MB push through `ssh.push_probe` - direct, then through a jump server; the answer is kept for a few minutes. (True, how) or (False, why)."""
+    now = time.time() if now is None else now
+    hit = _PUSH.get(target_id)
+
+    if hit is not None and now - hit[2] < (PUSH_OK_TTL if hit[0] else PUSH_BAD_TTL):
+        return hit[0], hit[1]
+
+    with session() as db:
+        row = db.get(Server, target_id)
+        node = Node(row.host, row.ssh_user, row.ssh_port) if row is not None else None
+
+    if node is None:
+        return False, "it is not in the list any more"
+
+    try:
+        via = push_probe(node)
+        res = (True, f"through {via}" if via else "direct")
+    except SSHError as e:
+        res = (False, f"the panel cannot push a file to it: {str(e)[:100]}")
+
+    _PUSH[target_id] = (res[0], res[1], now)
+    return res
+
+
+def _vet_target(p: dict, sid: int) -> dict:
+    """The target of a dead server's plan must take a file (a build puts its binaries there): when it cannot, it is marked, its reservation given back and the plan made again without it - up to three servers."""
+    for _ in range(3):
+        t = p.get("target")
+
+        if not t or not PUSH_CHECK:
+            return p
+
+        ok, why = target_pushable(t["id"])
+
+        if ok:
+            return p
+
+        mark_bad_target(t["id"], why)
+        release(p)
+        log.warning("failover: %s is not a target for %s: %s", t.get("name"), p.get("server"), why)
+
+        with session() as db:
+            emit(db, "warn", "actions", f"Doctor: {t.get('name')} cannot take the tunnels of {p.get('server')} ({why}); another Iran server is tried.", p.get("server"))
+
+        try:
+            p = assign_target(plan_dead(sid))
+        except (ValueError, RuntimeError):
+            log.warning("failover: plan again for %s failed", p.get("server"), exc_info=True)
+            return {**p, "target": None, "problems": [*p.get("problems", []), f"{t.get('name')}: {why}"]}
+
+        p["problems"] = [*p.get("problems", []), f"{t.get('name')}: {why}"]
+
+    return p
 
 
 RETRY_NO_TARGET = 120     # a dead server whose tunnels found no target is looked at again after this long (it was ten minutes: with half the servers off, the first plans leave a server with room later)
@@ -940,6 +1044,7 @@ def _check() -> None:
             continue
 
         p = assign_target(p)                   # (instant: one plan after the other, so that the second one sees what the first one took)
+        p = _vet_target(p, sid)                # (1.69.260: the server that cannot be pushed a file is left out, another one is picked)
         p["id"] = f"{sid}-{now}"
         p["down_since"] = since
         lead = f"is cut from abroad (on, but only Iran sees it) and its tunnels have been down for {(now - since) // 60} min" if sid in cut else f"has been off for {(now - since) // 60} min"
@@ -1140,6 +1245,20 @@ def _work(aid: int, p: dict, finish: bool = True) -> bool:
 
     autopilot._say(aid, f"{'Move' if src_on else 'Failover'} of {p['server']} ({p['why']}): {len(p['tunnels'])} tunnel(s) → {p['target']['name']}, {len(p['dns'])} DNS record(s) → {p['target']['ip']}"
                    + (" - the server is on: the new tunnels are built first, the old ones stay until the DNS has settled." if src_on and p["tunnels"] else ""))
+
+    if p["tunnels"] and PUSH_CHECK:
+        ok_push, how = target_pushable(p["target"]["id"])          # (1.69.260: BEFORE anything is touched - a target that cannot be pushed a file only ever fails the build, after the old tunnels were taken off)
+
+        if not ok_push:
+            mark_bad_target(p["target"]["id"], how)
+            autopilot._say(aid, f"{p['target']['name']} cannot take the tunnels: {how}. Nothing was touched; choose another Iran server" + (" (the Doctor does that by itself)." if p.get("reason") == "down" else "."), done=finish, ok=False)
+
+            with session() as db:
+                emit(db, "warn", "actions", f"Doctor: {p['server']} → {p['target']['name']} not started: {how}.", p["server"])
+
+            return False
+
+        autopilot._say(aid, f"{p['target']['name']} takes files from the panel ({how}).")
     moved, moved_names, leftover = 0, [], []
     moved_ids: list[int] = []                         # the tunnels that moved (1.69.243)
     gone: list[int] = []                              # the tunnels that were not on this server any more when their turn came: another story moved them (1.69.243)
@@ -1301,6 +1420,12 @@ def _work(aid: int, p: dict, finish: bool = True) -> bool:
 
     ok = all_done and not errors
     other = f" (+{len(gone)} taken by another move)" if gone else ""
+
+    if p["tunnels"] and p.get("target"):
+        if moved == 0 and len(gone) < total and p.get("reason") in ("down", "manual", "quality", "resources", "capacity"):
+            mark_bad_target(p["target"]["id"], "a failover moved not one tunnel to it")          # (1.69.260: the next try picks another server)
+        elif moved:
+            clear_bad_target(p["target"]["id"])
 
     with _STATE_LOCK:                                  # (the plans of an outage end at about the same time: one reads, changes and saves the record at a time)
         s = _state()

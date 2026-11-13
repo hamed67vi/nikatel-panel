@@ -1,5 +1,6 @@
 """The second vantage of the Configs monitoring (services/witness.py, 1.69.227): a config the main probe calls down but a witness gets through is shown up; both fail -> down;
 the witness is never a failover; its config list follows the main probe's."""
+import subprocess
 import time
 
 import httpx
@@ -206,7 +207,7 @@ def test_install_as_witness_registers_it_beside_the_probe_not_as_a_standby(clien
     monkeypatch.setattr(probe_install, "get_settings", lambda: S())
     monkeypatch.setattr(probe_install, "_put", lambda *a, **k: None)
     monkeypatch.setattr(probe_install, "run_action", lambda node, name, params=None, timeout=25: "UNIT nikatel-speed-api active\n")
-    monkeypatch.setattr(probe_install.subprocess, "run", lambda *a, **k: Done())
+    monkeypatch.setattr(subprocess, "run", lambda *a, **k: Done())          # (the copy runs subprocess.run inside ssh.copy_file now)
     main = client.post("/api/servers", json={"name": "iran-a", "host": "192.0.2.10", "role": "iran"}).json()
     other = client.post("/api/servers", json={"name": "iran-b", "host": "192.0.2.11", "role": "iran"}).json()
     main_id, other_id = main["id"], other["id"]

@@ -1011,6 +1011,123 @@ def ensure_via(node: Node, timeout: int = 20) -> str:
     return ""
 
 
+# ---------------------------------------------------------------- copying a file: the same way as a command (1.69.260)
+# An Iran server went off (2026-11-13) and its tunnels did not move: every build on the target died in `scp` ("timed out after 240 seconds") - a command answered there in a second, but a
+# bulk copy from the panel's host stalled (a filter or a bad path on that route: the trouble above, only seen with a file instead of a command). The jump route was used for commands only; every copy went direct.
+# `copy_file` is the panel's `scp`: a copy that stalls ends in about 30 s (ServerAlive), and a link error is tried again through a jump server, the way `_exec` does it.
+SCP_ALIVE = ["-o", "ServerAliveInterval=10", "-o", "ServerAliveCountMax=3", "-o", "LogLevel=ERROR"]
+PUSH_PROBE_KB = 1024
+
+
+def _plain_opts() -> list[str]:
+    s = get_settings()
+    return ["-i", str(s.ssh_key), "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=accept-new", "-o", f"UserKnownHostsFile={s.known_hosts}", "-o", "ConnectTimeout=15", *SCP_ALIVE]
+
+
+def _fail_of(code: int, text: str) -> SSHError:
+    """The SSHError of a finished scp / ssh that failed: a lost connection says so (`_link_error` reads it), anything else keeps the last line of what the tool said."""
+    err = (text or "").strip()
+    why = re.search(r"(Timeout, server[^\n]*|Connection (reset|closed|timed out)[^\n]*|kex_exchange_identification[^\n]*|Broken pipe)", err)
+
+    if re.search(r"Permission denied \((publickey|password|keyboard-interactive|gssapi)", err):
+        return SSHError("the panel's key is not accepted (authorized_keys)", code)
+
+    if code == 255 and why and "Host key verification failed" not in err:
+        return SSHError("ssh connection lost (" + why.group(0).strip() + ")", 255)
+
+    return SSHError((err.splitlines()[-1] if err else f"exit {code}")[:200], code)
+
+
+def _through(node: Node, once: Callable[[Node | None], None], what: str) -> str:
+    """Run `once(jump)` the way `_exec` runs a command: through the jump the panel already uses for this host, else direct; a link error goes through a jump server next, and that jump is kept for VIA_TTL.
+    Returns the jump's address, or '' when it went direct. Raises the first SSHError when nothing carries it."""
+    via = _VIA.get(node.host)
+
+    if via is not None and via[1] > time.time():
+        try:
+            once(via[0])
+            return via[0].host
+        except SSHError as e:
+            if not _link_error(e):
+                raise
+
+            _VIA.pop(node.host, None)
+
+    try:
+        once(None)
+        return ""
+    except SSHError as e:
+        if _JUMPS is None or not _link_error(e):
+            raise
+
+        first = e
+
+    for j in (_JUMPS(node) or [])[:2]:
+        try:
+            once(j)
+        except SSHError as e2:
+            if _link_error(e2):
+                continue
+
+            raise
+
+        _VIA[node.host] = (j, time.time() + VIA_TTL)
+        log.warning("%s %s: the direct way fails (%s); done through %s - the panel goes that way for %s min", what, node.host, str(first)[:80], j.host, VIA_TTL // 60)
+        return j.host
+
+    raise first
+
+
+def _copy_cmd(node: Node, local: str, remote: str, to_server: bool, jump: Node | None) -> list[str]:
+    cmd = ["scp", *_plain_opts()]
+
+    if jump is not None:
+        cmd += _proxy_option(jump)
+
+    cmd += ["-P", str(node.port), "--"]
+    return cmd + ([local, f"{target(node)}:{remote}"] if to_server else [f"{target(node)}:{remote}", local])
+
+
+def _copy_once(node: Node, local: str, remote: str, to_server: bool, timeout: int, jump: Node | None = None) -> None:
+    try:
+        r = subprocess.run(_copy_cmd(node, local, remote, to_server, jump), capture_output=True, text=True, timeout=timeout, check=False)
+    except FileNotFoundError:
+        raise SSHError("scp is not installed on the panel server") from None
+    except subprocess.TimeoutExpired:
+        raise SSHError(f"timeout after {timeout}s") from None
+
+    if r.returncode != 0:
+        raise _fail_of(r.returncode, r.stderr)
+
+
+def copy_file(node: Node, local, remote: str, to_server: bool = True, timeout: int = 240) -> str:
+    """`scp` of one file to (`to_server`) or from a server: direct, and through a jump server when the direct copy stalls or drops (see above). Returns the jump's address when it went through one, '' when direct."""
+    return _through(node, lambda jump: _copy_once(node, str(local), remote, to_server, timeout, jump), "copy to" if to_server else "copy from")
+
+
+def push_probe(node: Node, kb: int = PUSH_PROBE_KB, timeout: int = 30) -> str:
+    """Can a file be pushed to this server from here? A command answers fast on a server where a bulk copy stalls, so the Doctor asks before it picks the server for a move: `kb` KB of zeros are sent to `cat >/dev/null`
+    (nothing is written there), direct and then through a jump server. Returns '' (direct) or the jump's address; raises SSHError when no way carries it."""
+    data = b"\0" * (max(1, kb) * 1024)
+
+    def once(jump: Node | None) -> None:
+        cmd = ["ssh", *_plain_opts(), *(_proxy_option(jump) if jump is not None else []), "-p", str(node.port), "--", target(node), "cat >/dev/null; echo nikatel-push-ok"]
+
+        try:
+            r = subprocess.run(cmd, input=data, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=timeout, check=False)
+        except FileNotFoundError:
+            raise SSHError("ssh is not installed on the panel server") from None
+        except subprocess.TimeoutExpired:
+            raise SSHError(f"timeout after {timeout}s") from None
+
+        out = r.stdout.decode("utf-8", "replace")
+
+        if r.returncode != 0 or "nikatel-push-ok" not in out:
+            raise _fail_of(r.returncode or 255, out)
+
+    return _through(node, once, "push probe")
+
+
 def run_script(node: Node, name: str, params: Mapping[str, str] | None = None, timeout: int = 40) -> str:
     """Run one reviewed script with validated parameters."""
     script = _script_text(name, params)

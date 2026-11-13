@@ -5,15 +5,13 @@ from __future__ import annotations
 import base64
 import json
 import secrets
-import subprocess
 from pathlib import Path
 
 from ..config import get_settings
 from ..db import session
 from ..log import get_logger
 from ..models import Server
-from ..ssh import Node, run_action
-from ..ssh import target as ssh_target
+from ..ssh import Node, SSHError, copy_file, run_action
 from . import settings as st
 from .events import emit
 
@@ -72,18 +70,16 @@ def install(server_id: int, as_standby: bool = False, as_witness: bool = False) 
     for unit, text in UNITS.items():
         _put(node, f"/etc/systemd/system/{unit}", text.encode(), "0644")
 
-    opts = ["-i", str(s.ssh_key), "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=accept-new", "-o", f"UserKnownHostsFile={s.known_hosts}", "-o", "ConnectTimeout=15"]
-
     for fname in ("xray", "geoip.dat", "geosite.dat"):
         p = eng / fname
 
         if not p.exists():
             continue
 
-        r = subprocess.run(["scp", *opts, "-P", str(node.port), "--", str(p), f"{ssh_target(node)}:/opt/nikatel-probe/xray/{fname}"], capture_output=True, text=True, timeout=600, check=False)
-
-        if r.returncode != 0:
-            raise RuntimeError(f"could not copy {fname} to the server: " + r.stderr.strip()[:120])
+        try:
+            copy_file(node, p, f"/opt/nikatel-probe/xray/{fname}", timeout=600)
+        except SSHError as e:
+            raise RuntimeError(f"could not copy {fname} to the server: " + str(e)[:120]) from e
 
     out = run_action(node, "probe_start", timeout=120)
     states = {ln.split()[1]: ln.split()[2] for ln in out.splitlines() if ln.startswith("UNIT ") and len(ln.split()) >= 3}

@@ -21,8 +21,7 @@ from ..config import get_settings
 from ..db import session
 from ..log import get_logger
 from ..models import Server, ServerSample, Tunnel
-from ..ssh import Node, SSHError, run_action, run_script
-from ..ssh import target as ssh_target
+from ..ssh import Node, SSHError, copy_file, run_action, run_script
 from . import settings as cfg
 from .events import emit
 
@@ -287,12 +286,10 @@ def _copy_to_node(node: Node, engine: str, f: Path) -> None:
     if e["bin"].startswith("/opt/nikatel-xgw/"):
         run_action(node, "xgw_mkdir", timeout=30)
 
-    s = get_settings()
-    opts = ["-i", str(s.ssh_key), "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=accept-new", "-o", f"UserKnownHostsFile={s.known_hosts}", "-o", "ConnectTimeout=15"]
-    r = subprocess.run(["scp", *opts, "-P", str(node.port), "--", str(f), f"{ssh_target(node)}:{e['bin']}.nikatel.new"], capture_output=True, text=True, timeout=300, check=False)
-
-    if r.returncode != 0:
-        raise RuntimeError(f"could not copy {e['title']} to {node.host}: " + r.stderr.strip()[:120])
+    try:
+        copy_file(node, f, f"{e['bin']}.nikatel.new", timeout=300)          # (1.69.260: through a jump server when the direct copy stalls)
+    except SSHError as err:
+        raise RuntimeError(f"could not copy {e['title']} to {node.host}: " + str(err)[:120]) from err
 
 
 def ensure_on_node(node: Node, engine: str, say=None, only_missing: bool = False) -> bool:

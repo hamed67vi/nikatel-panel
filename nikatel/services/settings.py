@@ -57,7 +57,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
     "cfgstats": {"cdn": True, "cdn_state": {}},
     "balance": {"auto": True, "servers": {}},
     "underuse": {"auto": True},       # the Doctor fixes what the kernel settings can fix on a server that carries little (services/underuse.py)
-    "failover": {"seen": {}, "pending": [], "history": [], "dns_log": [], "tried": {}},   # dns_log: every record the failover re-pointed, so each one can be put back; tried: dead servers looked at without a target
+    "failover": {"seen": {}, "pending": [], "history": [], "dns_log": [], "tried": {}, "bad": {}},   # dns_log: every record the failover re-pointed, so each one can be put back; tried: dead servers looked at without a target
     # rebuilds that were started but not finished: a restart of the panel in the middle must not leave a removed tunnel unbuilt
     "pending_builds": {"items": []},
     # tunnels removed on request: a copy of each so that it can be restored (30 days)

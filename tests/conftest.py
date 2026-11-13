@@ -53,6 +53,8 @@ def _no_type_test_in_moves(monkeypatch):
     from nikatel.services import failover
 
     monkeypatch.setattr(failover, "PICK_BEST", False)
+    monkeypatch.setattr(failover, "PUSH_CHECK", False)      # (1.69.260: the push probe before a move needs SSH - tests/test_move_resilience.py turns it on with a stub)
+    failover._PUSH.clear()
 
 
 @pytest.fixture(autouse=True)

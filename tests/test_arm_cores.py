@@ -5,6 +5,7 @@ server what it is (`uname -m`) before it copies, updates both kinds in one run, 
 import gzip
 import io
 import re
+import subprocess
 import tarfile
 import types
 import zipfile
@@ -247,7 +248,7 @@ def test_backhaul_for_an_arm_server_comes_from_the_panels_arm_build_not_from_the
     monkeypatch.setattr(builder, "run_action", lambda *a, **k: "")
     monkeypatch.setattr(builder, "_put", lambda *a, **k: None)
     monkeypatch.setattr(builder, "_unit", lambda *a, **k: "active")
-    monkeypatch.setattr(builder.subprocess, "run", lambda cmd, **k: (scp.append(cmd), types.SimpleNamespace(returncode=0, stderr=""))[1])
+    monkeypatch.setattr(subprocess, "run", lambda cmd, **k: (scp.append(cmd), types.SimpleNamespace(returncode=0, stderr=""))[1])
     iran, foreign = Node("203.0.113.1", "root", 22), Node("203.0.113.2", "root", 22)
     builder.ensure_backhaul(iran, foreign, {"backhaul": True, "arch": "x86_64"}, {"backhaul": False, "arch": "aarch64"}, 1)
     assert asked == [("backhaul", "arm64")] and len(scp) == 1 and str(arm) in scp[0] and str(cache / "backhaul") not in scp[0]          # (the ARM file went to the ARM server; the x86 copy in the cache stayed where it was)
@@ -278,7 +279,7 @@ def test_two_x86_servers_still_copy_from_the_one_that_has_it(monkeypatch, tmp_pa
     monkeypatch.setattr(builder, "run_action", lambda *a, **k: "")
     monkeypatch.setattr(builder, "_put", lambda *a, **k: None)
     monkeypatch.setattr(builder, "_unit", lambda *a, **k: "active")
-    monkeypatch.setattr(builder.subprocess, "run", run)
+    monkeypatch.setattr(subprocess, "run", run)
     builder.ensure_backhaul(Node("203.0.113.1", "root", 22), Node("203.0.113.2", "root", 22), {"backhaul": True, "arch": "x86_64"}, {"backhaul": False, "arch": "x86_64"}, 1)
     assert asked == [] and len(scp) == 2                                                  # (fetched from the server that has it, put on the one that has not: the panel's cache of cores is not asked)
 

@@ -12,7 +12,6 @@ import ipaddress
 import random
 import re
 import secrets
-import subprocess
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -26,8 +25,7 @@ from ..config import get_settings
 from ..db import session
 from ..log import get_logger
 from ..models import ActionLog, Server, Tunnel, is_protected, is_standby, is_temp
-from ..ssh import Node, SSHError, ensure_via, run_action, run_script, via_of
-from ..ssh import target as ssh_target
+from ..ssh import Node, SSHError, copy_file, ensure_via, run_action, run_script, via_of
 from . import linkmodels
 from . import settings as st
 from .events import emit
@@ -721,7 +719,6 @@ def ensure_backhaul(iran: Node, foreign: Node, fi: dict, ff: dict, aid: int) -> 
     cache = s.data_dir.parent / "engines"
     cache.mkdir(parents=True, exist_ok=True)
     local = cache / "backhaul"
-    opts = ["-i", str(s.ssh_key), "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=accept-new", "-o", f"UserKnownHostsFile={s.known_hosts}", "-o", "ConnectTimeout=15"]
     from . import engines  # (late: engines imports a great deal)
 
     a_src, a_dst = (engines.arch_key(f.get("arch") or "x86_64") for f in (f_src, f_dst))          # (facts without the machine: an x86 server, as before)
@@ -736,15 +733,21 @@ def ensure_backhaul(iran: Node, foreign: Node, fi: dict, ff: dict, aid: int) -> 
         _say(aid, f"copying the backhaul binary from {src.host} to {dst.host} through the panel")
 
     if a_src == "amd64" and a_dst == "amd64" and (not local.exists() or local.stat().st_size < 1024):
-        r = subprocess.run(["scp", *opts, "-P", str(src.port), "--", f"{ssh_target(src)}:/usr/local/bin/backhaul", str(local)], capture_output=True, text=True, timeout=240, check=False)
+        try:
+            copy_file(src, local, "/usr/local/bin/backhaul", to_server=False, timeout=240)
+        except SSHError as e:
+            raise RuntimeError("could not fetch the backhaul binary: " + str(e)[:120]) from e
 
-        if r.returncode != 0 or local.stat().st_size < 1024:
-            raise RuntimeError("could not fetch the backhaul binary: " + r.stderr.strip()[:120])
+        if local.stat().st_size < 1024:
+            raise RuntimeError("could not fetch the backhaul binary: the file that came is empty")
 
-    r = subprocess.run(["scp", *opts, "-P", str(dst.port), "--", str(local), f"{ssh_target(dst)}:/usr/local/bin/.backhaul.nikatel-tmp"], capture_output=True, text=True, timeout=240, check=False)
+    try:
+        via = copy_file(dst, local, "/usr/local/bin/.backhaul.nikatel-tmp", timeout=240)          # (1.69.260: a copy that stalls on the direct way goes through a jump server, as a command does)
+    except SSHError as e:
+        raise RuntimeError("could not copy the backhaul binary to the server: " + str(e)[:120]) from e
 
-    if r.returncode != 0:
-        raise RuntimeError("could not copy the backhaul binary to the server: " + r.stderr.strip()[:120])
+    if via:
+        _say(aid, f"the direct copy to {dst.host} stalls: the binary went through {via}")
 
     run_action(dst, "restart_units", {"UNITS": "nikatel-noop.service"})   # no-op touch to keep the action path; harmless if absent
     _put(dst, "/usr/local/bin/backhaul-install.sh", "#!/bin/sh\nset -e\nchmod 755 /usr/local/bin/.backhaul.nikatel-tmp\n/usr/local/bin/.backhaul.nikatel-tmp -v >/dev/null 2>&1\nmv -f /usr/local/bin/.backhaul.nikatel-tmp /usr/local/bin/backhaul\necho installed\n", "0755")
