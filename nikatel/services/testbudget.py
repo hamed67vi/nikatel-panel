@@ -3,7 +3,8 @@ traffic too: every test moves up to 120 MB through a tunnel, a tunnel is measure
 
 What it counts: the bytes the streams of every speed test moved (`probe_run` says them: `w_moved`; build_other.parse_probe adds them here), per Tehran day, kept for KEEP_DAYS days. What it does with the count:
   routine  (the 90-minute measurements, the verify surveys, the night survey) go on while the day has used under ROUTINE_SHARE of the budget; from STRETCH's shares on the 90 minutes become 2 and 4 times as long;
-  urgent   (a tunnel that dropped or is very slow, a tunnel nobody has measured yet, a pair nobody has surveyed) go on until the budget is used;
+  urgent   (a tunnel that dropped or is very slow, a pair nobody has surveyed) go on until the budget is used;
+  first    (a tunnel nobody has measured yet: its row shows a dash until its first test - 1.69.265) goes on until the day has used FIRST_SHARE of the budget: ONE light test, never held for hours by a day the surveys and the moves filled;
   cut      (a tunnel that is cut: the repair and its tests) are never held back;
   by hand  (the owner's own "Test now") are never held back.
 The budget is `daily_gb` in the settings document `testbudget` (default 30 GB, a day is a Tehran day)."""
@@ -20,6 +21,7 @@ from . import settings as st
 log = get_logger("testbudget")
 ROUTINE_SHARE = 0.8              # the routine tests stop at this share of the day's budget ...
 STRETCH = ((0.5, 2), (0.8, 4))     # ... and from these shares the routine interval is this many times as long
+FIRST_SHARE = 1.5                # the first measurement of a new tunnel goes on until the day has used this share (1.69.265: it waited for the next Tehran day at 125 %)
 KEEP_DAYS = 14
 TEHRAN = 12600                   # UTC+3:30
 _LOCK = threading.Lock()
@@ -81,11 +83,11 @@ def share(now: int | None = None) -> float:
 
 
 def allow(level: str = "routine", now: int | None = None) -> bool:
-    """May a test of this level go on now? "cut" always; "urgent" until the budget is used; anything else (routine) until ROUTINE_SHARE of it is."""
+    """May a test of this level go on now? "cut" always; "first" until FIRST_SHARE of the budget is used; "urgent" until the budget is used; anything else (routine) until ROUTINE_SHARE of it is."""
     if level == "cut":
         return True
 
-    return share(now) < (1.0 if level == "urgent" else ROUTINE_SHARE)
+    return share(now) < {"first": FIRST_SHARE, "urgent": 1.0}.get(level, ROUTINE_SHARE)
 
 
 def stretch(now: int | None = None) -> int:

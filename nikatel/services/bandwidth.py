@@ -635,7 +635,7 @@ def run() -> None:
     ids = _due(now)
 
     if ids and not testbudget.allow("routine", now):          # (1.69.223: the day's volume of the Doctor's own tests is used: only a tunnel with no number yet, or one that dropped, is still measured - until the whole budget is used)
-        ids = [i for i in ids if testbudget.allow("urgent", now) and (_no_sample(i) or _in_trouble(i))]
+        ids = [i for i in ids if (_no_sample(i) and testbudget.allow("first", now)) or (testbudget.allow("urgent", now) and _in_trouble(i))]          # (1.69.265: a tunnel with no number yet is measured up to 150 % of the budget, one that dropped up to the whole budget)
 
     if not ids:
         return

@@ -118,3 +118,30 @@ def test_the_surveys_wait_when_the_budget_is_used_a_pair_nobody_knows_goes_first
     knowledge.run()
     assert started == []                                                                                      # (the budget is used: nothing)
     assert knowledge.state()["volume"]["used_gb"] >= 10.0                                                     # (the page says how much today's tests moved)
+
+
+def test_the_level_first_goes_on_after_the_whole_budget_but_not_without_end():
+    st.put("testbudget", {"daily_gb": 10})
+    testbudget.spend(12.5 * GB, "probe", NOW)
+    assert not testbudget.allow("urgent", NOW) and testbudget.allow("first", NOW) and testbudget.allow("cut", NOW)      # (125 %: a tunnel nobody has measured is still measured)
+    testbudget.spend(3 * GB, "probe", NOW)
+    assert not testbudget.allow("first", NOW) and testbudget.allow("cut", NOW)                                       # (155 %: even that waits, a test that fails again and again cannot go on for ever)
+
+
+def test_a_tunnel_with_no_number_is_measured_when_the_day_is_used_one_that_dropped_waits(monkeypatch):
+    import time as _t
+
+    st.put("testbudget", {"daily_gb": 10})
+    testbudget.spend(12.5 * GB, "probe", int(_t.time()))
+    measured = _routine(monkeypatch, [7])
+    monkeypatch.setattr(bandwidth, "_no_sample", lambda i: True)
+    bandwidth.run()
+    assert measured == [7]                                                                                    # (a new tunnel: its dash is not left for the next Tehran day)
+    measured = _routine(monkeypatch, [6], trouble=(6,))
+    bandwidth.run()
+    assert measured == []                                                                                     # (a tunnel that was measured before and dropped: the whole budget is used, it waits)
+    testbudget.spend(3 * GB, "probe", int(_t.time()))
+    measured = _routine(monkeypatch, [7])
+    monkeypatch.setattr(bandwidth, "_no_sample", lambda i: True)
+    bandwidth.run()
+    assert measured == []                                                                                     # (150 % used: nothing goes on)

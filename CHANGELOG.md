@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.69.265 - A new tunnel is measured even when the day's test volume is used
+
+> **In short:** the owner (2026-11-13), with a picture of a tunnel row: "why is this in this state, and why only a dash?" The row showed a dash and "measuring" for 6.5 hours. **Cause:** the Doctor's daily test volume (30 GB, a Tehran day) was used up to 125 % that day (the moves, the type tests and the surveys), and from the whole budget on the Doctor stopped even the **first** measurement of a tunnel nobody had measured - so the two tunnels it had built after a server went off were left without a capacity number until the next Tehran midnight. **Now:** a tunnel with no number yet is measured (ONE light test, at most 120 MB) until the day has used **150 %** of the budget; a test that fails again and again cannot go on for ever. Nothing else changed: the routine measurements still stop at 80 %, a tunnel that dropped waits at 100 %, a cut tunnel and the owner's own "Test now" are never held back.
+>
+> **به زبان ساده:** سقف حجم روزانهٔ تست‌های Doctor (۳۰ گیگ در هر روز تهران) آن روز پر شده بود (۱۲۵٪؛ جابه‌جایی‌ها و تست نوع و بررسی‌ها) و با پر شدن کامل، Doctor حتی **اولین اندازه‌گیری** یک تانل بی‌عدد را هم متوقف می‌کرد؛ برای همین دو تانلی که بعد از خاموشی سرور ساخته شده بودند ۶ ساعت فقط «—» و «measuring» نشان می‌دادند. حالا تانل بی‌عدد تا ۱۵۰٪ سقف اندازه‌گیری می‌شود (یک تست سبک، حداکثر ۱۲۰ مگابایت). بقیهٔ قواعد همان است.
+
+**Proved:** `tests/test_testbudget.py` (the new level, and a new tunnel measured at 125 % while one that dropped waits).
+
 ## 1.69.264 - The PROTECTED tag is gone from the Tunnel manager list
 
 > **In short:** the owner (2026-11-13), with a picture of the **PROTECTED** tag beside a tunnel's name: "no PROTECTED tag in the Tunnel manager list - why are these tags still shown?" The tag (put there by 1.69.226) is no longer drawn. **Nothing else changed:** a protected tunnel is still repaired and restarted by the Doctor and still never moved, replaced, rebuilt or removed; the protection is set and read where it always was (the tunnel's menu and the Doctor). The ECO, AI and L2TP tags beside a tunnel's name stay. The earlier version of this change was prepared by another session on 2026-11-13 and never shipped (its builder kept waiting for the panel server to be quiet).
