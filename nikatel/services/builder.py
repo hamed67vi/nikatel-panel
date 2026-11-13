@@ -742,6 +742,11 @@ def ensure_backhaul(iran: Node, foreign: Node, fi: dict, ff: dict, aid: int) -> 
             raise RuntimeError("could not fetch the backhaul binary: the file that came is empty")
 
     try:
+        run_action(dst, "engine_prep", {"FILE": "/usr/local/bin/.backhaul.nikatel-tmp"}, timeout=30)          # (1.69.263: the old temp file goes - a stalled old copy may still hold it open: the new copy is a NEW file)
+    except SSHError:
+        pass
+
+    try:
         via = copy_file(dst, local, "/usr/local/bin/.backhaul.nikatel-tmp", timeout=240)          # (1.69.260: a copy that stalls on the direct way goes through a jump server, as a command does)
     except SSHError as e:
         raise RuntimeError("could not copy the backhaul binary to the server: " + str(e)[:120]) from e

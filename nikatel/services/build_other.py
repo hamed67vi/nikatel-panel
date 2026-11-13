@@ -745,12 +745,41 @@ def _install_sink(b: Build, foreign: Node, key: str, bind: str = "") -> None:
         raise RuntimeError("the test door did not start on the foreign server: " + out.strip()[-160:])
 
 
+BUSY_RX = re.compile(r"Failed to execute (/usr/local/bin/[A-Za-z0-9._-]+|/opt/nikatel-xgw/[A-Za-z0-9._-]+): Text file busy")
+
+
+def _busy_engine(node: Node, unit: str, logs: str, b: Build) -> bool:
+    """(1.69.263) The core cannot start: "Text file busy" - an old copy that never ended still holds the file open for writing (a bulk copy to this server stalled earlier and its sftp-server stayed). The core is put there again as a
+    NEW file and the unit is started once more. True when the unit runs now; False when this is not that trouble or the repair did not help (the caller says what the unit said)."""
+    m = BUSY_RX.search(logs or "")
+    eng = next((k for k, v in engines.ENGINES.items() if m and v["bin"] == m.group(1)), "")
+
+    if not eng:
+        return False
+
+    _say(b.aid, f"{engines.ENGINES[eng]['title']} on {node.host} cannot start: an old copy still holds its file open (\"Text file busy\"). It is put there again as a new file and {unit} is started once more.")
+
+    try:
+        engines.force_install(node, eng)
+        run_action(node, "restart_units", {"UNITS": unit}, timeout=60)
+    except (SSHError, RuntimeError, ValueError) as e:
+        _say(b.aid, f"It could not be put there again: {str(e)[:120]}")
+        return False
+
+    time.sleep(3)
+    return _unit(node, unit) == "active"
+
+
 def _start(node: Node, label: str, unit: str, b: Build) -> None:
     b.created.append(node)
     st = _unit(node, unit)
 
     if st != "active":
         logs = run_script(node, "unit_log", {"UNIT": unit}, timeout=20)
+
+        if _busy_engine(node, unit, logs, b):
+            return
+
         raise RuntimeError(f"the {label} side did not start ({unit} is {st}): {logs.strip()[-300:]}")
 
 

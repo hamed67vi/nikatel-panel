@@ -278,6 +278,12 @@ def prefetch() -> dict:
     return out
 
 
+def parse_writers(probe: str) -> int:
+    """Pure (1.69.263): how many processes the answer of `engine_sha` says hold the core open for writing (`WRITERS=2`); 0 when it says nothing (an older answer)."""
+    m = re.search(r"WRITERS=(\d+)", probe or "")
+    return int(m.group(1)) if m else 0
+
+
 def _copy_to_node(node: Node, engine: str, f: Path) -> None:
     """Copy the core `f` (the panel's cache) next to its place on the server (`<bin>.nikatel.new`) with scp: nothing runs from it yet. The Xray gateway keeps its binary in a directory of its own, made first. RuntimeError with
     the sentence when the copy fails. (The Update button used to send the binary as base64 through the `put_file` action: its path and size rules refuse a core - on 2026-10-25 an update of Xray failed on all 29 servers at once.)"""
@@ -287,12 +293,17 @@ def _copy_to_node(node: Node, engine: str, f: Path) -> None:
         run_action(node, "xgw_mkdir", timeout=30)
 
     try:
+        run_action(node, "engine_prep", {"FILE": f"{e['bin']}.nikatel.new"}, timeout=30)          # (1.69.263: the old temp file goes, the copy makes a NEW file - a stalled old copy that holds the old one open cannot make the core busy)
+    except SSHError:
+        pass                                                                  # (the copy below says so when the server cannot be reached)
+
+    try:
         copy_file(node, f, f"{e['bin']}.nikatel.new", timeout=300)          # (1.69.260: through a jump server when the direct copy stalls)
     except SSHError as err:
         raise RuntimeError(f"could not copy {e['title']} to {node.host}: " + str(err)[:120]) from err
 
 
-def ensure_on_node(node: Node, engine: str, say=None, only_missing: bool = False) -> bool:
+def ensure_on_node(node: Node, engine: str, say=None, only_missing: bool = False, force: bool = False) -> bool:
     """The node runs the same build of the core as the panel's cache. Returns True when it was (re)installed. With `only_missing` a core that is there is left exactly as it is (another build may be what
     the tunnels of that server run - a server added to the panel often has tunnels already): it is put there only when it is not."""
     e = ENGINES[engine]
@@ -310,8 +321,13 @@ def ensure_on_node(node: Node, engine: str, say=None, only_missing: bool = False
     f = cache_file(engine) if arch == "amd64" else cache_file(engine, arch)          # (an ARM server gets the ARM build of the same release: a binary of the wrong machine would never start)
     sha = hashlib.sha256(f.read_bytes()).hexdigest()
 
-    if f"SHA={sha}" in probe:
+    held = parse_writers(probe)
+
+    if f"SHA={sha}" in probe and not held and not force:
         return False
+
+    if held and say:
+        say(f"{e['title']} on {node.host} is the right build but {held} old copy(ies) still hold its file open for writing (it cannot start: 'Text file busy'): it is put there again as a new file")
 
     _copy_to_node(node, engine, f)
     out = run_action(node, "engine_swap", {"BIN": e["bin"], "SHA": sha, "UNITS": "nikatel-none.service", "WATCH": "0"}, timeout=120)
@@ -323,6 +339,11 @@ def ensure_on_node(node: Node, engine: str, say=None, only_missing: bool = False
         say(f"{e['title']} installed on {node.host}")
 
     return True
+
+
+def force_install(node: Node, engine: str, say=None) -> bool:
+    """(1.69.263) Put the core on this server again, as a NEW file, even when it is the same build (the file that is there is held open for writing and cannot start)."""
+    return ensure_on_node(node, engine, say=say, force=True)
 
 
 def install_on(server_id: int, names=None, step=None) -> dict:

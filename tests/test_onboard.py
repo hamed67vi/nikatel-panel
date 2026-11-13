@@ -192,10 +192,10 @@ def test_the_xray_gateway_directory_is_made_before_its_copy_and_the_others_need_
     monkeypatch.setattr(engines.subprocess, "run", lambda *a, **k: types.SimpleNamespace(returncode=0, stderr=""))
     node = Node("203.0.113.9", "root", 22)
     assert engines.ensure_on_node(node, "xray") is True
-    assert [c[1] for c in calls] == ["engine_sha", "xgw_mkdir", "engine_swap"] and calls[0][2] == {"BIN": "/opt/nikatel-xgw/xray"}
+    assert [c[1] for c in calls] == ["engine_sha", "xgw_mkdir", "engine_prep", "engine_swap"] and calls[0][2] == {"BIN": "/opt/nikatel-xgw/xray"}
     calls.clear()
     assert engines.ensure_on_node(node, "paqet") is True
-    assert [c[1] for c in calls] == ["engine_sha", "engine_swap"] and calls[0][2] == {"BIN": "/usr/local/bin/paqet"}
+    assert [c[1] for c in calls] == ["engine_sha", "engine_prep", "engine_swap"] and calls[0][2] == {"BIN": "/usr/local/bin/paqet"}
 
 
 def test_a_core_that_is_there_is_left_exactly_as_it_is_by_an_install(monkeypatch, tmp_path):

@@ -162,6 +162,9 @@ echo "ARCH $(uname -m)"
     # checksum of one core binary (is the same build installed as the one in the panel's cache?) and the machine the server is (an ARM server gets the ARM build of the core)
     "engine_sha": (r"""if [ -x '@BIN@' ]; then echo "SHA=$(sha256sum '@BIN@' | awk '{print $1}')"; else echo SHA=none; fi
 echo "ARCH=$(uname -m)"
+# (1.69.263) how many processes hold the core OPEN FOR WRITING: the sftp-server of a copy that stalled and never ended on this side (2026-11-13: a bulk copy to one Iran server stalled all morning). The binary is the same build but it
+# cannot run - the unit that starts it fails with "Text file busy" - so it must be put there again, as a new file.
+W=0; for fd in /proc/[0-9]*/fd/*; do [ "$(readlink "$fd" 2>/dev/null)" = '@BIN@' ] || continue; fl=$(awk '/^flags:/ {print $2}' "${fd%/fd/*}/fdinfo/${fd##*/}" 2>/dev/null); [ -n "$fl" ] && [ $((8#$fl & 3)) -ne 0 ] && W=$((W+1)); done; echo "WRITERS=$W"
 """, {"BIN": r"^/(usr/local/bin|opt/nikatel-xgw)/[A-Za-z0-9._-]{1,40}$"}),
 
     # what the BackPack / Paqet / Chisel builders must know about a server
@@ -1827,6 +1830,11 @@ if [ -n "$U" ]; then
   [ -n "$V" ] && [ -z "$B" ] && echo "UNSTABLE:$V"
 fi; true
 """, {"BIN": r"^/(usr/local/bin|opt/nikatel-xgw)/[A-Za-z0-9._-]{1,40}$", "SHA": r"^[0-9a-f]{64}$", "UNITS": r"^[A-Za-z0-9*._-]{1,40}$", "WATCH": r"^\d{1,3}$"}),
+
+    # (1.69.263) take a stale temp file of a copy away ('<bin>.nikatel.new', '.backhaul.nikatel-tmp') BEFORE the next copy: the copy then makes a NEW file, and an old stalled copy that still holds the old one open for writing
+    # can never make the binary busy (a file that is held for writing cannot be run)
+    "engine_prep": (r"""rm -f '@FILE@'; echo PREPARED
+""", {"FILE": r"^/(usr/local/bin|opt/nikatel-xgw)/[A-Za-z0-9._-]{1,60}$"}),
 
     # put the build back that engine_swap kept ('<bin>.nikatel.prev'): the new one is kept beside it as '<bin>.nikatel.bad' for a look, the units that run are restarted and must come back
     "engine_rollback": (r"""set -e; P='@BIN@.nikatel.prev'; [ -f "$P" ] || { echo NO_PREV; exit 2; }
