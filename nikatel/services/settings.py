@@ -29,6 +29,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
     "retypewatch": {"watch": {}},                                 # the notes of the changes of type the Doctor watches the users after (services/retypewatch.py)
     "testbudget": {"daily_gb": 30.0, "day": 0, "bytes": 0, "by": {}, "days": {}},          # the volume the Doctor's own speed tests moved today and the daily budget (services/testbudget.py)
     "wiremeter": {"rings": {}},                                   # the wire meter (services/wiremeter.py): per tunnel the last 24 hours of [time, users bytes, wire bytes]
+    "duel": {"on": True, "cases": {}},                            # the duel (services/duel.py): `on` = the owner's switch, `cases` = per tunnel the rounds of its test against its standby and what they decided
     "nodedns": {"healed": {}, "done": []},                        # the Doctor's look at the name lookups of the foreign servers (services/nodedns.py): when a server's resolvers were last put in order (per server id), and the times of the heals of the last day
     "orphans": {"seen": {}, "done": []},                          # the Doctor's sweep of leftovers (services/orphans.py): when a unit was first seen unowned and idle, and when it removed one
                                      # when the Doctor last removed an extra copy of a tunnel (services/janitor.py: one every half hour, three a day)
