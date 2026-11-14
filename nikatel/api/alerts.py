@@ -24,6 +24,7 @@ class TelegramIn(BaseModel):
     enabled: bool = False
     token: str = ""          # empty keeps the stored one
     chat_id: str = ""
+    thread_id: int | None = Field(None, ge=0, le=2**31 - 1)          # the topic of the group the alerts and reports go to: 0 = the main page; left out = keep the stored one (a screen that does not know the field must not wipe it)
 
 
 @router.get("/settings/telegram")
@@ -34,7 +35,7 @@ def telegram_get():
 
 @router.put("/settings/telegram")
 def telegram_put(body: TelegramIn):
-    """Save the Telegram bot token and chat id (the token's shape is checked)."""
+    """Save the Telegram bot token, chat id and (optional) topic id of the group (the token's shape is checked)."""
     if body.token and not valid_token(body.token):
         raise HTTPException(400, "this does not look like a bot token (digits:letters, from @BotFather)")
 
@@ -42,9 +43,10 @@ def telegram_put(body: TelegramIn):
         raise HTTPException(400, "the chat id is a number (negative for groups/channels) or @channelname")
 
     old = st.get("telegram")
-    st.put("telegram", {"enabled": body.enabled, "token": body.token, "chat_id": body.chat_id})
+    thread = int(old.get("thread_id") or 0) if body.thread_id is None else body.thread_id
+    st.put("telegram", {"enabled": body.enabled, "token": body.token, "chat_id": body.chat_id, "thread_id": thread})
 
-    if (body.token and body.token != old.get("token")) or body.chat_id != old.get("chat_id"):          # (another bot or another chat: what the old ones were answered says nothing about these)
+    if (body.token and body.token != old.get("token")) or body.chat_id != old.get("chat_id") or thread != int(old.get("thread_id") or 0):          # (another bot, chat or topic: what the old ones were answered says nothing about these)
         tg_state.forget()
 
     return {"ok": True, **st.public("telegram"), "state": tg_state.state()}

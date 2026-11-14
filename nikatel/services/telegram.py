@@ -123,6 +123,11 @@ def _conf(require_enabled: bool) -> tuple[str, str] | None:
     return c["token"], c["chat_id"]
 
 
+def _thread() -> int:
+    """The topic of the group that alerts, reports and the test message go to (1.69.269; 0 = the main page of the group). Backups have topics of their own (backup.py)."""
+    return _num(st.get("telegram").get("thread_id"))
+
+
 def ready() -> bool:
     """Is Telegram switched on with a usable token and chat (so a file can be sent)?"""
     return _conf(True) is not None
@@ -136,10 +141,17 @@ def send_text(text: str, require_enabled: bool = True) -> tuple[bool, str]:
 
     token, chat = conf
 
+    body = {"chat_id": chat, "text": text[:4000], "disable_web_page_preview": True}
+    topic = _thread()
+
     try:
-        r = httpx.post(f"https://api.telegram.org/bot{token}/sendMessage", timeout=20,
-                       json={"chat_id": chat, "text": text[:4000], "disable_web_page_preview": True})
+        r = httpx.post(f"https://api.telegram.org/bot{token}/sendMessage", timeout=20, json={**body, **({"message_thread_id": topic} if topic else {})})
         d = r.json()
+
+        if topic and not d.get("ok") and "thread not found" in str(d.get("description") or "").lower():          # (the topic was deleted in Telegram: the message is not lost - it goes to the main page of the group)
+            log.warning("the Telegram topic %s is gone: sending to the main page", topic)
+            r = httpx.post(f"https://api.telegram.org/bot{token}/sendMessage", timeout=20, json=body)
+            d = r.json()
     except (httpx.HTTPError, ValueError) as e:
         log.warning("send failed: %s", e)
         return False, f"Telegram did not answer: {str(e)[:80]}"

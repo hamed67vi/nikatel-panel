@@ -12,7 +12,7 @@ from ..db import generation, session
 from ..models import Setting
 
 DEFAULTS: dict[str, dict[str, Any]] = {
-    "telegram": {"enabled": False, "token": "", "chat_id": ""},
+    "telegram": {"enabled": False, "token": "", "chat_id": "", "thread_id": 0},
     # down_seconds / up_seconds: how long a thing must stay bad / good (as its checker confirmed it) before one DOWN / UP message (services/alerts.py); the older rules (failed checks in a row, minutes, stable seconds) became these two - see _alerts_today
     "alerts": {"down_seconds": 10, "up_seconds": 15, "remind_hours": 0, "flap_max": 3, "flap_quiet_hours": 6, "muted": []},
     "report": {"enabled": True, "hour": 9, "tz_offset_minutes": 210},   # 09:00 Tehran (UTC+3:30)
