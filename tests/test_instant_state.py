@@ -74,7 +74,7 @@ def test_a_server_that_goes_off_wakes_the_look_at_its_tunnels(monkeypatch):
 def test_the_signature_of_the_states_changes_with_a_server_or_a_tunnel_and_carries_no_name(client):
     w = _world("i3")
     a = client.get("/api/tunnels/brief").json()
-    assert a["ok"] is True and len(a["sig"]) == 12 and a["servers"] >= 3 and a["tunnels"] >= 2 and set(a) == {"ok", "sig", "servers", "tunnels"}
+    assert a["ok"] is True and len(a["sig"]) == 12 and a["servers"] >= 3 and a["tunnels"] >= 2 and set(a) == {"ok", "sig", "servers", "tunnels", "alerts"}
     assert client.get("/api/tunnels/brief").json()["sig"] == a["sig"]                 # (the same states: the same signature)
 
     with session() as db:

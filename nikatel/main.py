@@ -31,6 +31,7 @@ from .services import (
     builder,
     carry,
     cfgstats,
+    chronic,
     comeback,
     commander,
     configs,
@@ -252,6 +253,7 @@ def _register_jobs() -> None:
     jobs.register("knowledge", 600, knowledge.run)            # what the Doctor KNOWS about every pair of servers: the night survey of the tunnel types, one pair at a time, when nothing else needs the servers (services/knowledge.py)
     jobs.register("wiremeter", wiremeter.EVERY, wiremeter.run)    # what every tunnel costs on the wire against what its users move: three light reads of an Iran server every 10 minutes, nothing is changed (1.69.266)
     jobs.register("duel", duel.EVERY, duel.run)                    # the duel (1.69.268): a tunnel and its warm standby tested one after the other, round after round; a standby that is clearly faster in every round becomes the tunnel's type, by the Doctor's own no-cut change and its rails
+    jobs.register("chronic", chronic.EVERY, chronic.run)           # the chronic look (1.69.269): a tunnel cut eight times in a week - three of them in the last day - is moved to a steadier Iran server by the Doctor's own move (mode move), and told; a server with two chronic tunnels says so
     jobs.register("bandwidth", 60, bandwidth.run)               # the bandwidth of every tunnel: one light measurement per minute at most (two connections, 120 MB at most; through the door for BackPack / Paqet / Chisel), each tunnel about every 4 hours (1.69.226; was 90 minutes) and not at all while its own users carry 60 % of its usual level; a drop is looked at by the Doctor (services/bandwidth.py)
     jobs.register("temp-purge", 600, tunnel_test.purge_stale)
     jobs.register("housekeeping", 6 * 3600, housekeeping.run)   # old events and finished repair stories go; the write-ahead log is folded back

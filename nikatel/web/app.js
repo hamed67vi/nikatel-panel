@@ -537,12 +537,21 @@ let lastTick = Date.now();
 setInterval(() => { if (Date.now() - lastTick < (state.page === "nodes" ? 8000 : 15000)) return; if (!document.hidden && !$("#app").classList.contains("hidden") && !state.edit && !state.open && !state.nodeWin && !state.build && !["bot", "settings"].includes(state.page) && !cf.open && !cf.edit && !cf.add && !cf.sub && !cf.subEdit && !document.activeElement.matches("input, textarea, select") && !document.querySelector(".nk-dd, .lab-menu, .pn-uchk:checked, .pn-hchk:checked, #modal .modal:not(.keep)")) { lastTick = Date.now(); refresh(true); } }, 2000);      // (a window that is open - Messages, Explain, a restore - is not drawn away by the round of the page behind: the tunnels page closed them within seconds)   // the servers page follows the pulse (every 10 s on the server)
 /* a change of the STATE of a server (on / off) or a tunnel (up, down ...) shows within ~2 s (the owner, 2026-10-20: "it detected very late - show it at once when a tunnel or a server is cut"): one signature of the
    states is asked every 2 s; when it changes the round of the page above is made due (lastTick = 0), so it redraws at once, under the same guards (no window open, nothing typed). */
+/* the alerts that do not reach the owner (1.69.269; the owner, 2026-11-14: the token had been refused for two weeks and no page said so): a red bar under the status bar, on EVERY page, while Telegram refuses the bot or messages wait for it;
+   the state comes with the brief the page asks every two seconds */
+const paintAlertBanner = a => {
+  const el = $("#alert-banner"); if (!el) return;
+  const text = a && a.bad ? String(a.text || "") : "";
+  if ((el.dataset.t || "") === text) return;
+  el.dataset.t = text; el.classList.toggle("hidden", !text); el.innerHTML = text ? `<b>⚠ Alerts</b> ${esc(text)}` : "";
+};
 let briefSig = null;
 setInterval(async () => {
   if (document.hidden || $("#app").classList.contains("hidden")) return;
   let r; try { r = await api("/api/tunnels/brief"); } catch (e) { return; }      // (a read that failed leaves what is shown)
   if (briefSig !== null && r.sig !== briefSig) lastTick = 0;
   briefSig = r.sig;
+  paintAlertBanner(r.alerts);
 }, 2000);
 /* the glass window: one thing opened from a row or a card; closed with ✕, Esc or a click outside */
 /* a window that is drawn again changes only what is different, in place: a value that changed is rewritten where it stands, everything else is not touched - so nothing blinks or jumps when Health, Quality, a check ... end */
@@ -2324,7 +2333,7 @@ PAGES.actions = async () => {
   const l2Row = f => { const t = Date.now() / 1000, tag = f.state === "hand" ? ["err", "needs a hand"] : ["warn", f.max ? "repairing" : "watching"], next = f.state === "working" && f.next ? (f.next > t ? ` · next repair in ${warpMin(f.next - t)}` : " · next repair within two minutes") : f.state === "hand" && f.max ? " · no more repairs today" : "";
     return `<div class="dx-iss l2tp ${f.state}" title="${esc(f.text)}"><span class="dx-fl">🔐</span><b>${esc(l2Name[f.part] || f.part)}</b><span class="dx-tag ${tag[0]}">${tag[1]}</span><span class="dx-wt">${esc(f.text)}${f.max ? ` · repaired ${f.tries} of ${f.max} times today` : ""}${next}</span></div>`; };
   const l2Box = l2w && l2w.on && l2w.configured ? `<div class="dx-issues dx-l2"><div class="dx-iss l2tp ${l2w.ok === false ? "bad" : l2w.ok ? "fine" : ""}" title="The L2TP watch looks at the entry, the exit, the tunnel between them, the direct server and the accounts mirror every two minutes and repairs what it can (services, ports, the route to the tunnel's far end, the exit's rules, the mirror, the tunnel's protection); the Doctor repairs the tunnel itself in place"><span class="dx-fl">🔐</span><b>L2TP</b><span class="dx-tag ${l2w.ok === false ? "err" : l2w.ok ? "ok" : "warn"}">${l2w.ok === false ? "not healthy" : l2w.ok ? "healthy" : "not looked yet"}</span><span class="dx-wt">${l2Parts}${l2w.at ? ` · looked ${ago(l2w.at)} ago` : ""}</span></div>${(l2w.flags || []).map(l2Row).join("")}</div>` : "";
-  const storm = outage && outage.storm ? `<div class="storm-banner" title="While it lasts nothing is deleted or rebuilt; the repair waits for the servers, then restarts what did not come back by itself.">⚠ <b>Mass disruption:</b> ${outage.servers_offline.length} server(s) offline, ${outage.tunnels_down.length} of ${outage.tunnels} tunnels down</div>` : "";
+  const storm = outage && outage.storm ? `<div class="storm-banner" title="While it lasts nothing is deleted or rebuilt; the repair waits for the servers, then restarts what did not come back by itself.">⚠ <b>Mass disruption:</b> ${(outage.servers_offline_carrying || outage.servers_offline).length} server(s) that carry tunnels offline, ${outage.tunnels_down.length} of ${outage.tunnels} tunnels down</div>` : "";
   /* the Doctor's mode (the owner, 2026-11-04): ONE bar - Off | Fix | Fix + move (the sentence of each is its tip), the minutes of the last one beside it, the switch of the lanes, and the buttons on the right; the number is saved as soon as it changes */
   const irn = (srvs || []).filter(s => s.role === "iran" && s.enabled);
   const cfg = (name, before, after, val, min, max, st) => `<div class="dr-nf" onclick="event.stopPropagation()"><span>${before}</span><span class="dr-num"><input name="${name}" type="number" min="${min}" max="${max}" step="1" data-st="${st}" value="${val}" ${ro ? "disabled" : ""} onchange="apCfg()"><span class="dr-st"><button type="button" tabindex="-1" aria-label="More" ${ro ? "disabled" : ""} onclick="apStep(this, 1)">${apIc("up")}</button><button type="button" tabindex="-1" aria-label="Less" ${ro ? "disabled" : ""} onclick="apStep(this, -1)">${apIc("down")}</button></span></span><span>${after}</span></div>`;

@@ -1531,11 +1531,13 @@ def outage_state() -> dict:
         servers = list(db.scalars(select(Server).where(Server.enabled.is_(True))))
         tunnels = list(db.scalars(select(Tunnel).where(Tunnel.enabled.is_(True))))
         by_tunnel = {t.name: off for t in tunnels if (off := servers_off(t))}
+        carrying = {sid for t in tunnels for sid in (t.iran_server_id, t.foreign_server_id)}          # (1.69.269: the servers that carry a tunnel that is switched on - a standby is a switched-off row)
 
     offline = [s.name for s in servers if s.online is False]
+    offline_carrying = [s.name for s in servers if s.online is False and s.id in carrying]
     down = [t.name for t in tunnels if t.state == "down"]
-    storm = len(offline) >= STORM_SERVERS or (len(tunnels) >= 4 and len(down) >= max(4, STORM_FRACTION * len(tunnels)))
-    return {"servers_offline": offline, "tunnels_down": down, "tunnels": len(tunnels), "storm": storm, "by_tunnel": by_tunnel}
+    storm = len(offline_carrying) >= STORM_SERVERS or (len(tunnels) >= 4 and len(down) >= max(4, STORM_FRACTION * len(tunnels)))          # (1.69.269, the owner, 2026-11-14: "3 servers offline" was two that had been off for days and carried nothing - the repair of a real cut waited for them)
+    return {"servers_offline": offline, "servers_offline_carrying": offline_carrying, "tunnels_down": down, "tunnels": len(tunnels), "storm": storm, "by_tunnel": by_tunnel}
 
 
 def repairing_names() -> list[str]:
@@ -1631,7 +1633,7 @@ def _tell_storm(o: dict) -> None:
     _STORM["told"] = now
 
     with session() as db:
-        emit(db, "warn", "actions", f"Mass disruption: {len(o['servers_offline'])} server(s) offline, {len(o['tunnels_down'])} of {o['tunnels']} tunnels down. "
+        emit(db, "warn", "actions", f"Mass disruption: {len(o.get('servers_offline_carrying', o['servers_offline']))} server(s) that carry tunnels offline, {len(o['tunnels_down'])} of {o['tunnels']} tunnels down. "
              "No tunnel is deleted or rebuilt while it lasts; the repair waits for the servers and then restarts what did not come back by itself.", "")
 
 

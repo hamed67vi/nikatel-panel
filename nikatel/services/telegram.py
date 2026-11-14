@@ -98,6 +98,11 @@ def _note(ok: bool, why: str = "") -> None:
                 log.warning("the Telegram state could not be kept: %s", e)
 
 
+def is_fatal(why: str) -> bool:
+    """Pure: does this answer say that Telegram refuses the BOT or the CHAT itself (a wrong token, a blocked bot, a chat that is gone) - not one message (a timeout, "too many requests")? The alerts that meet it are kept."""
+    return any(w in str(why or "").lower() for w in _FATAL)
+
+
 def valid_token(t: str) -> bool:
     return bool(_TOKEN.match(t or ""))
 

@@ -870,6 +870,8 @@ nav a .ic { width: 28px; font-size: 18px; } nav a .cnt { font-family: "Poppins",
 .side-ver { opacity: .22; } .side-ver:hover { opacity: .85; }
 /* ---- mass disruption */
 .storm-banner { margin: 0 0 10px; padding: 9px 12px; border-radius: 12px; border: 1px solid rgba(255,190,70,.5); background: rgba(255,190,70,.09); font-size: 12.5px; line-height: 1.5; }
+.alert-banner { margin: 0 0 12px; padding: 9px 12px; border-radius: 12px; border: 1px solid rgba(255,90,90,.6); background: rgba(255,90,90,.11); font-size: 12.5px; line-height: 1.5; cursor: pointer; }
+.alert-banner b { color: var(--bad, #ff6b6b); margin-right: 4px; }
 
 /* packet loss is yellow everywhere; red is for a full outage only */
 .loss { color: var(--warn); } .loss.hi { background: rgba(255,200,70,.16); }

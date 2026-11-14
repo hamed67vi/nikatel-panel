@@ -218,7 +218,9 @@ def tunnels_brief():
         servers = sorted((s.id, s.online is not False) for s in db.scalars(select(Server).where(Server.enabled.is_(True))))
         states = sorted((t.id, t.state) for t in db.scalars(select(Tunnel).where(Tunnel.enabled.is_(True))))
 
-    return {"ok": True, "sig": hashlib.md5(json.dumps([servers, states]).encode(), usedforsecurity=False).hexdigest()[:12], "servers": len(servers), "tunnels": len(states)}
+    from ..services import alerts as alerts_svc
+
+    return {"ok": True, "sig": hashlib.md5(json.dumps([servers, states]).encode(), usedforsecurity=False).hexdigest()[:12], "servers": len(servers), "tunnels": len(states), "alerts": alerts_svc.delivery_view()}          # (1.69.269: "alerts": the banner of every page says when they do not arrive)
 
 
 _USE: dict = {"at": 0, "rows": {}}

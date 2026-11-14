@@ -24,8 +24,9 @@ from ..db import session
 from ..log import get_logger
 from ..models import AlertState, Config, Maintenance, Panel, Server, Tunnel
 from . import settings as st
+from . import telegram as tgm
 from .events import emit
-from .telegram import send_text
+from .telegram import is_fatal, send_text
 
 log = get_logger("alerts")
 
@@ -225,6 +226,11 @@ _OUTBOX: list[dict] = []       # messages Telegram did not take yet, oldest firs
 _Q_LOCK = threading.Lock()     # the list (held for an instant)
 _SEND_LOCK = threading.Lock()  # one sender at a time (held while Telegram is asked: up to 20 s)
 _NEXT_TRY = {"at": 0.0}
+HELD_MAX = 60                  # (1.69.269) the messages Telegram REFUSES (a wrong token, a blocked bot: nothing a retry cures) are kept - the newest this many - and sent in ONE message when it answers again ...
+HELD_MAX_AGE = 3 * 86400       # ... for three days at most
+HELD_RETRY = 300               # the bot is asked again this often while messages are held
+_HELD_AT = {"at": 0.0}
+_VIEW: dict = {"at": 0.0, "v": {"bad": False, "held": 0}}      # what the page's banner reads (kept for ten seconds: the page asks every two)
 
 
 def retryable(why: str) -> bool:
@@ -249,6 +255,8 @@ def flush(force: bool = False) -> None:
     if not _SEND_LOCK.acquire(blocking=False):
         return                                   # another look is sending right now
 
+    refused = ""          # (why Telegram refused the bot in this look: the rest are held without asking again)
+
     try:
         while True:
             with _Q_LOCK:
@@ -262,14 +270,22 @@ def flush(force: bool = False) -> None:
                 _say("warn", f"{m['text'].splitlines()[0]} · dropped: Telegram did not take it for {_dur(OUTBOX_MAX_AGE)}")
                 continue
 
+            head = m["text"].splitlines()[0]
+
+            if refused:          # (Telegram refused the bot a moment ago: asking again for every message would only repeat the refusal)
+                _hold(m, refused)
+                _forget(m)
+                _say(m["level"], head + " · held: Telegram refuses the bot; it is sent when Telegram works again")
+                continue
+
             ok, why = send_text(m["text"])
             m["tries"] += 1
-            head = m["text"].splitlines()[0]
 
             if ok:
                 _forget(m)
                 _say(m["level"], head + " · sent" + (f" (after {m['tries']} tries, {_dur(time.time() - m['at'])} late)" if m["tries"] > 1 else ""))
                 log.info("alert sent: %s", head)
+                _release(time.time(), force=True)          # (Telegram works: what it refused before goes out now, in one message)
                 continue
 
             if retryable(why):
@@ -277,11 +293,108 @@ def flush(force: bool = False) -> None:
                 log.warning("alert not sent yet (%s); tried %s time(s), will try again", why, m["tries"])
                 return
 
+            if is_fatal(why):          # (the bot or the chat is refused - a wrong token, a blocked bot: nothing a retry cures: the message is KEPT, and sent in one digest when Telegram works again)
+                refused = why
+                _hold(m, why)
+                _forget(m)
+                _say(m["level"], head + f" · held: Telegram refuses the bot ({why[:80]}); it is sent when Telegram works again")
+                log.warning("alert held (%s): %s", why, head)
+                continue
+
             _forget(m)
             _say(m["level"], head + f" · not sent: {why}")
             log.info("alert NOT sent (%s): %s", why, head)
     finally:
         _SEND_LOCK.release()
+
+
+def _tz_off() -> int:
+    """Minutes the panel's clock (the report's) is ahead of UTC: 210 = Tehran."""
+    v = (st.get("report") or {}).get("tz_offset_minutes")
+    return 210 if v is None else int(v)
+
+
+def held_digest(items: list[dict], lost: int, now: float, off: int = 210) -> str:
+    """Pure: the ONE message that carries the alerts Telegram could not take - oldest first, each with its time (the panel's clock) and its first lines; at most 3,900 characters (Telegram's limit is 4,096)."""
+    def hm(ts) -> str:
+        return time.strftime("%H:%M", time.gmtime(int(ts) + off * 60))
+
+    rows = sorted(items, key=lambda x: int(x.get("at") or 0))
+    head = f"📬 {len(rows)} alert(s) could not be delivered while Telegram refused the bot (from {hm(rows[0]['at'])} to {hm(rows[-1]['at'])}, Tehran time) - oldest first:"
+    lines = []
+
+    for x in rows:
+        parts = [ln.strip() for ln in str(x.get("text") or "").splitlines() if ln.strip()]
+        lines.append(f"• {hm(x['at'])} {parts[0] if parts else ''}" + (" — " + " ".join(parts[1:3]) if len(parts) > 1 else ""))
+
+    tail = f"\n(+{lost} older ones were dropped: only the newest {HELD_MAX} are kept)" if lost else ""
+    return (head + "\n" + "\n".join(ln[:230] for ln in lines))[: 3900 - len(tail)] + tail
+
+
+def _hold(m: dict, why: str) -> None:
+    """Keep a message Telegram refuses (settings document `alerts_held`): the newest HELD_MAX, and how many older ones were dropped."""
+    with _Q_LOCK:
+        d = st.get("alerts_held")
+        items = list(d.get("items") or []) + [{"at": int(m["at"]), "level": m["level"], "text": str(m["text"])[:700]}]
+        st.put("alerts_held", {"items": items[-HELD_MAX:], "lost": int(d.get("lost") or 0) + max(0, len(items) - HELD_MAX), "why": str(why)[:200]})
+
+
+def _release(now: float, force: bool = False) -> None:
+    """Send the held messages as ONE digest (the sender lock is held by the caller). `force`: now, not only every HELD_RETRY seconds (a message has just gone through: Telegram works)."""
+    d = st.get("alerts_held")
+    kept = [x for x in (d.get("items") or []) if now - int(x.get("at") or 0) <= HELD_MAX_AGE]
+
+    if len(kept) != len(d.get("items") or []):
+        st.put("alerts_held", {"items": kept})
+
+    if not kept or (not force and now - _HELD_AT["at"] < HELD_RETRY):
+        return
+
+    _HELD_AT["at"] = now
+    ok, why = send_text(held_digest(kept, int(d.get("lost") or 0), now, _tz_off()))
+
+    if not ok:
+        log.info("the held alerts are not sent yet: %s", why)
+        return
+
+    st.put("alerts_held", {"items": [x for x in (st.get("alerts_held").get("items") or []) if x not in kept], "lost": 0, "why": ""})          # (what was held while the digest went out stays)
+    _say("ok", f"{len(kept)} held alert(s) were sent in one message: Telegram works again")
+
+
+def release_held(now: float | None = None) -> None:
+    """Job (every look): when messages are held, the bot is asked again every HELD_RETRY seconds; the digest goes out as soon as it answers."""
+    if not _SEND_LOCK.acquire(blocking=False):
+        return
+
+    try:
+        _release(time.time() if now is None else float(now))
+    finally:
+        _SEND_LOCK.release()
+
+
+def delivery_view(now: float | None = None) -> dict:
+    """What the banner of every page says (the owner, 2026-11-14: the token had been refused for two weeks and nothing on the pages said the alerts do not arrive): {"bad": bool, "held": n, "text": ...}. Bad when Telegram is
+    switched on and refuses the bot or the chat, or when held messages wait. Kept for ten seconds."""
+    now = time.time() if now is None else float(now)
+
+    if now - _VIEW["at"] < 10:
+        return _VIEW["v"]
+
+    held = len((st.get("alerts_held") or {}).get("items") or [])
+    v: dict = {"bad": False, "held": held}
+
+    if (st.get("telegram") or {}).get("enabled"):
+        s = tgm.state()
+
+        if s.get("ok") is False:
+            since = time.strftime("%Y-%m-%d", time.gmtime(int(s.get("since") or now) + _tz_off() * 60))
+            v = {"bad": True, "held": held, "why": str(s.get("why") or ""), "since": int(s.get("since") or 0),
+                 "text": f"Alerts are NOT reaching you: Telegram refuses the bot ({s.get('why') or 'no reason given'}) since {since}" + (f"; {held} alert(s) wait and go out in one message when it works again" if held else "") + ". Fix the bot token or the chat in Settings."}
+        elif held:
+            v = {"bad": True, "held": held, "why": "", "since": 0, "text": f"{held} alert(s) are waiting for Telegram: they go out in one message as soon as it answers."}
+
+    _VIEW.update(at=now, v=v)
+    return v
 
 
 def _forget(m: dict) -> None:
@@ -343,6 +456,7 @@ def prune_orphans(now: int | None = None) -> int:
 
 def run(now: int | None = None) -> None:
     flush()           # whatever Telegram did not take at the last look goes first
+    release_held()          # (1.69.269) what it REFUSED goes out in one message as soon as it answers
 
     conf = st.get("alerts")
     now = int(time.time() if now is None else now)

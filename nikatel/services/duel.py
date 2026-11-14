@@ -20,6 +20,11 @@ beside it and carrying nobody: a free laboratory. Testing the tunnel and its sta
               nothing runs while the day's volume of the Doctor's tests is used to its routine share (`testbudget`), while the servers carry users (`knowledge.not_now`), while a failover is on, or while the
               tunnel or its standby is not in its usual state. One round per turn of the job, one tunnel at a time.
 
+  evening     (1.69.269, the owner, 2026-11-14: "the lines slow down every evening") a type that wins at noon may lose at nine: an "upgrade" needs one of its three rounds in the EVENING PEAK (20:00-24:00 Tehran;
+              a case that has its three rounds and waits for one is kept 20 hours; an evening round may run while the servers carry up to EVENING_QUIET_MBPS of users - the line is what is measured).
+  quiet hours the change of type itself starts only between 01:00 and 07:00 Tehran (the verdict waits up to 12 hours for them): the Doctor's no-cut change waits for the old tunnel's connections to end by looking at its
+              traffic, and for a BackPack / Chisel tunnel that number is not read, so at the peak the old tunnel could be removed with its connections open - at night few are.
+
 The settings document `duel`: `on` (the owner's switch) and the `cases`. The pure parts (`rate`, `next_step`, `settled`) carry the decisions and are tested."""
 from __future__ import annotations
 
@@ -46,7 +51,11 @@ FIRST_LOOK = 1.2               # the standby must be at least this many times as
 READY_FOR = 3 * 3600           # the standby has been up this long (a standby that was just built or mended proves nothing about its steadiness)
 CASE_STALE = 4 * 3600          # the rounds of a case that waited longer than this are void: a new case starts
 RECHECK = 3 * 24 * 3600        # a case that ended with "no" is not looked at again for this long (the same two types)
-VALID_FOR = 6 * 3600           # an "upgrade" verdict waits this long for the rails (once in 24 hours, one change an hour for the panel) to let the change start
+VALID_FOR = 12 * 3600          # an "upgrade" verdict waits this long for the quiet hours and the rails (once in 24 hours, one change an hour for the panel) to let the change start
+EVENING = (20, 24)             # the evening peak, Tehran hours [from, to): the lines to abroad lose a third to a half from about 20:00 (the owner, 2026-11-02)
+EVENING_WAIT = 20 * 3600       # a case that has its rounds and waits for one in the evening is kept this long
+EVENING_QUIET_MBPS = 450.0     # an evening round runs while the servers carry up to this much of the users' traffic (a day round waits under `knowledge.VERIFY_QUIET_MBPS`)
+QUIET_HOURS = (1, 7)           # Tehran hours [from, to) in which a change of type is started
 MAX_PER_DAY = 2                # changes of type started by duels in 24 hours, for the whole panel
 KEEP_CASES = 80
 _LOCK = threading.Lock()
@@ -58,8 +67,27 @@ def _med(values: list[float]) -> float:
     return float(statistics.median(values))
 
 
-def rate(rounds: list[dict]) -> tuple[str, str]:
-    """Pure: ("more" | "no" | "upgrade", the sentence) from the rounds of a case, each {"p": the tunnel's download (Mb/s), "s": its standby's, "p_ms", "s_ms": their delay, "s_loss": the standby's loss %}.
+def _tz() -> int:
+    """Minutes the panel's clock (the report's) is ahead of UTC: 210 = Tehran."""
+    v = (st.get("report") or {}).get("tz_offset_minutes")
+    return 210 if v is None else int(v)
+
+
+def hour_of(ts: float, off: int = 210) -> int:
+    """Pure: the local hour (0-23) of a time, `off` minutes ahead of UTC."""
+    return int(((int(ts) + off * 60) // 3600) % 24)
+
+
+def in_evening(ts: float, off: int = 210) -> bool:
+    return EVENING[0] <= hour_of(ts, off) < EVENING[1]
+
+
+def in_quiet_hours(ts: float, off: int = 210) -> bool:
+    return QUIET_HOURS[0] <= hour_of(ts, off) < QUIET_HOURS[1]
+
+
+def rate(rounds: list[dict], off: int = 210) -> tuple[str, str]:
+    """Pure: ("more" | "evening" | "no" | "upgrade", the sentence) from the rounds of a case, each {"p": the tunnel's download (Mb/s), "s": its standby's, "p_ms", "s_ms": their delay, "s_loss": the standby's loss %}.
     "no" after the first round when the standby is not FIRST_LOOK times as fast; "more" until ROUNDS rounds are in; then "upgrade" only when the medians give the gain the upgrade rule asks of a better type
     (UPGRADE_RATIO times and UPGRADE_MIN_GAIN Mb/s more), the standby was FIRST_LOOK times as fast in EVERY round, lost at most UPGRADE_MAX_LOSS % and answers about as fast as the tunnel."""
     from . import knowledge
@@ -96,10 +124,15 @@ def rate(rounds: list[dict]) -> tuple[str, str]:
     if lat_s and lat_p and not knowledge._ping_ok({"latency_ms": _med(lat_s)}, {"latency_ms": _med(lat_p)}):
         return "no", f"{said}: but the standby answers in {_med(lat_s):.0f} ms against {_med(lat_p):.0f}"
 
-    return "upgrade", f"{said}, clearly faster in every round, {loss:g} % lost"
+    said = f"{said}, clearly faster in every round, {loss:g} % lost"
+
+    if not any(in_evening(r.get("at") or 0, off) for r in rounds):
+        return "evening", f"{said} - but no round was taken in the evening peak ({EVENING[0]}:00-{EVENING[1]}:00), when the lines are slowest: one is waited for"
+
+    return "upgrade", said
 
 
-def next_step(case: dict | None, p_kind: str, s_kind: str, now: int) -> str:
+def next_step(case: dict | None, p_kind: str, s_kind: str, now: int, off: int = 210) -> str:
     """Pure: what the job does for one tunnel now - "reset" (the case belongs to other types or its rounds are void: start again), "wait" (nothing to do), "round" (a round is due), "start" (an "upgrade"
     verdict is waiting for the change to start). `case`: {"p_kind", "s_kind", "rounds": [...], "state": "run" | "no" | "upgrade" | "started", "at": when the state began}."""
     if not case or (case.get("p_kind"), case.get("s_kind")) != (p_kind, s_kind):
@@ -117,19 +150,23 @@ def next_step(case: dict | None, p_kind: str, s_kind: str, now: int) -> str:
         return "start" if now - at < VALID_FOR else "reset"
 
     last = int(rounds[-1].get("at") or 0) if rounds else 0
+    awaiting = len(rounds) >= ROUNDS          # (the three rounds are in and the verdict is "evening": a round is waited for in the peak)
 
-    if rounds and now - last > CASE_STALE:
+    if rounds and now - last > (EVENING_WAIT if awaiting else CASE_STALE):
         return "reset"
+
+    if awaiting:
+        return "round" if in_evening(now, off) and now - last >= ROUND_GAP else "wait"
 
     return "round" if not rounds or now - last >= ROUND_GAP else "wait"
 
 
-def settled(case: dict, rnd: dict, now: int) -> dict:
+def settled(case: dict, rnd: dict, now: int, off: int = 210) -> dict:
     """Pure: the case after one more round: the round is added and the verdict of `rate` decides the state ("run" while more rounds are due)."""
     out = dict(case)
     out["rounds"] = (list(case.get("rounds") or []) + [rnd])[-ROUNDS:]
-    verdict, text = rate(out["rounds"])
-    out["state"] = {"more": "run", "no": "no", "upgrade": "upgrade"}[verdict]
+    verdict, text = rate(out["rounds"], off)
+    out["state"] = {"more": "run", "evening": "run", "no": "no", "upgrade": "upgrade"}[verdict]
     out["text"] = text
 
     if out["state"] != "run":
@@ -218,6 +255,9 @@ def _start_change(c: dict, case: dict, now: int) -> str:
     if actions.doctor_mode() == "off" or get_settings().read_only:
         return "the Doctor is off or the panel is read-only"
 
+    if not in_quiet_hours(now, _tz()):
+        return f"the change waits for the quiet hours ({QUIET_HOURS[0]:02d}:00-{QUIET_HOURS[1]:02d}:00 Tehran), when few users are on the tunnel"
+
     s = doctor._state()
 
     why = doctor.may_retype(c["name"], s.get("retype_done") or {}, now)
@@ -255,6 +295,12 @@ def _start_change(c: dict, case: dict, now: int) -> str:
         return str(e)[:140]
 
     return ""
+
+
+def _waits(c: dict, why: str) -> None:
+    """A change that waits is said in the log (once a turn); the quiet hours are the usual reason and are not worth a line every five minutes."""
+    if not why.startswith("the change waits for the quiet hours"):
+        log.info("duel: the change of %s waits: %s", c["name"], why)
 
 
 def _save(d: dict, name: str, case: dict) -> None:
@@ -304,11 +350,12 @@ def run(now: int | None = None) -> None:
 
     try:
         now = now or int(time.time())
+        off = _tz()
         todo = []
 
         for c in _candidates(now):
             case = d["cases"].get(c["name"])
-            step = next_step(case, c["p_kind"], c["s_kind"], now)
+            step = next_step(case, c["p_kind"], c["s_kind"], now, off)
 
             if step == "reset":
                 case = {"p_kind": c["p_kind"], "s_kind": c["s_kind"], "rounds": [], "state": "run", "at": now}
@@ -321,21 +368,23 @@ def run(now: int | None = None) -> None:
             return
 
         todo.sort(key=lambda x: (x[0], x[1]))                                                   # (a verdict that waits first, then a case under way, then a new one; the longest waiting first)
-        _, _, c, case, step = todo[0]
+        for _, _, c, case, step in todo:
+            if step != "start":
+                break                                                                               # (the first case that wants a ROUND: it is taken below)
 
-        if step == "start":
             why = _start_change(c, case, now)
 
             if not why:
                 case = {**case, "state": "started", "at": now}
                 _save(d, c["name"], case)
                 log.info("duel: the change of %s to %s started", c["name"], c["s_kind"])
-            else:
-                log.info("duel: the change of %s waits: %s", c["name"], why)
+                return
 
+            _waits(c, why)          # (a verdict that waits for the quiet hours or the rails never holds the other tunnels back)
+        else:
             return
 
-        if not testbudget.allow("routine", now) or knowledge.not_now(c["iran_id"], c["foreign_id"], now, knowledge.VERIFY_QUIET_MBPS) or bandwidth._server_busy_for(c["id"], now):
+        if not testbudget.allow("routine", now) or knowledge.not_now(c["iran_id"], c["foreign_id"], now, EVENING_QUIET_MBPS if in_evening(now, off) else knowledge.VERIFY_QUIET_MBPS) or bandwidth._server_busy_for(c["id"], now):
             return
 
         rnd = _measure_round(c, len(case.get("rounds") or []))
@@ -344,7 +393,7 @@ def run(now: int | None = None) -> None:
             return
 
         was = case.get("state")
-        case = settled(case, rnd, now)
+        case = settled(case, rnd, now, off)
         _save(d, c["name"], case)
         _note(c, case)
         log.info("duel of %s (%s) against its standby (%s): round %s: %.0f against %.0f Mb/s -> %s", c["name"], c["p_kind"], c["s_kind"], len(case["rounds"]), rnd["s"], rnd["p"], case["state"])
@@ -360,7 +409,7 @@ def run(now: int | None = None) -> None:
                 if not why:
                     _save(d, c["name"], {**case, "state": "started", "at": now})
                 else:
-                    log.info("duel: the change of %s waits: %s", c["name"], why)
+                    _waits(c, why)
     finally:
         with _LOCK:
             _RUNNING = False

@@ -16,6 +16,8 @@ DEFAULTS: dict[str, dict[str, Any]] = {
     # down_seconds / up_seconds: how long a thing must stay bad / good (as its checker confirmed it) before one DOWN / UP message (services/alerts.py); the older rules (failed checks in a row, minutes, stable seconds) became these two - see _alerts_today
     "alerts": {"down_seconds": 10, "up_seconds": 15, "remind_hours": 0, "flap_max": 3, "flap_quiet_hours": 6, "muted": []},
     "report": {"enabled": True, "hour": 9, "tz_offset_minutes": 210},   # 09:00 Tehran (UTC+3:30)
+    "alerts_held": {"items": [], "lost": 0, "why": ""},          # the alerts Telegram REFUSED (services/alerts.py): kept and sent in one message when it answers again
+    "chronic": {"told": {}, "moved": {}, "last_move": 0},         # the chronic look (services/chronic.py): when each chronic tunnel was told and moved
     "backup": {"enabled": True, "hour": 3, "keep_days": 14, "send_telegram": True, "every_minutes": 0, "tg_every": "all", "parts": {"panel": {"enabled": True, "topic": 0, "topic_name": ""}, "bot": {"enabled": True, "topic": 0, "topic_name": ""}}},
     # the smart repair is on by default (restart, rebuild, a new GRE link, another tunnel type - by itself); it can be switched off on Smart repair to work by hand
     "repair": {"auto": True, "after_seconds": 0, "level": "switch", "mode": "", "server_minutes": 10},       # after_seconds: no longer used - the Doctor starts at the first moment a tunnel is down (kept so that an old client and an old saved value do not break)   # mode: off | fix | move (the Doctor; "" = not chosen yet: derived from the old `auto` switch, so an install that had it off stays off); server_minutes: an Iran server off this long is replaced (mode move)
