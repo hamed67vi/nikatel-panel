@@ -67,13 +67,13 @@ def mapping(ports: list, record: dict | None) -> list[tuple[int, int]]:
 
 
 def parse(out: str) -> dict[int, str]:
-    """Pure: the answer of `ports_carry` -> {port: "CARRIES" | "CLOSED" | "NOCONNECT"}."""
+    """Pure: the answer of `ports_carry` -> {port: "CARRIES" | "CLOSED" | "NOCONNECT" | "NOANSWER"} (NOANSWER: the probe got no answer at all - a firewall dropped it - so nothing is known)."""
     res: dict[int, str] = {}
 
     for line in str(out).splitlines():
         parts = line.split()
 
-        if len(parts) == 2 and parts[0] in ("CARRIES", "CLOSED", "NOCONNECT") and parts[1].isdigit():
+        if len(parts) == 2 and parts[0] in ("CARRIES", "CLOSED", "NOCONNECT", "NOANSWER") and parts[1].isdigit():
             res[int(parts[1])] = parts[0]
 
     return res
@@ -86,12 +86,12 @@ def verdict(maps: list[tuple[int, int]], iran: dict[int, str], foreign: dict[int
     service: list[int] = []
 
     for listen, target in maps:
-        if iran.get(listen) in (None, "CARRIES"):
+        if iran.get(listen) in (None, "CARRIES", "NOANSWER"):          # (1.69.272: no answer is not a "no")
             continue
 
         if foreign.get(target) == "CARRIES":
             bad.append(listen)
-        elif target in foreign:
+        elif target in foreign and foreign[target] != "NOANSWER":
             service.append(listen)
 
     return bad, service

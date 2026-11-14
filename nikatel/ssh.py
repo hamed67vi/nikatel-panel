@@ -1818,9 +1818,9 @@ cp "$U.bak-ports" "$U"; systemctl daemon-reload; systemctl restart '@UNIT@'; ech
 if [ $ok = 1 ]; then echo "LISTENING"; else echo "NOTLISTEN"; fi
 """, {"CHECK": r"^\d{1,5}( \d{1,5}){0,200}$"}),
 
-    # every port the server forwards really CARRIES a connection (1.69.208): a connection to it stays open waiting for the client's first bytes (what a proxy does); one that is closed at once found nothing at its end
+    # every port the server forwards really CARRIES a connection (1.69.208): a connection to it stays open waiting for the client's first bytes (what a proxy does); one that is closed at once found nothing at its end; (1.69.272) one that does not ANSWER within 6 s (`timeout` exits 124) is NOANSWER, not CLOSED - a firewall that drops the probe (the SS fence of the Iran servers drops loopback connects to 1820-1829 / 1840-1841) says nothing about the tunnel
     "ports_carry": (r"""for P in @CHECK@; do
-  ( timeout 6 bash -c 'exec 3<>/dev/tcp/127.0.0.1/$1 || exit 99; read -t 2 -u 3 x; [ $? -eq 1 ] && exit 1; exit 0' _ "$P"; case $? in 0) echo "CARRIES $P";; 99) echo "NOCONNECT $P";; *) echo "CLOSED $P";; esac ) &
+  ( timeout 6 bash -c 'exec 3<>/dev/tcp/127.0.0.1/$1 || exit 99; read -t 2 -u 3 x; [ $? -eq 1 ] && exit 1; exit 0' _ "$P"; case $? in 0) echo "CARRIES $P";; 99) echo "NOCONNECT $P";; 124) echo "NOANSWER $P";; *) echo "CLOSED $P";; esac ) &
 done
 wait
 """, {"CHECK": r"^\d{1,5}( \d{1,5}){0,200}$"}),
