@@ -105,3 +105,13 @@ def client():
 
 
 # the Doctor's mode decides whether the failover moves anything (services/doctor.py); the tests set the mode they need
+
+
+@pytest.fixture(autouse=True)
+def _no_kind_times_in_the_alert_timing_tests(request, monkeypatch):
+    """(1.69.273) Each KIND of thing waits its own time before its DOWN is told (settings `alerts.down_seconds_by_kind`). The tests of the alert rule's own seconds (down_seconds / up_seconds) and of what is told
+    in which order run without those times: they are about the mechanics, and tests/test_alert_kind_confirm.py is about the times."""
+    if request.module.__name__.rsplit(".", 1)[-1] in ("test_alert_mass", "test_alert_server_off_alone", "test_alert_speed"):
+        from nikatel.services import settings as _st
+
+        monkeypatch.setitem(_st.DEFAULTS["alerts"], "down_seconds_by_kind", {})

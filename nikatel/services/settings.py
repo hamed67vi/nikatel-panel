@@ -14,7 +14,8 @@ from ..models import Setting
 DEFAULTS: dict[str, dict[str, Any]] = {
     "telegram": {"enabled": False, "token": "", "chat_id": "", "thread_id": 0},
     # down_seconds / up_seconds: how long a thing must stay bad / good (as its checker confirmed it) before one DOWN / UP message (services/alerts.py); the older rules (failed checks in a row, minutes, stable seconds) became these two - see _alerts_today
-    "alerts": {"down_seconds": 10, "up_seconds": 15, "remind_hours": 0, "flap_max": 3, "flap_quiet_hours": 6, "muted": []},
+    "alerts": {"down_seconds": 10, "up_seconds": 15, "remind_hours": 0, "flap_max": 3, "flap_quiet_hours": 6, "muted": [],
+               "down_seconds_by_kind": {"config": 300, "tunnel": 60, "server": 90, "node": 120}},          # (1.69.273: a blip is not told - each kind waits at least this long before its DOWN goes out; the base down_seconds is the floor)
     "report": {"enabled": True, "hour": 9, "tz_offset_minutes": 210},   # 09:00 Tehran (UTC+3:30)
     "alerts_held": {"items": [], "lost": 0, "why": ""},          # the alerts Telegram REFUSED (services/alerts.py): kept and sent in one message when it answers again
     "chronic": {"told": {}, "moved": {}, "last_move": 0},         # the chronic look (services/chronic.py): when each chronic tunnel was told and moved

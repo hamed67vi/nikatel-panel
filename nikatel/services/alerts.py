@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import threading
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field, replace
 
 from sqlalchemy import select
 
@@ -42,6 +42,7 @@ class Rules:
     flap_max: int = 0                     # this many DOWNs inside flap_window -> one FLAPPING notice, then quiet; 0 = off
     flap_window: int = 3600
     flap_quiet: int = 6 * 3600
+    by_kind: dict = field(default_factory=dict)      # (1.69.273) kind of thing -> the least seconds it must be bad before its DOWN is told (0 / missing = the base `down_seconds` alone)
 
 
 @dataclass
@@ -141,10 +142,19 @@ def in_maintenance(now: int, windows: list[tuple[int, int]]) -> bool:
     return any(a <= now <= b for a, b in windows)
 
 
+def rules_for(rules: Rules, kind: str) -> Rules:
+    """Pure: the rules for one KIND of thing. The base `down_seconds` is the floor; a kind that is noisy by nature waits longer (the owner, 2026-11-15, «حل کن که پیام‌های بیخودی نیاد»: about sixty "DOWN"
+    messages a day, each followed by its "UP again" a minute later - a config's test from a data centre misses now and then, a tunnel cut for fifteen seconds is carried by its standby, the panel host cannot
+    always reach a server that is on). A fault that lasts longer than that is told as before."""
+    need = int((rules.by_kind or {}).get(kind) or 0)
+    return rules if need <= rules.down_seconds else replace(rules, down_seconds=need)
+
+
 def rules_from(conf: dict) -> Rules:
     """The Rules from the alerts settings."""
     return Rules(int(conf.get("down_seconds", DOWN_SECONDS)), int(conf.get("up_seconds", UP_SECONDS)), int(conf.get("remind_hours", 0)) * 3600,
-                 int(conf.get("flap_max", 0)), 3600, int(conf.get("flap_quiet_hours", 6)) * 3600)
+                 int(conf.get("flap_max", 0)), 3600, int(conf.get("flap_quiet_hours", 6)) * 3600,
+                 {str(k): int(x) for k, x in (conf.get("down_seconds_by_kind") or {}).items() if str(x).lstrip("-").isdigit()})
 
 
 # ------------------------------------------------------------------ one cause, one message
@@ -541,7 +551,7 @@ def run(now: int | None = None) -> None:
         def judge(kind: str, ref: str, bad: bool, since: int = 0) -> tuple[AlertState, str | None]:
             a = track_for(kind, ref)
             _, hold_down, hold_up = mass.get(kind, (False, False, False))
-            new, verdict = decide(Track(a.fails, a.alerted, a.bad_since, a.good_since, a.last_notice, a.flips or 0, a.flap_since or 0, a.quiet_until or 0), bad, now, rules, since, hold=hold_down if bad else hold_up)
+            new, verdict = decide(Track(a.fails, a.alerted, a.bad_since, a.good_since, a.last_notice, a.flips or 0, a.flap_since or 0, a.quiet_until or 0), bad, now, rules_for(rules, kind), since, hold=hold_down if bad else hold_up)
             a.fails, a.alerted, a.bad_since, a.good_since, a.last_notice = new.fails, new.alerted, new.bad_since, new.good_since, new.last_notice
             a.flips, a.flap_since, a.quiet_until = new.flips, new.flap_since, new.quiet_until
             return a, verdict
