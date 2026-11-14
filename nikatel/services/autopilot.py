@@ -41,6 +41,7 @@ from . import (
     build_other,
     builder,
     detect,
+    freshlook,
     knowledge,
     linkmodels,
     linkprobe,
@@ -1048,6 +1049,15 @@ def retry_after(state: str, runs: int) -> int:
     return RETRY_STEPS[min(max(int(runs), 1), len(RETRY_STEPS)) - 1]
 
 
+PROTECTED_LOOK_EVERY = 6 * 3600      # (1.69.271) a PROTECTED tunnel that only loses packets can be offered nothing (no swap, no move, no rebuild): it is looked at this seldom, not every half hour
+
+
+def retry_gap(state: str, runs: int, protected: bool) -> int:
+    """Pure: `retry_after`, but a protected tunnel that is only DEGRADED waits PROTECTED_LOOK_EVERY (a cut one is retried at the usual pace: a restart can still heal it)."""
+    gap = retry_after(state, runs)
+    return max(gap, PROTECTED_LOOK_EVERY) if protected and state != "down" else gap
+
+
 def wake_repair() -> None:
     """Run the repair job now: a tunnel was cut or a repair has ended, so the next step is due - not at the next tick of the job."""
     try:
@@ -1117,8 +1127,23 @@ def smart_fix(aid: int, tunnel_id: int, level: str, source: str = "manual", fini
         return False
 
     steps = ladder_for(d["cause"], d["kind"], level, d.get("ext_blocked", False))
+    protected = is_protected(snap["record"])
+
+    if protected:          # (1.69.271: a protected tunnel is repaired in place only - a candidate test beside it, a swap, a move, a rebuild would each end at "it is protected" after minutes of load on the pair)
+        kept = [s for s in steps if s == "restart"]
+
+        if kept != steps:
+            _say(aid, f"{snap['label']} is protected: {', '.join(s for s in steps if s not in kept)} are not offered to it (each would change its addresses, its type or its server) - it is repaired in place only.")
+            steps = kept
+
+        if d["cause"] == "lossy_route":
+            _say(aid, freshlook.look(snap)["text"])
 
     if not steps:
+        if protected:
+            _say(aid, f"{snap['name']}: it is protected, nothing is offered to it for this cause - it stays as it is.", done=finish, ok=False)
+            return False
+
         hint = " Use “Move to another Iran server” on the Smart repair page." if d["cause"] in ("route_cut", "lossy_route") else ""
         _say(aid, f"{snap['name']}: no step at level “{level}” applies to this cause.{hint}", done=finish, ok=False)
         return False
@@ -1261,7 +1286,7 @@ def smart_fix(aid: int, tunnel_id: int, level: str, source: str = "manual", fini
         _say(aid, f"{snap['name']}: stopped - {stopped}. It is looked at again when the server answers.", done=finish, ok=False)
         return False
 
-    if not healed and d["cause"] in ("gre_blocked", "route_cut", "lossy_route", "port_blocked"):
+    if not healed and not protected and d["cause"] in ("gre_blocked", "route_cut", "lossy_route", "port_blocked"):
         from . import failover  # imported here: failover builds on this module
 
         t_move = time.time()
@@ -1749,12 +1774,12 @@ def auto_escalate() -> None:
 
     with session() as db:
         # down tunnels, and degraded ones whose trouble is the route (flapping or lossy link): restarts do not cure those, so they climb without them
-        down = [(t.id, t.name, t.state_since, t.state, t.last_error or "", t.iran_server_id, t.foreign_server_id) for t in db.scalars(select(Tunnel).where(Tunnel.enabled.is_(True), Tunnel.state.in_(("down", "degraded"))))
+        down = [(t.id, t.name, t.state_since, t.state, t.last_error or "", t.iran_server_id, t.foreign_server_id, is_protected(t)) for t in db.scalars(select(Tunnel).where(Tunnel.enabled.is_(True), Tunnel.state.in_(("down", "degraded"))))
                 if (t.state == "down" or any(w in (t.last_error or "") for w in ("flaps", "loss", "lost packets", "no data moves"))) and not servers_off(t)]       # a server that is off: no smart repair until it is back
 
     down.sort(key=lambda r: (r[3] != "down", r[2]))      # the tunnels that are down first, the longest-down first
 
-    for tid, name, since, st_, err, iran_id, foreign_id in down:
+    for tid, name, since, st_, err, iran_id, foreign_id, prot in down:
         if len(_BUSY) >= MAX_AUTO_REPAIRS:                # a few at a time: one repair cannot starve the servers of the others
             break
 
@@ -1773,7 +1798,7 @@ def auto_escalate() -> None:
         last_end = max(int(rows[0][0] or 0), int(rows[0][1] or 0)) if rows else 0
         runs = sum(1 for ts, _ in rows if int(ts or 0) >= int(since or 0))               # the smart repairs of THIS cut
 
-        if last_end and now - last_end < retry_after(st_, runs):         # a cut tunnel is tried again 1, 2, 5 minutes after the end of the last try, then every 10 (its users are cut); one that only flaps every half hour
+        if last_end and now - last_end < retry_gap(st_, runs, prot):         # a cut tunnel is tried again 1, 2, 5 minutes after the end of the last try, then every 10 (its users are cut); one that only flaps every half hour
             continue
 
         log.info("auto smart repair of %s (down for %ss, level %s)", name, now - since, level)
