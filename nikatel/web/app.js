@@ -992,6 +992,7 @@ const bwTip = t => {
   const parts = [`Capacity - what this tunnel can carry (download): ${bwFmt(b.down)}`, b.ref ? `usually ${bwFmt(b.ref)}` : "the usual level is still being learnt", `the Doctor's last test, ${ago(b.at)} ago (a light test every ${(t.record || {}).test_port ? "half hour" : "90 minutes"}; it cannot be live)`];
   if (bwFelt(t)) parts.push((b.down < BW_STALL ? "NO DATA moved in the test" : "TOO LOW for its users" + (useOf(t) && b.down > 0 ? ": they use " + Math.round(useOf(t).down / b.down * 100) + " % of it" : "")) + ((b.why || {}).text ? " - " + b.why.text : ""));
   const day = useDay(t); if (day) parts.push(`USERS, last 24 hours: peak ${bwFmt(day.peak)}, average ${bwFmt(day.avg)}` + (day.peak > b.down ? " - more than the little test shows, so the number in the row is that peak: the real capacity is at least what the users got" : ""));
+  const rc = b.recent; if (rc && rc.n >= 3) parts.push(`MIDDLE of its last ${rc.n} tests: ${bwFmt(rc.med)} (they swung from ${bwFmt(rc.lo)} to ${bwFmt(rc.hi)})` + (b.down < rc.med * 0.7 || b.down > rc.med * 1.4 ? " - the last test is far from the middle: one test alone says little" : ""));
   if (b.state === "slow") parts.push("VERY SLOW: the last two tests gave under " + BW_SLOW + " Mb/s - it did not drop, it never gave more" + ((b.why || {}).text ? ". " + b.why.text : ""));
   return parts.join(" · ") + uxTip(t) + wireTip(t);
 };

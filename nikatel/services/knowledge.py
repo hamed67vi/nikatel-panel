@@ -174,11 +174,36 @@ def verdict(e: dict | None) -> str:
     return "poor" if last.get("measured") else "failed"
 
 
+def _mixed(pair: dict | None, now: int) -> bool:
+    """Pure: do the fresh FULL tests of the pair differ in WHAT they measured - some with a one-connection download (a pair test: eight connections and one), some without (the quality test of a running tunnel: two
+    connections)? Then the one-connection reading must not decide (1.69.267, the owner, 2026-11-14): it is far lower than the many-connection one (66.8 against 193.9 Mb/s in a real test) and counts 60 % of "the speed a
+    user gets", so a type tested one way scored 49 against 69 for the same line tested the other way, and was called poor. Compared like with like: the one-connection reading is dropped from every score of the pair."""
+    seen = set()
+
+    for e in ((pair or {}).get("kinds") or {}).values():
+        full = (e or {}).get("full") or {}
+
+        if full.get("down_mbps") is not None and now - int(full.get("at") or 0) < FULL_FRESH:
+            seen.add(full.get("down1_mbps") is not None)
+
+    return len(seen) > 1
+
+
+def _basis(q: dict, mixed: bool) -> dict:
+    return {**q, "down1_mbps": None} if mixed else q
+
+
+def _base_user(full: dict, mixed: bool) -> float:
+    """What the user gets of one full test (the running type's, the base that a better type is compared with), on the same basis as the rows of `ranked`."""
+    return user_score(_basis(full, mixed)) if has_speed(full) else (full.get("score") or 0)
+
+
 def ranked(pair: dict | None, now: int, include_poor: bool = False) -> list[dict]:
     """The kinds that work on the pair, best first: those with a fresh FULL measurement before those known by latency only, each by what the user gets (speed, ping, jitter, loss) times how steady the type was in its
     kept tests (`stability`: a type that failed or fell in some tests goes behind one that passed all of them; one tested too few times counts a little less) - a tie by the standard order.
     `include_poor`: the kinds that carried data but scored under the line count too (for a tunnel that is CUT, any tunnel that connects is better than none)."""
     out = []
+    mixed = _mixed(pair, now)
 
     for kind, e in ((pair or {}).get("kinds") or {}).items():
         if verdict(e) not in (("good", "poor") if include_poor else ("good",)):
@@ -188,8 +213,8 @@ def ranked(pair: dict | None, now: int, include_poor: bool = False) -> list[dict
         fresh = full.get("score") is not None and now - int(full.get("at") or 0) < FULL_FRESH
         src = full if fresh else (e.get("lat") or full)
         row = {"kind": kind, "score": src.get("score"), "measure": "full" if fresh else "latency", "at": int(src.get("at") or 0), "down_mbps": src.get("down_mbps"), "down1_mbps": src.get("down1_mbps"),
-               "latency_ms": src.get("latency_ms"), "jitter_ms": src.get("jitter_ms"), "loss_pct": src.get("loss_pct")}
-        row["user"] = user_score(row) if has_speed(row) and row["latency_ms"] is not None else row["score"]          # (what the USER gets, counted again from the numbers: a score written down by an older rule does not decide)
+               "up_mbps": src.get("up_mbps"), "latency_ms": src.get("latency_ms"), "jitter_ms": src.get("jitter_ms"), "loss_pct": src.get("loss_pct")}
+        row["user"] = user_score(_basis(row, mixed)) if has_speed(row) and row["latency_ms"] is not None else row["score"]          # (what the USER gets, counted again from the numbers: a score written down by an older rule does not decide)
         st_ = stability(e, now)
         row["steady"] = None if st_ is None else st_["pct"]
         row["tests"] = len([x for x in (e.get("hist") or []) if now - int(x.get("at") or 0) <= FULL_FRESH])
@@ -317,7 +342,7 @@ def upgrade_kinds(pair: dict | None, now: int, current: str, allowed=lambda k: T
             and now - int(r.get("at") or 0) <= FASTER_FRESH and float(r.get("loss_pct") or 0) <= UPGRADE_MAX_LOSS and allowed(r["kind"]) and _ping_ok(r, full)
             and (r["wire"] < overhead.HEAVY or r["wire"] <= c_cur)
             and (r.get("steady") is None or r["steady"] >= STEADY_OK)          # (a type that fell or failed in some of its tests is no upgrade, however fast its best test was)
-            and (r.get("user") or 0) >= (user_score(full) if has_speed(full) else (full.get("score") or 0))]
+            and (r.get("user") or 0) >= _base_user(full, _mixed(pair, now))]          # (1.69.267: the same basis as the rows - the upload counts on both sides, a one-connection reading on neither unless every test has one)
     return sorted(rows, key=lambda r: (r.get("steady") is None, -(r.get("user") or 0), -float(r["down_mbps"])))          # (the ones that passed all their tests first)
 
 
@@ -328,7 +353,7 @@ def steadier_kinds(pair: dict | None, now: int, current: str, allowed=lambda k: 
     """Pure: the types the memory of the pair knows to be STEADY (stability STEADY_OK or more over at least STEADY_MIN_TESTS tests) for a tunnel that keeps being cut: not the running type, a fresh full test, the
     user score at least STEADIER_KEEP of the running type's, a ping about the same (`_ping_ok`), the licence allows it. The steadiest first (a tie: the one that gives the user more). Empty when none is known."""
     cur = (((pair or {}).get("kinds") or {}).get(current) or {}).get("full") or {}
-    base = (user_score(cur) if has_speed(cur) else (cur.get("score") or 0)) or 0
+    base = _base_user(cur, _mixed(pair, now)) or 0
     rows = [r for r in ranked(pair, now) if r["kind"] != current and r.get("measure") == "full" and r.get("steady") is not None and r["steady"] >= STEADY_OK and allowed(r["kind"])
             and now - int(r.get("at") or 0) <= FASTER_FRESH and (r.get("user") or 0) >= STEADIER_KEEP * base and _ping_ok(r, cur)]
     return sorted(rows, key=lambda r: (-r["steady"], -(r.get("user") or 0)))
@@ -359,7 +384,7 @@ def lighter_kinds(pair: dict | None, now: int, current: str, allowed=lambda k: T
     if c_cur < overhead.HEAVY:
         return []
 
-    base = (user_score(full) if has_speed(full) else (full.get("score") or 0)) or 0
+    base = _base_user(full, _mixed(pair, now)) or 0
     rows = [r for r in ranked(pair, now) if r["kind"] != current and r.get("measure") == "full" and allowed(r["kind"]) and now - int(r.get("at") or 0) <= FASTER_FRESH
             and r["wire"] <= c_cur * overhead.LIGHTER_BY and r.get("steady") is not None and r["steady"] >= STEADY_OK and float(r.get("loss_pct") or 0) <= UPGRADE_MAX_LOSS
             and _ping_ok(r, full) and (r.get("user") or 0) >= LIGHTER_KEEP * base]
@@ -855,10 +880,38 @@ VERIFY_TESTS = 3                # (1.69.220, the owner: "test which type is the 
 VERIFY_EVERY = 24 * 3600        # ... one more of a kind at most this often (spread over the days: steadiness is about different hours; 1.69.226: was 6 h - every full test moves up to 120 MB through the Iran server, the owner wants the least test traffic) ...
 VERIFY_RIVALS = 3               # ... the rivals are the best kinds of the pair's own survey
 VERIFY_QUIET_MBPS = QUIET_MBPS  # a verify survey (a few kinds, a short speed test each) runs when the users of the pair's servers carry less than this (1.69.226: 150 like the night survey; was 400)
+POOR_RETEST = 2 * 24 * 3600     # (1.69.267) a type that ONE test called poor but that was much faster than the running type is tested again (with a speed) when its last test is this old ...
+POOR_LOOK = 1.2                 # ... and its speed in that test was at least this many times the running type's (the owner, 2026-11-14: a type that gave 194 Mb/s against 121 stayed poor for ten days, because a poor type is nobody's rival and so is never tested again)
 
 
 def _full_tests(e: dict | None, now: int) -> list[dict]:
     return [x for x in ((e or {}).get("hist") or []) if x.get("m") == "full" and now - int(x.get("at") or 0) <= STEADY_RECENT]
+
+
+def poor_retest(pair: dict | None, now: int, current: str, allowed=lambda k: True) -> list[str]:
+    """Pure: the ONE kind of the pair that was called "poor" (it carried data, but its last test scored under the line) and must be tested again: its last test is POOR_RETEST old, it was at least POOR_LOOK times as fast
+    as the running type in its last full test, lost at most UPGRADE_MAX_LOSS % and the licence allows it. A poor type is left out of `ranked`, so it is nobody's rival: without this a single bad score - one that
+    also depended on how that test was made (`_mixed`) - kept a faster type out of every later test. Empty when the running type has no full test to compare with. The fastest first, at most one (a test moves up to 120 MB)."""
+    kinds = (pair or {}).get("kinds") or {}
+    base = ((kinds.get(current) or {}).get("full") or {}).get("down_mbps")
+
+    if base is None:
+        return []
+
+    rows = []
+
+    for k, e in kinds.items():
+        full = (e or {}).get("full") or {}
+
+        if k == current or verdict(e) != "poor" or not allowed(k) or full.get("down_mbps") is None:
+            continue
+
+        if now - int(((e or {}).get("last") or {}).get("at") or 0) < POOR_RETEST or float(full["down_mbps"]) < POOR_LOOK * float(base) or float(full.get("loss_pct") or 0) > UPGRADE_MAX_LOSS:
+            continue
+
+        rows.append((float(full["down_mbps"]), k))
+
+    return [k for _, k in sorted(rows, reverse=True)[:1]]
 
 
 def verify_kinds(pair: dict | None, now: int, current: str, allowed=lambda k: True) -> list[str]:
@@ -874,6 +927,7 @@ def verify_kinds(pair: dict | None, now: int, current: str, allowed=lambda k: Tr
         if allowed(k) and len(h) < VERIFY_TESTS and (not h or now - max(int(x["at"]) for x in h) >= VERIFY_EVERY):
             out.append(k)
 
+    out += [k for k in poor_retest(pair, now, current, allowed) if k not in out]          # (1.69.267: a faster type that one test called poor gets another test)
     return out
 
 
@@ -902,7 +956,7 @@ def verify_pairs(now: int) -> list[tuple[int, int, list[str]]]:
                 kinds += [k for k in verify_kinds(p, now, cur, license.tunnel_kind_allowed) if k not in kinds]
 
             if kinds:
-                out.append((min(len(_full_tests((p.get("kinds") or {}).get(k), now)) for k in kinds), i, f, kinds[: VERIFY_RIVALS + 1]))
+                out.append((min(len(_full_tests((p.get("kinds") or {}).get(k), now)) for k in kinds), i, f, kinds[: VERIFY_RIVALS + 2]))
 
     return [(i, f, k) for _, i, f, k in sorted(out)]
 

@@ -50,6 +50,8 @@ MIN_REF_MBPS = 20.0          # a tunnel whose usual level is under this is too s
 DROP_RATIO = 0.6             # under this share of the usual level: a drop
 LOW_RATIO = 0.8              # a drop ends over this share
 KEEP = 60                    # samples kept
+RECENT_N = 5                 # (1.69.267) the "middle" of a tunnel: the median of its last tests ...
+RECENT_WINDOW = 24 * 3600    # ... of the last day (one test is noise: a line gave 38, 71, 87, 55 and 121 Mb/s within hours)
 LINK_PORT = 39777            # the sink of a GRE tunnel listens on its inner address (never a public one) on this port
 BYTES = 60_000_000           # each of the two connections pulls this much at most ...
 SECS = 3                     # ... and for 3 s at most (real tests, 2026-10-16, over a GRE link: one connection scattered by 16 % from run to run, two by 9 %, four by 7 % - and one connection of 4 s stalled once)
@@ -101,6 +103,20 @@ def reference(hist: list, now: int) -> float | None:
     usual = _third_quarter([v for _, v in rows])
     same = [v for at, v in rows if now - at >= REF_HOUR_AGE and _minutes_apart(at, now) <= REF_HOUR_SPAN]
     return min(usual, _third_quarter(same)) if len(same) >= REF_MIN else usual
+
+
+def recent_stats(hist: list | None, now: int) -> dict | None:
+    """Pure: {"n", "med", "lo", "hi"} of the last RECENT_N tests of the last day (None under two tests). ONE test is noise - the owner, 2026-11-14: a row said 38 Mb/s while the next test said 121; the middle of the last
+    tests and the range they swing in say what the tunnel is, the last number alone does not. Only told (the tooltip): the drop and slow rules judge the samples one by one, as before."""
+    rows = [float(x[1]) for x in (hist or []) if x[1] is not None and now - int(x[0]) <= RECENT_WINDOW][-RECENT_N:]
+
+    if len(rows) < 2:
+        return None
+
+    s = sorted(rows)
+    n = len(s)
+    med = s[n // 2] if n % 2 else (s[n // 2 - 1] + s[n // 2]) / 2
+    return {"n": n, "med": round(med, 1), "lo": round(s[0], 1), "hi": round(s[-1], 1)}
 
 
 def verdict(down: float | None, ref: float | None, slow_line: float = SLOW_MBPS) -> str:
@@ -185,7 +201,7 @@ def add_sample(bw: dict | None, now: int, down: float, up: float | None, how: st
     keep = {"pct": old_loss["pct"], "at": old_loss["at"]} if loss is None and old_loss.get("pct") is not None and now - int(old_loss.get("at") or 0) <= LOSS_FRESH else None      # (a test without UDP keeps the last number for a while)
 
     return {"m": METHOD, "down": round(down, 1), "up": None if up is None else round(up, 1), "at": now, "how": how, "ping": ping, "ref": reference(hist, now), "state": state, "drop": drop, "slow": slow, "suspect": suspect,
-            "next_at": next_at, "hist": hist, "loss": {"pct": float(loss), "at": now} if loss is not None else keep}, change
+            "next_at": next_at, "hist": hist, "recent": recent_stats(hist, now), "loss": {"pct": float(loss), "at": now} if loss is not None else keep}, change
 
 
 def carry_notes(old: dict | None, new: dict, change: str) -> dict:
