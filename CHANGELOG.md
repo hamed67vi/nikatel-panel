@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.69.281 - The free quality signals
+
+> **In short:** the owner (2026-11-15), «بله، بساز» - the cheap way to see the quality of the tunnels between the (now ten-day) speed tests. Two signals that cost no byte: **(1) the tunnel's own TCP** - one light command per Iran server every five
+> minutes (`ssh.py` `tcp_health`: the counters `ss -tin` keeps per socket of the tunnel's control port - bytes sent, bytes sent again, rtt; the real format was captured on live Iran servers); the share the tunnel had to send again in the last hour
+> is the signal (a clean line about 0.1 %, measured on four live tunnels; 2 % or more twice in a row is bad); **(2) the users against themselves** - the speed they get through the tunnel (the checks' counters, rx + tx) over the last 15 minutes
+> against the SAME HOUR of the last days (their usual at least 10 Mb/s, readings from two different days; under half of it twice in a row). What a signal does: it asks the bandwidth job for a speed test of that tunnel NOW (`bw.next_at`), at most once in
+> 12 hours per tunnel, only while the day's volume of the Doctor's tests allows routine ones, and writes why (the record `fl`, an event). The speed test confirms and decides by the rules it always had; a signal alone changes nothing, touches no
+> server and restarts nothing. New job `freesignals` (every 5 minutes), new module `services/freesignals.py`.
+>
+> **به زبان ساده:** بین تست‌های سرعتِ ده‌روزه، کیفیت را از چیزهایی می‌خوانیم که هیچ بایتی خرج نمی‌کنند. اول، خودِ TCP تانل: هسته برای هر اتصالِ تانل می‌شمارد چقدر فرستاده و چقدر را مجبور شده دوباره بفرستد؛ خط سالم حدود ۰٫۱٪ دوباره می‌فرستد و خطِ پرافت چند درصد. دوم، سرعتِ واقعیِ کاربرها نسبت به همان ساعتِ روزهای قبل. اگر دو نگاهِ پشت‌سرهم بد بود، فقط یک تست سرعت می‌خواهد تا تأیید کند (حداکثر هر ۱۲ ساعت برای هر تانل، و فقط وقتی سهمیهٔ تست‌های روز اجازه بدهد). خودِ نشانه هیچ چیزی را تغییر نمی‌دهد.
+
+**Proved:** `tests/test_free_signals.py` (the real shell script run against the real format of `ss -tin` - IPv4, IPv6-mapped, a socket that sent nothing, a socket that never resent, the cap, the parameters; `parse`, `step` - first read, new socket, counter that went back, the tunnel's port at either end - `share`, `same_hour`, `users_fell`; two bad reads in a row ask once with the reason and a second ask waits 12 hours; a clean line, an idle tunnel and a used-up budget ask for nothing; the users that fell ask after two looks; a tunnel that is not up is not asked; the job reads each Iran server once).
+
 ## 1.69.280 - One speed test every ten days
 
 > **In short:** the owner (2026-11-15), after the volume of the Doctor's tests was told (38 - 84 GB a day against a budget of 30): «تست سرعت هر 10 روز یک بار انجام بشه / از تستها کم نکن / فقط عاملی که باعث میشه همچین حجمی بره رو بهینه میکنیم».

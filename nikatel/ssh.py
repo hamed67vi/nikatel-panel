@@ -484,6 +484,23 @@ for h in @PEERS@; do ( o=$(ping -c 3 -i 0.2 -W 1 -q "$h" 2>/dev/null); l=$(echo 
 echo "NOW $(date +%s)"
 """, {"UNITS": _UNITS, "IFACES": r"^([A-Za-z0-9][A-Za-z0-9._-]{0,14}( [A-Za-z0-9][A-Za-z0-9._-]{0,14}){0,59})?$", "PEERS": r"^(\d{1,3}(\.\d{1,3}){3}( \d{1,3}(\.\d{1,3}){3}){0,59})?$"}),
 
+    # the TCP of the tunnels (services/freesignals.py), read-only (1.69.281): for every far end asked, "S <far end> <local port> <peer port> <bytes sent> <bytes sent again> <rtt ms or ->" of the sockets that have sent data - the counters
+    # the kernel keeps per socket (`ss -tin`: bytes_sent, bytes_retrans, rtt) - at most KEEP sockets of one far end. Nothing is sent, nothing is changed.
+    "tcp_health": (r"""for h in @PEERS@; do ss -tin dst "$h" 2>/dev/null | awk -v h="$h" -v keep=@KEEP@ '
+  /^ESTAB/ { n = split($4, a, ":"); lp = a[n]; m = split($5, b, ":"); pp = b[m]; next }
+  /bytes_sent:/ && lp != "" {
+    sent = 0; retr = 0; rtt = "-"
+    for (i = 1; i <= NF; i++) {
+      if ($i ~ /^bytes_sent:/) { split($i, x, ":"); sent = x[2] }
+      else if ($i ~ /^bytes_retrans:/) { split($i, x, ":"); retr = x[2] }
+      else if ($i ~ /^rtt:/) { split($i, x, ":"); split(x[2], y, "/"); rtt = y[1] }
+    }
+    c++; if (c <= keep) print "S", h, lp, pp, sent, retr, rtt
+    lp = ""
+  }'; done
+echo "NOW $(date +%s)"
+""", {"PEERS": r"^\d{1,3}(\.\d{1,3}){3}( \d{1,3}(\.\d{1,3}){3}){0,59}$", "KEEP": r"^\d{1,4}$"}),
+
     # the WARM STANDBY (services/standby.py), read-only: the redirects of the users' ports that stand on this server - "STANDBY <standby name> <tcp|udp> <users' port> <shifted port>" for every NAT rule tagged
     # "nikatel-standby-<name>". The panel compares it with what it believes (a rule nobody asked for is taken off, a handover whose rules are gone is put again).
     "standby_list": (r"""iptables -t nat -S PREROUTING 2>/dev/null | awk '/nikatel-standby-/ { n = ""; p = ""; d = ""; s = ""; for (i = 1; i <= NF; i++) { if ($i == "-p") p = $(i + 1); if ($i == "--dport") d = $(i + 1); if ($i == "--to-ports") s = $(i + 1); if ($i == "--comment") { n = $(i + 1); gsub(/"/, "", n); sub(/^nikatel-standby-/, "", n) } } if (n != "" && p != "" && d != "" && s != "") print "STANDBY", n, p, d, s }'

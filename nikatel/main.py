@@ -43,6 +43,7 @@ from .services import (
     extras,
     facts,
     failover,
+    freesignals,
     housekeeping,
     janitor,
     knowledge,
@@ -255,6 +256,7 @@ def _register_jobs() -> None:
     jobs.register("duel", duel.EVERY, duel.run)                    # the duel (1.69.268): a tunnel and its warm standby tested one after the other, round after round; a standby that is clearly faster in every round becomes the tunnel's type, by the Doctor's own no-cut change and its rails
     jobs.register("chronic", chronic.EVERY, chronic.run)           # the chronic look (1.69.269): a tunnel cut eight times in a week - three of them in the last day - is moved to a steadier Iran server by the Doctor's own move (mode move), and told; a server with two chronic tunnels says so
     jobs.register("bandwidth", 60, bandwidth.run)               # the bandwidth of every tunnel: one light measurement per minute at most (two connections, 120 MB at most; through the door for BackPack / Paqet / Chisel), each tunnel about every 4 hours (1.69.226; was 90 minutes) and not at all while its own users carry 60 % of its usual level; a drop is looked at by the Doctor (services/bandwidth.py)
+    jobs.register("freesignals", freesignals.EVERY, freesignals.run)     # the free quality signals (1.69.281): the TCP of the tunnels themselves (what the kernel resent) and the users against the same hour of the last days - no byte is sent; a bad one asks the bandwidth job for a speed test (services/freesignals.py)
     jobs.register("temp-purge", 600, tunnel_test.purge_stale)
     jobs.register("housekeeping", 6 * 3600, housekeeping.run)   # old events and finished repair stories go; the write-ahead log is folded back
     jobs.register("engine-cache", 6 * 3600, _engine_cache)      # the tunnel cores the panel's cache lacks are downloaded (verified), so a server added later gets them at once (the owner, 2026-10-16: "they must install by themselves"); nothing is changed on any server

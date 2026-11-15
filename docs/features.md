@@ -55,6 +55,13 @@ Plain JS, no build step; hover fade on every button and row; a loading box and a
 |---|---|
 | **Settings → Api & Key → Bale · customer notices** | a small Bale bot on one Iran server (`relay/bale_relay.py`): customers start it once and may link their subscription; it tells them by itself when the server has lost the whole outside world for a few minutes and again when it is back; customers can write to you in the same chat and you answer from your own Bale (so an owner abroad with only Bale reachable can run it: `/send`, `/cut`, `/back`, `/info`). Install / update / remove from the box, the state read from the server, the texts changeable. Design and limits: [`bale.md`](bale.md) |
 
+## The free quality signals (1.69.281)
+
+With the speed tests asked once in ten days, the quality between them is read from what costs no byte. Every five minutes one light command per Iran server (`tcp_health`) reads, from the kernel's own counters of the tunnel's TCP sockets (`ss -tin`: bytes sent,
+bytes sent AGAIN), how much of what the tunnel sent it had to send again - a clean line about 0.1 %, measured on four live tunnels; a line that loses packets several percent. And the speed the users get through the tunnel (the checks' counters) is compared with the SAME HOUR
+of the last days. When the resend share of the last hour is 2 % or more in two looks in a row, or the users carry under half of their usual at this hour for two looks (their usual at least 10 Mb/s, from two different days), the signal asks the bandwidth job for a speed test of that
+tunnel now - at most once in 12 hours per tunnel, only while the day's volume of the Doctor's tests allows routine tests - and writes why (the record `fl`, an event). The speed test is the confirmation and decides, by the rules it always had. A signal alone changes nothing.
+
 ## One speed test every ten days (1.69.280)
 
 The speed tests were the volume of the Doctor's own tests (the day's use of 38 - 84 GB against a budget of 30): a kind of a live pair got three of them in a week (`VERIFY_TESTS`, one a day at most), and the bandwidth job measured every
