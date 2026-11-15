@@ -8,7 +8,9 @@ What it counts: the bytes the streams of every speed test moved (`probe_run` say
            (1.69.276) and over FIRST_SHARE too, a few times: `first_allowed` gives a tunnel FIRST_TRIES tries a day and all the tunnels together FIRST_TOTAL - a day at 184 % left a tunnel rebuilt that afternoon with a dash until the next Tehran day;
   cut      (a tunnel that is cut: the repair and its tests) are never held back;
   by hand  (the owner's own "Test now") are never held back.
-The budget is `daily_gb` in the settings document `testbudget` (default 30 GB, a day is a Tehran day)."""
+The budget is `daily_gb` in the settings document `testbudget` (default 30 GB, a day is a Tehran day).
+(1.69.280) The routine speed tests are asked once in `speed_every()` - `speed_days` in the same document, 10 days by default (the owner, 2026-11-15: "تست سرعت هر 10 روز یک بار انجام بشه"): one speed test per kind of a live pair
+(the verify survey) and per tunnel (the bandwidth job). The pings, the latency tests and the tests that something asks for (a new tunnel, a drop, a poor score, a repair, the owner) are not held by it."""
 from __future__ import annotations
 
 import threading
@@ -28,6 +30,16 @@ FIRST_TOTAL = 60                 # ... and all the tunnels together this many (a
 KEEP_DAYS = 14
 TEHRAN = 12600                   # UTC+3:30
 _LOCK = threading.Lock()
+
+
+def speed_every() -> int:
+    """Seconds between two SPEED tests of the same kind of a pair / the same tunnel (1.69.280): `speed_days` of the settings document `testbudget`, 10 days by default; never less than a day, never more than 60."""
+    try:
+        days = float(st.get("testbudget").get("speed_days") or 10.0)
+    except (TypeError, ValueError):
+        days = 10.0
+
+    return int(min(max(days, 1.0), 60.0) * 86400)
 
 
 def _day(now: int) -> int:

@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.69.280 - One speed test every ten days
+
+> **In short:** the owner (2026-11-15), after the volume of the Doctor's tests was told (38 - 84 GB a day against a budget of 30): «تست سرعت هر 10 روز یک بار انجام بشه / از تستها کم نکن / فقط عاملی که باعث میشه همچین حجمی بره رو بهینه میکنیم».
+> The factor was the SPEED tests, and their rhythm: the verify survey of the live pairs gave a kind three speed tests a week (one a day at most), and the bandwidth job measured every tunnel every four hours (about 100 tests a day).
+> No test is dropped - every kind is still tested and the pings, the latency tests and the quality job are as before. Only the speed part of the routine is asked once in `testbudget.speed_every()`: the new setting `speed_days` in the
+> settings document `testbudget` (10 by default, 1 - 60). `knowledge.verify_kinds` asks a kind for a speed test when its last one - from any source - is that old or it never had one (a type that one test called poor waits for the
+> same rule); `bandwidth.every()` replaces the four hours of the routine measurement and the budget's stretch. What something asks for does not wait: a tunnel never measured, a drop, a very slow tunnel, a poor quality score, a repair's
+> own candidate tests, the owner's own tests. The stability of a type stays known: three speed tests ten days apart fall in the month `stability` looks at.
+>
+> **به زبان ساده:** حجمِ بالا از «تست سرعت» می‌آمد، نه از بقیهٔ تست‌ها: هر نوعِ تانلِ یک جفت هفته‌ای ۳ تست سرعت می‌گرفت و کار «پهنای باند» هر تانل را هر ۴ ساعت می‌سنجید. حالا هیچ تستی حذف نشده؛ همهٔ نوع‌ها
+> هنوز تست می‌شوند و ping و تست تأخیر و کیفیت مثل قبل است. فقط بخش «سرعت» معمولی هر ۱۰ روز یک بار انجام می‌شود (تنظیم `speed_days` در سند `testbudget`، پیش‌فرض ۱۰، بین ۱ تا ۶۰). آنچه چیزی صدایش کند منتظر نمی‌ماند:
+> تانلی که هنوز هیچ‌وقت سنجیده نشده، افت سرعت، تانل خیلی کند، نمرهٔ کیفیتِ بد، تست‌های تعمیر و تست‌های خودِ تو.
+
+**Proved:** `tests/test_speed_every.py` (the setting and its limits; a kind is due when its last speed test is 10 days old or none; a latency test is no speed test; a type that was called poor waits for the rule too; stability is still known after three
+tests ten days apart; the bandwidth job measures after 10 days and not after 4 hours, but a never-measured tunnel, a drop and a poor score are not held; the next measurement is planned `every()` ahead and the setting moves it) and the verify survey test written again for the rule.
+
 ## 1.69.279 - The Doctor's repair policy as a table of scenarios
 
 > **In short:** the owner (2026-11-15), on the list of improvements of the Doctor: «بند یک تا 3 رو انجام بده». No behaviour changes in this version - it is the second of the three: **tests**. The two faults the review of the Doctor

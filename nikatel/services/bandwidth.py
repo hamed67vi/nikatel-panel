@@ -153,7 +153,7 @@ def add_sample(bw: dict | None, now: int, down: float, up: float | None, how: st
         v = "learning"                                            # the users carry the line or more through it: the tunnel is not slow, the little test reads low (1.69.21)
 
     drop, slow, suspect, change = bw.get("drop"), bw.get("slow"), bool(bw.get("suspect")), ""
-    next_at = now + INTERVAL
+    next_at = now + every()
 
     if v == "drop":
         if suspect or drop:
@@ -368,7 +368,7 @@ def _store(tunnel_id: int, down: float, up: float | None, how: str, ping: float 
             bw["bloat"] = kept
 
 
-        if bw["next_at"] == now + INTERVAL:               # the usual rhythm: a few minutes different for every tunnel, so that they do not all fall in one minute
+        if bw["next_at"] == now + every():               # the usual rhythm: a few minutes different for every tunnel, so that they do not all fall in one minute
             bw["next_at"] += (tunnel_id * 97) % 600
 
         rec["bw"] = bw
@@ -558,11 +558,16 @@ def users_prove(ref: float | None, peak: float | None) -> bool:
     return float(peak) >= max(PROVE_MBPS, DROP_RATIO * float(ref)) if ref else float(peak) >= PROVE_MBPS
 
 
+def every() -> int:
+    """Seconds between two routine measurements of one tunnel (1.69.280): `testbudget.speed_every()` - 10 days by default; INTERVAL (4 hours) is the floor. The measurements that something asks for do not wait for it: a tunnel never
+    measured, a drop, a very slow tunnel, a poor quality score (`next_at` set sooner), and a repair's own."""
+    return max(INTERVAL, testbudget.speed_every())
+
+
 def _due(now: int) -> list[int]:
-    """The tunnels to measure, the one that waited longest first: up, with a GRE link or a test door, not measured for INTERVAL (times the budget's stretch; or asked for sooner by `next_at`) - and, on the usual
+    """The tunnels to measure, the one that waited longest first: up, with a GRE link or a test door, not measured for `every()` (10 days, 1.69.280; or asked for sooner by `next_at`) - and, on the usual
     rhythm, not proven by their own users (`users_prove`): a drop, a very slow tunnel, a poor score and a tunnel never measured are looked at whatever the users carry."""
     out, usual = [], {}
-    stretch = testbudget.stretch(now)          # (1.69.223: once the Doctor's tests have used half of the day's volume the interval is 2 times as long, from 80 % 4 times)
 
     with session() as db:
         for t in db.scalars(select(Tunnel).where(Tunnel.enabled.is_(True), Tunnel.state.in_(("up", "degraded")))):         # (a tunnel that is only unstable carries its users: its bandwidth is the thing to see)
@@ -572,7 +577,7 @@ def _due(now: int) -> list[int]:
                 continue
 
             bw = (t.record or {}).get("bw") or {}
-            nxt = int(bw.get("next_at") or 0) or (int(bw.get("at") or 0) + INTERVAL * stretch + (t.id * 97) % 600)
+            nxt = int(bw.get("next_at") or 0) or (int(bw.get("at") or 0) + every() + (t.id * 97) % 600)
             at = int(bw.get("at") or 0)
             early = False
 

@@ -55,6 +55,14 @@ Plain JS, no build step; hover fade on every button and row; a loading box and a
 |---|---|
 | **Settings → Api & Key → Bale · customer notices** | a small Bale bot on one Iran server (`relay/bale_relay.py`): customers start it once and may link their subscription; it tells them by itself when the server has lost the whole outside world for a few minutes and again when it is back; customers can write to you in the same chat and you answer from your own Bale (so an owner abroad with only Bale reachable can run it: `/send`, `/cut`, `/back`, `/info`). Install / update / remove from the box, the state read from the server, the texts changeable. Design and limits: [`bale.md`](bale.md) |
 
+## One speed test every ten days (1.69.280)
+
+The speed tests were the volume of the Doctor's own tests (the day's use of 38 - 84 GB against a budget of 30): a kind of a live pair got three of them in a week (`VERIFY_TESTS`, one a day at most), and the bandwidth job measured every
+tunnel every four hours. The owner (2026-11-15): "one speed test every 10 days - do not reduce the tests - optimize only the factor that makes the volume". Now NO test is dropped: every kind is still tested, the pings, the latency
+tests of the night survey and the quality job run as before; only the SPEED part of the routine is asked once in `testbudget.speed_every()` (`speed_days` of the settings document `testbudget`, 10 by default, between 1 and 60) - per kind of a
+pair in the verify survey (`knowledge.verify_kinds`: its last speed test, from any source, is 10 days old or it never had one) and per tunnel in the bandwidth job (`bandwidth.every()`). What something asks for does not wait: a tunnel never
+measured, a drop, a very slow tunnel, a poor quality score, the repair's own candidate tests and the owner's own tests. The stability of a type is still known: three speed tests ten days apart fall in the month the rule looks at.
+
 ## An L2TPv3 leftover is removed by its session (1.69.278)
 
 A link of the L2TPv3 kind cannot be removed with `ip link del`: the kernel keeps the device while its SESSION exists. The sweep of test leftovers (`purge_test_leftovers`, before every tunnel test) and the clean-up of a link probe (`link_probe_clean`) deleted the scripts and the device and only the L2TP tunnels without a session - so a cut-short L2TPv3 probe left its session, a device that was DOWN and its firewall rules on the Iran server for ever (one was found by hand on 2026-11-15 and cleaned). Now both delete the SESSION of a `lp-*` / `test-*` device first (the tunnel left empty goes next; the probe's clean-up deletes the tunnel only when no session is left in it) and remove the firewall rules whose comment is the exact tag of such a link (`nikatel-gre-lp-*`, `nikatel-gre-test-*`). A live tunnel is never named like that, so none is touched.

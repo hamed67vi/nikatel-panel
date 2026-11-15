@@ -1018,8 +1018,8 @@ def _live_pairs(db) -> dict[tuple[int, int], int]:
     return out
 
 
-VERIFY_TESTS = 3                # (1.69.220, the owner: "test which type is the best and the steadiest, always") the running type of a live pair and each of its best rivals get this many FULL tests in a week ...
-VERIFY_EVERY = 24 * 3600        # ... one more of a kind at most this often (spread over the days: steadiness is about different hours; 1.69.226: was 6 h - every full test moves up to 120 MB through the Iran server, the owner wants the least test traffic) ...
+# (1.69.280) VERIFY_TESTS (three full tests of a kind in a week) is gone: a kind gets a SPEED test when its last one is `testbudget.speed_every()` old (10 days), see `verify_kinds`
+# (1.69.280) VERIFY_EVERY (one speed test a day at most) is gone for the same reason
 VERIFY_RIVALS = 3               # ... the rivals are the best kinds of the pair's own survey
 VERIFY_QUIET_MBPS = QUIET_MBPS  # a verify survey (a few kinds, a short speed test each) runs when the users of the pair's servers carry less than this (1.69.226: 150 like the night survey; was 400)
 POOR_RETEST = 2 * 24 * 3600     # (1.69.267) a type that ONE test called poor but that was much faster than the running type is tested again (with a speed) when its last test is this old ...
@@ -1027,7 +1027,12 @@ POOR_LOOK = 1.2                 # ... and its speed in that test was at least th
 
 
 def _full_tests(e: dict | None, now: int) -> list[dict]:
-    return [x for x in ((e or {}).get("hist") or []) if x.get("m") == "full" and now - int(x.get("at") or 0) <= STEADY_RECENT]
+    return [x for x in ((e or {}).get("hist") or []) if x.get("m") == "full" and now - int(x.get("at") or 0) <= FULL_FRESH]
+
+
+def last_full(e: dict | None) -> int:
+    """Pure (1.69.280): when the newest SPEED test of a kind was made (0: never). A latency test is no speed test."""
+    return max((int(x.get("at") or 0) for x in ((e or {}).get("hist") or []) if x.get("m") == "full"), default=0)
 
 
 def poor_retest(pair: dict | None, now: int, current: str, allowed=lambda k: True) -> list[str]:
@@ -1057,19 +1062,18 @@ def poor_retest(pair: dict | None, now: int, current: str, allowed=lambda k: Tru
 
 
 def verify_kinds(pair: dict | None, now: int, current: str, allowed=lambda k: True) -> list[str]:
-    """Pure: the kinds of a live pair that must be tested again now with a speed test: the RUNNING type and its VERIFY_RIVALS best rivals (the kinds of the pair's survey that work, best first), each when it has fewer than
-    VERIFY_TESTS full tests in the last week and the last of them is older than VERIFY_EVERY. Without such tests the Doctor can never call a better type "proven steady" and a tunnel is never improved."""
+    """Pure: the kinds of a live pair that must be tested again now with a speed test: the RUNNING type and its VERIFY_RIVALS best rivals (the kinds of the pair's survey that work, best first), each when its last speed test is
+    older than `testbudget.speed_every()` (10 days; the owner, 2026-11-15: one speed test every 10 days - the kinds are all still tested, only the speed part is rarer) or it never had one. Without such tests the Doctor can never call a better type "proven steady" and a tunnel is never improved."""
     kinds = (pair or {}).get("kinds") or {}
     rivals = [r["kind"] for r in ranked(pair, now) if r["kind"] != current and allowed(r["kind"])][:VERIFY_RIVALS]
-    out = []
+    every = testbudget.speed_every()
 
-    for k in [current, *rivals]:
-        h = _full_tests(kinds.get(k), now)
+    def due(k: str) -> bool:
+        last = last_full(kinds.get(k))
+        return not last or now - last >= every
 
-        if allowed(k) and len(h) < VERIFY_TESTS and (not h or now - max(int(x["at"]) for x in h) >= VERIFY_EVERY):
-            out.append(k)
-
-    out += [k for k in poor_retest(pair, now, current, allowed) if k not in out]          # (1.69.267: a faster type that one test called poor gets another test)
+    out = [k for k in [current, *rivals] if allowed(k) and due(k)]
+    out += [k for k in poor_retest(pair, now, current, allowed) if k not in out and due(k)]          # (1.69.267: a faster type that one test called poor gets another test)
     return out
 
 
