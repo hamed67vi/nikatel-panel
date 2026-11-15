@@ -141,7 +141,10 @@ def test_a_tunnel_with_no_number_is_measured_when_the_day_is_used_one_that_dropp
     bandwidth.run()
     assert measured == []                                                                                     # (a tunnel that was measured before and dropped: the whole budget is used, it waits)
     testbudget.spend(3 * GB, "probe", int(_t.time()))
+    for _ in range(testbudget.FIRST_TRIES):
+        testbudget.note_first(7, int(_t.time()))                                                              # (1.69.276: over 150 % a tunnel with no number has FIRST_TRIES tries a day: here they are used)
+
     measured = _routine(monkeypatch, [7])
     monkeypatch.setattr(bandwidth, "_no_sample", lambda i: True)
     bandwidth.run()
-    assert measured == []                                                                                     # (150 % used: nothing goes on)
+    assert measured == []                                                                                     # (155 % used and its tries used: nothing goes on)

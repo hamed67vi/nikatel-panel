@@ -651,7 +651,7 @@ def run() -> None:
     ids = _due(now)
 
     if ids and not testbudget.allow("routine", now):          # (1.69.223: the day's volume of the Doctor's own tests is used: only a tunnel with no number yet, or one that dropped, is still measured - until the whole budget is used)
-        ids = [i for i in ids if (_no_sample(i) and testbudget.allow("first", now)) or (testbudget.allow("urgent", now) and _in_trouble(i))]          # (1.69.265: a tunnel with no number yet is measured up to 150 % of the budget, one that dropped up to the whole budget)
+        ids = [i for i in ids if (_no_sample(i) and testbudget.first_allowed(i, now)) or (testbudget.allow("urgent", now) and _in_trouble(i))]          # (1.69.265: a tunnel with no number yet is measured up to 150 % of the budget, one that dropped up to the whole budget; 1.69.276: and over 150 % a few tries a day, `first_allowed`)
 
     if not ids:
         return
@@ -661,6 +661,9 @@ def run() -> None:
     for tid in fresh or ids[:1]:
         if jobs.stopping() or _server_busy_for(tid, now):
             continue
+
+        if tid in fresh and not testbudget.allow("first", now):
+            testbudget.note_first(tid, now)          # (1.69.276: a first test over FIRST_SHARE of the day's budget is counted: FIRST_TRIES a day per tunnel)
 
         with _LOCK:
             _RUNNING.add(tid)

@@ -5,6 +5,7 @@ What it counts: the bytes the streams of every speed test moved (`probe_run` say
   routine  (the 90-minute measurements, the verify surveys, the night survey) go on while the day has used under ROUTINE_SHARE of the budget; from STRETCH's shares on the 90 minutes become 2 and 4 times as long;
   urgent   (a tunnel that dropped or is very slow, a pair nobody has surveyed) go on until the budget is used;
   first    (a tunnel nobody has measured yet: its row shows a dash until its first test - 1.69.265) goes on until the day has used FIRST_SHARE of the budget: ONE light test, never held for hours by a day the surveys and the moves filled;
+           (1.69.276) and over FIRST_SHARE too, a few times: `first_allowed` gives a tunnel FIRST_TRIES tries a day and all the tunnels together FIRST_TOTAL - a day at 184 % left a tunnel rebuilt that afternoon with a dash until the next Tehran day;
   cut      (a tunnel that is cut: the repair and its tests) are never held back;
   by hand  (the owner's own "Test now") are never held back.
 The budget is `daily_gb` in the settings document `testbudget` (default 30 GB, a day is a Tehran day)."""
@@ -22,6 +23,8 @@ log = get_logger("testbudget")
 ROUTINE_SHARE = 0.8              # the routine tests stop at this share of the day's budget ...
 STRETCH = ((0.5, 2), (0.8, 4))     # ... and from these shares the routine interval is this many times as long
 FIRST_SHARE = 1.5                # the first measurement of a new tunnel goes on until the day has used this share (1.69.265: it waited for the next Tehran day at 125 %)
+FIRST_TRIES = 3                  # (1.69.276) over FIRST_SHARE a tunnel with no number still gets this many first tests a day ...
+FIRST_TOTAL = 60                 # ... and all the tunnels together this many (a first test moves 120 MB at the most: about 7 GB) - a test that fails again and again, or a loop that builds new tunnels again and again, has an end
 KEEP_DAYS = 14
 TEHRAN = 12600                   # UTC+3:30
 _LOCK = threading.Lock()
@@ -90,6 +93,43 @@ def allow(level: str = "routine", now: int | None = None) -> bool:
     return share(now) < {"first": FIRST_SHARE, "urgent": 1.0}.get(level, ROUTINE_SHARE)
 
 
+def _firsts(now: int) -> dict[str, int]:
+    """The tries of the first tests made over FIRST_SHARE today, per tunnel id (the count belongs to its Tehran day)."""
+    d = st.get("testbudget")
+
+    if int(d.get("firsts_day") or 0) != _day(now):
+        return {}
+
+    return {str(k): int(v) for k, v in dict(d.get("firsts") or {}).items()}
+
+
+def first_allowed(tunnel_id, now: int | None = None) -> bool:
+    """May the FIRST measurement of a tunnel with no number go on? Yes until the day has used FIRST_SHARE of the budget (`allow("first")`); over it, yes for the first FIRST_TRIES tries of this tunnel and the first
+    FIRST_TOTAL tries of all the tunnels of the day (1.69.276: the surveys and the moves had filled a day to 184 % and a tunnel rebuilt that afternoon kept its dash until the next Tehran day)."""
+    now = int(now or time.time())
+
+    if allow("first", now):
+        return True
+
+    f = _firsts(now)
+    return f.get(str(tunnel_id), 0) < FIRST_TRIES and sum(f.values()) < FIRST_TOTAL
+
+
+def note_first(tunnel_id, now: int | None = None) -> None:
+    """Count one try of a first measurement made over FIRST_SHARE. Never raises: a speed test is not stopped by its own bookkeeping."""
+    now = int(now or time.time())
+
+    try:
+        key = str(int(tunnel_id))
+
+        with _LOCK:
+            f = _firsts(now)
+            f[key] = f.get(key, 0) + 1
+            st.put("testbudget", {"firsts": f, "firsts_day": _day(now)})
+    except (SQLAlchemyError, TypeError, ValueError):
+        log.exception("the try of a first test could not be counted")
+
+
 def stretch(now: int | None = None) -> int:
     """How many times as long as usual the routine interval is today (1, 2 or 4)."""
     s, out = share(now), 1
@@ -108,5 +148,5 @@ def state(now: int | None = None) -> dict:
     today = _day(now)
     cur = int(d.get("bytes") or 0) if int(d.get("day") or 0) == today else 0
     days = [{"day": time.strftime("%Y-%m-%d", time.gmtime(int(k) * 86400)), "gb": round(int(v) / 1e9, 1)} for k, v in sorted(dict(d.get("days") or {}).items(), key=lambda kv: int(kv[0]))[-7:]]
-    return {"daily_gb": round(limit_bytes() / 1e9, 1), "used_gb": round(cur / 1e9, 2), "share": round(cur / limit_bytes(), 3), "stretch": stretch(now), "routine": allow("routine", now),
+    return {"daily_gb": round(limit_bytes() / 1e9, 1), "used_gb": round(cur / 1e9, 2), "share": round(cur / limit_bytes(), 3), "stretch": stretch(now), "routine": allow("routine", now), "firsts": sum(_firsts(now).values()),
             "by": {k: round(int(v) / 1e9, 2) for k, v in dict(d.get("by") or {}).items()} if cur else {}, "days": days}

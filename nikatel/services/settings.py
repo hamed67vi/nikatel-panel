@@ -30,7 +30,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
     # not hold on a server and was put back (never tried again by itself), `last` = what the last automatic run did
     "janitor": {"done": [], "pointed": {}},                      # (pointed: when the DNS names of a second copy were moved to the keeper, per tunnel id)
     "retypewatch": {"watch": {}},                                 # the notes of the changes of type the Doctor watches the users after (services/retypewatch.py)
-    "testbudget": {"daily_gb": 30.0, "day": 0, "bytes": 0, "by": {}, "days": {}},          # the volume the Doctor's own speed tests moved today and the daily budget (services/testbudget.py)
+    "testbudget": {"daily_gb": 30.0, "day": 0, "bytes": 0, "by": {}, "days": {}, "firsts": {}, "firsts_day": 0},          # the volume the Doctor's own speed tests moved today and the daily budget (services/testbudget.py)
     "wiremeter": {"rings": {}},                                   # the wire meter (services/wiremeter.py): per tunnel the last 24 hours of [time, users bytes, wire bytes]
     "duel": {"on": True, "cases": {}},                            # the duel (services/duel.py): `on` = the owner's switch, `cases` = per tunnel the rounds of its test against its standby and what they decided
     "nodedns": {"healed": {}, "done": []},                        # the Doctor's look at the name lookups of the foreign servers (services/nodedns.py): when a server's resolvers were last put in order (per server id), and the times of the heals of the last day
