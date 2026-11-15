@@ -2028,7 +2028,14 @@ done < $tmp
 for n in $ifs; do
   if [ -d "/sys/class/net/$n" ]; then b=$(( $(cat /sys/class/net/$n/statistics/rx_bytes) + $(cat /sys/class/net/$n/statistics/tx_bytes) )); a0=$(grep "^$n " $tmp.a | cut -d' ' -f2); echo "L $n $(( b - ${a0:-$b} ))"; else echo "L $n -1"; fi
 done
+systemctl list-units --all --no-legend --plain 'backpack-*' 'backhaul-*' 'paqet-*' 'chisel-*' 'nikatel-*' 2>/dev/null | awk '$2=="not-found" && $3=="failed"{print "G", $1}'
 rm -f $tmp $tmp.a
+""", {}),
+
+    # (1.69.275) GHOST failed units: the unit file is gone (LOAD not-found) but systemd keeps the failed state, and the builder refuses every tunnel test of a server that "has failed tunnel units". The orphan sweep reads them
+    # (`G <unit>` in orphan_look) and clears them here: `reset-failed` of the units of OUR engines whose LOAD is not-found and whose state is failed - a unit that exists is never touched, nothing is removed or stopped.
+    "ghost_reset": (r"""n=0; for u in $(systemctl list-units --all --no-legend --plain 'backpack-*' 'backhaul-*' 'paqet-*' 'chisel-*' 'nikatel-*' 2>/dev/null | awk '$2=="not-found" && $3=="failed"{print $1}'); do systemctl reset-failed "$u" >/dev/null 2>&1 && n=$((n+1)); done
+echo "GHOSTS_RESET $n"
 """, {}),
 
     # a copy of what the engines keep on this server, taken before the sweep removes a leftover (the last five stay)

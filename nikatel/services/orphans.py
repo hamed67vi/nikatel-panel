@@ -14,6 +14,10 @@ door (`nikatel-sink-…`). By hand they were found at the end of a long day: 49 
   the helper rows  a hidden tunnel (standby or strand) whose parent tunnel is gone, seen so for ROW_GRACE seconds with no traffic, is removed like any tunnel (into Recently removed).
   never            a DNS record. The records are the way back to Arvan; this job does not read them and cannot write them.
 
+  ghost units      (1.69.275) a unit whose file is gone but whose failed state systemd keeps (`not-found failed`) is nothing to remove - and it made the builder refuse every tunnel test of its server ("has failed tunnel
+                   units": 82 build crashes a week). The look reads them (`G <unit>`), `ghost_reset` clears them (`systemctl reset-failed`, only LOAD not-found + failed, only the engines' names) in the same look, with an event
+                   once a day per server. No second look, no backup: nothing is deleted.
+
 The removal uses the reviewed actions the panel already has (`remove_backhaul_unit`, `remove_tunnel_files`, `other_remove`, `bw_sink_remove`). The pure parts (`removal_of`, `owned`, `parse_look`, `idle_orphans`, `confirm`, `rails`)
 carry the decisions and are tested."""
 from __future__ import annotations
@@ -51,6 +55,7 @@ _BH_KHAREJ = re.compile(r"^backhaul-kharej-(tcp|tcpmux|wsmux|wssmux)-(\d{1,5})\.
 _ENGINE = re.compile(r"^(backpack|paqet|chisel)-([a-z0-9][a-z0-9-]*?)(-kharej)?\.service$")
 _GRE = re.compile(r"^nikatel-(?:gre-check|gre)-([a-z0-9][a-z0-9-]*)\.(?:service|timer)$")
 _SINK = re.compile(r"^nikatel-sink-([a-z0-9][a-z0-9-]*)\.service$")
+_GHOST = re.compile(r"^[a-z0-9@._-]{1,90}\.(?:service|timer)$")
 
 
 # ------------------------------------------------------------------ pure helpers (tested)
@@ -125,6 +130,19 @@ def parse_look(out: str) -> tuple[dict[str, dict], dict[str, int]]:
             continue
 
     return units, links
+
+
+def parse_ghosts(out: str) -> list[str]:
+    """Pure: the ghost failed units of an `orphan_look` answer (`G <unit>`), in order, once each; a line of any other shape is ignored."""
+    seen: list[str] = []
+
+    for ln in str(out).splitlines():
+        p = ln.split()
+
+        if len(p) == 2 and p[0] == "G" and _GHOST.match(p[1]) and p[1] not in seen:
+            seen.append(p[1])
+
+    return seen
 
 
 def idle_orphans(units: dict[str, dict], links: dict[str, int], is_owned) -> list[str]:
@@ -361,6 +379,15 @@ def run() -> None:
 
             units, links = parse_look(out)
             sid = s["id"]
+            ghosts = parse_ghosts(out)
+
+            if ghosts:          # (1.69.275: nothing to confirm or back up - a ghost has no file; `reset-failed` only forgets the failed state)
+                try:
+                    _act(s, "ghost_reset", {})
+                    _tell(f"ghost:{sid}", f"Server {s['name']}: {len(ghosts)} ghost failed unit(s) cleared by the Doctor ({', '.join(ghosts[:4])}{'…' if len(ghosts) > 4 else ''}): the unit files were gone but systemd kept the failed state, which makes the builder refuse every tunnel test of a server.", "info")
+                except (SSHError, ValueError, RuntimeError, OSError) as e:
+                    log.warning("ghost units on %s could not be cleared: %s", s["name"], str(e)[:100])
+
             exp, ifs, slg = world["expected"].get(sid, set()), world["ifaces"].get(sid, set()), world["slugs"].get(sid, set())
             found = idle_orphans(units, links, functools.partial(owned, expected=exp, ifaces=ifs, slugs=slg, ids=world["ids"]))
 
@@ -406,11 +433,11 @@ def run() -> None:
 _TOLD: dict[str, float] = {}
 
 
-def _tell(key: str, text: str) -> None:
+def _tell(key: str, text: str, level: str = "warn") -> None:
     if time.time() - _TOLD.get(key, 0) < 24 * 3600:
         return
 
     _TOLD[key] = time.time()
 
     with session() as db:
-        emit(db, "warn", "servers", text, "")
+        emit(db, level, "servers", text, "")
