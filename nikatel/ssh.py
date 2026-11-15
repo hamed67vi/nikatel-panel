@@ -1638,11 +1638,15 @@ if [ -x "$f" ]; then "$f"; echo "LINK_PROBE @MODE@ $n rc=$?"; else echo "LINK_PR
 """, {"NAME": r"^lp-[a-z0-9]{2,11}$", "MODE": r"^(up|down)$"}),
 
     # the LINK PROBE, last step (on BOTH servers, always run): the temporary link comes down, its scripts, its key file and its tagged firewall rules are removed
+    # (1.69.278) the down script of the link does all of this when it is there; when it is not (a sweep of test leftovers took it, a cut-short probe) the clean-up itself deletes the L2TPv3 SESSION of the device (a device of that kind
+    # cannot be removed with `ip link del`), the tunnel only when no session is left in it, and the firewall rules of the link's tag.
     "link_probe_clean": (r"""n='@NAME@'
 [ -x "/usr/local/sbin/nikatel-gre-down-$n" ] && "/usr/local/sbin/nikatel-gre-down-$n" >/dev/null 2>&1
 systemctl stop "nikatel-ipsec-sock-$n.service" >/dev/null 2>&1 || true
 systemctl stop "nikatel-carrier-$n.service" >/dev/null 2>&1 || true
 ip link set "$n" down 2>/dev/null || true; ip link del "$n" 2>/dev/null || true
+ip l2tp show session 2>/dev/null | awk -v n="$n" '/^Session /{sid=$2; tid=$5} /interface name:/ && $3==n {print sid, tid}' | while read -r sid tid; do ip l2tp del session tunnel_id "$tid" session_id "$sid" 2>/dev/null || true; ip l2tp show session tunnel_id "$tid" 2>/dev/null | grep -q '^Session' || ip l2tp del tunnel tunnel_id "$tid" 2>/dev/null || true; done
+TAG="nikatel-gre-$n"; for chain in INPUT OUTPUT FORWARD; do iptables -w 5 -S "$chain" 2>/dev/null | grep -- "--comment $TAG " | sed 's/^-A/-D/' | while read -r rule; do iptables -w 5 $rule 2>/dev/null || true; done; done; iptables -w 5 -t mangle -S FORWARD 2>/dev/null | grep -- "--comment $TAG " | sed 's/^-A/-D/' | while read -r rule; do iptables -w 5 -t mangle $rule 2>/dev/null || true; done
 rm -f "/usr/local/sbin/nikatel-gre-up-$n" "/usr/local/sbin/nikatel-gre-down-$n" "/etc/nikatel/ipsec/$n.keys" "/etc/nikatel/wg/$n.key"
 rm -f "/etc/systemd/system/nikatel-carrier-$n.service" /etc/nikatel-chisel/$n.key /etc/nikatel-chisel/$n.crt /etc/nikatel-chisel/$n.tls.key /etc/nikatel-chisel/$n.srv.env /etc/nikatel-chisel/$n.cli.env; systemctl daemon-reload 2>/dev/null || true
 echo "LINK_PROBE_CLEAN $n"
@@ -2058,6 +2062,9 @@ chmod 600 $B/@NAME@.*; echo PREPARED
     # remove everything a BackPack / Paqet / Chisel tunnel (and its test sink) left on a server
     # a tunnel TEST that was cut short (a restart of the panel in the middle of it) leaves its temporary units behind: the test-* units of every engine, the sink,
     # the GRE link, and a backhaul unit whose config forwards the reserved test port. Removing them is safe: no real tunnel is named test-* or forwards that port.
+    # (1.69.278) A link of the L2TPv3 kind has no `ip link del`: the kernel keeps its device while its SESSION exists. The sweep used to delete the scripts and the device and only the tunnels WITHOUT a session, so the session,
+    # the device and the firewall rules of a cut-short L2TPv3 probe stayed for ever (found on an Iran server, 2026-11-15). Now the sessions of the lp-* / test-* devices go first (the tunnel left empty goes in the next
+    # line) and so do the firewall rules whose comment is the tag of such a link (`nikatel-gre-lp-*` / `nikatel-gre-test-*`: the exact tag, with the space that ends it - test-1 is not test-10).
     "purge_test_leftovers": (r"""tp='@TESTPORT@'; n=0
 for u in $(systemctl list-units --all --no-legend --plain 'backpack-test-*' 'paqet-test-*' 'chisel-test-*' 'nikatel-carrier-test-*' 'nikatel-carrier-lp-*' 'nikatel-gre-test-*' 'nikatel-gre-check-test-*' 'nikatel-sink-test-*' 2>/dev/null | awk '{print $1}'); do systemctl disable --now "$u" >/dev/null 2>&1 || true; rm -f "/etc/systemd/system/$u"; systemctl reset-failed "$u" >/dev/null 2>&1 || true; n=$((n+1)); done
 for f in $(grep -lE "\"$tp(=|\")|\"$tp:" /etc/backhaul/*.toml 2>/dev/null); do b=$(basename "$f" .toml); systemctl disable --now "backhaul-$b.service" >/dev/null 2>&1 || true; rm -f "/etc/systemd/system/backhaul-$b.service" "$f"; n=$((n+1)); done
@@ -2068,6 +2075,8 @@ for i in $(ip -o link show type wireguard 2>/dev/null | awk -F': ' '{print $2}' 
 for i in $(ip -o link show type ipip 2>/dev/null | awk -F': ' '{print $2}' | cut -d@ -f1 | grep -E '^(test|lp)-'); do ip link del "$i" 2>/dev/null || true; done
 for i in $(ip -o link show type xfrm 2>/dev/null | awk -F': ' '{print $2}' | cut -d@ -f1 | grep -E '^(test|lp)-'); do ip link del "$i" 2>/dev/null || true; done
 for ty in gretap vxlan geneve l2tpeth; do for i in $(ip -o link show type "$ty" 2>/dev/null | awk -F': ' '{print $2}' | cut -d@ -f1 | grep -E '^(test|lp)-'); do ip link del "$i" 2>/dev/null || true; done; done
+ip l2tp show session 2>/dev/null | awk '/^Session /{sid=$2; tid=$5} /interface name:/{print sid, tid, $3}' | grep -E ' (test|lp)-[a-z0-9-]+$' | while read -r sid tid nm; do ip l2tp del session tunnel_id "$tid" session_id "$sid" 2>/dev/null || true; done
+for tag in $(iptables-save 2>/dev/null | grep -oE -- '--comment nikatel-gre-(lp|test)-[A-Za-z0-9-]+' | awk '{print $2}' | sort -u); do for chain in INPUT OUTPUT FORWARD; do iptables -w 5 -S "$chain" 2>/dev/null | grep -- "--comment $tag " | sed 's/^-A/-D/' | while read -r rule; do iptables -w 5 $rule 2>/dev/null || true; done; done; iptables -w 5 -t mangle -S FORWARD 2>/dev/null | grep -- "--comment $tag " | sed 's/^-A/-D/' | while read -r rule; do iptables -w 5 -t mangle $rule 2>/dev/null || true; done; done
 for t in $(ip l2tp show tunnel 2>/dev/null | sed -n 's/^Tunnel \([0-9]*\),.*/\1/p'); do ip l2tp show session tunnel_id "$t" 2>/dev/null | grep -qi session || ip l2tp del tunnel tunnel_id "$t" 2>/dev/null || true; done
 for s in /usr/local/sbin/nikatel-gre-up-lp-* /usr/local/sbin/nikatel-gre-down-lp-*; do [ -e "$s" ] && rm -f "$s"; done; rm -f /etc/nikatel/ipsec/lp-*.keys /etc/nikatel/wg/lp-*.key 2>/dev/null
 for u in $(systemctl list-units --all --no-legend --plain 'nikatel-ipsec-sock-test-*' 2>/dev/null | awk '{print $1}'); do systemctl stop "$u" >/dev/null 2>&1 || true; done
