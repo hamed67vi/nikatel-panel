@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.69.279 - The Doctor's repair policy as a table of scenarios
+
+> **In short:** the owner (2026-11-15), on the list of improvements of the Doctor: «بند یک تا 3 رو انجام بده». No behaviour changes in this version - it is the second of the three: **tests**. The two faults the review of the Doctor
+> found in two weeks of a live panel (a repair on the new tunnel of a running move, 38 times; a repair that lost its tunnel after its own rebuild, 117 times) lived BETWEEN features: each feature had its own tests and no test
+> ran a whole repair. `tests/test_doctor_scenarios.py` runs `autopilot.smart_fix` for real - the ladder of every cause at every level, the guards (a protected tunnel, a mass disruption, a server that is off, a step that healed
+> minutes ago), the order of the steps, the record kept for the analyst - against a scripted fleet: the diagnosis says the cause, every step answers what the scenario says, nothing touches a server and no clock runs. Each scenario
+> asserts the PATH of the repair and the work it did (what was restarted, rebuilt, tested, swapped, moved), so a change of the policy shows in one place and has to be made on purpose. Two things the table writes down as they are today:
+> a lossy tunnel that carries users is swapped for a clearly better candidate only at a quiet moment (under 1.5 Mb/s) and otherwise the repair goes on to the move (11 of the 39 lossy repairs of 21 days ended there), and the ladder's
+> "move" entry does nothing in its turn of the loop - the real move runs after it, so the record of a failed route repair has two "move" entries.
+>
+> **به زبان ساده:** این نسخه رفتار Doctor را عوض نمی‌کند؛ فقط یک «جدول سناریو» اضافه می‌کند. هر سناریو یک خرابی ساختگی است (سرویس‌ها قطع، GRE فیلتر، مسیر پرافت، سرور خاموش، تانل محافظت‌شده، اختلال گسترده …) و تست می‌گوید Doctor باید چه مسیری برود: اول restart، بعد rebuild، بعد نوع دیگر، بعد move، و در هر حالت چه چیزی را نباید لمس کند. دو اشکالِ این هفته (تعمیر روی تانل تازهٔ یک move، و تعمیری که تانل خودش را بعد از rebuild گم می‌کرد) دقیقاً بین قابلیت‌ها بودند و هیچ تستی کل تعمیر را اجرا نمی‌کرد؛ حالا می‌کند. هر تغییرِ سیاست از این به بعد در یک جا دیده می‌شود.
+
+**Proved:** `tests/test_doctor_scenarios.py` (the ladder of every cause by level; restart, rebuild, switch, relink, move paths; a lossy route: one server's own network, a clearly better candidate, a candidate that is not clearly better, a candidate that loses packets, a busy tunnel; protected tunnels; a mass disruption; a server that is off; a relapse; a healthy tunnel; no service).
+
 ## 1.69.278 - An L2TPv3 leftover is removed by its session
 
 > **In short:** the owner (2026-11-15), after the leftover interface `lp-l2tpv3` of a cut-short link probe was found half-removed on an Iran server (DOWN, 28 packets, its session and 8 firewall rules still there; nothing used it) and cleaned by hand with the product's own down script: «بله، بساز». A link of the L2TPv3 kind has no `ip link del` - the kernel keeps the device while its session exists. `purge_test_leftovers` (the sweep before every tunnel test) deleted the probe scripts and the device and only the L2TP tunnels WITHOUT a session, and `link_probe_clean` relied on `ip link del` when the down script was gone, so such a leftover stayed for ever. Now both delete the L2TP session of a `lp-*` / `test-*` device first (the sweep: the tunnel left empty goes in the next line; the probe's clean-up: the tunnel only when no session is left in it) and remove the firewall rules whose comment is the exact tag of that link (`nikatel-gre-lp-*`, `nikatel-gre-test-*`, the space that ends the tag included: test-1 is not test-10). A live tunnel is never named `lp-*` / `test-*`, so none is touched.
