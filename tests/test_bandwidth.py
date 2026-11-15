@@ -456,7 +456,7 @@ def test_a_tunnel_that_is_removed_takes_its_bandwidth_sink_with_it(monkeypatch):
 def test_the_probe_script_takes_a_host_a_byte_limit_and_a_direction():
     script = SCRIPTS["probe_run"][0]
     rules = SCRIPTS["probe_run"][1]
-    assert "'@HOST@' '@BYTES@' '@DIR@'" in script and "socket.create_connection((H, P)" in script and "(not LIM or n < LIM)" in script and "(not LIM or sent < LIM)" in script
+    assert "'@HOST@' '@BYTES@' '@DIR@'" in script and "socket.create_connection((H, P)" in script and "(not LIM or n < LIM)" in script and "(not ULIM or sent < ULIM)" in script
     assert '"d" not in DIRS' in script and '"u" not in DIRS' in script and 'H = (sys.argv[7] if len(sys.argv) > 7 else "") or "127.0.0.1"' in script
     import re
 
@@ -899,3 +899,38 @@ def test_the_live_route_carries_the_peak_and_the_average_of_what_the_users_carri
     j = client.get("/api/tunnels/live").json()
     assert j["ok"] and j["use24"][str(tid)] == {"peak": 13.0, "avg": 5.5} and str(few) not in j["use24"]                               # fewer than five readings say nothing
     tapi._USE["at"], tapi._USE["rows"] = 0, {}
+
+
+# ------------------------------------------------------------------ the poor-score rule (1.69.282)
+def test_a_poor_score_asks_for_a_new_test_soon_only_when_the_tunnel_is_newly_poor():
+    """1.69.282 (the owner, 2026-11-16, «بله، همه را بساز»): the score comes from the DELAY, so a line of 170 ms is under 40 for ever and was measured every ten minutes - 105 tests a day on 8 tunnels that said the same.
+    Now: soon when it is NEWLY poor (good at its last test, or the score fell 15 points since), every six hours when it was poor at its last test too."""
+    after, again = bandwidth.POOR_AFTER, bandwidth.POOR_AGAIN
+    assert (after, again) == (600, 6 * 3600) and bandwidth.POOR_FALL == 15
+    assert bandwidth.poor_after(None, 30) is None and bandwidth.poor_after(40, 30) is None and bandwidth.poor_after(72, None) is None          # (no score, or a good one: not this rule)
+    assert bandwidth.poor_after(39.9, 55) == after and bandwidth.poor_after(30, 40.0) == after                                              # (good at its last test: newly poor)
+    assert bandwidth.poor_after(30, None) == after                                                                                           # (the last test did not keep a score - a record from before 1.69.282: one more look, which keeps it)
+    assert bandwidth.poor_after(24, 24) == again and bandwidth.poor_after(30, 35) == again and bandwidth.poor_after(21, 35) == again         # (poor then too: the line's usual)
+    assert bandwidth.poor_after(20, 35) == after and bandwidth.poor_after(5, 24) == after                                                    # (fell 15 points or more: a change)
+
+
+def test_a_line_that_is_poor_for_good_is_measured_every_six_hours_not_every_ten_minutes():
+    far = NOW + 20 * 86400                                                                                                                   # (the usual rhythm: ten days)
+    chronic, _, _, _ = make_tunnel("pc-chronic", bw={**good_history(300.0), "at": NOW - 700, "next_at": far, "q": 24.0}, record={"quality": {"score": 24, "latency_ms": 174.0}})
+    newly, _, _, _ = make_tunnel("pc-newly", bw={**good_history(300.0), "at": NOW - 700, "next_at": far, "q": 61.0}, record={"quality": {"score": 33, "latency_ms": 150.0}})
+    fell, _, _, _ = make_tunnel("pc-fell", bw={**good_history(300.0), "at": NOW - 700, "next_at": far, "q": 38.0}, record={"quality": {"score": 20, "latency_ms": 300.0}})
+    unknown, _, _, _ = make_tunnel("pc-unknown", bw={**good_history(300.0), "at": NOW - 700, "next_at": far}, record={"quality": {"score": 24}})
+    assert sorted(bandwidth._due(NOW)) == sorted([newly, fell, unknown]) and chronic not in bandwidth._due(NOW + 3600)                       # (the chronic one waits, the three that changed or are not known yet go at once)
+    assert chronic not in bandwidth._due(NOW + bandwidth.POOR_AGAIN - 800) and chronic in bandwidth._due(NOW + bandwidth.POOR_AGAIN)         # (six hours after its last test)
+
+
+def test_a_test_keeps_the_score_the_tunnel_had_so_that_the_next_look_can_tell_newly_poor_from_poor_for_good():
+    tid, _, _, _ = make_tunnel("pc-store", bw=good_history(), record={"quality": {"score": 33.0}})
+    bandwidth._store(tid, 290.0, None, "link", 80.0)
+    nothing, _, _, _ = make_tunnel("pc-nothing", bw=good_history())
+    bandwidth._store(nothing, 290.0, None, "link", 80.0)
+
+    with session() as db:
+        assert db.get(Tunnel, tid).record["bw"]["q"] == 33.0 and db.get(Tunnel, nothing).record["bw"]["q"] is None
+
+    assert bandwidth.poor_after(33.0, 33.0) == bandwidth.POOR_AGAIN                                         # (the same score again: the usual of the line)

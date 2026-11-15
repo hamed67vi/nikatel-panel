@@ -111,10 +111,11 @@ def parse_probe(out: str) -> dict:
 
 
 def _note_volume(d: dict) -> None:
-    """(1.69.223) What the streams of a speed test moved is counted against the Doctor's daily volume of tests (testbudget), and the readings of the card give the wire cost of the type (overhead.wire_ratio)."""
+    """(1.69.223) What the streams of a speed test moved is counted against the Doctor's daily volume of tests (testbudget) under the name of what asked for it (`testbudget.purpose`, 1.69.282), and the readings of the card
+    give the wire cost of the type (overhead.wire_ratio)."""
     from . import overhead, testbudget
 
-    testbudget.spend(d.get("w_moved"), "probe")
+    testbudget.spend(d.get("w_moved"), testbudget.purpose_now())
     ratio = overhead.wire_ratio(d)
 
     if ratio is not None:
@@ -471,6 +472,7 @@ class Build:
     udp: bool = False
     created: list[Node] = field(default_factory=list)
     measure: str = "full"       # full | latency
+    capped: bool = False        # (1.69.282) the speed test stops a stream by bytes too (PAIR_STREAM_CAP): the Doctor's own verify survey; a test the owner asks for is never capped
     quality: dict = field(default_factory=dict)
     standby_of: str = ""        # the warm standby of this tunnel (services/standby.py): the row is made switched off and without an event, under its own lock
     hidden_key: str = "standby_of"          # the key of the row's record that names the tunnel ("strand_of": an extra strand of a Trident, services/trident.py)
@@ -478,9 +480,9 @@ class Build:
 
 
 def start_build(iran_id: int, foreign_id: int, ports_text: str, kind: str, transport: str = "", opts: dict | None = None, forced_name: str = "", measure: str = "full", standby_of: str = "",
-                hidden_key: str = "standby_of", extra_record: dict | None = None) -> int:
+                hidden_key: str = "standby_of", extra_record: dict | None = None, capped: bool = False) -> int:
     """Validate, create the action_log entry, build in a thread. Returns the action id. `standby_of`: the name of the tunnel this one is the warm standby of (`hidden_key` "strand_of": an extra strand of its Trident;
-    `extra_record`: more fields of the row's record, e.g. the `relay` of a relay strand)."""
+    `extra_record`: more fields of the row's record, e.g. the `relay` of a relay strand). `capped`: the speed test of the new tunnel stops a stream by bytes too (1.69.282, the Doctor's own verify survey)."""
     if get_settings().read_only:
         raise ValueError("the panel is read-only; set NIKATEL_READ_ONLY=false on the panel server to build tunnels")
 
@@ -562,7 +564,7 @@ def start_build(iran_id: int, foreign_id: int, ports_text: str, kind: str, trans
             db.add(entry)
             db.flush()
             aid = entry.id
-            b = Build(aid, kind, iran, foreign, ports, transport, opts, name=forced_name, measure=measure, standby_of=standby_of, hidden_key=hidden_key, extra_record=dict(extra_record or {}))
+            b = Build(aid, kind, iran, foreign, ports, transport, opts, name=forced_name, measure=measure, capped=bool(capped), standby_of=standby_of, hidden_key=hidden_key, extra_record=dict(extra_record or {}))
             db.expunge(iran)
             db.expunge(foreign)
 
@@ -780,8 +782,14 @@ def _start(node: Node, label: str, unit: str, b: Build) -> None:
         raise RuntimeError(f"the {label} side did not start ({unit} is {st}): {logs.strip()[-300:]}")
 
 
-def _probe(iran: Node, test_port: int, key: str, secs: float = 0, streams: int = 8, pings: int = 3, to: float = 1.2) -> dict:
-    out = run_script(iran, "probe_run", {"PORT": str(test_port), "SECS": str(secs), "STREAMS": str(streams), "PINGS": str(pings), "KEY": key, "TO": str(to), "UDPN": "0"}, timeout=int(60 + secs * 4))
+def _probe(iran: Node, test_port: int, key: str, secs: float = 0, streams: int = 8, pings: int = 3, to: float = 1.2, cap: tuple[int, int] | None = None) -> dict:
+    """One test through a test door. `cap` = (bytes one DOWNLOAD stream pulls at most, bytes one UPLOAD stream pushes at most): the seconds are not the only limit then (1.69.282)."""
+    params = {"PORT": str(test_port), "SECS": str(secs), "STREAMS": str(streams), "PINGS": str(pings), "KEY": key, "TO": str(to), "UDPN": "0"}
+
+    if cap:
+        params["BYTES"], params["UBYTES"] = str(int(cap[0])), str(int(cap[1]))
+
+    out = run_script(iran, "probe_run", params, timeout=int(60 + secs * 4))
     return parse_probe(out)
 
 
@@ -843,17 +851,33 @@ def _wait_for_data(b: Build, iran: Node, key: str, hint: str, log_node: Node, lo
     raise RuntimeError(f"the tunnel started but no data passes through it ({last}). {extra or hint}" + (f" Log: {logs}" if logs else ""))
 
 
+# (1.69.282) The speed test of a pair the Doctor asks for by itself (the verify survey) stops a stream by BYTES as well as by seconds: a pair that carries 2 Gb/s moved 2 GB in 4 seconds both ways, tests that came by the dozen on a
+# new server filled the night's volume. Eight streams pull 24 MB and push 20 MB each at most, the one connection 96 MB and 32 MB: 480 MB a test at the most, whatever the line (1.1 GB on a line of 1 Gb/s, 2.5 GB on 2 Gb/s before).
+# Real tests on two standby tunnels (1.07 and 0.6 Gb/s): the eight connections read the same as the whole four seconds (down within the run-to-run noise of 12 %); the caps are as long as it takes for a stream to leave its start-up
+# behind (a short upload read 20 - 28 % low at 12 MB, a short single connection 15 % low at 48 MB). A line under about 0.5 Gb/s never reaches the cap (the four seconds end first): its numbers are what they were.
+PAIR_STREAM_CAP = (24_000_000, 20_000_000)
+PAIR_ONE_CAP = (96_000_000, 32_000_000)
+
+
 def _measure(b: Build, iran: Node, key: str) -> None:
+    from . import testbudget
+
+    with testbudget.purpose("pair-survey" if b.capped else "pair-test" if is_temp(b.name) else "new-tunnel"):          # (1.69.282: the volume of the test is counted under what asked for it)
+        _measure_counted(b, iran, key)
+
+
+def _measure_counted(b: Build, iran: Node, key: str) -> None:
+    """The measurement itself (`_measure` counts what it moves under a name). A pair test the Doctor asks for by itself stops a stream by bytes too (`PAIR_STREAM_CAP`)."""
     try:
         if b.measure == "latency":
             _say(b.aid, "Measuring latency, jitter and loss through the tunnel")
             b.quality = _probe(iran, b.test_port, key, secs=0, pings=20, to=2.5)
         else:
-            _say(b.aid, "Measuring speed through the tunnel (8 connections each way)")
-            b.quality = _probe(iran, b.test_port, key, secs=4, streams=8, pings=20, to=2.5)
+            _say(b.aid, "Measuring speed through the tunnel (8 connections each way)" + (", up to 24 MB a connection" if b.capped else ""))
+            b.quality = _probe(iran, b.test_port, key, secs=4, streams=8, pings=20, to=2.5, **({"cap": PAIR_STREAM_CAP} if b.capped else {}))
 
             try:      # ONE connection too (the owner, 2026-10-16: the closest to what a customer gets: a phone downloads over one connection)
-                one = _probe(iran, b.test_port, key, secs=4, streams=1, pings=1, to=2.5)
+                one = _probe(iran, b.test_port, key, secs=4, streams=1, pings=1, to=2.5, **({"cap": PAIR_ONE_CAP} if b.capped else {}))
                 b.quality["down1_mbps"], b.quality["up1_mbps"] = one.get("down_mbps"), one.get("up_mbps")
             except (SSHError, RuntimeError, ValueError) as e:
                 _say(b.aid, f"One connection not measured: {str(e)[:80]}")
@@ -1137,7 +1161,9 @@ def quality(tunnel_id: int, secs: float = 4) -> dict:
     except (SSHError, ValueError):
         pass
 
-    with livebw.quiet(tunnel_id, 60 if secs > 0 else 1):                     # (the test moves data over the link: that is not the users' - the live numbers wait for it; pings move nothing)
+    from . import testbudget
+
+    with testbudget.purpose("tunnel-test"), livebw.quiet(tunnel_id, 60 if secs > 0 else 1):                     # (the test moves data over the link: that is not the users' - the live numbers wait for it; pings move nothing)
         q = _probe(iran, port, key, secs=secs, streams=8, pings=30, to=2.5)
 
     if q.get("error") or q.get("latency_ms") is None:

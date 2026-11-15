@@ -18,7 +18,7 @@ const knReady = p => {
 };
 
 /* the volume of the Doctor's own tests today against its daily budget (services/testbudget.py) */
-const knVolume = v => v ? `<small class="mut kn-vol" title="${esc("The speed tests and the surveys of the Doctor are traffic too. The routine ones slow down from half of the daily budget and stop at 80 %; a tunnel that dropped is still tested until the budget is used. " + (v.stretch > 1 ? "The routine tests are " + v.stretch + " times as far apart today. " : "") + Object.entries(v.by || {}).map(([k, g]) => k + " " + g + " GB").join(", "))}">tests today ${v.used_gb} of ${v.daily_gb} GB</small>` : "";
+const knVolume = v => v ? `<small class="mut kn-vol" title="${esc("The speed tests and the surveys of the Doctor are traffic too. The routine ones slow down from half of the daily budget and stop at 80 %; a tunnel that dropped is still tested until the budget is used. " + (v.stretch > 1 ? "The routine tests are " + v.stretch + " times as far apart today. " : "") + Object.entries(v.by || {}).map(([k, g]) => k + " " + g + " GB" + ((v.tests || {})[k] ? " (" + v.tests[k] + " tests)" : "")).join(", "))}">tests today ${v.used_gb} of ${v.daily_gb} GB</small>` : "";
 
 window.knLoad = async () => {
   const box = $("#kn-box"); if (!box) return;

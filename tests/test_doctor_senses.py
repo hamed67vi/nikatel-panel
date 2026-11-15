@@ -255,7 +255,7 @@ def test_the_pair_test_says_the_latency_under_load_and_keeps_it(monkeypatch):
     said = []
 
     class B:
-        aid, test_port, measure, quality = 1, 39100, "full", {}
+        aid, test_port, measure, quality, name, capped = 1, 39100, "full", {}, "test-1", False
 
     def fake(iran, port, key, secs=0, streams=8, pings=3, to=1.2):
         return {"latency_ms": 80.0, "jitter_ms": 1.0, "loss_pct": 0.0, "down_mbps": 400.0, "up_mbps": 380.0, "loaded_ms": 310.0} if streams == 8 else {"down_mbps": 55.0, "up_mbps": 41.0}

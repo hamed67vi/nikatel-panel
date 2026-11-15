@@ -461,8 +461,11 @@ def kind_parts(kind: str) -> tuple[str, str]:
     return "chisel", {"chisel:tls": "wss", "chisel:fwd": "fws", "chisel:fwdtls": "fwss"}.get(kind, "ws")
 
 
-def start_other(iran_id: int, foreign_id: int, kind: str, measure: str = "full") -> int:
-    """A temporary BackPack / Paqet / Chisel tunnel: built (which measures it), then removed. Returns the test's action id."""
+CAPPED_SOURCES = ("survey-verify",)       # (1.69.282) the pair speed tests the Doctor asks for by itself: a stream stops by BYTES too (build_other.PAIR_STREAM_CAP). A test the owner asks for - Compare, Test now, the Smart test - and the tests of a repair are never capped.
+
+
+def start_other(iran_id: int, foreign_id: int, kind: str, measure: str = "full", capped: bool = False) -> int:
+    """A temporary BackPack / Paqet / Chisel tunnel: built (which measures it), then removed. Returns the test's action id. `capped`: its speed test stops a stream by bytes too (1.69.282)."""
     purge_leftovers(iran_id, foreign_id)
     from . import build_other
 
@@ -477,7 +480,7 @@ def start_other(iran_id: int, foreign_id: int, kind: str, measure: str = "full")
         n += 1
 
     name = f"test-{n}"
-    build_aid = build_other.start_build(iran_id, foreign_id, str(TEST_PORT), k, tr, {}, forced_name=name, measure=measure)
+    build_aid = build_other.start_build(iran_id, foreign_id, str(TEST_PORT), k, tr, {}, forced_name=name, measure=measure, **({"capped": True} if capped else {}))
 
     with session() as db:
         entry = ActionLog(ref=name, action="tunnel_test", source="manual", story=[f"Temporary {kind} tunnel {name} is being built (build #{build_aid})…"])
@@ -601,7 +604,7 @@ def compare_start(iran_id: int, foreign_id: int, kinds: list[str], measure: str 
             jid += "x"
 
         job = {"id": jid, "iran_id": iran_id, "foreign_id": foreign_id, "measure": measure, "source": source, "kinds": kinds, "results": [], "current": "", "current_aid": None, "done": False, "stop": False, "started": int(time.time()),
-               "install_wg": bool(install_wg)}
+               "install_wg": bool(install_wg), "capped": source in CAPPED_SOURCES}
         _COMPARE[jid] = job
 
         for old in [k for k, v in _COMPARE.items() if v["done"] and time.time() - v["started"] > 7200]:
@@ -625,7 +628,7 @@ def _compare_worker(job: dict) -> None:
             job["current"] = kind
 
             try:
-                aid = start(job["iran_id"], job["foreign_id"], kind_parts(kind)[1], kind_link(kind), bool(job.get("install_wg"))) if kind_parts(kind)[0] == "backhaul" else start_other(job["iran_id"], job["foreign_id"], kind, job.get("measure", "full"))
+                aid = start(job["iran_id"], job["foreign_id"], kind_parts(kind)[1], kind_link(kind), bool(job.get("install_wg"))) if kind_parts(kind)[0] == "backhaul" else start_other(job["iran_id"], job["foreign_id"], kind, job.get("measure", "full"), **({"capped": True} if job.get("capped") else {}))
             except (ValueError, RuntimeError, OverflowError) as e:          # (an id the database cannot hold killed this thread: the comparison stayed "running" for ever)
                 job["results"].append({"kind": kind, "ok": False, "error": str(e)[:160]})
                 continue

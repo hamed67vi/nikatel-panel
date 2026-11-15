@@ -193,7 +193,7 @@ echo "IF=$IF"; echo "IP=$IP"; echo "GW=$GW"; echo "MAC=$MAC"
 
     # latency / jitter / loss and (when SECS > 0) speed both ways through a tunnel's test door
     # (runs on the Iran server, talks to the sink on the foreign server through the tunnel)
-    "probe_run": (r"""python3 - '@PORT@' '@SECS@' '@STREAMS@' '@PINGS@' '@KEY@' '@TO@' '@HOST@' '@BYTES@' '@DIR@' '@UDPN@' <<'__NK_PY__'
+    "probe_run": (r"""python3 - '@PORT@' '@SECS@' '@STREAMS@' '@PINGS@' '@KEY@' '@TO@' '@HOST@' '@BYTES@' '@DIR@' '@UDPN@' '@UBYTES@' <<'__NK_PY__'
 import socket, threading, time, json, sys, os, select
 # every block is NEW random bytes: a tunnel that compresses or de-duplicates (BackPack) must not look faster than it is for the encrypted traffic of real customers (a pool of the same blocks over and over is found again by a window of a few MB)
 P = int(sys.argv[1]); SECS = float(sys.argv[2]); N = int(sys.argv[3]); PINGS = int(sys.argv[4]); KEY = sys.argv[5].encode()
@@ -203,6 +203,7 @@ H = (sys.argv[7] if len(sys.argv) > 7 else "") or "127.0.0.1"
 LIM = int(sys.argv[8] or 0) if len(sys.argv) > 8 else 0
 DIRS = (sys.argv[9] if len(sys.argv) > 9 else "") or "du"
 UDPN = int(sys.argv[10] or 0) if len(sys.argv) > 10 else 0          # UDP packets to echo through the link (0 = none): the loss of a link that drops ICMP
+ULIM = int(sys.argv[11]) if len(sys.argv) > 11 and sys.argv[11] else LIM          # (1.69.282) UBYTES: stop an UPLOAD stream after this many bytes (empty = the same as BYTES): a customer downloads, the upload of a pair test can be a smaller one
 def card():
     # bytes in + out of the card of the default route since boot - the wire the tunnel really uses (1.69.223); None when this machine cannot say
     try:
@@ -315,7 +316,7 @@ def run(mode, results, i):
             rate = (n - nw) * 8 / (end - warm) / 1e6 if (warm and end > warm) else n * 8 / max(end - t0, 0.2) / 1e6
         else:
             sent = 0
-            while time.time() - t0 < SECS and (not LIM or sent < LIM):
+            while time.time() - t0 < SECS and (not ULIM or sent < ULIM):
                 s.sendall(os.urandom(65536)); sent += 65536
             got = sent
             s.settimeout(30)
@@ -368,7 +369,7 @@ if SECS > 0 and "error" not in out and MOVED:
 print("NKPROBE " + json.dumps(out))
 __NK_PY__
 """, {"PORT": r"^\d{1,5}$", "SECS": r"^\d{1,2}(\.\d)?$", "STREAMS": r"^\d{1,2}$", "PINGS": r"^\d{1,3}$", "KEY": r"^[a-z0-9]{1,32}$", "TO": r"^\d{1,2}(\.\d)?$",
-       "HOST": r"^(\d{1,3}(\.\d{1,3}){3})?$", "BYTES": r"^\d{0,9}$", "DIR": r"^(d|u|du)?$", "UDPN": r"^\d{0,3}$"}),
+       "HOST": r"^(\d{1,3}(\.\d{1,3}){3})?$", "BYTES": r"^\d{0,9}$", "DIR": r"^(d|u|du)?$", "UDPN": r"^\d{0,3}$", "UBYTES": r"^\d{0,9}$"}),
 
     # how many packets the firewall counted on the raw port of a Paqet tunnel (the rules of its own firewall script count): PAQET_IN = packets that arrived for the port, PAQET_OUT = packets the server sent from it. Read-only.
     "paqet_count": (r"""P=@PORT@

@@ -181,7 +181,7 @@ def run_customer(aid: int, tunnel_id: int, say) -> dict:
 def run_door(aid: int, tunnel_id: int, say) -> dict:
     """Through the test door of the tunnel: one connection, then four (random data: a tunnel that compresses must not look faster than it is)."""
     from ..ssh import run_action
-    from . import build_other
+    from . import build_other, testbudget
 
     with session() as db:
         t = _tunnel(db, tunnel_id)
@@ -200,7 +200,7 @@ def run_door(aid: int, tunnel_id: int, say) -> dict:
 
     say("One connection through the test door of the tunnel: 6 s down, 6 s up…")
 
-    with livebw.quiet(tunnel_id, 90):                             # (the two tests move data over the link: not the users')
+    with testbudget.purpose("tunnel-speed"), livebw.quiet(tunnel_id, 90):                             # (the two tests move data over the link: not the users'; 1.69.282: counted under the name of the owner's own speed test)
         one = build_other._probe(iran, port, key, secs=6, streams=1, pings=20, to=2.5)
 
         if one.get("error") or one.get("latency_ms") is None:

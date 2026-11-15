@@ -9,10 +9,13 @@ What it counts: the bytes the streams of every speed test moved (`probe_run` say
   cut      (a tunnel that is cut: the repair and its tests) are never held back;
   by hand  (the owner's own "Test now") are never held back.
 The budget is `daily_gb` in the settings document `testbudget` (default 30 GB, a day is a Tehran day).
+(1.69.282) Every count carries the NAME of what asked for the test (`by`, the bytes; `tests`, how many; the last days keep their `days_by`): "where does the volume go" is read, not worked out.
 (1.69.280) The routine speed tests are asked once in `speed_every()` - `speed_days` in the same document, 10 days by default (the owner, 2026-11-15: "تست سرعت هر 10 روز یک بار انجام بشه"): one speed test per kind of a live pair
 (the verify survey) and per tunnel (the bandwidth job). The pings, the latency tests and the tests that something asks for (a new tunnel, a drop, a poor score, a repair, the owner) are not held by it."""
 from __future__ import annotations
 
+import contextlib
+import contextvars
 import threading
 import time
 
@@ -42,6 +45,26 @@ def speed_every() -> int:
     return int(min(max(days, 1.0), 60.0) * 86400)
 
 
+_WHAT: contextvars.ContextVar[str] = contextvars.ContextVar("testbudget_what", default="probe")
+
+
+@contextlib.contextmanager
+def purpose(what: str):
+    """(1.69.282) The name the speed tests run inside the block are counted under (`spend`): the caller says what it is for, the test itself - `build_other.parse_probe` - does not know. A thread has its own: a job that
+    measures a tunnel and a pair test that runs beside it never mix their names."""
+    token = _WHAT.set(str(what) or "probe")
+
+    try:
+        yield
+    finally:
+        _WHAT.reset(token)
+
+
+def purpose_now() -> str:
+    """The name the tests of this thread are counted under now ("probe" when nobody named it)."""
+    return _WHAT.get()
+
+
 def _day(now: int) -> int:
     return (int(now) + TEHRAN) // 86400
 
@@ -56,7 +79,8 @@ def limit_bytes() -> int:
 
 
 def spend(nbytes, what: str = "probe", now: int | None = None) -> None:
-    """Count what a test moved. Never raises: a speed test is not stopped by its own bookkeeping."""
+    """Count what a test moved, under the name of what asked for it (1.69.282: `bandwidth` the job that measures a tunnel, `pair-survey` the Doctor's speed test of a pair, `pair-test` and `new-tunnel` the tests the owner asked for
+    or a repair needed, `tunnel-test`, `tunnel-speed`; the tests are counted too, per name). Never raises: a speed test is not stopped by its own bookkeeping."""
     try:
         n = int(nbytes or 0)
     except (TypeError, ValueError):
@@ -71,18 +95,21 @@ def spend(nbytes, what: str = "probe", now: int | None = None) -> None:
     try:
         with _LOCK:
             d = st.get("testbudget")
-            days = dict(d.get("days") or {})
-            used, by = int(d.get("bytes") or 0), dict(d.get("by") or {})
+            days, days_by = dict(d.get("days") or {}), dict(d.get("days_by") or {})
+            used, by, tests = int(d.get("bytes") or 0), dict(d.get("by") or {}), dict(d.get("tests") or {})
 
             if int(d.get("day") or 0) != day:
                 if d.get("day"):
                     days[str(d["day"])] = used
+                    days_by[str(d["day"])] = by          # (1.69.282) what the day moved, per kind of test: the answer to "what is the volume made of" is kept for the last days too
 
-                used, by = 0, {}
+                used, by, tests = 0, {}, {}
                 days = {k: v for k, v in days.items() if int(k) > day - KEEP_DAYS}
+                days_by = {k: v for k, v in days_by.items() if int(k) > day - KEEP_DAYS}
 
             by[what] = int(by.get(what, 0)) + n
-            st.put("testbudget", {"day": day, "bytes": used + n, "by": by, "days": days})
+            tests[what] = int(tests.get(what, 0)) + 1
+            st.put("testbudget", {"day": day, "bytes": used + n, "by": by, "tests": tests, "days": days, "days_by": days_by})
     except SQLAlchemyError:
         log.exception("the volume of a test could not be counted")
 
@@ -159,6 +186,10 @@ def state(now: int | None = None) -> dict:
     d = st.get("testbudget")
     today = _day(now)
     cur = int(d.get("bytes") or 0) if int(d.get("day") or 0) == today else 0
-    days = [{"day": time.strftime("%Y-%m-%d", time.gmtime(int(k) * 86400)), "gb": round(int(v) / 1e9, 1)} for k, v in sorted(dict(d.get("days") or {}).items(), key=lambda kv: int(kv[0]))[-7:]]
+    days_by = dict(d.get("days_by") or {})
+    days = [{"day": time.strftime("%Y-%m-%d", time.gmtime(int(k) * 86400)), "gb": round(int(v) / 1e9, 1),
+             **({"by": {w: round(int(b) / 1e9, 2) for w, b in dict(days_by[k]).items()}} if isinstance(days_by.get(k), dict) else {})} for k, v in sorted(dict(d.get("days") or {}).items(), key=lambda kv: int(kv[0]))[-7:]]
+    today_by = int(d.get("day") or 0) == today
     return {"daily_gb": round(limit_bytes() / 1e9, 1), "used_gb": round(cur / 1e9, 2), "share": round(cur / limit_bytes(), 3), "stretch": stretch(now), "routine": allow("routine", now), "firsts": sum(_firsts(now).values()),
-            "by": {k: round(int(v) / 1e9, 2) for k, v in dict(d.get("by") or {}).items()} if cur else {}, "days": days}
+            "by": {k: round(int(v) / 1e9, 2) for k, v in dict(d.get("by") or {}).items()} if cur else {},
+            "tests": {k: int(v) for k, v in dict(d.get("tests") or {}).items()} if today_by else {}, "days": days}

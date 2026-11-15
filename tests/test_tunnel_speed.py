@@ -212,7 +212,7 @@ def test_the_pair_test_measures_one_connection_beside_the_eight(monkeypatch):
     said, calls = [], []
 
     class B:                                                    # the little of a Build that _measure uses
-        aid, test_port, measure, quality = 1, 39100, "full", {}
+        aid, test_port, measure, quality, name, capped = 1, 39100, "full", {}, "test-1", False
 
     def fake(iran, port, key, secs=0, streams=8, pings=3, to=1.2):
         calls.append((streams, secs))

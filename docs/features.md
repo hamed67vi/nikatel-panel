@@ -55,6 +55,19 @@ Plain JS, no build step; hover fade on every button and row; a loading box and a
 |---|---|
 | **Settings → Api & Key → Bale · customer notices** | a small Bale bot on one Iran server (`relay/bale_relay.py`): customers start it once and may link their subscription; it tells them by itself when the server has lost the whole outside world for a few minutes and again when it is back; customers can write to you in the same chat and you answer from your own Bale (so an owner abroad with only Bale reachable can run it: `/send`, `/cut`, `/back`, `/info`). Install / update / remove from the box, the state read from the server, the texts changeable. Design and limits: [`bale.md`](bale.md) |
 
+## The volume of the Doctor's tests, cut at its two sources (1.69.282)
+
+With the ten-day rhythm the day's volume still read 53 GB on a mean (the budget is 30): the night of 2026-11-16 filled 11 GB in its first 44 minutes. Two things made it, and neither was a count of tests the owner wanted to lower.
+(1) **The pair speed test had no byte cap**: eight connections for four seconds each way, then one connection - on a pair that carries 2 Gb/s that is up to 2 GB a test, and a new server brought tests by the dozen. The speed tests the Doctor asks for by itself
+(the verify survey, `tunnel_test.CAPPED_SOURCES`) now stop a stream by BYTES too (`probe_run`'s `BYTES` for the download, the new `UBYTES` for the upload): eight connections pull 24 MB and push 20 MB, the one connection 96 MB and 32 MB - 480 MB a test at the
+most (1.1 GB on a line of 1 Gb/s before). A line under about 0.5 Gb/s never reaches the cap (the four seconds end first), so its numbers are what they were. Measured on two standby tunnels (1.07 and 0.6 Gb/s) before it was shipped: the eight connections read the same
+as the whole four seconds; a short upload (12 MB) read 20 - 28 % low and a short single connection (48 MB) 15 % low, which is why the caps are what they are. A test the owner asks for (Compare, Test now, the Smart test, a new tunnel's first measurement) and a repair's
+candidate tests are never capped.
+(2) **The poor-score rule measured a far line every ten minutes for ever**: the quality score comes from the delay, so a line of 170 ms is under 40 whatever it does, and every tunnel under 40 got a speed test ten minutes after the last one (105 a day on 8
+tunnels, one of them alone 33). Now the test goes after ten minutes only when the tunnel is NEWLY poor - it was not poor at its last test (the test keeps the score it had: `bw["q"]`), or its score fell 15 points since - and every six hours when it was poor at its last test too (`bandwidth.poor_after`).
+And the volume is no longer one number: every count carries the NAME of what asked for the test (`testbudget.purpose`: `bandwidth`, `pair-survey`, `pair-test`, `new-tunnel`, `tunnel-test`, `tunnel-speed`) - the bytes and the number of tests of today, and the last days with their names (`days_by`) - the
+tooltip of "tests today" on the Doctor's page lists them.
+
 ## The free quality signals (1.69.281)
 
 With the speed tests asked once in ten days, the quality between them is read from what costs no byte. Every five minutes one light command per Iran server (`tcp_health`) reads, from the kernel's own counters of the tunnel's TCP sockets (`ss -tin`: bytes sent,

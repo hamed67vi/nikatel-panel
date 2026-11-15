@@ -37,8 +37,10 @@ INTERVAL = 4 * 3600          # between two measurements of one tunnel (a little 
 PROVE_MBPS = 20.0            # the users' own traffic through a tunnel proves it (no test needed) when their peak of the last half hour is at least this and 60 % (DROP_RATIO) of the usual level: no drop is possible then
 CONFIRM_AFTER = 180          # a sample that looks like a drop is measured again after this
 SLOW_CONFIRM_AFTER = 60      # the second test of a very slow one comes this soon (a drop keeps its 3 minutes): the owner, 2026-10-19: "the process must not take long"
-POOR_SCORE = 40             # a tunnel whose quality test scored under this is measured every POOR_AFTER, not every INTERVAL
-POOR_AFTER = 10 * 60
+POOR_SCORE = 40             # a tunnel whose quality test scored under this is measured soon (POOR_AFTER, or POOR_AGAIN when it was poor at its last test already), not at the usual rhythm
+POOR_AFTER = 10 * 60        # a tunnel that is poor NOW and was not at its last test (or fell POOR_FALL points since): measured again this soon (the owner, 2026-10-19: "when a tunnel has a problem, do not wait for the next sample")
+POOR_AGAIN = 6 * 3600       # (1.69.282) a tunnel that was poor at its last test too: this late. The score comes from the DELAY: a line of 170 ms is under 40 for ever and was measured every ten minutes - 16 tests a day that said the same
+POOR_FALL = 15              # ... unless its score fell by this many points since that test: that is a change, not the line's usual
 WATCH_AFTER = 20 * 60       # while a drop lasts the tunnel is measured this often (to see it end)
 RETRY_AFTER = 15 * 60        # a tunnel that could not be measured is left alone this long
 RETRY_FIRST = 90             # ... but a tunnel that has NO capacity yet (a new one) is tried again soon: its row shows a dash until the first test (the owner, 2026-10-21)
@@ -367,6 +369,8 @@ def _store(tunnel_id: int, down: float, up: float | None, how: str, ping: float 
         if kept:
             bw["bloat"] = kept
 
+        score = (rec.get("quality") or {}).get("score")
+        bw["q"] = float(score) if isinstance(score, (int, float)) else None          # (1.69.282: the quality score of the tunnel at the time of this test - the poor-score rule asks whether the tunnel is NEWLY poor, `poor_after`)
 
         if bw["next_at"] == now + every():               # the usual rhythm: a few minutes different for every tunnel, so that they do not all fall in one minute
             bw["next_at"] += (tunnel_id * 97) % 600
@@ -501,7 +505,7 @@ def _measure(tunnel_id: int) -> tuple[dict, str]:
     _ensure_sink(tunnel_id, foreign, target["peer"], key)
     params = {"PORT": str(LINK_PORT), "SECS": str(SECS), "STREAMS": str(STREAMS), "PINGS": "5", "KEY": key, "TO": "2.0", "HOST": target["peer"], "BYTES": str(BYTES), "DIR": "d", "UDPN": str(UDP_PACKETS)}
 
-    with livebw.quiet(tunnel_id):                         # (what this test moves over the link is not the users': the live numbers wait for it)
+    with testbudget.purpose("bandwidth"), livebw.quiet(tunnel_id):                         # (what this test moves over the link is not the users': the live numbers wait for it; 1.69.282: its volume is counted under its own name)
         try:
             d = build_other.parse_probe(run_script(iran, "probe_run", params, timeout=45))
 
@@ -564,6 +568,20 @@ def every() -> int:
     return max(INTERVAL, testbudget.speed_every())
 
 
+def poor_after(score, last) -> int | None:
+    """Pure (1.69.282): seconds after its last test a tunnel with this quality `score` is measured again because the score is poor (under POOR_SCORE); None = the poor-score rule does not apply (a good score, or no score).
+    `last` = the score the tunnel had when its last test was taken (`bw["q"]`; None = not known, as before the first update). A tunnel that is NEWLY poor - good at its last test, or one whose score fell POOR_FALL points or more
+    since - is looked at soon (POOR_AFTER, the owner's rule of 2026-10-19). One that was poor at its last test too is the line's usual (the score comes from the delay: a line of 170 ms never gets over 40): POOR_AGAIN. Before this,
+    every poor tunnel was measured every ten minutes for ever - 105 tests a day on 8 tunnels, the speed tests of a whole Tehran day made of the same answer."""
+    if score is None or float(score) >= POOR_SCORE:
+        return None
+
+    if last is None or float(last) >= POOR_SCORE or float(last) - float(score) >= POOR_FALL:
+        return POOR_AFTER
+
+    return POOR_AGAIN
+
+
 def _due(now: int) -> list[int]:
     """The tunnels to measure, the one that waited longest first: up, with a GRE link or a test door, not measured for `every()` (10 days, 1.69.280; or asked for sooner by `next_at`) - and, on the usual
     rhythm, not proven by their own users (`users_prove`): a drop, a very slow tunnel, a poor score and a tunnel never measured are looked at whatever the users carry."""
@@ -586,8 +604,8 @@ def _due(now: int) -> list[int]:
 
                 if bw.get("state") == "learning" and float(bw.get("down") if bw.get("down") is not None else 99) < SLOW_MBPS:
                     nxt, early = min(nxt, at + SLOW_CONFIRM_AFTER), True               # a very slow test that nobody has judged (the first of a pair, or one of a schedule from before 1.69.15) is not left for the next turn
-                elif q.get("score") is not None and float(q["score"]) < POOR_SCORE and bw.get("state") not in ("drop", "slow"):
-                    nxt, early = min(nxt, at + POOR_AFTER), True                       # a tunnel the quality test calls poor is measured again soon: "when a tunnel has a problem, do not wait for the next sample" (the owner, 2026-10-19)
+                elif bw.get("state") not in ("drop", "slow") and poor_after(q.get("score"), bw.get("q")) is not None:
+                    nxt, early = min(nxt, at + poor_after(q.get("score"), bw.get("q"))), True        # a tunnel the quality test calls poor is measured again soon: "when a tunnel has a problem, do not wait for the next sample" (the owner, 2026-10-19) - 1.69.282: soon when it is NEWLY poor, every POOR_AGAIN when it was poor at its last test too
 
             if now >= nxt:
                 out.append((at, t.id))

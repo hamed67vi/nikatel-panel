@@ -46,6 +46,29 @@ def test_a_speed_test_that_says_what_it_moved_is_counted_and_its_wire_cost_is_wo
     assert "wire_ratio" not in d and testbudget.used() == 100_000_000                                         # (an older script, or a test that moved nothing: nothing is added)
 
 
+def test_the_volume_is_counted_under_the_name_of_what_asked_for_it_and_the_last_days_keep_their_names():
+    """1.69.282 (the owner, 2026-11-16): "what is the volume made of" is read, not worked out - the bytes and the number of tests per name, today and for the last days."""
+    out = 'NKPROBE {"down_mbps": 100.0, "w_moved": 100000000}'
+
+    with testbudget.purpose("bandwidth"):
+        build_other.parse_probe(out)
+        build_other.parse_probe(out)
+
+    build_other.parse_probe(out)                                                                              # (nobody named it)
+
+    with testbudget.purpose("pair-survey"):
+        build_other.parse_probe(out)
+
+    s = testbudget.state()
+    assert s["by"] == {"bandwidth": 0.2, "probe": 0.1, "pair-survey": 0.1} and s["tests"] == {"bandwidth": 2, "probe": 1, "pair-survey": 1} and s["used_gb"] == 0.4
+    testbudget.spend(2 * GB, "bandwidth", NOW)
+    testbudget.spend(1 * GB, "pair-survey", NOW + 60)
+    testbudget.spend(1 * GB, "probe", NOW + 86400)                                                            # (the next Tehran day: the first one is closed with its names)
+    s = testbudget.state(NOW + 86400)
+    assert s["by"] == {"probe": 1.0} and s["tests"] == {"probe": 1} and s["days"][-1]["gb"] == 3.0 and s["days"][-1]["by"] == {"bandwidth": 2.0, "pair-survey": 1.0}
+    assert testbudget.state(NOW + 3 * 86400)["tests"] == {}                                                   # (a day with no test says nothing: the counts belong to their own day)
+
+
 def _routine(monkeypatch, ids, trouble=()):
     monkeypatch.setattr(get_settings(), "read_only", False)
     monkeypatch.setattr(bandwidth.jobs, "stopping", lambda: False)
