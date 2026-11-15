@@ -541,6 +541,18 @@ def tools_missing(lines) -> bool:
     return any("wireguard-tools is not installed" in str(ln) for ln in list(lines or [])[-6:])
 
 
+def tools_side(lines) -> str:
+    """Pure: WHICH server the build named as lacking wireguard-tools - "iran", "foreign" or "" when the story does not say. The Doctor then keeps every pair of that server from spending a build on a WireGuard
+    kind (`knowledge.no_tools_on`): it used to learn it again on every pair, for every WireGuard kind, every day."""
+    for ln in reversed(list(lines or [])[-6:]):
+        m = re.search(r"\b(Iran|Foreign) server [^:]{1,80}: wireguard-tools is not installed", str(ln))
+
+        if m:
+            return m.group(1).lower()
+
+    return ""
+
+
 UNFIT_MARKS = ("has no python3", "the SSH user is not root", "(x86_64 only)", "(x86_64 and aarch64 only)")          # (the old wording stays: a story saved before ARM was supported still reads as it did)
 
 
@@ -644,6 +656,7 @@ def _compare_worker(job: dict) -> None:
             r.update(kind=kind, ok=ok, aid=aid, verdict=story[-1] if story else "", error="" if ok or r.get("score") is not None else explain_failure(kind, (story[-1] if story else "no result")[:160]))   # a failed build says why
             if not ok and tools_missing(story):
                 r["skipped"] = "tools"
+                r["tools_side"] = tools_side(story)
                 r["error"] = "not tested: wireguard-tools is not installed on a server (Servers -> the server's menu -> Install -> WireGuard tools)"
             elif not ok and server_unfit(story):
                 r["skipped"] = "server"                      # (a server that cannot run the engine: every type of it fails the same way - not tested, not blocked)

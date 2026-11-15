@@ -34,6 +34,7 @@ from .tunnels import (
     being_removed,
     check_tunnel,
     external_probe_one,
+    in_move,
     judge,
     plan_for,
     servers_off,
@@ -454,6 +455,9 @@ def auto_repair() -> None:
     down.sort(key=lambda r: r[2])
 
     for tid, name, since, why in down:
+        if in_move(name, now):          # (the new tunnel of a move that is still running: the move checks it and removes it when it carries nothing)
+            continue
+
         if len(_RUNNING) >= 4:                       # servers coming back together: a few restarts at a time, the rest next minute
             break
 

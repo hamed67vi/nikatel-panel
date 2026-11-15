@@ -393,7 +393,7 @@ def lighter_kinds(pair: dict | None, now: int, current: str, allowed=lambda k: T
 
 def blocked(pair: dict | None, now: int) -> list[str]:
     """The kinds that did not work on the pair lately (a test that failed less than FAIL_FRESH ago)."""
-    return sorted(k for k, e in ((pair or {}).get("kinds") or {}).items() if verdict(e) == "failed" and now - int(e["last"].get("at") or 0) < FAIL_FRESH)
+    return sorted(k for k, e in ((pair or {}).get("kinds") or {}).items() if verdict(e) == "failed" and now - int(e["last"].get("at") or 0) < fail_wait(e))
 
 
 def untested(pair: dict | None) -> list[dict]:
@@ -425,8 +425,10 @@ def forget_tool_skips(server_id: int) -> None:
                 d["pairs"][key] = {**p, "kinds": kinds, "links": links}
                 changed = True
 
-        if changed:
-            st.put("knowledge", {"pairs": d["pairs"]})
+        marks = {k: v for k, v in dict(d.get("no_tools") or {}).items() if k != str(int(server_id))}          # (and the server is no longer "seen without the tools")
+
+        if changed or len(marks) != len(d.get("no_tools") or {}):
+            st.put("knowledge", {"pairs": d["pairs"], "no_tools": marks})
 
 
 def poor(pair: dict | None, now: int) -> list[str]:
@@ -471,6 +473,140 @@ def due_kinds(pair: dict | None, kinds: list[str], now: int, refresh: int = REFR
             out.append(k)
 
     return out
+
+
+# ------------------------------------------------------------------ the test plan (1.69.277): a test is run for what it is WORTH
+# The owner, 2026-11-15: "the Doctor must not run pointless tests ... it must run the best tests, so that its capacity for the important tests is not used up". Fourteen days of a live panel: about 190 temporary
+# test tunnels a day (56 hours of them), most of them the weekly re-test of every kind of every pair - also of the kinds nothing would ever use, of the ones that fail every time, of every transport of a link
+# that does not pass, and of the WireGuard kinds on servers without wireguard-tools (136 builds, none could work). Every kind is still tested ONCE on every pair (the Doctor knows every way out of a cut); what
+# changes is how soon a kind is worth ANOTHER test:
+#   needed   the types that run on the pair, its best NEED_TOP, and the best NEED_PER_CUT that stay possible in each kind of cut     -> after REFRESH, as before
+#   spare    it works, but nothing would reach for it                                                                                -> after SPARE_REFRESH
+#   poor     it carried data under the line (a faster-but-poor one is looked at sooner by `poor_retest`)                             -> after POOR_REFRESH
+#   failing  it did not work                                                                                                         -> FAIL_FRESH, twice as long after every failure in a row, FAIL_MAX at most
+#   link     the kind that speaks for its link (`family_head`) failed or could not be tried lately                                   -> not before that one is asked again: it would fail for the same reason
+#   tools    a server of the pair was SEEN without wireguard-tools (the build names it)                                              -> no WireGuard kind is built on ANY pair of that server for TOOLS_SERVER_RETRY
+NEED_TOP = LIMIT                  # the best kinds of a pair, by what the user gets: the ones a switch reaches for first
+NEED_PER_CUT = 2                  # ... and the best two that stay possible in each cut (see CUT_SCENARIOS): the way out of a cut and its reserve
+SPARE_REFRESH = FULL_FRESH        # a kind that works but that nothing would use: tested again after a month, not after a week
+POOR_REFRESH = FULL_FRESH         # a kind that carried data but scored under the line: the same
+FAIL_MAX = 56 * 86400             # a kind that keeps failing: 14, 28, then 56 days between two tries
+TOOLS_SERVER_RETRY = 7 * 86400    # a server seen without wireguard-tools is believed for this long (at once when the owner installs them: `forget_tool_skips`)
+SPARED = ("spare", "poor", "failing", "link", "tools")          # why a re-test that the old weekly rule would have run is left out
+
+
+def needs_tools(kind: str) -> bool:
+    """Pure: does this kind need wireguard-tools on both servers (Backhaul over WireGuard, plain or carried in Chisel)?"""
+    return str(kind).partition(":")[0] in ("wg", *linkmodels.CARRIER_LINKS)
+
+
+def family_head(kind: str) -> str:
+    """Pure: the kind that speaks for the link a kind runs over - `tcpmux` for the Backhaul kinds over GRE, `<link>:tcpmux` for Backhaul over another link, the kind itself for every other engine.
+    When the head failed (or could not be tried), the other transports of the same link would fail for the same reason."""
+    link, _transport = linkmodels.split_kind(kind)
+
+    if link == "gre":
+        return "tcpmux"
+
+    return f"{link}:tcpmux" if link else kind
+
+
+def fail_streak(e: dict | None) -> int:
+    """Pure: how many of the newest kept tests of a kind failed in a row (it did not work at all: nothing was measured)."""
+    n = 0
+
+    for x in reversed((e or {}).get("hist") or []):
+        if x.get("ok") or any(x.get(k) is not None for k in ("down", "down1", "lat", "loss")):
+            break
+
+        n += 1
+
+    return n
+
+
+def fail_wait(e: dict | None) -> int:
+    """Pure: how long a kind that failed is left alone: FAIL_FRESH after one failure, twice as long after every further failure in a row, FAIL_MAX at most."""
+    return min(FAIL_FRESH * 2 ** max(0, fail_streak(e) - 1), FAIL_MAX)
+
+
+def wait_of(kind: str, e: dict | None, needed=frozenset()) -> int:
+    """Pure: the seconds after its last test before a kind is worth another one (see the table above)."""
+    v = verdict(e)
+
+    if v == "failed":
+        return fail_wait(e)
+
+    if v == "untested":
+        return TOOLS_RETRY
+
+    if v == "poor":
+        return POOR_REFRESH
+
+    return REFRESH if kind in needed else SPARE_REFRESH
+
+
+def needed_kinds(pair: dict | None, now: int, running=()) -> set[str]:
+    """Pure: the kinds of a pair whose knowledge must stay FRESH: the types that run on it (`running`), its best NEED_TOP by what the user gets (the first things a switch tries), and the best NEED_PER_CUT that
+    stay possible in each kind of cut (the Iran server cut from abroad, the foreign server filtered, both: the kernel links). Everything else that works is spare."""
+    rows = [r["kind"] for r in ranked(pair, now)]
+    out = set(running) | set(rows[:NEED_TOP])
+
+    for _key, side in CUT_SCENARIOS:
+        out.update([k for k in rows if k in (side or RAW_KINDS)][:NEED_PER_CUT])
+
+    return out
+
+
+def plan_kinds(pair: dict | None, kinds: list[str], now: int, needed=frozenset(), no_tools: bool = False) -> tuple[list[str], dict[str, int]]:
+    """Pure: (the kinds that are worth a test now, in the order given; what was left out and why - only the re-tests the old weekly rule would have run, counted per reason of SPARED).
+    Never tested = due (unless its link cannot pass or a server lacks the tools); tested = due after `wait_of`."""
+    have = (pair or {}).get("kinds") or {}
+    due: list[str] = []
+    spared: dict[str, int] = {}
+
+    for k in kinds:
+        e = have.get(k)
+        last = (e or {}).get("last")
+        age = now - int((last or {}).get("at") or 0)
+        v = verdict(e)
+        old_due = not last or age >= (FAIL_FRESH if v == "failed" else TOOLS_RETRY if v == "untested" else REFRESH)
+        head = family_head(k)
+        he = have.get(head) if head != k else None
+        why = ""
+
+        if no_tools and needs_tools(k):
+            why = "tools"
+        elif he and verdict(he) in ("failed", "untested") and now - int((he.get("last") or {}).get("at") or 0) < wait_of(head, he, needed):
+            why = "link"
+        elif not last or age >= wait_of(k, e, needed):
+            due.append(k)
+            continue
+        else:
+            why = {"failed": "failing", "poor": "poor"}.get(v, "spare")
+
+        if old_due:
+            spared[why] = spared.get(why, 0) + 1
+
+    return due, spared
+
+
+def running_kinds(db) -> dict[tuple[int, int], set[str]]:
+    """The tunnel types that run (or stand by) on every pair right now: they are always worth a fresh test."""
+    from . import autopilot
+
+    out: dict[tuple[int, int], set[str]] = {}
+
+    for t in db.scalars(select(Tunnel)):
+        if not is_temp(t.name):
+            out.setdefault((t.iran_server_id, t.foreign_server_id), set()).add(autopilot.kind_of(t.type, t.transport, t.record or {}))
+
+    return out
+
+
+def no_tools_on(d: dict | None, iran_id: int, foreign_id: int, now: int) -> bool:
+    """Was a server of this pair seen without wireguard-tools less than TOOLS_SERVER_RETRY ago (a build on ANY of its pairs said so)?"""
+    marks = (d or {}).get("no_tools") or {}
+    return any(now - int(marks.get(str(int(s))) or 0) < TOOLS_SERVER_RETRY for s in (iran_id, foreign_id))
 
 
 REVERSE_KINDS = frozenset({"bp:tcpmux", "bp:tcp", "bp:stealth", "bp:wss", "bp:wssmux", "bp:ws", "bp:wsmux", "bp:kcp", "bp:quic", "bp:pck", "bp:xdi", "chisel", "chisel:tls"})      # the FOREIGN server dials the Iran server
@@ -600,7 +736,13 @@ def record(iran_id: int, foreign_id: int, r: dict, measure: str, now: int | None
         kinds = dict(p.get("kinds") or {})
         kinds[r["kind"]] = merge(kinds.get(r["kind"]), r, measure, now)
         d["pairs"][k] = {**p, "at": now, "kinds": kinds}
-        st.put("knowledge", {"pairs": d["pairs"]})
+        changes = {"pairs": d["pairs"]}
+        lacking = {"iran": iran_id, "foreign": foreign_id}.get(str(r.get("tools_side") or ""))
+
+        if r.get("skipped") == "tools" and lacking:          # (the build named the server that lacks wireguard-tools: no pair of that server spends a build on a WireGuard kind until it has them - see `no_tools_on`)
+            changes["no_tools"] = {**dict(d.get("no_tools") or {}), str(int(lacking)): now}
+
+        st.put("knowledge", changes)
 
 
 def record_link(iran_id: int, foreign_id: int, link: str, r: dict, now: int | None = None) -> None:
@@ -987,6 +1129,7 @@ def pending_pairs(now: int, cold_only: bool = False) -> list[tuple[int, int, lis
 
     with session() as db:
         live = _live_pairs(db)
+        running = running_kinds(db)
         out = []
 
         for i, f in live:
@@ -998,10 +1141,12 @@ def pending_pairs(now: int, cold_only: bool = False) -> list[tuple[int, int, lis
             if cold_only and p.get("kinds"):
                 continue
 
-            due = due_kinds(p, allowed, now)
+            need = needed_kinds(p, now, running.get((i, f), ()))          # (the test plan: a kind is tested again for what it is worth - see `plan_kinds`)
+            lacking = no_tools_on(d, i, f, now)
+            due = plan_kinds(p, allowed, now, need, lacking)[0]
 
             if not due and not cold_only:                     # (the night survey goes on when a pair knows its first tier: the rest of the standard list, then the variants of the links that passed)
-                due = due_kinds(p, [k for k in MORE if license.tunnel_kind_allowed(k)], now) or due_kinds(p, [k for k in link_variants(p) if license.tunnel_kind_allowed(k)], now)
+                due = plan_kinds(p, [k for k in MORE if license.tunnel_kind_allowed(k)], now, need, lacking)[0] or plan_kinds(p, [k for k in link_variants(p) if license.tunnel_kind_allowed(k)], now, need, lacking)[0]
 
             if due:
                 out.append((len(p.get("kinds") or {}), int(p.get("at") or 0), i, f, due))
@@ -1105,6 +1250,7 @@ def state(now: int | None = None) -> dict:
     with session() as db:
         names = {s.id: s.name for s in db.scalars(select(Server))}
         live = _live_pairs(db)
+        running = running_kinds(db)
 
     rows = []
 
@@ -1116,12 +1262,15 @@ def state(now: int | None = None) -> dict:
 
         p = d["pairs"].get(k) or {}
         kinds = p.get("kinds") or {}
+        need, lacking = needed_kinds(p, now, running.get((i, f), ())), no_tools_on(d, i, f, now)
+        plans = [plan_kinds(p, lst, now, need, lacking) for lst in (READY, MORE, link_variants(p))]          # (what the survey would really test: the plan, not the old weekly rule)
         rows.append({"iran_id": i, "foreign_id": f, "iran": names[i], "foreign": names[f], "tunnels": live.get((i, f), 0), "at": int(p.get("at") or 0), "tested": len(kinds),
-                     "due": len(due_kinds(p, READY, now)), "due_more": len(due_kinds(p, MORE, now)) + len(due_kinds(p, link_variants(p), now)), "best": ranked(p, now), "poor": poor(p, now), "cuts": repeats(i, f, now), "links": dict(p.get("links") or {}),
+                     "due": len(plans[0][0]), "due_more": len(plans[1][0]) + len(plans[2][0]), "spared": {w: sum(x[1].get(w, 0) for x in plans) for w in SPARED if any(x[1].get(w) for x in plans)}, "best": ranked(p, now), "poor": poor(p, now), "cuts": repeats(i, f, now), "links": dict(p.get("links") or {}),
                      "blocked": [{"kind": x, "error": kinds[x]["last"].get("error") or "", "at": int(kinds[x]["last"].get("at") or 0)} for x in blocked(p, now)],
                      "untested": untested(p), "ready_for": readiness(p, now)})
 
     rows.sort(key=lambda r: (r["iran"].lower(), r["foreign"].lower()))
     return {"on": bool(d["on"]), "from_hour": int(d["from_hour"]), "to_hour": int(d["to_hour"]), "tz_minutes": tz, "window_open": in_window(now, tz, int(d["from_hour"]), int(d["to_hour"])),
             "running": _running(), "volume": testbudget.state(now), "kinds": len(PRIOR), "ready": list(READY), "pairs": rows,
+            "plan": {"due": sum(r["due"] + r["due_more"] for r in rows if r["tunnels"]), "spared": {w: sum(r["spared"].get(w, 0) for r in rows if r["tunnels"]) for w in SPARED}},
             "incidents": [{**e, "pair_name": " ⇄ ".join(names.get(int(x), "?") for x in str(e.get("pair", "0:0")).split(":"))} for e in list(reversed(d.get("incidents") or []))[:30]]}

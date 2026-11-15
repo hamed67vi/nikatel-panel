@@ -72,6 +72,22 @@ def sname(t: Tunnel) -> str:
     return str((t.record or {}).get("slug") or t.name)
 
 
+MOVE_YOUNG = 1800          # the new tunnel of a move (<name>-mv / -mw) is the MOVE's business for this long after it was made
+
+
+def in_move(name: str, now: int | None = None) -> bool:
+    """Is this the NEW tunnel of a move that is still running (its name ends in -mv / -mw and it is younger than MOVE_YOUNG)? The move builds it, checks that it carries data, and renames or removes it;
+    a repair of it worked on a tunnel that was gone a minute later (38 smart repairs in two weeks of a live panel ended "tunnel not found", one of them swapping the type under the move's feet).
+    An old one (a move that died) is repaired like any tunnel."""
+    if not str(name).endswith(("-mv", "-mw")):
+        return False
+
+    with session() as db:
+        made = db.scalar(select(Tunnel.created_at).where(Tunnel.name == name))
+
+    return made is not None and int(now or time.time()) - int(made or 0) < MOVE_YOUNG
+
+
 def servers_off(t: Tunnel) -> list[str]:
     """Plain sentences for the servers of this tunnel that are off (or do not answer). While one is, nothing is done to the tunnel by itself: there is nothing to repair until the server is back."""
     return [f"{role} server {s.name} is off or does not answer" for role, s in (("Iran", t.iran), ("Foreign", t.foreign)) if s is not None and s.enabled and s.online is False]

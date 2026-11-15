@@ -50,7 +50,7 @@ from . import (
 )
 from . import settings as st
 from .events import emit
-from .tunnels import check_tunnel, servers_off, servers_off_of
+from .tunnels import check_tunnel, in_move, servers_off, servers_off_of
 
 log = get_logger("autopilot")
 LEVELS = ("restart", "rebuild", "switch")
@@ -1084,6 +1084,19 @@ def relapsed(name: str, now: int) -> set[str]:
     return out
 
 
+def _id_now(name: str, tunnel_id: int) -> int:
+    """The row of the tunnel a repair works on, NOW: a rebuild (and a failed build that put the old type back) gives the tunnel a new row under the same name. The steps after it looked at the old id:
+    117 smart repairs in two weeks of a live panel ended "Stopped: tunnel not found" right after "Rebuild: Tunnel ... is ready" - the tunnel was healed, the repair was written down as failed, and nothing
+    of it was kept for the next cut. The old id while its row is still there, else the row that carries the name, else the old id (the caller says "not found" as before)."""
+    with session() as db:
+        if db.get(Tunnel, tunnel_id) is not None:
+            return tunnel_id
+
+        new = db.scalar(select(Tunnel.id).where(Tunnel.name == name))
+
+    return int(new) if new is not None else tunnel_id
+
+
 def _holds(aid: int, tunnel_id: int, seconds: int = SOAK) -> bool:
     """A repair that works for a moment is not a repair: the tunnel must still be up `seconds` later (a fresh check, the users' path asked from another Iran server)."""
     time.sleep(seconds)
@@ -1189,6 +1202,7 @@ def smart_fix(aid: int, tunnel_id: int, level: str, source: str = "manual", fini
             healed = ok
         elif step == "rebuild":
             ok, story = _rebuild_safe(aid, tunnel_id)
+            tunnel_id = _id_now(snap["name"], tunnel_id)          # (a rebuild gives the tunnel a new row: the check below and the steps after it follow it)
             _say(aid, "Rebuild: " + (story[-1] if story else "no result"))
             healed = ok
         elif step == "relink":
@@ -1209,6 +1223,7 @@ def smart_fix(aid: int, tunnel_id: int, level: str, source: str = "manual", fini
 
             _say(aid, "The new link works: removing the old link and building it again.")
             ok, story = _rebuild_safe(aid, tunnel_id, fresh_link=True)
+            tunnel_id = _id_now(snap["name"], tunnel_id)
             plan_line = next((ln for ln in story if ln.startswith("Plan:")), "")
             _say(aid, "New link: " + (plan_line.replace("Plan: ", "") + " → " if plan_line else "") + (story[-1] if story else "no result"))
             healed = ok
@@ -1290,6 +1305,7 @@ def smart_fix(aid: int, tunnel_id: int, level: str, source: str = "manual", fini
         from . import failover  # imported here: failover builds on this module
 
         t_move = time.time()
+        tunnel_id = _id_now(snap["name"], tunnel_id)                   # (a step that built another type and put the old one back left a new row too)
         healed = failover.after_ladder(aid, tunnel_id, d["cause"])     # the move to another Iran server, with the DNS: asks first unless the failover is automatic
         tried.append({"step": "move", "ok": bool(healed), "secs": int(time.time() - t_move)})
 
@@ -1778,6 +1794,7 @@ def auto_escalate() -> None:
                 if (t.state == "down" or any(w in (t.last_error or "") for w in ("flaps", "loss", "lost packets", "no data moves"))) and not servers_off(t)]       # a server that is off: no smart repair until it is back
 
     down.sort(key=lambda r: (r[3] != "down", r[2]))      # the tunnels that are down first, the longest-down first
+    down = [r for r in down if not in_move(r[1], now)]      # (the new tunnel of a move that is still running is the move's business: it checks it, and renames or removes it)
 
     for tid, name, since, st_, err, iran_id, foreign_id, prot in down:
         if len(_BUSY) >= MAX_AUTO_REPAIRS:                # a few at a time: one repair cannot starve the servers of the others
