@@ -10,7 +10,7 @@ import time
 from sqlalchemy import select
 
 from ..db import session
-from ..log import get_logger
+from ..log import get_logger, known_stop_or_crash
 from ..models import ActionLog, Server, Tunnel
 from ..ssh import Node, SSHError, run_action, run_script
 from . import builder, linkmodels
@@ -111,7 +111,7 @@ def quality_all(speed: bool = True) -> list[dict]:
     for tid in ids:
         try:
             out.append(quality(tid, speed=speed))
-        except (ValueError, SSHError) as e:
+        except (ValueError, RuntimeError, SSHError) as e:          # (1.69.274: a tunnel that carries nothing right now is a result, not a failed job)
             out.append({"id": tid, "error": str(e)[:120]})
 
     return out
@@ -248,8 +248,8 @@ def _worker(aid: int, build_aid: int, name: str, iran_id: int = 0, foreign_id: i
 
     try:
         ok, verdict = _run(aid, build_aid, name)
-    except Exception as e:  # thread boundary
-        log.exception("tunnel test #%s crashed", aid)
+    except Exception as e:  # noqa: BLE001  thread boundary: known_stop_or_crash logs it
+        known_stop_or_crash(log, "tunnel test", aid, e)
         verdict = f"Stopped: {str(e)[:160]}"
         ok = False
     finally:
@@ -528,8 +528,8 @@ def _other_worker(aid: int, build_aid: int, name: str, iran_id: int = 0, foreign
             _say(aid, f"Built and measured: {q.get('latency_ms')} ms, jitter {q.get('jitter_ms')} ms, loss {q.get('loss_pct')}%, ↓{q.get('down_mbps')} ↑{q.get('up_mbps')} Mb/s" + (f", one connection ↓{q['down1_mbps']} ↑{q.get('up1_mbps')}" if q.get("down1_mbps") is not None else "") + (f", {q['loaded_ms']} ms under load" if q.get("loaded_ms") is not None else ""))
             ok = sc >= 50
             verdict = f"Score {sc}/100 — {'excellent' if sc >= 75 else 'usable' if sc >= 50 else 'poor'}. Everything temporary was removed."
-    except Exception as e:  # thread boundary
-        log.exception("tunnel test #%s crashed", aid)
+    except Exception as e:  # noqa: BLE001  thread boundary: known_stop_or_crash logs it
+        known_stop_or_crash(log, "tunnel test", aid, e)
         verdict, ok = f"Stopped: {str(e)[:160]}", False
     finally:
         _safe_cleanup(aid, name, iran_id, foreign_id)

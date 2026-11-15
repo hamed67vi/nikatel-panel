@@ -19,7 +19,7 @@ from sqlalchemy import select
 
 from ..config import get_settings
 from ..db import session
-from ..log import get_logger
+from ..log import get_logger, known_stop_or_crash
 from ..models import ActionLog, Server, Tunnel, is_temp
 from ..ssh import Node, SSHError, run_action, run_script
 from . import engines, livebw
@@ -585,11 +585,8 @@ def _worker(b: Build, pair: str) -> None:
     try:
         with server_locks([b.iran.id, b.foreign.id], b.aid):
             _build(b)
-    except Exception as e:  # thread boundary
-        if isinstance(e, PreflightError):
-            log.warning("build #%s stopped: %s", b.aid, e)          # (one line: the night survey meets such a server for every type of the pair)
-        else:
-            log.exception("build #%s crashed", b.aid)
+    except Exception as e:  # noqa: BLE001  thread boundary: known_stop_or_crash logs it
+        known_stop_or_crash(log, "build", b.aid, e)          # (a known stop - a server that cannot take it, a tunnel that carries nothing - is one WARNING line, not a traceback; the night survey meets them for every type of the pair)
 
         try:
             _rollback(b)

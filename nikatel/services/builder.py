@@ -23,7 +23,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from ..config import get_settings
 from ..db import session
-from ..log import get_logger
+from ..log import get_logger, known_stop_or_crash
 from ..models import ActionLog, Server, Tunnel, is_protected, is_standby, is_temp
 from ..ssh import Node, SSHError, copy_file, ensure_via, run_action, run_script, via_of
 from . import linkmodels
@@ -1022,8 +1022,8 @@ def _build_worker(b: Build, pair: str) -> None:
                     b.created = []
                     b.opts["link"] = nxt
                     _say(b.aid, f"Everything of it was removed. Trying the next link model: {LINK_TITLE[nxt]}…")
-    except Exception as e:  # thread boundary
-        log.exception("build #%s crashed", b.aid)
+    except Exception as e:  # noqa: BLE001  thread boundary: known_stop_or_crash logs it
+        known_stop_or_crash(log, "build", b.aid, e)
 
         try:
             _rollback(b)

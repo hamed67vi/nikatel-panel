@@ -17,6 +17,18 @@ from .events import emit
 
 log = get_logger("servers")
 
+_SAMPLE_FAILING: set[int] = set()          # (1.69.274) the servers whose sample fails right now: said ONCE when it starts, the next ones (every two minutes) at DEBUG until one passes
+
+
+def _sample_failed(server_id: int, name: str, host: str, err) -> None:
+    """A server that was off for days wrote 720 identical lines a day."""
+    if server_id in _SAMPLE_FAILING:
+        log.debug("sample failed name=%s host=%s err=%s", name, host, err)
+    else:
+        _SAMPLE_FAILING.add(server_id)
+        log.warning("sample failed name=%s host=%s err=%s (said once; the next ones are DEBUG until a sample passes)", name, host, err)
+
+
 KEEP_SAMPLES_SECONDS = 7 * 86400
 
 
@@ -201,6 +213,9 @@ def sample_server(server_id: int) -> None:
     except (SSHError, ValueError) as e:
         failure = e
 
+    if failure is None:
+        _SAMPLE_FAILING.discard(server_id)
+
     with session() as db:
         srv = db.get(Server, server_id)
 
@@ -211,7 +226,7 @@ def sample_server(server_id: int) -> None:
 
         if failure is not None:
             e = failure
-            log.warning("sample failed name=%s host=%s err=%s", name, host, e)
+            _sample_failed(server_id, name, host, e)
             from . import pulse
 
             if "key is not accepted" in str(e):          # [no-login] the panel has no SSH login to this server. Kept in extra: the pulse rewrites `online` and `last_error` of an Iran server that is on but cut from abroad, and the row looked healthy (the owner, 2026-11-04)

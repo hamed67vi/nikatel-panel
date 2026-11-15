@@ -16,6 +16,27 @@ from ..models import Config
 from . import probe
 
 log = get_logger("witness")
+
+_FAILING: set[str] = set()          # (1.69.274) the witnesses that fail right now: said ONCE when they start failing, not at every look (a witness server that was off wrote about 1,600 lines a day)
+
+
+def _failing(kind: str, name: str, why: str) -> None:
+    key = f"{kind}:{name}"
+
+    if key in _FAILING:
+        log.debug("witness %s %s", name, why)
+    else:
+        _FAILING.add(key)
+        log.warning("witness %s %s (said once; the next looks say it at DEBUG until it answers again)", name, why)
+
+
+def _answers(kind: str, name: str) -> None:
+    key = f"{kind}:{name}"
+
+    if key in _FAILING:
+        _FAILING.discard(key)
+        log.info("witness %s answers again (%s)", name, kind)
+
 FRESH = 120           # seconds: a witness test older than this says nothing about now
 READ_EVERY = 20       # seconds a read of the witnesses is kept (the quick job asks every 15 s)
 BACKOFF = 60          # seconds without asking again after a witness did not answer (the monitor never waits long for a helper)
@@ -45,9 +66,10 @@ def read(max_age: float = READ_EVERY) -> dict[str, dict]:
         try:
             d = probe._call(w, "GET", "/api/configs", timeout=12)
         except (httpx.HTTPError, RuntimeError, ValueError) as e:
-            log.warning("witness %s does not answer: %s", w["name"], str(e)[:80])
+            _failing("read", w["name"], f"does not answer: {str(e)[:80]}")
             continue
 
+        _answers("read", w["name"])
         answered = True
 
         for r in configs.parse_health(d):
@@ -140,7 +162,8 @@ def mirror() -> dict:
 
             done[w["name"]] = {k: len(v) for k, v in body.items()}
             log.info("witness %s mirrored: %s", w["name"], done[w["name"]])
+            _answers("mirror", w["name"])
         except (httpx.HTTPError, RuntimeError, ValueError) as e:
-            log.warning("witness %s not mirrored: %s", w["name"], str(e)[:100])
+            _failing("mirror", w["name"], f"not mirrored: {str(e)[:100]}")
 
     return done

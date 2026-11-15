@@ -49,6 +49,10 @@ asserts it. Do not log request bodies.
 * API errors: `HTTPException(code, "<plain sentence>")`. 500s are logged with `rid`; the
   browser gets `{"ok": false, "error": "internal error", "rid": "…"}`.
 
+## What is an ERROR, and how often a line may repeat (1.69.274)
+
+An ERROR with a traceback is a bug. A stop that the code raises itself with a plain sentence (a RuntimeError; `SSHError` is one) - "the tunnel started but no data passes through it", "Iran server X has failed tunnel units" - is ONE WARNING line, `<work> #<id> stopped: <sentence>`, through `log.known_stop_or_crash`; the story of the work says the same to the operator. A thing that keeps failing (a witness server that is off, a server whose sample fails every two minutes) is said ONCE when it starts failing and at DEBUG afterwards, until it answers again.
+
 ## Reading a problem: the panel, your server, or outside?
 
 `services/diagnosis.py` classifies every sentence the panel writes about a failure (a log line, the story of a repair) into one origin, with a plain hint:

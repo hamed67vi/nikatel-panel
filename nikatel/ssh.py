@@ -755,7 +755,7 @@ else echo "CRONFILE missing"; fi
 echo "LINKS=$(ip -br link show 2>/dev/null | awk '{print $1}' | cut -d@ -f1 | tr '\n' ' ')"
 echo "LISTEN=$(ss -ltnH 2>/dev/null | awk '{print $4}' | sed 's/.*://' | sort -un | tr '\n' ' ')"
 echo "UNITS=$(systemctl list-units --all --no-legend --plain 'backhaul-*' 'nikatel-*' 'backpack-*' 'chisel-*' 'paqet-*' 2>/dev/null | awk '{print $1}' | tr '\n' ' ')"
-echo "BROKEN=$(systemctl list-units --all --no-legend --plain 'backhaul-*.service' 'nikatel-gre-*.service' 2>/dev/null | awk '$3=="failed"{print $1}' | tr '\n' ' ')"
+echo "BROKEN=$(systemctl list-units --all --no-legend --plain 'backhaul-*.service' 'nikatel-gre-*.service' 2>/dev/null | awk '$2=="loaded" && $3=="failed"{print $1}' | tr '\n' ' ')"
 modprobe ip_gre 2>/dev/null; echo "GRE_MOD=$( (lsmod | grep -q '^ip_gre' || [ -d /sys/module/ip_gre ]) && echo 1 || echo 0)"
 echo "BACKHAUL=$([ -x /usr/local/bin/backhaul ] && /usr/local/bin/backhaul -v 2>&1 | head -1 || echo none)"
 echo "IPTABLES=$(command -v iptables >/dev/null 2>&1 && echo 1 || echo 0)"
@@ -2012,7 +2012,7 @@ rm -f "/etc/systemd/system/nikatel-sink-$n.service" "/usr/local/sbin/nikatel-sin
 
     # the Doctor's sweep of leftovers (services/orphans.py): every unit of the tunnel engines on the server with its state and the connections of its process, and the traffic of every GRE link in six seconds. Read only.
     "orphan_look": (r"""tmp=$(mktemp)
-systemctl list-units --all --no-legend --plain 'backpack-*' 'backhaul-*' 'paqet-*' 'chisel-*' 'nikatel-gre-*' 'nikatel-sink-*' 2>/dev/null | awk '{print $1, $3}' | grep -E '^[a-z0-9@._-]+[.](service|timer) ' > $tmp
+systemctl list-units --all --no-legend --plain 'backpack-*' 'backhaul-*' 'paqet-*' 'chisel-*' 'nikatel-gre-*' 'nikatel-sink-*' 2>/dev/null | awk '$2!="not-found"{print $1, $3}' | grep -E '^[a-z0-9@._-]+[.](service|timer) ' > $tmp
 ifs=$(sed -n -e 's/^nikatel-gre-check-\([^ ]*\)[.]\(service\|timer\) .*/\1/p' -e 's/^nikatel-gre-\([^ ]*\)[.]service .*/\1/p' $tmp | grep -v '^check-' | sort -u)
 for n in $ifs; do [ -d "/sys/class/net/$n" ] && echo "$n $(( $(cat /sys/class/net/$n/statistics/rx_bytes) + $(cat /sys/class/net/$n/statistics/tx_bytes) ))"; done > $tmp.a
 sleep 6
@@ -2052,7 +2052,7 @@ chmod 600 $B/@NAME@.*; echo PREPARED
     # a tunnel TEST that was cut short (a restart of the panel in the middle of it) leaves its temporary units behind: the test-* units of every engine, the sink,
     # the GRE link, and a backhaul unit whose config forwards the reserved test port. Removing them is safe: no real tunnel is named test-* or forwards that port.
     "purge_test_leftovers": (r"""tp='@TESTPORT@'; n=0
-for u in $(systemctl list-units --all --no-legend --plain 'backpack-test-*' 'paqet-test-*' 'chisel-test-*' 'nikatel-carrier-test-*' 'nikatel-carrier-lp-*' 'nikatel-gre-test-*' 'nikatel-gre-check-test-*' 'nikatel-sink-test-*' 2>/dev/null | awk '{print $1}'); do systemctl disable --now "$u" >/dev/null 2>&1 || true; rm -f "/etc/systemd/system/$u"; n=$((n+1)); done
+for u in $(systemctl list-units --all --no-legend --plain 'backpack-test-*' 'paqet-test-*' 'chisel-test-*' 'nikatel-carrier-test-*' 'nikatel-carrier-lp-*' 'nikatel-gre-test-*' 'nikatel-gre-check-test-*' 'nikatel-sink-test-*' 2>/dev/null | awk '{print $1}'); do systemctl disable --now "$u" >/dev/null 2>&1 || true; rm -f "/etc/systemd/system/$u"; systemctl reset-failed "$u" >/dev/null 2>&1 || true; n=$((n+1)); done
 for f in $(grep -lE "\"$tp(=|\")|\"$tp:" /etc/backhaul/*.toml 2>/dev/null); do b=$(basename "$f" .toml); systemctl disable --now "backhaul-$b.service" >/dev/null 2>&1 || true; rm -f "/etc/systemd/system/backhaul-$b.service" "$f"; n=$((n+1)); done
 for s in /usr/local/sbin/nikatel-gre-up-test-* /usr/local/sbin/nikatel-gre-down-test-* /usr/local/sbin/nikatel-gre-check-test-* /usr/local/sbin/nikatel-bpfw-test-* /usr/local/sbin/nikatel-paqet-fw-test-* /usr/local/sbin/nikatel-sink-test-*; do [ -e "$s" ] && rm -f "$s"; done
 rm -f /etc/backpack/test-*.toml /etc/backpack/test-*.metrics.json /etc/paqet/test-*.yaml /etc/nikatel-chisel/test-*.key /etc/nikatel-chisel/test-*.crt /etc/nikatel-chisel/test-*.env 2>/dev/null
@@ -2065,7 +2065,7 @@ for t in $(ip l2tp show tunnel 2>/dev/null | sed -n 's/^Tunnel \([0-9]*\),.*/\1/
 for s in /usr/local/sbin/nikatel-gre-up-lp-* /usr/local/sbin/nikatel-gre-down-lp-*; do [ -e "$s" ] && rm -f "$s"; done; rm -f /etc/nikatel/ipsec/lp-*.keys /etc/nikatel/wg/lp-*.key 2>/dev/null
 for u in $(systemctl list-units --all --no-legend --plain 'nikatel-ipsec-sock-test-*' 2>/dev/null | awk '{print $1}'); do systemctl stop "$u" >/dev/null 2>&1 || true; done
 rm -f /etc/nikatel/wg/test-*.key /etc/nikatel/ipsec/test-*.keys /etc/systemd/system/nikatel-carrier-test-*.service /etc/systemd/system/nikatel-carrier-lp-*.service /etc/nikatel-chisel/lp-* 2>/dev/null
-systemctl daemon-reload; echo "PURGED $n"
+systemctl daemon-reload; for p in 'nikatel-gre-test-*' 'nikatel-gre-check-test-*' 'backpack-test-*' 'paqet-test-*' 'chisel-test-*' 'nikatel-sink-test-*'; do systemctl reset-failed "$p" >/dev/null 2>&1 || true; done; echo "PURGED $n"
 """, {"TESTPORT": r"^\d{4,5}$"}),
 
     "other_remove": (r"""n='@NAME@'; k='@KIND@'; p='@PORT@'; pr='@PROTO@'

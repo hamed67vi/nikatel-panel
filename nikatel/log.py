@@ -91,3 +91,13 @@ def setup(level: str = "INFO", log_dir: Path | None = None) -> None:
 def get_logger(domain: str) -> logging.Logger:
     """One logger per domain (servers, tunnels, ssh, jobs, http, auth, ...)."""
     return logging.getLogger(domain)
+
+
+def known_stop_or_crash(logger: logging.Logger, what: str, ident, exc: BaseException) -> None:
+    """(1.69.274) A background worker (a build, a tunnel test) ended with `exc`. A stop the code raises itself with a plain sentence (a RuntimeError, SSHError is one: "the tunnel started but no data passes
+    through it", "Iran server X has failed tunnel units") is told once at WARNING without a traceback - the story of the work already says it, and the night survey meets such stops all the time - while anything
+    else is a bug: ERROR with its traceback, as before. (A week had 352 ERRORs and 384 tracebacks, almost all of them such stops.)"""
+    if isinstance(exc, RuntimeError):
+        logger.warning("%s #%s stopped: %s", what, ident, exc)
+    else:
+        logger.error("%s #%s crashed", what, ident, exc_info=exc)
