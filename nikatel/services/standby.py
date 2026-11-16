@@ -796,7 +796,7 @@ def build(name: str, kind: str = "", by_swap: bool = False) -> int:
     if name in _BUILDS:
         raise ValueError("its standby is being built")
 
-    if p["state"] != "up":
+    if p["state"] != "up" and not (by_swap and p["state"] == "degraded"):          # (the swap beside a tunnel that LOSES PACKETS, 1.69.283: it is degraded, not down - it still carries its users, which is why it is swapped and not repaired)
         raise ValueError(f"the tunnel is {p['state']}: a standby is built when it is up")
 
     if name in autopilot.repairing_names() and not by_swap:

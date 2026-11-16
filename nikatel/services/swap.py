@@ -15,7 +15,12 @@ At every step the users stand on a tunnel that works. Whatever ends the story - 
 server, the licence, the tunnel not up) the Doctor does NOT cut the users by itself: the change is a SUGGESTION on the Doctor page (one click = the old way, with its cut).
 
 The rails of every automatic change stay: once in 24 hours per tunnel (`doctor.mark_retyped`, counted when the users are first touched), only the modes fix and move, and only a type whose steadiness is proven
-(the callers' rule: `knowledge.STEADY_MIN_TESTS` tests, `STEADY_OK`)."""
+(the callers' rule: `knowledge.STEADY_MIN_TESTS` tests, `STEADY_OK`).
+
+A BUSY tunnel that loses packets (1.69.283, the owner, 2026-11-16, «راه a»): the smart repair used to swap such a tunnel only at a quiet moment (under 1.5 Mb/s), which a tunnel with users never reaches - 11 of the 39
+lossy repairs of 21 days found a clearly better type and could do nothing with it. It now calls `beside(..., lossy={...})` first (`autopilot._lossy_beside`): the same story, but the new tunnel must prove itself by ITS OWN delay and loss
+(`confirm_lossy`) before anyone is sent to it, and a tunnel that is only degraded may start. What came of it is returned (`DONE` ... `KEPT`), so the repair knows whether the old way (a cut at a quiet moment) is still its to take
+(only after `CANNOT`: nothing was built or moved)."""
 from __future__ import annotations
 
 import time
@@ -39,10 +44,54 @@ BAD_LOSS = 5.0                  # % of the packets the new tunnel may lose while
 CONFIRM_GAIN = 1.5              # the speed test through the new tunnel must give this many times what the dropped tunnel gives now ...
 DRAIN_LIMIT = 1800              # ... the old tunnel is waited for this long (seconds) until its open connections have ended
 RETRY_GAP = 3 * 3600            # a swap that did not finish is not started again for the same tunnel before this
+LOSSY_DRAIN_LIMIT = 3600        # a LOSSY tunnel (1.69.283) is waited for this long: its new connections already run on the clean line, so waiting costs the users nothing
+LOSSY_SPEED_KEEP = 0.5          # a clean line must still give this share of what the lossy tunnel gave in its last speed test (a clean line that crawls is no cure)
+MAX_AT_ONCE = 2                 # swaps beside a tunnel going on at the same time (1.69.283): each one builds a second tunnel and holds one of the Doctor's repair places for up to an hour or two
 _TRIED: dict[str, int] = {}     # tunnel name -> when a swap of it was last started
+_RUNNING: set[str] = set()      # the tunnels a swap beside is going on for now
+
+# what became of a swap (`beside` returns one of these; the callers of the drop swap ignore it, the repair of a LOSSY tunnel reads it)
+DONE = "done"                   # the tunnel runs as the new type, nobody was cut
+CANNOT = "cannot"               # it could not even start (no port to hand over, a busy server, the tunnel's own type ...): nothing was built or moved, the old way (a cut at a quiet moment) is still the repair's to take
+HOLD = "hold"                   # it was not started ON PURPOSE (protected, read-only, tried a short while ago, the users already stand on the standby, the link does not pass): the tunnel stays as it is
+REJECTED = "rejected"           # the new type was built beside and tested through itself, and it was not clearly better (or could not be built or measured): no user was sent to it
+ROLLED_BACK = "rolled_back"     # the users' new connections went over and it carried them badly: they went back, the old tunnel was never touched
+KEPT = "kept"                   # the new type carried, but the old tunnel was not replaced (its connections did not end in time, or the build failed): the connections went back, nobody was cut
+
+
+def at_once() -> int:
+    """How many swaps beside a tunnel are going on now."""
+    return len(_RUNNING)
 
 
 # ------------------------------------------------------------------ pure decisions
+def confirm_lossy(q: dict | None, down: float | None, before: float | None, current_score: float | None) -> str:
+    """'' when the new tunnel, measured through ITSELF, is clearly better than the tunnel that loses packets; else the sentence that says why not (1.69.283, the owner, 2026-11-16: «راه a»). The same bars the candidate had to pass
+    in the test beside the tunnel (`autopilot.choose_better`) - it loses under LOSSY_CLEAN % and its line scores BETTER_BY points more by delay and loss, than the tunnel does now - but now they are asked of the REAL new tunnel,
+    on the shifted ports, before any user is sent to it; and a speed test through it must give at least what keeps the users' speed (the lossy tunnel's last speed test, LOSSY_SPEED_KEEP of it, never under the lowest line).
+    `q`: what `tunnel_test.quality` read of the new tunnel (latency, jitter, loss); `current_score`: the score of the lossy tunnel by delay and loss (None = not known: the loss bar alone)."""
+    from . import autopilot, knowledge, tunnel_test
+
+    if not q or q.get("latency_ms") is None or q.get("loss_pct") is None:
+        return "its delay and loss could not be measured through the new tunnel"
+
+    loss = float(q["loss_pct"])
+
+    if loss >= autopilot.LOSSY_CLEAN:
+        return f"it loses {loss:g} % of the packets itself (a change needs under {autopilot.LOSSY_CLEAN:g} %)"
+
+    score = tunnel_test.score(q.get("latency_ms"), q.get("jitter_ms"), loss, None)
+
+    if current_score is not None and score < float(current_score) + autopilot.BETTER_BY:
+        return f"its line scores {score}/100 by delay and loss, not {autopilot.BETTER_BY} points more than the {float(current_score):g} of the tunnel now"
+
+    if down is None:
+        return "the speed test through the new tunnel gave no number"
+
+    need = max(float(knowledge.FASTER_MIN_MBPS), LOSSY_SPEED_KEEP * float(before or 0))
+    return "" if float(down) >= need else f"it gave {float(down):.0f} Mb/s in the speed test through itself, less than the {need:.0f} Mb/s that keep the users' speed"
+
+
 def confirm_ok(down: float | None, before: float | None) -> str:
     """'' when the speed test through the new tunnel backs the change, else the sentence that says why not. `before`: what the dropped tunnel gives now (Mb/s). The new one must give CONFIRM_GAIN times that and at
     least `knowledge.FASTER_MIN_MBPS`."""
@@ -164,12 +213,17 @@ def _wait_standby_quiet(name: str) -> None:
         time.sleep(POLL)
 
 
-def _suggest(aid: int, snap: dict, cur: str, kind: str, why: str, reason: str, before: float) -> None:
+def _suggest(say, snap: dict, cur: str, kind: str, reason: str, lossy: dict | None = None, hold: bool = False) -> str:
     """The swap cannot be made beside the tunnel: it is NOT done and NOT suggested (the owner, 2026-10-22: "no more suggestions - when it sees a steady tunnel with better quality it does it by itself"). A change the old way would
-    cut the users, so the Doctor leaves the tunnel as it is and looks again at its next round. (The name is old: nothing is suggested now.)"""
-    from . import autopilot
+    cut the users, so the Doctor leaves the tunnel as it is and looks again at its next round. (The name is old: nothing is suggested now.) Returns CANNOT, or HOLD when it was held back on purpose (`hold`).
+    The repair of a LOSSY tunnel (`lossy`) has the old way as its own next step (a cut at a quiet moment): its story only says why nothing was built beside."""
+    if lossy is None:
+        say(f"{snap['name']} is NOT changed to {kind} by itself: {reason}. A change would cut the users, so the Doctor leaves it as it is and looks again later; it suggests nothing.", done=True, ok=True)
+    else:
+        say(f"{snap['name']}: {kind} is not built beside {cur}: {reason}.")
 
-    autopilot._say(aid, f"{snap['name']} is NOT changed to {kind} by itself: {reason}. A change would cut the users, so the Doctor leaves it as it is and looks again later; it suggests nothing.", done=True, ok=True)
+    return HOLD if hold else CANNOT
+
 
 def _remember(snap: dict, kind: str, healed: bool) -> None:
     """What the swap taught the Doctor (the owner, 2026-10-23: "when it has tested the types the problem and the type that fixed it go into its memory"): the problem (a drop or a very slow tunnel - the cause `slow`, as the restart of
@@ -183,47 +237,57 @@ def _remember(snap: dict, kind: str, healed: bool) -> None:
 
 
 # ------------------------------------------------------------------ the story
-def beside(aid: int, snap: dict, kind: str, why: str, before: float, revert: bool = False) -> None:
-    """Change the type of the tunnel in `snap` to `kind` without a cut (see the module's text). `why`: the sentence of the change; `before`: what the tunnel gives now (Mb/s)."""
+def beside(aid: int, snap: dict, kind: str, why: str, before: float, revert: bool = False, lossy: dict | None = None, close: bool = True) -> str:
+    """Change the type of the tunnel in `snap` to `kind` without a cut (see the module's text). `why`: the sentence of the change; `before`: what the tunnel gives now (Mb/s). Returns what became of it (DONE, CANNOT, HOLD,
+    REJECTED, ROLLED_BACK, KEPT).
+    `lossy` (1.69.283): the tunnel LOSES PACKETS and is busy, so it is changed for loss, not for speed - {"score": its score by delay and loss now (None = not known), "loss": its loss in %}. The new tunnel is then judged
+    by its own delay and loss (`confirm_lossy`) besides its speed, a tunnel that is only DEGRADED may start (loss is exactly what degrades it), the connections that stay on it are waited for longer (LOSSY_DRAIN_LIMIT) and what
+    the swap learns is left to the repair that called (it writes the incident under the real cause). `close` False: the story belongs to a repair that goes on after this - no line of it ends the story."""
     from . import autopilot, standby
 
-    say = lambda line, **kw: autopilot._say(aid, line, **kw)
+    def say(line: str, **kw) -> None:
+        autopilot._say(aid, line, **(kw if close else {}))
+
     name = snap["name"]
     cur = autopilot.kind_of(snap["type"], snap["transport"], snap["record"])
     now = int(time.time())
 
     if get_settings().read_only:
         say("The panel is read-only: nothing is changed.", done=True, ok=False)
-        return
+        return HOLD
 
     if is_protected(snap["record"]):          # (1.69.221: the standby is not even built - the swap, and the way back to the old type too, would end in a replacement, which a protected tunnel never gets)
         say(f"{name} is protected: its type is not changed. Nothing is built or removed.", done=True, ok=False)
-        return
+        return HOLD
 
     if not revert and now - _TRIED.get(name, 0) < RETRY_GAP:
         say(f"A swap of {name} was tried {(now - _TRIED[name]) // 60} minutes ago and did not finish: it is not tried again before {RETRY_GAP // 3600} hours have passed.", done=True, ok=False)
-        return
+        return HOLD
 
     v = standby._view(name)
     p, s = v["p"], v["s"]
+    live = ("up", "degraded") if lossy is not None else ("up",)          # (a tunnel that loses packets is DEGRADED, not down: it still carries its users, which is what makes it a swap and not a repair)
 
-    if p is None or p["state"] != "up":
-        _suggest(aid, snap, cur, kind, why, f"{name} is not up, and a tunnel that is not up cannot hand its users to a new one", before)
-        return
+    if p is None or p["state"] not in live:
+        return _suggest(say, snap, cur, kind, f"{name} is not up, and a tunnel that is not up cannot hand its users to a new one", lossy)
 
     if s is not None and s["use"]:
-        _suggest(aid, snap, cur, kind, why, f"the users' ports of {name} stand on its standby now", before)
-        return
+        return _suggest(say, snap, cur, kind, f"the users' ports of {name} stand on its standby now", lossy, hold=True)
+
+    if lossy is not None:
+        from . import trident
+
+        if trident.owns(name):          # (a handover would fight the Trident for the NAT chain: it would fail AFTER a tunnel was built and measured - asked first)
+            return _suggest(say, snap, cur, kind, f"the Trident of {name} shares the users' ports, so they cannot be handed over", lossy)
 
     try:
         standby.build_plan(name, kind)                     # (only a look: the ports, the licence, the load of the two servers - nothing is built or removed yet)
     except ValueError as e:
-        _suggest(aid, snap, cur, kind, why, str(e), before)
-        return
+        return _suggest(say, snap, cur, kind, str(e), lossy)
 
     if not autopilot._probe_links(aid, snap, [kind]):
         say(f"The link of {kind} does not pass between {snap['iran_name']} and {snap['foreign_name']}: nothing is built, {name} is not touched.", done=True, ok=False)
-        return
+        return HOLD
 
     _TRIED[name] = now
     say(f"{name}: changing the type {cur} → {kind} WITHOUT a cut - {kind} is built beside {cur}, the users go over to it, and {cur} is removed last. {why}")
@@ -231,10 +295,12 @@ def beside(aid: int, snap: dict, kind: str, why: str, before: float, revert: boo
 
     pre = retypewatch.snapshot(snap["id"], now)          # (the use of the tunnel and of the fleet BEFORE the change: the watch after it compares with these)
     was = standby.borrow_mark(name)
+    _RUNNING.add(name)
 
     try:
-        _work(aid, snap, cur, kind, why, before, say, revert, pre)
+        return _work(aid, snap, cur, kind, why, before, say, revert, pre, lossy)
     finally:
+        _RUNNING.discard(name)
         standby.unwant(name)
 
         if not was["marked"] and was["optout"]:
@@ -242,7 +308,7 @@ def beside(aid: int, snap: dict, kind: str, why: str, before: float, revert: boo
             standby.return_mark(name, was)
 
 
-def _work(aid: int, snap: dict, cur: str, kind: str, why: str, before: float, say, revert: bool = False, pre: dict | None = None) -> None:
+def _work(aid: int, snap: dict, cur: str, kind: str, why: str, before: float, say, revert: bool = False, pre: dict | None = None, lossy: dict | None = None) -> str:
     from . import (
         autopilot,
         bandwidth,
@@ -251,10 +317,12 @@ def _work(aid: int, snap: dict, cur: str, kind: str, why: str, before: float, sa
         knowledge,
         retypewatch,
         standby,
+        tunnel_test,
     )
 
     name = snap["name"]
     s = standby._view(name)["s"]
+    remember = (lambda snap_, kind_, healed_: None) if lossy is not None else _remember          # (the repair of a lossy tunnel writes the incident itself, under its real cause)
 
     if s is not None and (s["kind"] != kind or s["stale"]):
         say(f"The standby of {name} is {s['kind']}: it is a spare that carries nobody, so it is built again as {kind}; {name} keeps carrying its users.")
@@ -263,7 +331,7 @@ def _work(aid: int, snap: dict, cur: str, kind: str, why: str, before: float, sa
             standby.remove_standby(name)
         except (ValueError, RuntimeError, SSHError) as e:
             say(f"The old standby could not be removed ({str(e)[:140]}): nothing was changed.", done=True, ok=False)
-            return
+            return CANNOT
 
         s = None
 
@@ -275,7 +343,7 @@ def _work(aid: int, snap: dict, cur: str, kind: str, why: str, before: float, sa
         except ValueError as e:
             if "being built" not in str(e):
                 say(f"The new tunnel cannot be built now ({str(e)[:140]}): nothing was changed.", done=True, ok=False)
-                return
+                return CANNOT
 
         say(f"Building {kind} beside {cur} (a minute or two); {name} carries its users meanwhile.")
 
@@ -283,30 +351,42 @@ def _work(aid: int, snap: dict, cur: str, kind: str, why: str, before: float, sa
 
     if s is None:
         say(f"{kind} could not be built beside {cur} ({reason[:160]}): nothing was changed, {name} was never touched.", done=True, ok=False)
-        return
+        return REJECTED
 
     try:
         bw, _ = bandwidth.measure(s["id"])
         down = None if bw.get("down") is None else float(bw["down"])
     except (ValueError, RuntimeError, SSHError, OSError) as e:
         say(f"The new tunnel could not be measured ({str(e)[:120]}): the users stay on {cur}.", done=True, ok=False)
-        return
+        return REJECTED
 
-    bad = "" if revert else confirm_ok(down, before)          # (a change BACK to the old type does not have to be faster than the one the users left)
+    if lossy is not None:                                  # (the lossy tunnel is judged by its line: the new tunnel's own delay and loss, asked through the new tunnel itself)
+        try:
+            q = tunnel_test.quality(s["id"], speed=False)
+        except (ValueError, RuntimeError, SSHError, OSError) as e:
+            say(f"The delay and loss of the new tunnel could not be measured ({str(e)[:120]}): the users stay on {cur}.", done=True, ok=False)
+            return REJECTED
+
+        bad = confirm_lossy(q, down, before, lossy.get("score"))
+        proof = (f"{kind} measures {q.get('latency_ms')} ms and {q.get('loss_pct')} % loss through itself" + ("" if down is None else f" and gives {down:g} Mb/s in the speed test")
+                 + f" ({cur} loses {lossy.get('loss')} % and gave {before:g} Mb/s in its last speed test).")
+    else:
+        bad = "" if revert else confirm_ok(down, before)          # (a change BACK to the old type does not have to be faster than the one the users left)
+        proof = f"{kind} gives {down:g} Mb/s in the speed test through itself (the dropped {cur} gives {before:g})." if down is not None else ""
 
     if bad:
         say(f"{kind} is up beside {cur}, but {bad}: the users stay on {cur}.", done=True, ok=False)
-        _remember(snap, kind, False)
-        return
+        remember(snap, kind, False)
+        return REJECTED
 
-    say(f"{kind} gives {down:g} Mb/s in the speed test through itself (the dropped {cur} gives {before:g}). The users' new connections go over to it now.")
+    say(f"{proof} The users' new connections go over to it now.".strip())
     doctor.mark_retyped(name, int(time.time()))
 
     try:
         standby.handover(name, why, manual=True)
     except (ValueError, RuntimeError, SSHError) as e:
         say(f"The new connections could not be handed over ({str(e)[:140]}): nothing was changed.", done=True, ok=False)
-        return
+        return CANNOT
 
     state = {"back": False}
 
@@ -323,6 +403,7 @@ def _work(aid: int, snap: dict, cur: str, kind: str, why: str, before: float, sa
         return state["back"]
 
     ok = False
+    drain = LOSSY_DRAIN_LIMIT if lossy is not None else DRAIN_LIMIT
 
     try:
         verdict, note = _settle(s["id"])
@@ -334,18 +415,18 @@ def _work(aid: int, snap: dict, cur: str, kind: str, why: str, before: float, sa
             with session() as db:
                 emit(db, "warn", "tunnels", f"Tunnel {name}: the Doctor built {kind} beside {cur}, but it did not carry well ({note}); the users stayed on {cur}.", name)
 
-            _remember(snap, kind, False)
-            return
+            remember(snap, kind, False)
+            return ROLLED_BACK
 
-        say(f"{kind} carries the users' new connections ({note}). Waiting up to {DRAIN_LIMIT // 60} minutes for the connections that are open on {cur} to end - it is not touched before.")
+        say(f"{kind} carries the users' new connections ({note}). Waiting up to {drain // 60} minutes for the connections that are open on {cur} to end - it is not touched before.")
 
-        if not autopilot._wait_quiet(aid, snap["id"], DRAIN_LIMIT, loss_counts=False):
-            say(f"{name} still carries open connections after {DRAIN_LIMIT // 60} minutes: it is NOT touched (that would cut them). The new connections go back to it; {kind} stays as its standby.", done=True, ok=False)
+        if not autopilot._wait_quiet(aid, snap["id"], drain, loss_counts=False):
+            say(f"{name} still carries open connections after {drain // 60} minutes: it is NOT touched (that would cut them). The new connections go back to it; {kind} stays as its standby.", done=True, ok=False)
             back("swap beside: the open connections did not end")
-            return
+            return KEPT
 
         say(f"{name} is quiet: it is built again as {kind} while the users stand on {kind} beside it.")
-        ok = autopilot._replace(aid, snap["id"], snap["iran_id"], snap["foreign_id"], kind, "Swap beside the tunnel: the old type dropped.", snap=snap)
+        ok = autopilot._replace(aid, snap["id"], snap["iran_id"], snap["foreign_id"], kind, "Swap beside the tunnel: the line of the old type is poor." if lossy is not None else "Swap beside the tunnel: the old type dropped.", snap=snap)
 
         if ok and not revert:
             retypewatch.begin(name, cur, kind, pre)          # (the users are watched after the change: they leave a type they dislike)
@@ -357,7 +438,7 @@ def _work(aid: int, snap: dict, cur: str, kind: str, why: str, before: float, sa
         if state["back"]:
             say(f"The build of {kind} failed; {cur} was put back. Nobody was cut.", done=True, ok=False)
 
-        return
+        return KEPT
 
     say("The new connections are on the tunnel again; the connections that are left on the standby end there.")
     after = ""
@@ -377,13 +458,13 @@ def _work(aid: int, snap: dict, cur: str, kind: str, why: str, before: float, sa
     except (ValueError, RuntimeError, SSHError, OSError) as e:
         after = f" It could not be measured just now ({str(e)[:80]}): the Doctor measures it in a few minutes."
 
-    _remember(snap, kind, True)
+    remember(snap, kind, True)
 
     with session() as db:
-        emit(db, "ok", "tunnels", f"Tunnel {name} is now {kind} (it was {cur}): the Doctor changed it without a cut.{after}", name)
+        emit(db, "ok", "tunnels", f"Tunnel {name} is now {kind} (it was {cur}): the Doctor changed it without a cut" + (" - its line lost packets." if lossy is not None else ".") + after, name)
 
     try:
-        failover._notice(f"✅ {name}: {cur} → {kind} without a cut.{after}")
+        failover._notice(f"✅ {name}: {cur} → {kind} without a cut" + (" (its line lost packets)." if lossy is not None else ".") + after)
     except Exception:
         log.exception("the notice of the swap could not be sent")
 
@@ -391,4 +472,5 @@ def _work(aid: int, snap: dict, cur: str, kind: str, why: str, before: float, sa
     d["suggestions"] = [x for x in d["suggestions"] if x.get("tunnel") != name]          # (what was suggested for this tunnel is done)
     doctor._save(d)
     say(f"{name} runs as {kind} now.{after}", done=True, ok=True)
+    return DONE
 

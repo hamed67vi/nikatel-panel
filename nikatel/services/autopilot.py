@@ -1036,6 +1036,74 @@ def _wait_quiet(aid: int, tunnel_id: int, limit: int = 1800, loss_counts: bool =
         time.sleep(30)
 
 
+def is_busy(rx: float | None, tx: float | None) -> bool:
+    """Pure: does the tunnel carry users now - at least QUIET_MBPS (both ways together)? Counters that cannot be read are not "busy" (nothing says anybody uses it). The loss does NOT count here, unlike `quiet_ok`: a tunnel
+    that loses 40 % of its packets and carries 20 Mb/s is exactly the busy tunnel the swap beside is for."""
+    if rx is None and tx is None:
+        return False
+
+    return (rx or 0) + (tx or 0) >= QUIET_MBPS
+
+
+def _flow_of(tunnel_id: int) -> tuple[float | None, float | None]:
+    """(rx, tx) in Mb/s of the tunnel's last check."""
+    with session() as db:
+        t = db.get(Tunnel, tunnel_id)
+        return (t.rx_mbps, t.tx_mbps) if t is not None else (None, None)
+
+
+def _steady_pct(snap: dict, kind: str) -> int | None:
+    """What the Doctor's memory of the pair says about the steadiness of `kind` (percent over its kept tests); None = not known (too few tests, or never tested)."""
+    try:
+        for r in knowledge.ranked(knowledge.pair(snap["iran_id"], snap["foreign_id"]), int(time.time()), include_poor=True):
+            if r["kind"] == kind:
+                return r.get("steady")
+    except Exception:
+        log.exception("the steadiness of %s could not be read", kind)
+
+    return None
+
+
+def _lossy_beside(aid: int, snap: dict, best: dict, current: float | None, source: str) -> str:
+    """The new rung of the repair of a BUSY tunnel that loses packets (1.69.283, the owner, 2026-11-16, «راه a»): the better type is built BESIDE the tunnel and the users go over to it without a cut (`swap.beside`), instead
+    of waiting for a quiet moment that a tunnel with users never has. Returns what became of it (the `swap` outcomes: only CANNOT leaves the old way open to the caller). The guards: the Doctor's own affairs wait in a mass
+    disruption (`quiet_now`), two swaps already going on (`swap.MAX_AT_ONCE`), the day's volume of the Doctor's tests (the speed test through the new tunnel is one: `testbudget.allow("urgent")`), the once-in-24-hours rail of an automatic change of type (`doctor.may_retype`;
+    the owner's own click is not held by it), and a type the memory knows to be UNSTEADY is never taken by itself (one that is not proven yet is: it has to prove itself through itself, and the retype watch follows it)."""
+    from . import doctor, swap, testbudget
+
+    name, kind = snap["name"], best["kind"]
+
+    if quiet_now():
+        _say(aid, f"{kind} would be better, but the Doctor's own affairs wait now (mass disruption or a failover): nothing is built beside {name}.")
+        return swap.HOLD
+
+    if swap.at_once() >= swap.MAX_AT_ONCE:
+        _say(aid, f"{swap.at_once()} swaps beside a tunnel are going on already (the most at one time: each builds a second tunnel and holds a repair place): nothing is built beside {name} now.")
+        return swap.CANNOT
+
+    if not testbudget.allow("urgent"):
+        _say(aid, "The day's volume of the Doctor's tests is used up: the speed test through a new tunnel cannot be made now, so nothing is built beside.")
+        return swap.CANNOT
+
+    if source == "auto" and (block := doctor.may_retype(name, doctor._state().get("retype_done") or {}, int(time.time()))):
+        _say(aid, f"The Doctor does not change the type of {name} now: {block}.")
+        return swap.HOLD
+
+    pct = _steady_pct(snap, kind)
+
+    if pct is not None and pct < knowledge.STEADY_OK:
+        _say(aid, f"{kind} would be better, but the Doctor's memory calls it UNSTEADY ({pct} % over its kept tests): it is not taken by itself.")
+        return swap.HOLD
+
+    with session() as db:
+        t = db.get(Tunnel, snap["id"])
+        loss = (t.detail or {}).get("loss_pct") if t is not None else None
+
+    before = float(((snap["record"].get("bw") or {}).get("down")) or 0)
+    _say(aid, f"{name} carries users now ({sum(x or 0 for x in _flow_of(snap['id'])):.1f} Mb/s, a quiet moment is under {QUIET_MBPS} Mb/s) and its line loses packets: {kind} (score {best.get('score')}) is built BESIDE it and the users go over to it without a cut - after it has proved itself through itself.")
+    return swap.beside(aid, snap, kind, f"The line of {name} loses packets (loss {loss} %, score {current} by delay and loss).", before, lossy={"score": current, "loss": loss}, close=False)
+
+
 RELAPSE_WINDOW = 1800   # a step that healed a tunnel less than this long ago did not hold when it is cut again: the repair climbs past it
 SOAK = 25               # after a repair the tunnel must still be up this many seconds later, or the repair did not hold (was 60: a tunnel that falls again does it within seconds, and the relapse rule catches a later fall)
 RETRY_STEPS = (60, 120, 300, 600)      # a tunnel that is down gets a new smart repair this long after the END of its last one: 1, 2, 5 minutes, then every 10 (one that only flaps: every half hour). The types that failed on the route are not tried again for two weeks, so a quick retry costs little
@@ -1228,7 +1296,7 @@ def smart_fix(aid: int, tunnel_id: int, level: str, source: str = "manual", fini
             _say(aid, "New link: " + (plan_line.replace("Plan: ", "") + " → " if plan_line else "") + (story[-1] if story else "no result"))
             healed = ok
         elif step == "switch":
-            lossy = d["cause"] == "lossy_route"          # still carries data: test beside it, swap only for something clearly better, at a quiet moment
+            lossy = d["cause"] == "lossy_route"          # still carries data: test beside it, swap only for something clearly better - beside it without a cut when it carries users (`_lossy_beside`), else at a quiet moment
             current = None
 
             if lossy and d.get("where") in ("iran_side", "foreign_side", "both"):
@@ -1254,11 +1322,28 @@ def smart_fix(aid: int, tunnel_id: int, level: str, source: str = "manual", fini
 
                 if best is None:
                     _say(aid, "No candidate is clearly better than what runs now: the tunnel stays as it is, nothing was cut.")
-                elif not _wait_quiet(aid, tunnel_id):
-                    _say(aid, f"{best['kind']} would be better (score {best.get('score')}), but the tunnel is busy: it is swapped at the next quiet moment.")
                 else:
-                    healed = _replace(aid, tunnel_id, snap["iran_id"], snap["foreign_id"], best["kind"], f"Best type today: {best['kind']} (score {best.get('score')}).")
-                    step_kind = best["kind"] if healed else ""
+                    from . import swap
+
+                    beside = ""          # (1.69.283: a tunnel that carries users is not waited for - the better type is built beside it and the users go over without a cut; what became of that decides whether the old way is still open)
+
+                    if is_busy(*_flow_of(tunnel_id)):
+                        beside = _lossy_beside(aid, snap, best, current, source)
+                        tunnel_id = _id_now(snap["name"], tunnel_id)          # (a swap that ended in a new tunnel gave it a new row)
+
+                    if beside == swap.DONE:
+                        healed, step_kind = True, best["kind"]
+                    elif beside in ("", swap.CANNOT):
+                        if beside:
+                            _say(aid, f"Nothing could be built beside {snap['name']}: the old way is left - a swap at a quiet moment.")
+
+                        if not _wait_quiet(aid, tunnel_id):
+                            _say(aid, f"{best['kind']} would be better (score {best.get('score')}), but the tunnel is busy: it is swapped at the next quiet moment.")
+                        else:
+                            healed = _replace(aid, tunnel_id, snap["iran_id"], snap["foreign_id"], best["kind"], f"Best type today: {best['kind']} (score {best.get('score')}).")
+                            step_kind = best["kind"] if healed else ""
+                    else:
+                        _say(aid, f"{snap['name']} was NOT changed to {best['kind']} ({beside.replace('_', ' ')}): it stays as it is, and nobody was cut.")
             else:
                 _say(aid, "The tunnel is cut, so any tunnel type that connects is better than none: the first one that connects is built (what healed this pair before, then what is known to connect, then the robust kinds); better ones are looked for afterwards.")
                 kinds, notes = knowledge.plan_for(snap["iran_id"], snap["foreign_id"], d["kind"], d["cause"] in ("gre_blocked", "route_cut"), False, dial_i=d.get("dial_i"), dial_f=d.get("dial_f"), cause=d["cause"])      # (GRE cannot pass where GRE is filtered or the two servers cannot reach each other at all)
@@ -1701,7 +1786,7 @@ def observe(aid: int, tunnel_id: int) -> None:
     elif (loss or 0) < ACT_FROM and d["cause"] == "lossy_route":
         _say(aid, f"The loss ({loss}%) is under the level users feel ({ACT_FROM:g}%): only watching. The repair starts by itself when it stays above that.", done=True, ok=True)
     else:
-        _say(aid, "This is past the level users feel: the repair acts by itself (tests first, a swap only for something clearly better, at a quiet moment).", done=True, ok=True)
+        _say(aid, "This is past the level users feel: the repair acts by itself (tests first, a swap only for something clearly better - beside the tunnel without a cut when it carries users, else at a quiet moment).", done=True, ok=True)
 
 
 def observe_all() -> None:
