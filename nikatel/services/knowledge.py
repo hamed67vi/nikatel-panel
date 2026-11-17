@@ -77,11 +77,11 @@ PLAYBOOK_DAYS = 90          # what healed a pair this long ago is still the firs
 _LOCK = threading.Lock()
 
 
-LOST_MARKS = ("ssh connection lost", "is off or does not answer", "does not answer over SSH")
+LOST_MARKS = ("ssh connection lost", "is off or does not answer", "does not answer over SSH", "timeout after")          # (1.69.283: "timeout after 30s" - the panel's ssh gave up waiting for a server - says nothing about the route either)
 
 
 def server_lost(text) -> bool:
-    """Pure: does this line (or the last lines of the story of a build) say that the panel lost its SSH connection to a server - it went off, its network dropped? Such a kind was NOT TESTED: the build died before the route
+    """Pure: does this line (or the last lines of the story of a build) say that the panel lost its SSH connection to a server - it went off, its network dropped, or it did not answer in time (`timeout after 30s`, 1.69.283)? Such a kind was NOT TESTED: the build died before the route
     was judged, so it says nothing about the route (it is remembered as "could not be tried", never as "blocked for two weeks" - the owner's panel, 2026-10-24: 26 types were "blocked" on a pair because its Iran server was off)."""
     lines = [text] if isinstance(text, str) else list(text or [])[-6:]
     return any(m in str(ln) for ln in lines for m in LOST_MARKS)

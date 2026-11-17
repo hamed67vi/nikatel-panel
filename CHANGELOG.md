@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.69.284 - A timeout is not a verdict on the route
+
+> **In short:** the owner (2026-11-16), shown the bugs of the daily tests - «باگِ timeout را در نسخهٔ بعدی درست کنم؟» - «بله، درست کن». A build step of a pair test that stopped with `Stopped: timeout after 30s` (the panel's ssh gave up waiting for a server) was kept by
+> `knowledge.merge` as a plain FAILED kind, and `blocked()` / `due_kinds()` left it alone for `FAIL_FRESH` = 14 days (twice as long after every further failure in a row). On 2026-11-16 ten kinds on three pairs were blocked that way; three of them were on a new
+> Turkish pair, tested for the first time within the hour (the pair the Doctor most needs choices on). A timeout says nothing about the route - it is the same case as a server that went off (the owner's panel, 2026-10-24: 26 types "blocked" because an Iran server
+> was off), which `knowledge.server_lost` already kept as "not tested": `LOST_MARKS` gets `timeout after`. Such a kind is "not tested", asked again after a day (`TOOLS_RETRY`), leaves no line in the history of the kind (the stability of a type is not made of timeouts),
+> and the entries kept BEFORE this version are read again as "not tested" at once (`verdict` has always re-read the old ones by their text) - no migration. The repair's own trial of kinds (`autopilot`, `lost_now`) uses the same word. What the route itself said - a link
+> that answers and then loses its packets, inner addresses that cannot ping each other, a poor score - stays a failure. Not proved: WHY a build step timed out (the first install of an engine on a new server? an ssh that is slow while a survey builds twenty kinds in a row?).
+>
+> **به زبان ساده:** وقتی ساختنِ یک تانلِ تستی با «timeout after 30s» متوقف می‌شد، Doctor آن نوع را «خراب» حساب می‌کرد و ۱۴ روز دست نمی‌زد؛ در حالی که هیچ‌کس مسیر را قضاوت نکرده بود. دیروز ده نوع روی سه جفت به همین شکل بسته شده بودند. حالا timeout مثل «سرور خاموش بود» حساب می‌شود: آن نوع «تست نشده» است و یک روز بعد دوباره امتحان می‌شود. چیزهایی که خودِ مسیر گفته (مثلاً لینک جواب می‌دهد ولی بسته گم می‌کند) همچنان «خراب» می‌مانند. موردهای قبلی هم بلافاصله «تست نشده» خوانده می‌شوند و نیازی به پاک‌سازی نیست.
+
+**Proved:** `tests/test_timeout_is_not_a_verdict.py` (the words of the 11-16 entries are `server_lost`, a real failure and a poor score are not; `merge` keeps a timeout as "not tested" with no history line and a build that carried data stays good; entries kept before are read again as "not tested", not blocked, due after a day, while a real failure waits its two weeks).
+
 ## 1.69.283 - A busy tunnel that loses packets is swapped without a cut
 
 > **In short:** the owner (2026-11-16), shown the gap the review of the Doctor found - a tunnel that carries users and loses packets, a clearly better type found beside it, and nothing done, because the swap CUTS the users and so waits for a quiet moment

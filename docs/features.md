@@ -55,6 +55,12 @@ Plain JS, no build step; hover fade on every button and row; a loading box and a
 |---|---|
 | **Settings → Api & Key → Bale · customer notices** | a small Bale bot on one Iran server (`relay/bale_relay.py`): customers start it once and may link their subscription; it tells them by itself when the server has lost the whole outside world for a few minutes and again when it is back; customers can write to you in the same chat and you answer from your own Bale (so an owner abroad with only Bale reachable can run it: `/send`, `/cut`, `/back`, `/info`). Install / update / remove from the box, the state read from the server, the texts changeable. Design and limits: [`bale.md`](bale.md) |
 
+## A timeout is not a verdict on the route (1.69.284)
+
+A build step of a test that stopped with `timeout after 30s` (the panel's ssh gave up waiting for a server) was kept in the Doctor's memory of the pair as a plain FAILED kind, and the pair left that kind alone for 14 days. On 2026-11-16 ten kinds
+on three pairs were blocked that way - three of them on a new server within the hour they were first tried - without anybody having judged the route. `knowledge.LOST_MARKS` now holds `timeout after`: such a kind is "not tested" (the same word as a server that went off), it is
+asked again after a day (`TOOLS_RETRY`), it leaves no line in the history of the kind, and what was kept before is read again as "not tested" at once (`verdict`). What the route itself said - a link that answers and loses its packets, inner addresses that cannot ping - stays a failure.
+
 ## The volume of the Doctor's tests, cut at its two sources (1.69.282)
 
 With the ten-day rhythm the day's volume still read 53 GB on a mean (the budget is 30): the night of 2026-11-16 filled 11 GB in its first 44 minutes. Two things made it, and neither was a count of tests the owner wanted to lower.
