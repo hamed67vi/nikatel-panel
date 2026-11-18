@@ -630,6 +630,29 @@ def _remember_rebuild(snap: dict, iran_id: int, foreign_id: int) -> None:
         builder.pending_put(builder.pending_item(snap["name"], iran_id, foreign_id, (snap["type"] or "").lower(), snap["transport"] or "tcpmux", snap["record"], snap["ports"]))
 
 
+PAIR_BUSY = "is already being built"      # (the refusal of `builder.start_build` / `build_other.start_build` while another build of the same two servers runs)
+PAIR_WAIT_SECS = 15
+PAIR_WAIT_TRIES = 40                       # (1.69.286) ten minutes: the longest build of one pair; after that the refusal is the answer, as before
+
+
+def _pause(seconds: float) -> None:
+    time.sleep(seconds)                    # (tests replace it)
+
+
+def _start_when_free(start):
+    """(1.69.286, the owner, 2026-11-18: two of the four failovers of the morning of 2026-11-17 ended "not ok") Two plans of one outage may build tunnels between the same two servers (the dead servers carried tunnels to the same foreign
+    server and went to the same target): the second used to be refused at once - "a tunnel between these two servers is already being built" - and the tunnel it had taken off a dead server was put back dead. It waits for the first build to
+    finish (every `PAIR_WAIT_SECS` seconds, `PAIR_WAIT_TRIES` times) and starts then. Any other refusal is the answer at once."""
+    for i in range(PAIR_WAIT_TRIES + 1):
+        try:
+            return start()
+        except ValueError as e:
+            if PAIR_BUSY not in str(e) or i >= PAIR_WAIT_TRIES:
+                raise
+
+            _pause(PAIR_WAIT_SECS)
+
+
 def _build_kind(snap: dict, iran_id: int, foreign_id: int, kind: str, opts: dict | None = None) -> int:
     k, tr = tunnel_test.kind_parts(kind)
 
@@ -639,9 +662,9 @@ def _build_kind(snap: dict, iran_id: int, foreign_id: int, kind: str, opts: dict
         if tunnel_test.kind_link(kind) != "gre":
             o["link"] = tunnel_test.kind_link(kind)
 
-        return builder.start_build(iran_id, foreign_id, snap["ports"], tr, forced_name=snap["name"], opts=o)
+        return _start_when_free(lambda: builder.start_build(iran_id, foreign_id, snap["ports"], tr, forced_name=snap["name"], opts=o))
 
-    return build_other.start_build(iran_id, foreign_id, snap["ports"], k, tr, opts or {}, forced_name=snap["name"])
+    return _start_when_free(lambda: build_other.start_build(iran_id, foreign_id, snap["ports"], k, tr, opts or {}, forced_name=snap["name"]))
 
 
 def _replace(aid: int, tunnel_id: int, iran_id: int, foreign_id: int, kind: str, why: str, skip_offline: bool = False, snap: dict | None = None, first: bool = True, restore: bool = True,

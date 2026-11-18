@@ -55,6 +55,16 @@ Plain JS, no build step; hover fade on every button and row; a loading box and a
 |---|---|
 | **Settings → Api & Key → Bale · customer notices** | a small Bale bot on one Iran server (`relay/bale_relay.py`): customers start it once and may link their subscription; it tells them by itself when the server has lost the whole outside world for a few minutes and again when it is back; customers can write to you in the same chat and you answer from your own Bale (so an owner abroad with only Bale reachable can run it: `/send`, `/cut`, `/back`, `/info`). Install / update / remove from the box, the state read from the server, the texts changeable. Design and limits: [`bale.md`](bale.md) |
 
+## The failovers of one outage do not collide (1.69.287)
+
+When several Iran servers are cut or off in the same minute, every one of them is planned and started at once, and their tunnels go to the Iran servers that are left. Two things made some of those failovers end "not ok" (2026-11-17, four
+Iran servers cut from abroad at once; two of the four failovers did not finish): (1) the target of a plan was the best ranked server with the tunnels already on their way counted, but not their PORTS - two tunnels that listen on the
+same port went to the same server and the second build stopped with "port 8072 is already in use on the Iran server"; (2) two plans that built tunnels between the same two servers (the dead servers carried tunnels to the same foreign server) - the
+second build was refused at once with "a tunnel between these two servers is already being built" and the tunnel it had taken off the dead server was put back dead. Now `failover.assign_target` passes over a server where a port of the plan is taken
+already - by a tunnel of the panel there, or by a tunnel on its way from another plan of the same minute (`coming_ports`) - for the next server that can carry all the tunnels (`pick_free_target`), and the story says so (`ports_note`); when no server has
+them free the best ranked one stays the target, as before. `autopilot._build_kind` waits for a busy pair (every 15 seconds, up to ten minutes) instead of failing. A move the operator started (`strict`) already proved its ports free; this is the same
+for the automatic one, from the panel's own record (the listening ports are not read over SSH: a failover must not wait for that).
+
 ## A Servers folder is a wall (1.69.286)
 
 A Servers folder that holds an Iran server AND a foreign server is a private folder (the owner, 2026-11-18, two servers of a friend's panel kept in a folder of their own: nothing of the fleet may be tunneled onto them, and the Doctor must watch them). The servers of a

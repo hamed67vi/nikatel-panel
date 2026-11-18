@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.69.287 - The failovers of one outage do not collide
+
+> **In short:** the owner (2026-11-18), shown that four failovers of the morning of 2026-11-17 ended with two "not ok" - «بله، بساز» to the offered fix. Four Iran servers were cut from abroad within a minute and every one was failed over at the same time to
+> the same server. Read from the action log: one failover's build stopped with `a tunnel between these two servers is already being built` (another plan built tunnels between the same two servers in that minute) and its old tunnel could not be rebuilt either, another
+> with `port 8072 is already in use on the Iran server` and a third with `port 8075 ...` (the target already carried a tunnel on that port, or a plan of the same minute was taking it); the tunnels that did not move were put back and the DNS records they shared were left alone
+> (correctly: they did not move). Two causes. (1) `assign_target` spread the plans over the servers by room and line quality (`with_reserved`) but never looked at the PORTS: the strict move (the operator's button) proves its ports free (`_ports_problem`), the automatic
+> one did not. New `failover.pick_free_target` (pure) and `coming_ports`: the target is the best ranked server where none of the plan's ports is taken - by a tunnel of the panel there (`forwarded_ports`) or by a tunnel on its way from another plan of the same minute
+> (the reservation now keeps the ports as a fourth element; an older three-element entry still counts for its room) - and the plan says why it did not take the first one (`ports_note`, told in the story); when no server has them free the best ranked stays, as before. (2)
+> `autopilot._build_kind` started the build and got `a tunnel between these two servers is already being built` at once; now it waits (`_start_when_free`: every 15 seconds, up to 40 times) and starts when the first build is done, any other refusal is still the answer
+> at once. Not changed: the listening ports of the target are not read over SSH (a failover must not wait for that; `build` still says if something else listens there), the placement of tunnels that clash on EVERY server, and the old tunnel that is kept when users still
+> hold it. Not proved on live servers: the real outage cannot be repeated; the code is proved on a world of dead and target servers.
+>
+> **به زبان ساده:** وقتی چند سرورِ ایرانی با هم می‌افتادند، Doctor tunnelهایشان را هم‌زمان به یک سرورِ مقصد می‌برد و دو tunnel که یک port داشتند به هم می‌خوردند: ساختِ دومی با «port در حال استفاده است» یا «ساختِ این دو سرور از قبل در جریان است» متوقف می‌شد. حالا مقصد را با در نظر گرفتنِ port انتخاب می‌کند، و اگر ساختِ همان جفت در جریان بود صبر می‌کند، نه این‌که شکست بخورد.
+
+**Proved:** `tests/test_pair_and_port_collision.py` (the pure choice passes over a server whose port is taken and keeps the best one when all clash; two plans of one minute with the same port go to two servers, a port that a tunnel of the panel forwards there is not taken, the note
+tells why, the ports are given back with the reservation and an old reservation expires; a build that finds its pair busy waits and starts, the wait has an end, another refusal is not waited for, the repair's own try ends in a started build).
+
 ## 1.69.286 - A Servers folder is a wall
 
 > **In short:** the owner (2026-11-18), adding two servers that belong to a friend's panel (an Iran server and a foreign server) in a Servers folder of their own: «پوشه اشون جدا باشه با پنل خودمون قاطی نشه / از سرورهای خودمونم چیزی روش تانل نشه / دکتر حواسش باشه».

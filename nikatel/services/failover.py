@@ -185,7 +185,7 @@ RESERVE_QUALITY = 5        # ... and this many off its line quality (half a step
 RESERVE_TTL = 1800         # a reservation nobody gave back (a plan that died in the middle) is forgotten after this long
 PARALLEL_TUNNELS = 4       # tunnels of one dead server built at the same time
 PLAN_THREADS = 6           # dead servers planned at the same time
-_RESERVED: dict[str, tuple[int, int, float]] = {}      # plan key -> (Iran server the tunnels go to, how many, when): the tunnels that are on their way
+_RESERVED: dict[str, tuple] = {}      # plan key -> (Iran server the tunnels go to, how many, when, the ports they listen on - 1.69.286; an older entry has no ports): the tunnels that are on their way
 _RESERVE_LOCK = threading.Lock()
 _STATE_LOCK = threading.RLock()                         # the failover record (seen, tried, history, dns_log) is read, changed and saved by several plans at once
 
@@ -195,7 +195,7 @@ def held(book: dict | None = None) -> dict[int, int]:
     now = time.time()
     out: dict[int, int] = {}
 
-    for tid, n, at in list((_RESERVED if book is None else book).values()):
+    for tid, n, at, *_ in list((_RESERVED if book is None else book).values()):
         if now - at < RESERVE_TTL:
             out[tid] = out.get(tid, 0) + n
 
@@ -224,6 +224,60 @@ def with_reserved(rows: list[dict], on_the_way: dict[int, int]) -> list[dict]:
     return sorted(out, key=rank_key)
 
 
+def coming_ports(book: dict | None = None) -> dict[int, set[int]]:
+    """(1.69.286) The ports the tunnels on their way will listen on at each Iran server: {server id: {ports}}. A plan of the same minute must not take one of them."""
+    now = time.time()
+    out: dict[int, set[int]] = {}
+
+    for v in list((_RESERVED if book is None else book).values()):
+        if len(v) > 3 and now - v[2] < RESERVE_TTL:
+            out.setdefault(v[0], set()).update(int(x) for x in v[3])
+
+    return out
+
+
+def _plan_ports(p: dict) -> set[int]:
+    """(1.69.286) The ports the tunnels of this plan listen on at their Iran server (the panel's own record, `forwarded_ports`): the ports that must be free on the server they move to."""
+    ids = [t["id"] for t in p.get("tunnels") or []]
+
+    if not ids:
+        return set()
+
+    with session() as db:
+        return {int(x) for t in db.scalars(select(Tunnel).where(Tunnel.id.in_(ids))) for x in (t.forwarded_ports or []) if str(x).isdigit()}
+
+
+def _ports_on(server_id: int) -> set[int]:
+    """(1.69.286) The ports the panel's own tunnels forward at this Iran server (a switched-off standby too: it comes up in the place of its tunnel)."""
+    with session() as db:
+        return {int(x) for t in db.scalars(select(Tunnel).where(Tunnel.iran_server_id == server_id)) for x in (t.forwarded_ports or []) if str(x).isdigit()}
+
+
+def pick_free_target(rankings: dict[int, list[dict]], ports: set[int], busy) -> tuple[dict | None, list[tuple[str, list[int]]], bool]:
+    """Pure (1.69.286, the owner, 2026-11-18, two of the four failovers of the morning of 2026-11-17 ended "not ok": "port 8072 is already in use on the Iran server"): like `pick_target`, but a server where one of `ports` is
+    taken already (`busy(server_id)` gives its taken ports: the panel's own tunnels there and the tunnels on their way) is passed over while another server that can carry all the tunnels has them free.
+    Returns (the target, [(name, clashing ports) of the servers passed over], True) - or, when no server has them free, the best ranked one as before, every server that clashed, and False: the build tells the truth then."""
+    ranked = rank_targets(rankings)
+
+    if not ranked:
+        return None, [], True
+
+    if not ports:
+        return ranked[0], [], True
+
+    passed: list[tuple[str, list[int]]] = []
+
+    for c in ranked:
+        clash = sorted(ports & busy(c["id"]))
+
+        if not clash:
+            return c, passed, True
+
+        passed.append((str(c.get("name") or c["id"]), clash))
+
+    return ranked[0], passed, False
+
+
 def release(p: dict) -> None:
     """Give back what the plan reserved on its target (once; a plan that reserved nothing is left alone)."""
     key = p.pop("reserved", None)
@@ -235,20 +289,29 @@ def release(p: dict) -> None:
 
 def assign_target(p: dict, book: dict | None = None) -> dict:
     """Phase two of a dead server's plan, one plan at a time and at once: the target is the server that can carry every tunnel with the best rank AFTER the tunnels already on their way (the other dead servers' plans of this minute)
-    are counted, and the plan reserves its own tunnels there. A plan that has its target already (or none to pick from) is left as it is."""
+    are counted, and the plan reserves its own tunnels there. A plan that has its target already (or none to pick from) is left as it is.
+    (1.69.286) The ports of the plan's tunnels count too: a server that carries one of them already - a tunnel of the panel, or one on its way from another plan of the same minute - is passed over for the next one
+    that can carry them all, and the plan says so (`ports_note`)."""
     rankings = p.pop("_rankings", None)
 
     if rankings is None:
         return p
 
+    ports = _plan_ports(p)          # (1.69.286: a database read, outside the lock)
+
     with _RESERVE_LOCK:
         way = held(book)
-        target = pick_target({tid: with_reserved(lst, way) for tid, lst in rankings.items()}) if rankings else None
+        coming = coming_ports(book)
+        target, passed, free = pick_free_target({tid: with_reserved(lst, way) for tid, lst in rankings.items()}, ports, lambda sid: _ports_on(sid) | coming.get(sid, set())) if rankings else (None, [], True)
         moving = len(p["tunnels"])
+
+        if passed:
+            said = "; ".join(f"{n}: port {', '.join(str(x) for x in ps)} is used there already" for n, ps in passed)
+            p["ports_note"] = (f"{target['name']} is the target, not a server that ranks higher ({said})." if free else f"no Iran server has these ports free ({said}); {target['name']} stays the target as the best ranked.")
 
         if target and moving:
             key = f"{p['server_id']}-{time.time_ns()}"
-            (_RESERVED if book is None else book)[key] = (target["id"], moving, time.time())
+            (_RESERVED if book is None else book)[key] = (target["id"], moving, time.time(), frozenset(ports))
 
             if book is None:
                 p["reserved"] = key
@@ -1272,6 +1335,9 @@ def _work(aid: int, p: dict, finish: bool = True) -> bool:
 
     autopilot._say(aid, f"{'Move' if src_on else 'Failover'} of {p['server']} ({p['why']}): {len(p['tunnels'])} tunnel(s) → {p['target']['name']}, {len(p['dns'])} DNS record(s) → {p['target']['ip']}"
                    + (" - the server is on: the new tunnels are built first, the old ones stay until the DNS has settled." if src_on and p["tunnels"] else ""))
+
+    if p.get("ports_note"):
+        autopilot._say(aid, p["ports_note"])
 
     if p["tunnels"] and PUSH_CHECK:
         ok_push, how = target_pushable(p["target"]["id"])          # (1.69.260: BEFORE anything is touched - a target that cannot be pushed a file only ever fails the build, after the old tunnels were taken off)
