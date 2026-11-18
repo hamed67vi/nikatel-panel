@@ -1782,12 +1782,67 @@ def follow_move(name: str, custom: bool = False) -> str:
     return new
 
 
+MOVE_STEM = 11     # (1.69.285) `failover._temp_name` keeps this many characters of a name before -mv / -mw (a tunnel name is 15 characters at most: a Linux interface name)
+
+
+def plain_name_after_move(name: str, foreign_name: str, iran_names: list[str], iran_name: str, taken: set[str], age: int) -> str | None:
+    """Pure (1.69.285, the owner, 2026-11-18, a list with three tunnels called <name>-mv: "why do these end in mv?"): the name a tunnel that is still called <name>-mv / -mw should carry, or None.
+    A move builds its new tunnel under that temporary name beside the old one and gives it the old name when the old one is removed - but the old one is kept when users still hold it half an hour after the DNS
+    changed, and the janitor may remove it later as an extra copy: nobody renamed the new one then, and `tidy_names` only followed Iran server names. Now: the tunnel is older than the move's own half hour
+    (`tunnels.MOVE_YOUNG`), the tunnel it replaced is gone (its name is free), and the name before the suffix is one the panel made (<foreign>-<iran> of ANY Iran server, with or without -N, or the first
+    `MOVE_STEM` characters of one: a long name is cut before the suffix) - a name that is not guessed stays. The new name is the one the panel gives on the Iran server the tunnel runs on, unique among `taken`."""
+    from .tunnels import MOVE_YOUNG
+
+    stem = name[:-3]
+
+    if not name.endswith(("-mv", "-mw")) or not stem or age < MOVE_YOUNG or stem in taken:
+        return None
+
+    autos = [pretty_name(foreign_name, i, set()) for i in iran_names]
+
+    if not any(stem == a or re.fullmatch(re.escape(a) + r"-\d+", stem) or (len(stem) == MOVE_STEM and a.startswith(stem)) for a in autos):
+        return None
+
+    new = pretty_name(foreign_name, iran_name, taken - {name})
+    return new if NAME_RE.match(new) else None
+
+
+def drop_move_suffix(name: str) -> str:
+    """(1.69.285) A tunnel that a move left called <name>-mv / -mw takes the name of its own Iran server (`plain_name_after_move`); the configs that name it, the alert mutes, the standby and the Doctor's ledger of moves follow
+    (`_rename_row`), what the servers know it as does not change. Returns the name the tunnel has now - the old one when nothing changed or the rename failed: a name is cosmetic and must never stop anything."""
+    new = name
+
+    try:
+        with _NAME_LOCK, session() as db:                # (two tunnels of one pair must not take the same new name)
+            t = db.scalar(select(Tunnel).where(Tunnel.name == name))
+
+            if t is None or t.iran is None or t.foreign is None or (t.record or {}).get("custom_name"):
+                return name
+
+            found = plain_name_after_move(name, t.foreign.name, [s.name for s in db.scalars(select(Server).where(Server.role == "iran"))], t.iran.name, {x.name for x in db.scalars(select(Tunnel))}, int(time.time()) - int(t.created_at or 0))
+
+            if found is None:
+                return name
+
+            new = found
+            _rename_row(db, t, new, custom=False)
+            emit(db, "info", "tunnels", f"Tunnel {name} renamed to {new}: the tunnel it replaced is gone, so the temporary name of the move is dropped.", new)
+    except (ValueError, RuntimeError, SQLAlchemyError):
+        log.warning("tunnel %s: the name without the move's suffix was not saved", name, exc_info=True)
+        return name
+
+    from . import doctor
+
+    doctor.renamed(name, new)
+    return new
+
+
 TIDY_MAX = 10      # names put right in one round (a name is cosmetic: a long list is done over a few rounds)
 
 
 def tidy_names(limit: int = TIDY_MAX) -> list[str]:
     """(1.69.243) The tunnels that were moved before names followed moves: a tunnel that carries the name the panel made for ANOTHER Iran server than the one it runs on gets the name of its own (`follow_move`). Left alone: a name
-    chosen by hand, a standby, a temporary build, a protected tunnel (something stands on it), a tunnel that is switched off. Returns ["old → new"]."""
+    chosen by hand, a standby, a temporary build, a protected tunnel (something stands on it), a tunnel that is switched off. (1.69.285) A tunnel a move left called <name>-mv / -mw whose old tunnel is gone gets the name of its own server too (`drop_move_suffix`). Returns ["old → new"]."""
     todo = []
 
     with session() as db:
@@ -1799,12 +1854,14 @@ def tidy_names(limit: int = TIDY_MAX) -> list[str]:
                 continue
 
             if moved_name(t.name, False, t.foreign.name, iran, t.iran.name, names) != t.name:
-                todo.append(t.name)
+                todo.append((t.name, follow_move))
+            elif plain_name_after_move(t.name, t.foreign.name, iran, t.iran.name, names, int(time.time()) - int(t.created_at or 0)) is not None:
+                todo.append((t.name, drop_move_suffix))
 
     done = []
 
-    for name in todo[:limit]:
-        new = follow_move(name)
+    for name, rename in todo[:limit]:
+        new = rename(name)
 
         if new != name:
             done.append(f"{name} → {new}")

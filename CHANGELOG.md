@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.69.285 - A tunnel called -mv gets its own name when the old one is gone
+
+> **In short:** the owner (2026-11-18, a list with three tunnels ending in `-mv`): «اینا چرا آخر اسمشون mv هست؟» - then «بله، بساز» to the offered fix. `-mv` (or `-mw`) is the temporary name a move gives the NEW tunnel while the old one still runs
+> (`failover._temp_name`); when the old one is removed the new one is renamed to the old name (`builder.rename_tunnel`, then `follow_move`). Two cases kept the temporary name for good: (1) the old tunnel is still used 30 minutes after the DNS
+> changed (`QUIET_LIMIT`) - the move says "NOT removed ... remove the old one by hand" and `continue`s past the rename (two of the three, both made on 2026-11-18, the old ones stood beside them); (2) the janitor removed the plain-named tunnel as an
+> "extra copy" of the `-mv` one a day after a move (the third) and nothing renamed the survivor. `tidy_names` (every ten minutes) only followed Iran server names, so no later round ever touched a `-mv` name. New `builder.plain_name_after_move` (pure)
+> and `drop_move_suffix`: a tunnel called `<name>-mv` / `-mw` that is older than `tunnels.MOVE_YOUNG` (the move's own half hour), whose stem is a panel name (`<foreign>-<iran>` of any Iran server, with `-N`, or the first `MOVE_STEM` = 11 characters of one:
+> `_temp_name` cuts a long name) and whose stem is FREE (the tunnel it replaced is gone) takes the name the panel gives on the Iran server it runs on (`pretty_name`, unique among the tunnels; `-2` when taken). The round skips what `tidy_names` always skipped
+> (a name chosen by hand, a standby, a protected or switched-off tunnel) and a stem that is not a panel name is never guessed. The rename goes through `_rename_row`: configs, alert mutes, standby and the Doctor's ledger follow, and what the servers know it as
+> (`record.slug`) does not change - a panel-only rename. While the old tunnel stands beside the new one nothing is renamed and nothing is removed. Not proved: on the owner's live panel (the round runs ten minutes after the Update; the two tunnels whose
+> old twin still stands wait until it is removed); the three live names are only read, not changed.
+>
+> **به زبان ساده:** `-mv` اسمِ موقتِ tunnelِ تازه است وقتی Doctor یک tunnel را به سرورِ ایرانیِ دیگری می‌برد. اگر tunnelِ قدیمی هنوز مشتری داشت پاک نمی‌شد و اسمِ تازه همان `-mv` می‌ماند؛ یک بار هم پاک‌کنندهٔ «نسخهٔ اضافی» قدیمی را برد و اسمِ تازه برنگشت. حالا هر ده دقیقه، وقتی tunnelِ قدیمی دیگر نیست، اسمِ `-mv` خودکار به اسمِ سرورِ خودش عوض می‌شود. تا قدیمی هست، چیزی عوض نمی‌شود.
+
+**Proved:** `tests/test_mv_name_comes_back.py` (the pure rule: -mv and -mw, the old one standing, the young one, a taken name gets -2, a -N stem, a name that is not a panel name, no suffix; a cut stem is found again; the tidy round leaves the pair alone while the old one stands and renames when it is gone, keeps the slug and the
+mark "not chosen by hand", is quiet the next time; a config that names the tunnel follows; a young one, a hand name, a protected one, a standby and a switched-off one stay; two tunnels of one pair get two different names in one round).
+
 ## 1.69.284 - A timeout is not a verdict on the route
 
 > **In short:** the owner (2026-11-16), shown the bugs of the daily tests - «باگِ timeout را در نسخهٔ بعدی درست کنم؟» - «بله، درست کن». A build step of a pair test that stopped with `Stopped: timeout after 30s` (the panel's ssh gave up waiting for a server) was kept by

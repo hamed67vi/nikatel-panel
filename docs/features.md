@@ -55,6 +55,15 @@ Plain JS, no build step; hover fade on every button and row; a loading box and a
 |---|---|
 | **Settings → Api & Key → Bale · customer notices** | a small Bale bot on one Iran server (`relay/bale_relay.py`): customers start it once and may link their subscription; it tells them by itself when the server has lost the whole outside world for a few minutes and again when it is back; customers can write to you in the same chat and you answer from your own Bale (so an owner abroad with only Bale reachable can run it: `/send`, `/cut`, `/back`, `/info`). Install / update / remove from the box, the state read from the server, the texts changeable. Design and limits: [`bale.md`](bale.md) |
 
+## A tunnel called -mv gets its own name when the old one is gone (1.69.285)
+
+A move builds its new tunnel beside the old one under a temporary name (`<name>-mv`, or `-mw` when the old one already carries `-mv` on the servers) and gives it the old name when the old tunnel is removed. Two things left the temporary
+name on a tunnel for good: the old tunnel is kept when users still hold it half an hour after the DNS changed (the move says so and skips the rename), and the janitor can remove the plain-named tunnel later as "an extra copy" of the
+`-mv` one. On 2026-11-18 three tunnels of the owner's list ended in `-mv`; nothing renamed them afterwards, because `tidy_names` only followed Iran server names. Now the tidy round (every ten minutes, never while a failover runs or waits, never
+in a read-only panel) also renames a tunnel called `<name>-mv` / `-mw` when it is older than the move's own half hour, the name before the suffix is one the panel made (`<foreign>-<iran>` of any Iran server, with or without `-N`, or its first
+eleven characters: a long name is cut before the suffix) and the tunnel it replaced is gone - the name is free. It takes the name the panel gives on the Iran server it runs on, unique among the tunnels. A name chosen by hand, a standby, a protected
+or switched-off tunnel and a name that is not a panel name are left alone. The configs that name it, the alert mutes, the standby and the Doctor's ledger follow; what the servers know it as does not change.
+
 ## A timeout is not a verdict on the route (1.69.284)
 
 A build step of a test that stopped with `timeout after 30s` (the panel's ssh gave up waiting for a server) was kept in the Doctor's memory of the pair as a plain FAILED kind, and the pair left that kind alone for 14 days. On 2026-11-16 ten kinds
