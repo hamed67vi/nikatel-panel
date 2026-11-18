@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.69.288 - A tunnel whose users suffer gets a faster type beside it
+
+> **In short:** the owner (2026-11-18), after the read-only look at the Austria config - «بله، بساز» to "teach the Doctor: config bad, tunnel healthy". The config rode a tunnel the Doctor had moved that morning (a WebSocket-over-TLS mux type that tested
+> 597 Mb/s between the two servers and gave 3.7 in service); from 06:00 of 2026-11-17 its tests answered 90 %, 75 %, 51 % per six hours, the tunnel had no failed check in 72 hours and a steady delay of 93 ms, other configs were fine in the same hours (so it was not the
+> probe), and at night it was 97 %. The Doctor's look (`userq.investigate`) said three times "the tunnel is healthy ... the problem is BEYOND the tunnel" and nothing else was done: the repair climbs on a tunnel that is not broken, the very-slow rung needs a type that
+> is PROVEN steady (three tests) and a new pair has none, and the lossy swap (1.69.283) needs loss. New `userq.swap_wanted` (pure) and `userq.retype_for_users` (called by the grade job every five minutes, a failure of it never stops the job): a tunnel whose grade
+> has been poor or bad for `UX_SWAP_AFTER` = 3 hours, whose own look NOW still says `beyond`, and for which `bandwidth._faster_row` knows a clearly faster type that is not UNSTEADY (a type not yet proven is allowed, as in `autopilot._lossy_beside`: the swap measures it through
+> itself and `retypewatch` follows it), gets that type built beside it - `doctor._run_retype(auto=True)`, i.e. `swap.beside` with its own proof, handover and rollback. Rails: modes fix / move, `quiet_now`, `swap.MAX_AT_ONCE`, `testbudget` urgent, `doctor.may_retype`
+> (once in 24 hours), a protected tunnel never, more than a third of the graded tunnels suffering at once = nothing (the probe or the foreign side, not one type), at most every `UX_SWAP_GAP` = 6 hours per tunnel, a story that cannot start leaves no mark. Not changed: the
+> grade itself (`config_issue`, `tunnel_ux`), the investigation, the swap and its confirmation (`confirm_ok` still asks 1.5 times the speed the tunnel gives now). Not proved: on a real tunnel (the only stand-in is the Austria one, and whether a type change cures it is exactly what is
+> not known); that the users' grade improves after the swap - `retypewatch` watches the use of the tunnel and the fleet, not the config grade.
+>
+> **به زبان ساده:** اگر مشتری‌های یک tunnel سه ساعت پشتِ هم تجربهٔ بد داشته باشند، در حالی که خودِ tunnel سالم است و Doctor در حافظه‌اش نوعِ خیلی سریع‌تری برای همان جفت سرور می‌شناسد، آن نوع را کنارِ tunnel می‌سازد و مشتری‌ها را بدونِ قطع به آن می‌برد. اگر نوعِ تازه در تستِ خودش بهتر نبود، رد می‌شود و به مشتری دست نمی‌زند. اگر هم‌زمان مشتری‌های بیشترِ tunnelها ناراضی باشند، چیزی عوض نمی‌شود، چون مشکل از probe یا سرورِ خارجی است.
+
+**Proved:** `tests/test_retype_for_users.py` (the pure rule: grade, age, share of the fleet; the job starts exactly one change of type with the faster kind and the why, not again before six hours; each rail says no - the Doctor off, a read-only panel, a failover on, two swaps at once, the day's
+volume used, a change an hour ago; a young grade, wide trouble, a protected tunnel, a tunnel that is down or loses packets are left alone; an unsteady type is not taken, the next steady one is, no known faster type = nothing; a story that cannot start leaves no mark; a failure of the look does not stop the grade job).
+
 ## 1.69.287 - The failovers of one outage do not collide
 
 > **In short:** the owner (2026-11-18), shown that four failovers of the morning of 2026-11-17 ended with two "not ok" - «بله، بساز» to the offered fix. Four Iran servers were cut from abroad within a minute and every one was failed over at the same time to

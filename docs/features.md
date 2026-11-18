@@ -55,6 +55,16 @@ Plain JS, no build step; hover fade on every button and row; a loading box and a
 |---|---|
 | **Settings → Api & Key → Bale · customer notices** | a small Bale bot on one Iran server (`relay/bale_relay.py`): customers start it once and may link their subscription; it tells them by itself when the server has lost the whole outside world for a few minutes and again when it is back; customers can write to you in the same chat and you answer from your own Bale (so an owner abroad with only Bale reachable can run it: `/send`, `/cut`, `/back`, `/info`). Install / update / remove from the box, the state read from the server, the texts changeable. Design and limits: [`bale.md`](bale.md) |
 
+## A tunnel whose users suffer gets a faster type beside it (1.69.288)
+
+The Doctor grades every tunnel by what its users really get (`userq`: the share of the probe's tests that answered, the ping against the config's own week, the speed). When the grade falls to poor or bad it looks and says where the problem is -
+and when the tunnel itself is healthy (bandwidth, loss, delay, servers) it said "beyond the tunnel" and did nothing. On 2026-11-17 a config on a tunnel built that morning answered 51-75 % of its tests for a day, the tunnel had no failed check and a
+steady delay, and the Doctor said so three times. Now, when the grade has been poor or bad for three hours, the Doctor's own look still says "beyond the tunnel" (not down, not slow, no loss, no busy server) and its memory of the pair knows a clearly faster type
+(`bandwidth._faster_row`: at least five times what the tunnel gives and at least 20 Mb/s) that is not known to be unsteady, that type is built beside the tunnel and the users go over without a cut - the same swap as every automatic change of type (`doctor._run_retype`
+with auto, `swap.beside`: speed test through the new tunnel, handover, the old tunnel removed last, `retypewatch` puts the old type back when the users leave). The rails: the modes fix and move, nothing while a failover or a mass disruption is on (`quiet_now`),
+two swaps at once, the day's volume of tests, once in 24 hours per tunnel, a protected tunnel never, and nothing when more than a third of the graded tunnels suffer at once (then it is the probe or the foreign side). A tunnel is tried at most every six hours.
+What stays: a type that only tested fast is not proof - the swap measures it through itself again and refuses it when it is not clearly better. Not proved on a real tunnel.
+
 ## The failovers of one outage do not collide (1.69.287)
 
 When several Iran servers are cut or off in the same minute, every one of them is planned and started at once, and their tunnels go to the Iran servers that are left. Two things made some of those failovers end "not ok" (2026-11-17, four

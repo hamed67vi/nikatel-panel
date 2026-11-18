@@ -9,7 +9,10 @@ Iran that keeps one xray per config and tests it all the time (status, ping, now
   the grade of the tunnel good (nothing) · fair (a few configs have a problem) · poor (half of them or more) · bad (every one) · unknown (no config, or too little data) - changed only when two looks in a row agree.
 
 When the grade falls to poor or bad the Doctor looks by itself: if the tunnel is fine (bandwidth, loss, delay, servers) the problem is BEYOND it, and that is said; if the tunnel is not fine, the tunnel's own explanation is
-(see services/bandwidth.py). Kept in the record of the tunnel, `ux`; the pure helpers (`map_configs`, `config_stats`, `config_issue`, `tunnel_ux`, `settle_grade`, `explain_users`) carry the decisions and are tested."""
+(see services/bandwidth.py). Kept in the record of the tunnel, `ux`; the pure helpers (`map_configs`, `config_stats`, `config_issue`, `tunnel_ux`, `settle_grade`, `explain_users`) carry the decisions and are tested.
+
+(1.69.288, the owner, 2026-11-18, the Austria config: 51-75 % of its tests answered for a whole day while its tunnel had no failed check - the Doctor said "the problem is beyond the tunnel" three times and did nothing) A tunnel whose
+users have suffered for hours while the tunnel itself is healthy and a faster type is known on its pair gets that type built BESIDE it, without a cut (`retype_for_users`, the same swap as every automatic change of type)."""
 from __future__ import annotations
 
 import statistics
@@ -21,7 +24,15 @@ from sqlalchemy import select
 from .. import jobs
 from ..db import session
 from ..log import get_logger
-from ..models import Config, ConfigSample, Server, Tunnel, is_temp
+from ..models import (
+    Config,
+    ConfigSample,
+    Server,
+    Tunnel,
+    is_protected,
+    is_standby,
+    is_temp,
+)
 from . import dnscache
 from .events import emit
 
@@ -48,6 +59,11 @@ PROBE_NOISE = 0.5            # when this share of the configs are jumpy at once 
 BUCKET = 120                 # the tests of the probe are grouped in buckets of this many seconds ...
 MASS_MIN = 6                 # ... and a bucket in which this many configs were tested and half of them failed was the probe's fault (its test user out of quota for 18 days, its server overloaded, its line), not theirs: its tests are left out
 MASS_SHARE = 0.5
+UX_SWAP_AFTER = 3 * 3600     # (1.69.288) the grade of a tunnel has been poor or bad this long before the Doctor tries another type for it
+UX_SWAP_GAP = 6 * 3600       # ... and it is tried for the same tunnel at most this often (the swap's own rails - once in 24 hours, three hours after a swap that did not finish - come on top)
+UX_FLEET_SHARE = 1 / 3       # when more than this share of the graded tunnels suffer at once it is the probe or the foreign side, not the type of one tunnel
+UX_MIN_GRADED = 3            # fewer graded tunnels than this: no share is judged
+_UX_TRIED: dict[str, int] = {}      # tunnel name -> when the Doctor last started a change of type for its users
 _LOCK = threading.Lock()
 _RUNNING = [False]
 
@@ -262,6 +278,25 @@ def explain_users(f: dict) -> tuple[str, str]:
                       "the problem is BEYOND the tunnel - the foreign server's own internet or its Xray, or the CDN in front of the Iran server.")
 
 
+def swap_wanted(ux: dict, now: int, fleet: list[str]) -> str:
+    """Pure (1.69.288): '' when the users of this tunnel have suffered long enough for the Doctor to try another type, else the sentence that says why not. `ux`: the grade kept in the tunnel's record; `fleet`: the grades of every
+    graded tunnel. A grade younger than UX_SWAP_AFTER is a bad hour, not a pattern; when more than UX_FLEET_SHARE of the graded tunnels suffer at once the trouble is the probe's or the foreign side's, and no type of one tunnel cures it."""
+    if ux.get("grade") not in ("poor", "bad"):
+        return "its users are not suffering"
+
+    since = int(ux.get("since") or 0)
+
+    if not since or now - since < UX_SWAP_AFTER:
+        return f"its users have suffered for under {UX_SWAP_AFTER // 3600} hours"
+
+    graded = [g for g in fleet if g]
+
+    if len(graded) >= UX_MIN_GRADED and sum(1 for g in graded if g in ("poor", "bad")) > len(graded) * UX_FLEET_SHARE:
+        return "the users of many tunnels suffer at once: not a matter of the type of one tunnel"
+
+    return ""
+
+
 # ------------------------------------------------------------------ reading the panel
 def _ref_ping(db, c: Config, now: int) -> float | None:
     """The usual ping of a config: the middle of its answered pings of the last week without the last two hours. Worked out again once an hour and kept in its meta."""
@@ -371,6 +406,11 @@ def run() -> None:
 
         for tid in looked:
             _investigate_later(tid)
+
+        try:
+            retype_for_users(now)                            # (1.69.288: users that suffer for hours while the tunnel is healthy: a faster known type is built beside it)
+        except Exception:
+            log.exception("the change of type for suffering users failed")
 
         _forget(set(grades))                                 # (a tunnel whose configs are gone keeps no grade: 1.69.210)
 
@@ -505,3 +545,65 @@ def _investigate_later(tunnel_id: int) -> None:
             autopilot._start(name, investigate, tunnel_id, action="speed", source="auto", allow_read_only=True)
     except ValueError as e:
         log.info("look at the users of tunnel %s not started: %s", tunnel_id, str(e)[:100])
+
+
+# ------------------------------------------------------------------ the change of type for suffering users (1.69.288)
+def retype_for_users(now: int | None = None) -> list[str]:
+    """(1.69.288, the owner, 2026-11-18: «بله، بساز») A tunnel whose users have had a poor or bad connection for UX_SWAP_AFTER hours while the tunnel itself is healthy (the Doctor's own look says "beyond the tunnel": `explain_users`)
+    and for which the Doctor's memory of the pair knows a clearly faster type that is not known to be unsteady, gets that type built BESIDE it without a cut - `doctor._run_retype` with auto, the same swap as every automatic change of type
+    (the speed test through the new tunnel, the users' new connections handed over, the old one removed last; `retypewatch` follows it and puts the old type back when the users leave). The pair test of a type and what a type does
+    under real users can differ a lot (a tunnel that tested 597 Mb/s gave its users 3.7): the users' own grade is the judge that was missing. The rails: the modes fix and move, nothing while the Doctor's own affairs wait (`quiet_now`),
+    two swaps at most (`swap.MAX_AT_ONCE`), the day's volume of tests (`urgent`), once in 24 hours per tunnel (`doctor.may_retype`), a protected tunnel never, and not while more than a third of the fleet suffers (`swap_wanted`).
+    A look that cannot start leaves no mark and is made again at the next round. Returns the names of the tunnels a change was started for."""
+    from ..config import get_settings
+    from . import actions, autopilot, bandwidth, doctor, knowledge, swap, testbudget
+
+    now = int(now or time.time())
+
+    if get_settings().read_only or actions.doctor_mode() not in ("fix", "move") or autopilot.quiet_now():
+        return []
+
+    with session() as db:
+        tunnels = [t for t in db.scalars(select(Tunnel).where(Tunnel.enabled.is_(True))) if not is_temp(t.name) and not is_standby(t)]
+        rows = [(t.id, t.name, dict((t.record or {}).get("ux") or {}), is_protected(t)) for t in tunnels]
+
+    fleet = [r[2].get("grade") for r in rows if r[2].get("grade")]
+    started: list[str] = []
+
+    for tid, name, ux, protected in rows:
+        if protected or swap_wanted(ux, now, fleet) or now - _UX_TRIED.get(name, 0) < UX_SWAP_GAP:
+            continue
+
+        if swap.at_once() >= swap.MAX_AT_ONCE or not testbudget.allow("urgent"):
+            break
+
+        try:
+            snap = autopilot._snapshot(tid)
+            cur = autopilot.kind_of(snap["type"], snap["transport"], snap["record"])
+            f = _facts(tid)
+        except ValueError:
+            continue
+
+        if explain_users(f)[0] != "beyond" or doctor.may_retype(name, doctor._state().get("retype_done") or {}, now):
+            continue
+
+        _best, faster = bandwidth._faster_row(snap, cur, f, now)
+        cand = next((r for r in faster if r.get("steady") is None or r["steady"] >= knowledge.STEADY_OK), None)
+
+        if cand is None:
+            continue
+
+        hours = (now - int(ux["since"])) // 3600
+        why = (f"The users of {name} have had a {ux['grade']} connection for {hours} hours while the tunnel itself is healthy ({summary(ux)[:160]}); {cand['kind']} gave {float(cand.get('down_mbps') or 0):.0f} Mb/s on this pair "
+               f"(the tunnel gives {f.get('now')}), so its type is changed without a cut.")
+
+        try:
+            autopilot._start(name, doctor._run_retype, tid, cand["kind"], cur, why, True, action="autopilot", source="auto")
+        except ValueError as e:
+            log.info("the change of type of tunnel %s for its users not started: %s", name, str(e)[:100])
+            continue
+
+        _UX_TRIED[name] = now
+        started.append(name)
+
+    return started
