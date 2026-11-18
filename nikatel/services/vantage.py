@@ -20,7 +20,7 @@ from ..db import session
 from ..log import get_logger
 from ..models import Server, Tunnel
 from ..ssh import Node, SSHError, run_script
-from . import pulse
+from . import folders, pulse
 from .tunnels import sname
 
 log = get_logger("servers")
@@ -99,12 +99,14 @@ def _tunnel_ends(sid: int) -> list[tuple[str, Node, str, str]]:
     return list(out.values())[:FOREIGN_ENDS]
 
 
-def _vantages(skip: set[int]) -> list[tuple[str, Node]]:
-    """The Iran servers that may be asked: on, enabled, and not one whose own connection from the panel's host fails (they are the problem, not the eyes)."""
+def _vantages(skip: set[int], target: int | None = None) -> list[tuple[str, Node]]:
+    """The Iran servers that may be asked: on, enabled, and not one whose own connection from the panel's host fails (they are the problem, not the eyes). `target`: the Iran server whose life is asked (1.69.286: a server of
+    a private Servers folder is asked about its own folder only)."""
     with session() as db:
         rows = [(s.id, s.name, Node(s.host, s.ssh_user, s.ssh_port)) for s in db.scalars(select(Server).where(Server.role == "iran", Server.enabled.is_(True), Server.online.is_(True)).order_by(Server.name))]
 
-    return [(n, node) for i, n, node in rows if i not in skip][:VANTAGES]
+    f = folders.load()
+    return [(n, node) for i, n, node in rows if i not in skip and f.may_probe(i, target)][:VANTAGES]
 
 
 def ask(sid: int, skip: set[int]) -> tuple[bool, str]:
@@ -137,7 +139,7 @@ def ask(sid: int, skip: set[int]) -> tuple[bool, str]:
     names: list[str] = []
 
     if not hits:
-        vs = _vantages(skip | {sid})
+        vs = _vantages(skip | {sid}, sid)
 
         def one(item: tuple[str, Node]) -> str:
             name, node = item

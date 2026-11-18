@@ -1,5 +1,26 @@
 # Changelog
 
+## 1.69.286 - A Servers folder is a wall
+
+> **In short:** the owner (2026-11-18), adding two servers that belong to a friend's panel (an Iran server and a foreign server) in a Servers folder of their own: «پوشه اشون جدا باشه با پنل خودمون قاطی نشه / از سرورهای خودمونم چیزی روش تانل نشه / دکتر حواسش باشه».
+> Until now only the MOVES inside `autopilot.ranking` respected a folder (1.69.211). Eight other paths chose an Iran server (or a foreign one) without looking at it, so a saturated fleet server could send its busiest tunnel to the friend's Iran server, a cut tunnel could build its
+> temporary test tunnel FROM it, a new tunnel's "smart choice" listed it, and the panel's own probes ran scripts of ours on it.
+> **The rule (`services/folders.py`).** A folder that holds an Iran server AND a foreign server is a PRIVATE folder (the fleet's Iran servers are in "Iran" and its foreign servers in other folders, so nothing of the fleet is private and nothing changes for it). The servers of a private folder are
+> chosen only for tunnels between servers of that folder (`compatible`), and its Iran servers run none of the panel's own probes (`may_probe`) - the fleet can still look at them, so the Doctor watches them like any other server. A folder is compared without capitals ("Friend" = "friend").
+> **Closed:** `detect.auto_iran` (the "smart choice" of Create tunnel, `create.smart_test`, `/tunnels/auto-iran`: the fleet's foreign server is offered no server of a private folder, the friend's foreign server only the friend's; the servers are not even pinged); the Doctor's resource move (`doctor.resources`) takes only
+> a server of the busiest tunnel's own folder; `autopilot.probe_other_iran` (the temporary test tunnel of a cut tunnel); `doctor.move_now` (every reason: a suggestion applied, a return, quality, capacity) and `failover._make_plan` with a target the panel chose refuse another folder;
+> the AI commander's "move" order is refused; the relay strand (`trident.relay_target`) never passes through a foreign server it may not be paired with; the outbound relay the panel suggests by itself (`outbound.suggest_relay`) and the Bale relay's watch list never use a foreign server of a private folder.
+> **Probes:** a private Iran server is not a vantage of the fleet - not for the HTTP reach of the tunnels' ports (`tunnels._vantages`), the proof of life of another Iran server (`vantage._vantages`), "filtered in Iran?" and the TCP reach (`nodes._own_rows`, `_tcp_rows`), the SSH jump of a stalled server (`nodes.jump_candidates`),
+> the config reach (`configs`), the site check (`dcs.check_from_iran`), the SNI check (`autopilot._sni_check`), the server test pairs (`nodes`), the weekly ping round (`netwatch.probe_all`) and the loss locator (`pathscan.scan`); it is looked at the other way round as before, and it probes the servers of its own folder.
+> **Left to the owner on purpose:** a choice made by hand - the Move button of one tunnel, Create tunnel with an Iran server picked, building on a server he names - is his own decision and is not blocked. A folder with only an Iran server (no foreign server in it) is not private: tunnels still move only inside it (1.69.211) but a NEW tunnel's smart choice may list it;
+> put a foreign server in the same folder to wall it. The strict plan of the Move button was already judged by the folder's ranking.
+>
+> **به زبان ساده:** پوشهٔ `ali` که دو سرورِ دوستت در آن است حالا واقعاً دیوار دارد. Doctor و پنل دیگر هیچ تانلِ سرورهای خودمان را روی سرورِ Iranِ دوستت نمی‌گذارند: نه برای جابه‌جاییِ فشار منابع، نه برای تانلِ تستیِ بعد از قطع، نه برای «انتخاب هوشمند» تانل جدید. سرورهای او هم برای probeهای ما
+> (vantage، فیلتر بودن، reach، پرش SSH) به کار نمی‌روند. Doctor همچنان آن‌ها را می‌بیند و مراقبشان است. اگر خودت با دست جابه‌جا کنی یا بسازی، تصمیم خودت است و بسته نمی‌شود.
+
+**Proved:** `tests/test_folder_walls.py` (the pure rules - the fleet is never private, a folder with both kinds is, case does not matter; `auto_iran` for a fleet and for the friend's foreign server, and unchanged without folders; the resource move goes to the fleet and never to the friend's server even when it ranks first, and with only the friend's server left nothing moves;
+the test tunnel of a cut tunnel; `move_now` for every reason; `_make_plan` with an explicit target; the commander; the relay strand; the vantages, the jump, the filtered check, the TCP reach, the site and SNI checks; the relay and Bale watch). Also the config reach (`configs.refresh_reach`), the ping round (`netwatch.probe_all`) and the loss locator (`pathscan.scan`). Not proved on the live panel: no real saturation or cut was made to see the walls hold; the SNI check and the site check are covered with stubs only.
+
 ## 1.69.285 - A tunnel called -mv gets its own name when the old one is gone
 
 > **In short:** the owner (2026-11-18, a list with three tunnels ending in `-mv`): «اینا چرا آخر اسمشون mv هست؟» - then «بله، بساز» to the offered fix. `-mv` (or `-mw`) is the temporary name a move gives the NEW tunnel while the old one still runs

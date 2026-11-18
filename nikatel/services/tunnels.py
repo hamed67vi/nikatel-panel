@@ -28,7 +28,7 @@ from ..db import session
 from ..log import get_logger
 from ..models import Server, Tunnel, TunnelCheck, is_standby
 from ..ssh import Node, SSHError, run_script
-from . import linkmodels
+from . import folders, linkmodels
 from .events import emit
 
 log = get_logger("tunnels")
@@ -597,6 +597,8 @@ def _vantages() -> list[tuple[int, str, Node]]:
     with session() as db:
         rows = [(s.id, s.name, Node(s.host, s.ssh_user, s.ssh_port)) for s in db.scalars(select(Server).where(Server.role == "iran", Server.enabled.is_(True), Server.online.is_(True)))]
 
+    ok = folders.probers([r[0] for r in rows])          # (1.69.286: a server of a private Servers folder does not look at the fleet's tunnels; the fleet may look at it)
+    rows = [r for r in rows if r[0] in ok]
     rows.sort(key=lambda r: 0 if r[0] == pid else 1)
     return rows[:2]
 

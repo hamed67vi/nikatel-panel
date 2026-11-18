@@ -19,7 +19,7 @@ from ..log import get_logger
 from ..models import Server
 from ..ssh import Node, SSHError, run_action, run_raw, run_script
 from ..ssh import target as ssh_target
-from . import profiles
+from . import folders, profiles
 from .events import emit
 
 log = get_logger("nodes")
@@ -266,6 +266,8 @@ def jump_candidates(target: Node) -> list[Node]:
         rows = [(s.id, s.name, Node(s.host, s.ssh_user, s.ssh_port)) for s in db.scalars(select(Server).where(Server.role == "iran", Server.enabled.is_(True), Server.online.is_(True)))
                 if s.host != target.host and not _ssh.via_of(s.host)]
 
+    ok = folders.probers([r[0] for r in rows], target.host)          # (1.69.286: an SSH session of ours is not carried through a server of a private Servers folder - unless it is going to a server of that same folder)
+    rows = [r for r in rows if r[0] in ok]
     rows.sort(key=lambda r: (0 if r[0] == pid else 1, r[1]))
     return [r[2] for r in rows]
 
@@ -679,7 +681,10 @@ def parse_ping(out: str) -> tuple[int, int, float | None]:
 
 def _own_rows(host: str) -> list[dict]:
     with session() as db:
-        iran = [(s.name, Node(s.host, s.ssh_user, s.ssh_port)) for s in db.scalars(select(Server).where(Server.role == "iran", Server.enabled.is_(True), Server.online.is_(True)))]
+        iran = [(s.id, s.name, Node(s.host, s.ssh_user, s.ssh_port)) for s in db.scalars(select(Server).where(Server.role == "iran", Server.enabled.is_(True), Server.online.is_(True)))]
+
+    ok = folders.probers([x[0] for x in iran], host)          # (1.69.286: a server of a private Servers folder pings only a server of its own folder)
+    iran = [(n, node) for i, n, node in iran if i in ok]
 
     def one(item):
         name, node = item
@@ -883,6 +888,9 @@ def gre_probe(server_id: int) -> dict:
         others = [{"id": x.id, "name": x.name, "host": x.host, "user": x.ssh_user, "port": x.ssh_port}
                   for x in db.scalars(select(Server).where(Server.role == ("foreign" if iran_side else "iran"), Server.enabled.is_(True), Server.id != server_id).order_by(Server.name)) if x.online is not False]
 
+    walls = folders.load()          # (1.69.286: a server of a private Servers folder is tested with servers of its own folder, and the fleet's servers with the fleet's)
+    others = [o for o in others if walls.compatible(server_id, o["id"])]
+
     if not others:
         raise ValueError("no foreign server is online to test toward: add or enable one in Servers → Foreign" if iran_side else "no Iran server is online to test from: add or enable one in Servers → Iran")
 
@@ -945,7 +953,10 @@ def gre_check_all(role: str = "") -> dict:
 def _tcp_rows(host: str, port: int, limit: int = 5) -> tuple[int, int]:
     """(opened, asked): does a TCP connection to host:port open from up to `limit` of the Iran servers of the panel? Pings can be closed by a firewall; a connection that opens from Iran proves the address is not cut."""
     with session() as db:
-        iran = [Node(s.host, s.ssh_user, s.ssh_port) for s in db.scalars(select(Server).where(Server.role == "iran", Server.enabled.is_(True), Server.online.is_(True)).order_by(Server.name))][:limit]
+        rows = [(s.id, Node(s.host, s.ssh_user, s.ssh_port)) for s in db.scalars(select(Server).where(Server.role == "iran", Server.enabled.is_(True), Server.online.is_(True)).order_by(Server.name))]
+
+    ok = folders.probers([i for i, _ in rows], host)          # (1.69.286)
+    iran = [n for i, n in rows if i in ok][:limit]
 
     def one(node: Node) -> bool | None:
         try:

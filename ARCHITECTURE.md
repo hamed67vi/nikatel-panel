@@ -41,6 +41,7 @@ nikatel/
     build_other.py   the other engines: BackPack (reverse and direct), Paqet, Chisel (reverse, or forward = the Iran server dials, transports fws / fwss) - plan, install, units, proof, rollback
     create.py        the Create story: precheck of ports and conflicts, Smart choice of the Iran side, replace, DNS follow
     detect.py        find tunnels already running on the servers and adopt them; auto choice of the Iran side
+    folders.py       the Servers folders as WALLS (1.69.286): a folder with an Iran AND a foreign server is private - its servers are chosen only for tunnels inside it and its Iran servers run none of the panel's probes (`compatible`, `may_probe`, `in_pool`, `probers`); every automatic choice of an Iran server and every probe from one goes through it
     trash.py         removed tunnels kept for a while with everything needed to put them back
     retune.py        apply newer tunnel defaults one tunnel at a time, checked, put back when worse
     pulse.py         a 5 s heartbeat that marks a switched-off server off within seconds and wakes the fast lane of the tunnel checks; before it calls a server off it asks for a second opinion (an Iran server saw it, a jump server reaches it, or a PasarGuard node of its address is connected in a panel read in the last 90 s - `node_connected`)

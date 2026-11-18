@@ -30,7 +30,7 @@ from ..config import get_settings
 from ..db import session
 from ..log import get_logger
 from ..models import Server, ServerSample, Tunnel, is_protected
-from . import actions, autopilot, detect, failover, license, netwatch
+from . import actions, autopilot, detect, failover, folders, license, netwatch
 from . import settings as st
 from .events import emit
 
@@ -351,7 +351,10 @@ def move_now(tunnel_id: int, iran_id: int, reason: str = "manual", why: str = ""
         if tgt is None or tgt.role != "iran" or not tgt.enabled or tgt.online is False:
             raise ValueError("the target must be an Iran server that is on")
 
-        name = t.name
+        name, src, tname = t.name, t.iran_server_id, tgt.name
+
+    if not folders.same_pool(src, iran_id):          # (1.69.286: a tunnel never leaves its Servers folder by a move the panel makes)
+        raise ValueError(f"{tname} is in another Servers folder than {name}: a tunnel is moved only inside its folder")
 
     if reason != "manual" and rails:
         block = may_move(name, _state()["moves"], int(time.time()))
@@ -601,7 +604,7 @@ def resources() -> None:
             continue
 
         try:
-            ranking = detect.auto_iran(busiest["foreign_id"], busiest["ports"])
+            ranking = folders.in_pool(detect.auto_iran(busiest["foreign_id"], busiest["ports"]), srv["id"])          # (1.69.286: the tunnels of a Servers folder go to a server of that folder only - never onto the separate folder of someone else's servers)
         except (ValueError, RuntimeError) as e:
             log.warning("resource move: no ranking for %s: %s", busiest["name"], e)
             continue

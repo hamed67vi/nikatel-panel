@@ -19,6 +19,7 @@ from ..db import session
 from ..log import get_logger
 from ..models import Server, Tunnel, is_temp
 from ..ssh import Node, SSHError, run_script
+from . import folders
 from .events import emit
 from .pathscan import ANCHORS, parse_loss
 
@@ -130,10 +131,13 @@ def probe_all() -> None:
 
     jobs = []
 
+    walls = folders.load()          # (1.69.286: a server of a private Servers folder pings the servers of its own folder only; the fleet's servers may look at it)
+
     for n, s in enumerate(iran):
-        others = [o for o in iran if o[0] != s[0]]
+        others = [o for o in iran if o[0] != s[0] and walls.may_probe(s[0], o[0])]
         dom = [others[(n + k) % len(others)][2] for k in range(min(2, len(others)))] if others else []
-        far = [foreign[(n * 4 + k) % len(foreign)][2] for k in range(min(4, len(foreign)))] if foreign else []      # four foreign servers per Iran server, rotating: every foreign server is seen from a few Iran servers each round
+        seen = [o for o in foreign if walls.may_probe(s[0], o[0])]
+        far = [seen[(n * 4 + k) % len(seen)][2] for k in range(min(4, len(seen)))] if seen else []      # four foreign servers per Iran server, rotating: every foreign server is seen from a few Iran servers each round
         jobs.append((s[0], s[1], s[4], {"anchor": list(ANCHORS), "domestic": dom, "foreign": far}))
 
     with ThreadPoolExecutor(6) as ex:

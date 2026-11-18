@@ -43,6 +43,7 @@ from . import (
     dnscache,
     dnsprov,
     failover,
+    folders,
     gateway,
     license,
     panels,
@@ -720,9 +721,11 @@ def pick_relay(cands: list[dict]) -> int | None:
 
 
 def suggest_relay() -> dict | None:
-    """The foreign server the panel would choose as the relay (the quietest one), or None."""
+    """The foreign server the panel would choose as the relay (the quietest one), or None. Never a server of a private Servers folder (1.69.286, the owner, 2026-11-18: "nothing of our servers may be on them")."""
+    walls = folders.load()
+
     with session() as db:
-        fo = list(db.scalars(select(Server).where(Server.role == "foreign", Server.enabled.is_(True))))
+        fo = [x for x in db.scalars(select(Server).where(Server.role == "foreign", Server.enabled.is_(True))) if not walls.is_private(x.id)]
         load = {}
 
         for sv in fo:

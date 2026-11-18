@@ -33,7 +33,7 @@ from .. import jobs
 from ..config import get_settings
 from ..db import session
 from ..log import get_logger
-from ..models import ActionLog, Profile, Server, Tunnel, TunnelCheck, is_protected
+from ..models import ActionLog, Server, Tunnel, TunnelCheck, is_protected
 from ..ssh import Node, SSHError, run_script
 from . import (
     actions,
@@ -41,6 +41,7 @@ from . import (
     build_other,
     builder,
     detect,
+    folders,
     freshlook,
     knowledge,
     linkmodels,
@@ -394,8 +395,10 @@ def _sni_check(info: dict) -> dict | None:
     from ..models import Server
 
     with session() as db:
-        s = db.scalar(select(Server).where(Server.role == "iran", Server.enabled.is_(True)).order_by(Server.id))
-        node = Node(s.host, s.ssh_user, s.ssh_port) if s is not None else None
+        rows = [(s.id, Node(s.host, s.ssh_user, s.ssh_port)) for s in db.scalars(select(Server).where(Server.role == "iran", Server.enabled.is_(True)).order_by(Server.id))]
+
+    fleet = folders.probers([i for i, _ in rows])          # (1.69.286: a server of a private Servers folder does not run our probes)
+    node = next((n for i, n in rows if i in fleet), None)
 
     if node is None:
         return None
@@ -1428,7 +1431,7 @@ def probe_other_iran(aid: int, snap: dict, kind: str) -> None:
     """A cut tunnel that no step could heal: ONE temporary test tunnel from the best other Iran server to the same foreign server tells whether the fault is the
     route / the Iran server or the foreign server. The temporary tunnel is hidden from the cards and removed again; the real tunnel is not touched."""
     try:
-        usable = [r for r in detect.auto_iran(snap["foreign_id"], snap["ports"]) if r.get("score", 0) > 0 and r["id"] != snap["iran_id"]]
+        usable = [r for r in folders.in_pool(detect.auto_iran(snap["foreign_id"], snap["ports"]), snap["iran_id"]) if r.get("score", 0) > 0 and r["id"] != snap["iran_id"]]          # (1.69.286: only an Iran server of the tunnel's own folder builds the test tunnel)
     except ValueError as e:
         _say(aid, f"No test from another Iran server: {str(e)[:100]}")
         return
@@ -1633,15 +1636,13 @@ def recommend_start(iran_id: int, foreign_id: int, kinds: list[str] | None = Non
 def pool_of(server_id: int) -> str:
     """The folder of an Iran server on the Servers page (the tag of its profile; "" = Any). The Iran servers of one folder are one pool: a tunnel is moved only inside its pool (1.69.211, the owner, 2026-11-04: "the Iran
     servers used for these must be separate from the ones used for the other tunnels"). While every server is in one folder - as now - nothing changes."""
-    with session() as db:
-        return str(db.scalar(select(Profile.tag).where(Profile.kind == "iran", Profile.server_id == server_id).limit(1)) or "")
+    return folders.pool_of(server_id)
 
 
 def ranking(tunnel_id: int) -> list[dict]:
     """The Iran servers that could carry this tunnel, best first (the current one is left out, and so is every server of another folder)."""
     snap = _snapshot(tunnel_id)
-    mine = pool_of(snap["iran_id"])
-    return [r for r in detect.auto_iran(snap["foreign_id"], snap["ports"]) if r["id"] != snap["iran_id"] and pool_of(r["id"]) == mine]
+    return [r for r in folders.in_pool(detect.auto_iran(snap["foreign_id"], snap["ports"]), snap["iran_id"]) if r["id"] != snap["iran_id"]]
 
 
 # ------------------------------------------------------------------ mass disruption

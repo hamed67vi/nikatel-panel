@@ -21,6 +21,7 @@ from ..db import session
 from ..log import get_logger
 from ..models import Server, Tunnel
 from ..ssh import Node, SSHError, run_script
+from . import folders
 
 log = get_logger("pathscan")
 ANCHORS = ("1.1.1.1", "8.8.8.8")        # public anchors that answer ping from everywhere
@@ -113,8 +114,9 @@ def scan(tunnel_id: int) -> dict:
     if iran is None or foreign is None:
         return {"where": "unknown", "text": "one of the two servers does not answer over SSH: the loss cannot be placed", "rows": [], "m": {}}
 
-    others_f = [s for s in online if s[3] == "foreign" and s[0] != f_id][:3]
-    others_i = [s for s in online if s[3] == "iran" and s[0] != i_id]
+    walls = folders.load()          # (1.69.286: the other servers that look are those of this tunnel's own side of the Servers folders)
+    others_f = [s for s in online if s[3] == "foreign" and s[0] != f_id and walls.may_probe(i_id, s[0])][:3]
+    others_i = [s for s in online if s[3] == "iran" and s[0] != i_id and walls.may_probe(s[0], f_id) and walls.may_probe(s[0], i_id)]
     dom = others_i[:2]
     far = others_i[:3]
     jobs = {"iran": (iran[4], [foreign[2]] + [s[2] for s in others_f] + list(ANCHORS) + [s[2] for s in dom]), "foreign": (foreign[4], [iran[2]] + list(ANCHORS))}

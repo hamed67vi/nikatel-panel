@@ -18,6 +18,7 @@ from ..db import session
 from ..log import get_logger
 from ..models import Server, Tunnel
 from ..ssh import Node, SSHError, run_script
+from . import folders
 
 log = get_logger("dcs")
 TTL = 600
@@ -109,8 +110,11 @@ def check_from_iran(domains: list[str]) -> dict[str, dict]:
     now = int(time.time())
 
     with session() as db:
-        srv = db.scalars(select(Server).where(Server.role == "iran", Server.enabled.is_(True), Server.online.is_(True)).order_by(Server.name)).first()
-        who = (srv.name, Node(srv.host, srv.ssh_user, srv.ssh_port)) if srv else None
+        rows = [(s.id, s.name, Node(s.host, s.ssh_user, s.ssh_port)) for s in db.scalars(select(Server).where(Server.role == "iran", Server.enabled.is_(True), Server.online.is_(True)).order_by(Server.name))]
+
+    ok = folders.probers([r[0] for r in rows])          # (1.69.286: one of the fleet's Iran servers - not a server of a private Servers folder)
+    srv = next((r for r in rows if r[0] in ok), None)
+    who = (srv[1], srv[2]) if srv else None
 
     if not who:
         return {d: check_site(d) for d in domains}

@@ -28,7 +28,7 @@ from ..db import session
 from ..log import get_logger
 from ..models import CommanderRun, Server, Tunnel, TunnelCheck, is_standby, is_temp
 from ..ssh import SSHError
-from . import actions, ai, autopilot, doctor, tunnel_test
+from . import actions, ai, autopilot, doctor, folders, tunnel_test
 from . import settings as st
 from .events import emit
 from .tunnels import servers_off, servers_off_of
@@ -640,6 +640,9 @@ def target_of(tool: str, args: dict) -> dict:
                 raise Refusal("choose another Iran server", "bad_args")
 
             names["to"] = s.name
+
+        if not folders.same_pool(tun["iran_id"], to):          # (1.69.286)
+            raise Refusal(f"{names['to']} is in another Servers folder: choose one of where_to_move", "bad_args")
 
     elif tool == "replace":
         if str(args.get("kind") or "") not in tunnel_test.KIND_KEYS:

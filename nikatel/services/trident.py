@@ -42,6 +42,7 @@ from . import (
     bandwidth,
     build_other,
     builder,
+    folders,
     knowledge,
     lanes,
     license,
@@ -903,9 +904,10 @@ def relay_target(iran_id: int, foreign_id: int, now: int | None = None) -> tuple
     lowest delay; never the tunnel's own foreign server, never one that is off. (0, why not) when there is none."""
     now = now or int(time.time())
     cands: dict[int, dict] = {}
+    walls = folders.load()          # (1.69.286: the strand goes through a foreign server this Iran server may be paired with - not one of a private Servers folder of someone else)
 
     with session() as db:
-        servers = {s.id: s for s in db.scalars(select(Server)) if s.role == "foreign" and s.enabled and s.online is not False and s.id != foreign_id}
+        servers = {s.id: s for s in db.scalars(select(Server)) if s.role == "foreign" and s.enabled and s.online is not False and s.id != foreign_id and walls.compatible(iran_id, s.id)}
 
         for t in db.scalars(select(Tunnel).where(Tunnel.iran_server_id == iran_id)):
             if t.foreign_server_id in servers and not is_temp(t.name) and t.state in ("up", "degraded") and not (t.record or {}).get("relay"):

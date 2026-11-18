@@ -9,6 +9,7 @@ from ..db import session
 from ..log import get_logger
 from ..models import Server, Tunnel
 from ..ssh import Node, SSHError, run_script
+from . import folders
 from .nodes import parse_ping
 
 log = get_logger("detect")
@@ -29,6 +30,7 @@ def auto_iran(foreign_id: int, ports_text: str = "") -> list[dict]:
     from .builder import parse_ports
 
     wanted = {p.listen for p in parse_ports(ports_text)} if ports_text.strip() else set()
+    walls = folders.load()          # (1.69.286: a server of a private Servers folder is a candidate only for a foreign server of that folder - and the foreign servers of the fleet have none of those Iran servers to choose from)
 
     with session() as db:
         f = db.get(Server, foreign_id)
@@ -38,7 +40,7 @@ def auto_iran(foreign_id: int, ports_text: str = "") -> list[dict]:
 
         fhost = f.host
         fname = f.name
-        iran = [(s.id, s.name, Node(s.host, s.ssh_user, s.ssh_port), dict(s.facts or {}), dict((s.extra or {}).get("gre") or {})) for s in db.scalars(select(Server).where(Server.role == "iran", Server.enabled.is_(True), Server.online.is_(True)))]
+        iran = [(s.id, s.name, Node(s.host, s.ssh_user, s.ssh_port), dict(s.facts or {}), dict((s.extra or {}).get("gre") or {})) for s in db.scalars(select(Server).where(Server.role == "iran", Server.enabled.is_(True), Server.online.is_(True))) if walls.compatible(s.id, foreign_id)]
         load = {}
         prev = {}              # iran server id -> the worst state of ITS tunnel to this foreign server ("down" beats "degraded")
         gre_down = set()       # Iran servers with a tunnel that is down on its GRE link right now: newer than the last GRE check

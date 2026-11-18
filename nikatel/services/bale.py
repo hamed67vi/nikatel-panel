@@ -21,6 +21,7 @@ from ..db import session
 from ..log import get_logger
 from ..models import Panel, Server
 from ..ssh import Node, SSHError, run_action, run_script
+from . import folders
 from . import settings as st
 from .events import emit
 from .panels import origin
@@ -103,8 +104,10 @@ def suggest_hosts() -> list[str]:
 
 
 def watch_targets() -> list[list]:
+    walls = folders.load()          # (1.69.286: not a server of a private Servers folder)
+
     with session() as db:
-        rows = list(db.scalars(select(Server).where(Server.role == "foreign", Server.enabled.is_(True)).order_by(Server.id)))
+        rows = [x for x in db.scalars(select(Server).where(Server.role == "foreign", Server.enabled.is_(True)).order_by(Server.id)) if not walls.is_private(x.id)]
 
     return [[s.host, int(s.ssh_port or 22)] for s in rows[:3]] + ANCHORS
 

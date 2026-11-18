@@ -55,6 +55,14 @@ Plain JS, no build step; hover fade on every button and row; a loading box and a
 |---|---|
 | **Settings → Api & Key → Bale · customer notices** | a small Bale bot on one Iran server (`relay/bale_relay.py`): customers start it once and may link their subscription; it tells them by itself when the server has lost the whole outside world for a few minutes and again when it is back; customers can write to you in the same chat and you answer from your own Bale (so an owner abroad with only Bale reachable can run it: `/send`, `/cut`, `/back`, `/info`). Install / update / remove from the box, the state read from the server, the texts changeable. Design and limits: [`bale.md`](bale.md) |
 
+## A Servers folder is a wall (1.69.286)
+
+A Servers folder that holds an Iran server AND a foreign server is a private folder (the owner, 2026-11-18, two servers of a friend's panel kept in a folder of their own: nothing of the fleet may be tunneled onto them, and the Doctor must watch them). The servers of a
+private folder are chosen only for tunnels between servers of that folder: the smart choice of Create tunnel, the Doctor's resource, quality, capacity and return moves, the temporary test tunnel of a cut tunnel, a plan with a target the panel chose, the AI commander's move, the
+relay strand, the outbound relay the panel suggests and the Bale watch list all leave them out. Their Iran servers also run none of the panel's own probes (the vantages, "filtered in Iran?", the config and TCP reach, the SSH jump, the site and SNI checks, the ping round, the loss locator);
+the fleet still looks at them, so the Doctor watches them like any other server. The fleet itself (Iran servers in one folder, foreign servers in others) is not private: nothing changes for it. A choice made by hand (the Move button, Create tunnel with an Iran server picked)
+stays the owner's. The rule lives in `nikatel/services/folders.py`.
+
 ## A tunnel called -mv gets its own name when the old one is gone (1.69.285)
 
 A move builds its new tunnel beside the old one under a temporary name (`<name>-mv`, or `-mw` when the old one already carries `-mv` on the servers) and gives it the old name when the old tunnel is removed. Two things left the temporary

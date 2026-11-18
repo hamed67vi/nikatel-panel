@@ -35,7 +35,7 @@ from ..db import session
 from ..log import get_logger
 from ..models import Config, Panel, Server, Tunnel, is_protected
 from ..ssh import Node, SSHError, push_probe
-from . import arvan, autopilot, dnsprov, telegram
+from . import arvan, autopilot, dnsprov, folders, telegram
 from . import settings as st
 from .events import emit
 
@@ -468,6 +468,9 @@ def _make_plan(server_id: int, move: set[int] | None, reason: str, target_id: in
                 raise ValueError("choose another Iran server")
 
             target = {"id": ts.id, "name": ts.name}
+
+        if not strict and not folders.same_pool(server_id, target["id"]):          # (1.69.286: a plan the panel makes by itself stays in the folder; the strict plan of the Move button judges it by the ranking, which is the folder's)
+            raise ValueError(f"{target['name']} is in another Servers folder than {info['server']}: the tunnels are moved only inside their folder")
 
     if strict or not target_id:
         def rank_one(t: dict) -> tuple[list[dict] | None, str]:

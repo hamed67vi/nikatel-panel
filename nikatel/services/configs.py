@@ -19,7 +19,7 @@ from ..db import session
 from ..log import get_logger
 from ..models import Config, ConfigSample, Server, Subscription
 from ..ssh import Node, SSHError, run_script
-from . import probe, witness
+from . import folders, probe, witness
 from .events import emit
 
 log = get_logger("configs")
@@ -287,7 +287,10 @@ def refresh_reach(names: list[str]) -> bool:
             if _direct_tcp(m) and now - int((m.get("reach") or {}).get("at", 0)) >= REACH_TTL:
                 todo.setdefault(f"{m['address']}:{m['port']}", []).append(c.id)
 
-        vantage = [Node(s.host, s.ssh_user, s.ssh_port) for s in db.scalars(select(Server).where(Server.role == "iran", Server.enabled.is_(True)).order_by(Server.id).limit(2))]
+        rows = [(s.id, Node(s.host, s.ssh_user, s.ssh_port)) for s in db.scalars(select(Server).where(Server.role == "iran", Server.enabled.is_(True)).order_by(Server.id))]
+
+    allowed = folders.probers([i for i, _ in rows])          # (1.69.286: the two vantages are servers of the fleet - not one of a private Servers folder)
+    vantage = [n for i, n in rows if i in allowed][:2]
 
     if not todo or not vantage:
         return False
