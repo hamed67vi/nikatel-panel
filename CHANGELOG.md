@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.69.289 - The duplicate sweep does not side with the old tunnel
+
+> **In short:** the owner (2026-11-19), asked why `az...-mv` was still called -mv after the rename fix of 1.69.285 - the read-only look found the cause - «بله، بساز». The move of 2026-11-18 01:32 built the new tunnel (chisel, forward) beside the old one (tcpmux) and changed
+> one DNS name to its Iran server; the old tunnel was kept because users still held it. The duplicate sweep (`janitor.run`, every ten minutes, mode move) judged the group: `pick_extras` takes the busiest tunnel that is up AND measured as the keeper - and `_use` is None for
+> every type without traffic counters (12 of 26 tunnels: chisel/fws, BackPack wss / wssmux / stealth / tcpmux). So the only measurable tunnel, the old one, was the keeper; at 04:34 `consolidate_names` pointed the DNS name BACK at the old tunnel's Iran server (the Doctor's own
+> move undone; the old tunnel carries users again), and the new tunnel, unmeasured, was "not measured enough to say it is quiet" - neither keeper nor extra, idle and still called -mv for good. New: (1) `pick_extras`: an up tunnel that cannot be measured but that a DNS name is tied to is
+> the KEEPER when no measured tunnel of the group is tied to a name (the youngest when several); an idle-keeper test no longer reads a use that is not there; (2) `consolidation_target` / `_consolidate` get the use of the group and never point names at a tunnel when the use of ANY member is not
+> known; (3) the old tunnel, measured, quiet for three hours (`QUIET_FOR`), older than that and tied to no name, is extra and goes like any extra copy (`remove_extra`) - after which the tidy round drops the -mv of the new one (1.69.285). Unchanged: every rail (mode, one removal
+> every half hour, three a day, storms, repairs), the re-check before a removal, two tunnels that cannot be told apart (told once a day, nothing removed), a pair that can all be measured. Not changed either: the CURRENT state of that tunnel (its DNS name is on the old tunnel since 2026-11-18 04:34
+> and the new one idles) - that is a decision for the owner. Not proved on the real panel.
+>
+> **به زبان ساده:** وقتی tunnelِ تازه از نوعی بود که panel ترافیکش را نمی‌خواند، پاک‌کنندهٔ «نسخهٔ اضافی» همیشه tunnelِ قدیمی را نگه می‌داشت و DNS را به آن برمی‌گرداند و جابه‌جاییِ Doctor را خنثی می‌کرد؛ tunnelِ تازه هم برای همیشه با اسمِ `-mv` بی‌کار می‌ماند. حالا tunnelی که DNS به آن اشاره می‌کند نگه داشته می‌شود، DNS هرگز از آن دور نمی‌شود، و tunnelِ قدیمی وقتی سه ساعت خالی بود و DNS به آن نبود پاک می‌شود.
+
+**Proved:** `tests/test_janitor_blind.py` (a tunnel without counters that the DNS points at is the keeper and the old one is extra when quiet, old enough and untied, and not while it carries users, is young or a name is tied to it; everything else keeps the old rule - the measured one that the
+DNS points at, both tied, a blind tunnel that is down, nothing up, two blind ones; no name is pointed at a tunnel when the use of any member is not known; the job on the real world of 2026-11-18: no name moved, nothing removed while the old tunnel is used, the old one removed when it is quiet).
+
 ## 1.69.288 - A tunnel whose users suffer gets a faster type beside it
 
 > **In short:** the owner (2026-11-18), after the read-only look at the Austria config - «بله، بساز» to "teach the Doctor: config bad, tunnel healthy". The config rode a tunnel the Doctor had moved that morning (a WebSocket-over-TLS mux type that tested

@@ -10,6 +10,10 @@ fine, an extra one is not".)
   what is done          in the modes fix and move, one extra every JANITOR_GAP, at most three a day, never in a storm: the tunnel goes to "Recently removed" (builder.delete_tunnel(trash=True): it can be restored for 30 days) and an event says
                         which tunnel it duplicated. Every look is written to the log; nothing is changed on a server before the check is made again.
 
+A tunnel that CANNOT BE MEASURED (1.69.289, the owner, 2026-11-19: 12 of 26 tunnels - chisel, BackPack wss / wssmux / stealth / tcpmux - have no traffic counters, `_use` is None for them) is never judged "less used" than one that can: the DNS
+name a move changed points at it, so it is the keeper (when no measured tunnel of the group is tied to a name), no name is pointed away from it, and the old tunnel goes when it is quiet. Before, the only measurable tunnel - the OLD one a move had
+kept because users still held it - was always the keeper, the names were pointed BACK at it (the Doctor's own move undone) and the new tunnel stayed for good, not keeper and not extra.
+
 The pure helpers (`duplicate_groups`, `pick_extras`, `rails`) carry the decisions and are tested."""
 from __future__ import annotations
 
@@ -55,13 +59,19 @@ def duplicate_groups(rows: list[dict]) -> list[list[dict]]:
 
 def pick_extras(group: list[dict], use: dict[int, float | None], age: dict[int, int], referenced: dict[int, bool | None]) -> tuple[dict | None, list[dict], str]:
     """Pure: (the tunnel that stays, the extras that may go, why nothing goes when none does). `use`: the average traffic (Mb/s, download + upload) of each over the window, None = not measured enough; `age`: seconds since it was
-    built; `referenced`: a DNS record that points at its Iran server is tied to it (True), is not (False), could not be asked (None). The keeper is the busiest that is up; an extra is quiet, old enough and proved unreferenced."""
+    built; `referenced`: a DNS record that points at its Iran server is tied to it (True), is not (False), could not be asked (None). The keeper is the busiest that is up; an extra is quiet, old enough and proved unreferenced.
+    (1.69.289) A tunnel that cannot be measured (`use` None) but is up and has a DNS name tied to it is the keeper when no measured tunnel of the group is tied to a name."""
     up = [t for t in group if t.get("state") == "up" and use.get(t["id"]) is not None]
+    blind = [t for t in group if t.get("state") == "up" and use.get(t["id"]) is None and referenced.get(t["id"]) is True]          # (1.69.289: up, cannot be measured, a DNS name is tied to it)
 
-    if not up:
+    if blind and not any(referenced.get(t["id"]) is True for t in up):          # (the DNS points at the tunnel that cannot be measured and at no measured one: that is where the users are meant to be)
+        keeper = min(blind, key=lambda t: int(age.get(t["id"], 0)))
+    elif up:
+        keeper = max(up, key=lambda t: (float(use[t["id"]]), -int(age.get(t["id"], 0))))
+    else:
         return None, [], "no tunnel of the group is up and measured"
 
-    keeper = max(up, key=lambda t: (float(use[t["id"]]), -int(age.get(t["id"], 0))))
+    kuse = use.get(keeper["id"])
     extras, why = [], ""
 
     for t in group:
@@ -78,7 +88,7 @@ def pick_extras(group: list[dict], use: dict[int, float | None], age: dict[int, 
             why = why or f"{t['name']} is younger than {QUIET_FOR // 3600} hours"
         elif referenced.get(t["id"]) is not False:
             why = why or (f"a DNS record is tied to {t['name']}" if referenced.get(t["id"]) else f"the DNS records could not be asked for {t['name']}")
-        elif float(use[keeper["id"]]) < QUIET_MBPS and referenced.get(keeper["id"]) is not True:
+        elif kuse is not None and float(kuse) < QUIET_MBPS and referenced.get(keeper["id"]) is not True:
             why = why or f"both {keeper['name']} and {t['name']} are idle and nothing proves which one is used"
         else:
             extras.append(t)
@@ -99,10 +109,14 @@ def rails(done: list, now: int) -> str:
     return ""
 
 
-def consolidation_target(group: list[dict], keeper: dict | None, age: dict[int, int], referenced: dict[int, bool | None], pointed: dict, now: int) -> dict | None:
+def consolidation_target(group: list[dict], keeper: dict | None, age: dict[int, int], referenced: dict[int, bool | None], pointed: dict, now: int, use: dict[int, float | None] | None = None) -> dict | None:
     """Pure: the copy whose DNS names are to be moved to the keeper (1.69.219) - the keeper is up, the copy is not the keeper, is older than QUIET_FOR, DNS names are tied to it (`referenced` True: the case that kept it,
-    the owner, 2026-11-04: the Doctor must remove the duplicates by itself) and its names were not moved in the last POINT_GAP seconds. None when there is no such copy."""
+    the owner, 2026-11-04: the Doctor must remove the duplicates by itself) and its names were not moved in the last POINT_GAP seconds. None when there is no such copy.
+    (1.69.289) `use` given and the use of ANY tunnel of the group not known: None - no name is pointed at a tunnel when nothing says which of them the users are on."""
     if keeper is None or keeper.get("state") != "up":
+        return None
+
+    if use is not None and any(use.get(t["id"]) is None for t in group):
         return None
 
     for t in group:
@@ -217,7 +231,7 @@ def run() -> None:
         if not extras:          # (1.69.219: a copy whose DNS names moved to the keeper a while ago and that is quiet now goes, though the three hours of its window still hold the traffic of before)
             extras = pick_after_point(group, keeper, pointed, {t["id"]: _use_recent(t["id"], now) for t in group}, referenced, now)
 
-        if not extras and _consolidate(group, keeper, age, referenced, pointed, now):
+        if not extras and _consolidate(group, keeper, age, referenced, pointed, now, use):
             return
 
         if not extras:
@@ -295,13 +309,13 @@ def _after_removal(name: str) -> list[str]:
         return []
 
 
-def _consolidate(group: list[dict], keeper: dict | None, age: dict[int, int], referenced: dict[int, bool | None], pointed: dict, now: int) -> bool:
+def _consolidate(group: list[dict], keeper: dict | None, age: dict[int, int], referenced: dict[int, bool | None], pointed: dict, now: int, use: dict[int, float | None] | None = None) -> bool:
     """(1.69.219) A copy that cannot go because DNS names are tied to it: when those names serve ONLY that copy (`failover.replace_plan` - a name that also serves another tunnel of its Iran server is left alone) they are
     pointed at the Iran server of the keeper (the records stay, every change is in the Changes box with Restore), and once the copy has been quiet a while it goes like any extra copy. In the mode move only (it changes DNS).
     Returns True when it started the move."""
     from . import actions, autopilot, failover
 
-    cand = consolidation_target(group, keeper, age, referenced, pointed, now)
+    cand = consolidation_target(group, keeper, age, referenced, pointed, now, use)
 
     if cand is None:
         return False

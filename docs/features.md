@@ -55,6 +55,14 @@ Plain JS, no build step; hover fade on every button and row; a loading box and a
 |---|---|
 | **Settings → Api & Key → Bale · customer notices** | a small Bale bot on one Iran server (`relay/bale_relay.py`): customers start it once and may link their subscription; it tells them by itself when the server has lost the whole outside world for a few minutes and again when it is back; customers can write to you in the same chat and you answer from your own Bale (so an owner abroad with only Bale reachable can run it: `/send`, `/cut`, `/back`, `/info`). Install / update / remove from the box, the state read from the server, the texts changeable. Design and limits: [`bale.md`](bale.md) |
 
+## The duplicate sweep does not side with the old tunnel (1.69.289)
+
+When a move builds a tunnel beside the old one and the users still hold the old one, the two serve the same ports of the same foreign server and the duplicate sweep (`janitor`) judges the group: the keeper is the busiest tunnel that is up AND
+measured. 12 of 26 tunnels of the owner's panel cannot be measured - chisel, BackPack wss / wssmux / stealth / tcpmux have no traffic counters. So when the new tunnel was one of those, the old one was always the keeper: on 2026-11-18 the sweep
+pointed the DNS name that the Doctor's own move had changed BACK at the old tunnel, and the new tunnel was neither keeper nor extra for good (it stayed called -mv). Now a tunnel that cannot be measured but is up and has a DNS name tied to it is the keeper
+(when no measured tunnel of the group is tied to a name), no name is ever pointed at a tunnel while the use of any tunnel of the group is not known (`consolidation_target`), and the old tunnel goes when it is quiet for three hours and no name is tied
+to it - after which the -mv name of the new one is dropped by the tidy round. Two tunnels that cannot be told apart are still told once a day and nothing is removed.
+
 ## A tunnel whose users suffer gets a faster type beside it (1.69.288)
 
 The Doctor grades every tunnel by what its users really get (`userq`: the share of the probe's tests that answered, the ping against the config's own week, the speed). When the grade falls to poor or bad it looks and says where the problem is -
