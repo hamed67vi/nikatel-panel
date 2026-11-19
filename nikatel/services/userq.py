@@ -548,13 +548,32 @@ def _investigate_later(tunnel_id: int) -> None:
 
 
 # ------------------------------------------------------------------ the change of type for suffering users (1.69.288)
+def _steadier_kind(snap: dict, cur: str, now: int) -> tuple[dict | None, int | None]:
+    """(1.69.290, the owner, 2026-11-19: the rule of 1.69.288 could not fire for the Austria tunnel - its type tested 778 Mb/s, no type was five times faster) (the best OTHER type that works on the pair and is not itself known to be
+    unsteady, the percent of kept tests the tunnel's own type passed): only when the Doctor's memory calls the type the tunnel runs as UNSTEADY (under `knowledge.STEADY_OK` percent). (None, percent) otherwise."""
+    from . import autopilot, knowledge, license
+
+    pct = autopilot._steady_pct(snap, cur)
+
+    if pct is None or pct >= knowledge.STEADY_OK:
+        return None, pct
+
+    for r in knowledge.ranked(knowledge.pair(snap["iran_id"], snap["foreign_id"]), now):
+        if r["kind"] != cur and license.tunnel_kind_allowed(r["kind"]) and (r.get("steady") is None or r["steady"] >= knowledge.STEADY_OK):
+            return r, pct
+
+    return None, pct
+
+
 def retype_for_users(now: int | None = None) -> list[str]:
     """(1.69.288, the owner, 2026-11-18: «بله، بساز») A tunnel whose users have had a poor or bad connection for UX_SWAP_AFTER hours while the tunnel itself is healthy (the Doctor's own look says "beyond the tunnel": `explain_users`)
     and for which the Doctor's memory of the pair knows a clearly faster type that is not known to be unsteady, gets that type built BESIDE it without a cut - `doctor._run_retype` with auto, the same swap as every automatic change of type
     (the speed test through the new tunnel, the users' new connections handed over, the old one removed last; `retypewatch` follows it and puts the old type back when the users leave). The pair test of a type and what a type does
     under real users can differ a lot (a tunnel that tested 597 Mb/s gave its users 3.7): the users' own grade is the judge that was missing. The rails: the modes fix and move, nothing while the Doctor's own affairs wait (`quiet_now`),
     two swaps at most (`swap.MAX_AT_ONCE`), the day's volume of tests (`urgent`), once in 24 hours per tunnel (`doctor.may_retype`), a protected tunnel never, and not while more than a third of the fleet suffers (`swap_wanted`).
-    A look that cannot start leaves no mark and is made again at the next round. Returns the names of the tunnels a change was started for."""
+    A look that cannot start leaves no mark and is made again at the next round.
+    (1.69.290) When no clearly faster type is known but the Doctor's memory calls the type the tunnel runs as UNSTEADY, the best other type that works there is taken (`_steadier_kind`) and the swap is not asked for a speed gain over the old number
+    (`before` 0): a speed test of one big connection hides a tunnel that stalls or resets new ones, and the new tunnel still has to carry the users (the swap's own proof). Returns the names of the tunnels a change was started for."""
     from ..config import get_settings
     from . import actions, autopilot, bandwidth, doctor, knowledge, swap, testbudget
 
@@ -590,15 +609,25 @@ def retype_for_users(now: int | None = None) -> list[str]:
         _best, faster = bandwidth._faster_row(snap, cur, f, now)
         cand = next((r for r in faster if r.get("steady") is None or r["steady"] >= knowledge.STEADY_OK), None)
 
+        flaky = None
+
         if cand is None:
-            continue
+            cand, flaky = _steadier_kind(snap, cur, now)
+
+            if cand is None:
+                continue
 
         hours = (now - int(ux["since"])) // 3600
-        why = (f"The users of {name} have had a {ux['grade']} connection for {hours} hours while the tunnel itself is healthy ({summary(ux)[:160]}); {cand['kind']} gave {float(cand.get('down_mbps') or 0):.0f} Mb/s on this pair "
-               f"(the tunnel gives {f.get('now')}), so its type is changed without a cut.")
+        lead = f"The users of {name} have had a {ux['grade']} connection for {hours} hours while the tunnel itself is healthy ({summary(ux)[:160]}); "
+
+        if flaky is None:
+            why = lead + f"{cand['kind']} gave {float(cand.get('down_mbps') or 0):.0f} Mb/s on this pair (the tunnel gives {f.get('now')}), so its type is changed without a cut."
+        else:
+            why = lead + (f"the Doctor's memory calls {cur} UNSTEADY on this pair ({flaky} % of its kept tests passed) and {cand['kind']} works here (score {cand.get('score')}), so its type is changed without a cut. "
+                          "A speed test does not see a tunnel that stalls new connections: the new tunnel is judged by what it carries, not by a speed gain.")
 
         try:
-            autopilot._start(name, doctor._run_retype, tid, cand["kind"], cur, why, True, action="autopilot", source="auto")
+            autopilot._start(name, doctor._run_retype, tid, cand["kind"], cur, why, True, False, 0.0 if flaky is not None else None, action="autopilot", source="auto")
         except ValueError as e:
             log.info("the change of type of tunnel %s for its users not started: %s", name, str(e)[:100])
             continue

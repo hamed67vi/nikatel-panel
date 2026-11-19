@@ -4841,3 +4841,5 @@ html body #page .pg-usage .pg-bar .tabs { background: none; border: 0; box-shado
 html body #page .pn-facts button .bt { display: none; } html body #page .pn-facts button { padding: 0 10px; }
 html[data-fluid] body #page .pn-ctl { flex: 1 1 100%; flex-wrap: wrap; margin-left: 0; padding-left: 0; border-left: 0; }
 nav#nav a[hidden] { display: none !important; }      /* a section that is hidden for now (the Shop bot, 1.53.3) */
+/* (1.69.290) the small tag of a foreign server whose node does not answer from outside (services/pathprobe.py) */
+.srv-tag { display: inline-block; margin-left: 7px; padding: 0 7px; border-radius: 999px; font-size: 10px; font-weight: 800; letter-spacing: .3px; line-height: 16px; color: #fff; background: #c0392b; cursor: help; vertical-align: middle; white-space: nowrap; }

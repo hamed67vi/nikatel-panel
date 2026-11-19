@@ -178,6 +178,42 @@ if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | head -1 | grep -q 
 if command -v python3 >/dev/null 2>&1; then echo "PY=1"; else echo "PY=0"; fi
 """, {}),
 
+    # (1.69.290) the LIGHT layered look (services/pathprobe.py): for each port, N fresh connections to HOST:PORT - the TCP connect time, then the TLS handshake with the config's SNI, nothing is sent after it (a few kilobytes in
+    # all). HOST 127.0.0.1 on an Iran server = its tunnel and the node behind it, no network in between; the address of another Iran server = the way the users come. The ports run in threads; one line per port.
+    "tls_probe": (r"""python3 - '@HOST@' '@PORTS@' '@SNI@' '@COUNT@' <<'__NK_PY__'
+import socket, ssl, sys, threading, time
+host, ports, sni, n = sys.argv[1], [int(p) for p in sys.argv[2].split()], sys.argv[3], int(sys.argv[4])
+T = 4
+need = int(0.75 * n + 0.999)
+out = {}
+def one(port):
+    ctx = ssl.create_default_context(); ctx.check_hostname = False; ctx.verify_mode = ssl.CERT_NONE
+    conn = tls = fails = 0; times = []; err = ""
+    for i in range(n):
+        s = None
+        try:
+            s = socket.create_connection((host, port), timeout=T); conn += 1
+            t0 = time.time(); w = ctx.wrap_socket(s, server_hostname=sni); times.append((time.time() - t0) * 1000); tls += 1; w.close(); s = None
+        except (OSError, ssl.SSLError) as e:
+            fails += 1; err = err or type(e).__name__
+        finally:
+            if s is not None:
+                s.close()
+        if fails > n - need:
+            break
+        if i < n - 1:
+            time.sleep(0.2)
+    times.sort()
+    out[port] = (conn, tls, int(times[len(times) // 2]) if times else 0, int(times[min(len(times) - 1, int(len(times) * 0.9))]) if times else 0, err)
+th = [threading.Thread(target=one, args=(p,)) for p in ports]
+[t.start() for t in th]
+[t.join() for t in th]
+for p in ports:
+    c, t, p50, p90, e = out.get(p, (0, 0, 0, 0, "NoResult"))
+    print("PORT=%d N=%d CONN=%d TLS=%d P50=%d P90=%d ERR=%s" % (p, n, c, t, p50, p90, e))
+__NK_PY__
+""", {"HOST": r"^[0-9]{1,3}(\.[0-9]{1,3}){3}$", "PORTS": r"^[0-9]{1,5}( [0-9]{1,5}){0,63}$", "SNI": r"^[a-z0-9][a-z0-9.-]{0,98}$", "COUNT": r"^[0-9]{1,2}$"}),
+
     # the default interface, its address and the gateway's MAC (Paqet sends raw frames through it)
     "paqet_net": (r"""IF=$(ip route show default 2>/dev/null | awk '/default/ {print $5; exit}')
 IP=$(ip -4 -o addr show dev "$IF" 2>/dev/null | awk '{print $4}' | cut -d/ -f1 | head -1)

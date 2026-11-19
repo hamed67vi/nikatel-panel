@@ -382,7 +382,7 @@ def apply_suggestion(sid: str) -> int:
 
 
 # ------------------------------------------------------------------ a change of the tunnel's type (a "type" suggestion applied)
-def _run_retype(aid: int, tunnel_id: int, kind: str, was: str, why: str, auto: bool = False, revert: bool = False) -> None:
+def _run_retype(aid: int, tunnel_id: int, kind: str, was: str, why: str, auto: bool = False, revert: bool = False, before_override: float | None = None) -> None:
     """The tunnel is built again as `kind` (same name, same ports), the old type is put back when the new one does not build; then it is measured again, and what it gave is told next to what it gave before."""
     from ..ssh import SSHError
     from . import bandwidth, knowledge, retypewatch
@@ -401,7 +401,7 @@ def _run_retype(aid: int, tunnel_id: int, kind: str, was: str, why: str, auto: b
     if was and cur != was:
         raise ValueError(f"{snap['name']} runs as {cur} now, not as {was}: the suggestion is out of date")
 
-    before = float(((snap["record"].get("bw") or {}).get("down")) or 0)
+    before = float(((snap["record"].get("bw") or {}).get("down")) or 0) if before_override is None else float(before_override)          # (1.69.290: the caller says what the speed bar is - 0 for a tunnel that is changed because its type is UNSTEADY, not because it is slow)
 
     if auto:                                                                  # (1.69.78: the Doctor's own change never cuts the users - the new type is built BESIDE the old one, the users go over, the old one is removed last: services/swap.py)
         from . import swap

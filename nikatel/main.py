@@ -56,6 +56,7 @@ from .services import (
     orphans,
     outbound,
     panels,
+    pathprobe,
     pg_auto,
     pg_watch,
     probe,
@@ -250,6 +251,7 @@ def _register_jobs() -> None:
     jobs.register("underuse", 1800, underuse.run)               # a server that carries little is looked at: its own network may be the reason; what the kernel settings can fix is fixed
     jobs.register("quality", 1800, besttoday.refresh)           # the latency, jitter and loss of every tunnel are measured again every half hour (read-only, PINGS ONLY since 1.69.226 - no data moved; the speed is the bandwidth job's): the ranking of the best tunnels of the day uses them
     jobs.register("userq", 300, userq.run)                      # what the USERS get through every tunnel: the probe's tests of the configs that ride it, each against its own week; the grade of the tunnel, a look by the Doctor when it falls (services/userq.py)
+    jobs.register("pathprobe", pathprobe.EVERY, pathprobe.run)   # the LAYERED look (1.69.290): the node from abroad, the tunnel on its Iran server itself, the Iran network to it - light, in parallel, a verdict per tunnel, a restart of a tunnel that resets new connections, a small tag on a foreign server whose node does not answer (services/pathprobe.py)
     jobs.register("comeback", 60, comeback.run)                 # a cut tunnel that was swapped to an emergency type: its old type is tested again with growing waits (5, 10, 20 ... min) and the tunnel goes back when it is clearly better (services/comeback.py)
     jobs.register("knowledge", 600, knowledge.run)            # what the Doctor KNOWS about every pair of servers: the night survey of the tunnel types, one pair at a time, when nothing else needs the servers (services/knowledge.py)
     jobs.register("wiremeter", wiremeter.EVERY, wiremeter.run)    # what every tunnel costs on the wire against what its users move: three light reads of an Iran server every 10 minutes, nothing is changed (1.69.266)

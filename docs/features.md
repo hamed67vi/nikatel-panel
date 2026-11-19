@@ -55,6 +55,19 @@ Plain JS, no build step; hover fade on every button and row; a loading box and a
 |---|---|
 | **Settings → Api & Key → Bale · customer notices** | a small Bale bot on one Iran server (`relay/bale_relay.py`): customers start it once and may link their subscription; it tells them by itself when the server has lost the whole outside world for a few minutes and again when it is back; customers can write to you in the same chat and you answer from your own Bale (so an owner abroad with only Bale reachable can run it: `/send`, `/cut`, `/back`, `/info`). Install / update / remove from the box, the state read from the server, the texts changeable. Design and limits: [`bale.md`](bale.md) |
 
+## The layered look: where is the problem (1.69.290)
+
+When the users of a config suffer, the Doctor used to ask one question - how fast is the tunnel - and a speed test of one big connection hides a tunnel that stalls or resets NEW connections. On 2026-11-19 a config answered 24-85 % of the probe's
+tests for two days while its foreign server, its DNS and the Iran network to its Iran server were all fine; only the tunnel instance reset new connections (one restart cured it). Now a job (`pathprobe`, every 30 minutes) looks at every layer
+between a user and the internet, lightly and in parallel: for the user port of every config that rides a tunnel, N fresh connections - the TCP connect time and the TLS handshake with the config's own SNI, nothing sent after it, a few kilobytes
+in all. Three layers: the NODE (from the panel's host, abroad: the foreign server's inbound port, no tunnel, no Iran network), the TUNNEL (on its Iran server itself, 127.0.0.1: the tunnel and the node behind it, no network in between; one ssh call
+per Iran server, its ports in threads there) and the PATH (from other Iran servers to the Iran server's own address - only for a tunnel whose users suffer while the first two are fine, and only a failure of every vantage counts). The verdict is the
+first layer that fails - `node`, `tunnel`, `path`, `ok` - kept in the record of the tunnel (`layers`) and changed only after two looks in a row; a layer that was not measured accuses nobody, and when most nodes fail at once from the panel's host
+the panel's host is the blind one and no node is judged. What is done: a tunnel whose settled verdict is `tunnel` (the node answers, the tunnel resets) is restarted on both ends - the same action as the Restart button - at most once in six hours, only in the
+modes fix and move, never a protected one, never while the Doctor's own affairs wait; and a foreign server whose node does not answer for two looks in a row gets a small tag next to its name (the Tunnels table and the server's window) with an event,
+which goes when the node answers again. The volume (about 100 MB a day for thirty configs) is counted in the day's volume of the Doctor's tests. The rule of 1.69.288 (a better type beside a tunnel whose users suffer) now also fires when the Doctor's memory calls
+the type the tunnel runs as UNSTEADY and no faster type is known: the best other type that works on the pair is taken, and the swap is not asked for a speed gain over a number that hides the fault.
+
 ## The duplicate sweep does not side with the old tunnel (1.69.289)
 
 When a move builds a tunnel beside the old one and the users still hold the old one, the two serve the same ports of the same foreign server and the duplicate sweep (`janitor`) judges the group: the keeper is the busiest tunnel that is up AND
