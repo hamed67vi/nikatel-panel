@@ -8,7 +8,8 @@ the question "where is the problem" is answered by a LIGHT look at every layer b
   the verdict           the first layer that fails: `node` (the foreign node), else `tunnel` (the tunnel instance resets or stalls new connections), else `path` (the Iran network to the Iran server), else `ok`; a layer that was not
                         measured never accuses anybody. A verdict is kept in the record of the tunnel (`layers`) and changes only after CONFIRM looks in a row that agree (one noisy look is nothing).
   what is done          `tunnel`, confirmed, in the modes fix and move: the tunnel is restarted on both ends (`actions.restart_now`, the same action as the button; a few seconds, the users reconnect) - once in RESTART_GAP per tunnel,
-                        never a protected one, never while the Doctor's own affairs wait. When that does not cure it the grade of the users takes over (`userq.retype_for_users`: another type beside it, without a cut).
+                        never a protected one, never while the Doctor's own affairs wait. When that does not cure it (1.69.291: two looks after the restart the verdict is still `tunnel`) the next rung is another type built BESIDE the tunnel
+                        without a cut (`escalate`: `doctor._run_retype`, the best other type that works on the pair and is not known to be unsteady) - once in 24 hours per tunnel, the rails of the restart on top.
   the tag               a foreign server whose node does not answer from outside for TAG_AFTER looks in a row gets a small tag (`Server.extra["health"]`, shown next to its name on the Servers page) and an event; it goes when the node
                         answers again. Nothing is tagged when the panel's own host is the blind one (most nodes fail at once: its network, not theirs).
 
@@ -39,6 +40,9 @@ OK_SHARE = 0.75              # a layer passes when at least this share of its ha
 CONFIRM = 2                  # a verdict (and a tag) changes after this many looks in a row that agree
 TAG_AFTER = 2
 RESTART_GAP = 6 * 3600       # a tunnel is restarted by the look at most this often
+ESCALATE_AFTER = 3300        # (1.69.291) a restart that was made this long ago (two looks) and a tunnel that STILL resets new connections: another type is built beside it
+ESCALATE_GAP = 24 * 3600     # ... and it is done for the same tunnel at most this often
+FLEET_SHARE = 1 / 3          # more than this share of the looked-at tunnels with the verdict `tunnel` at once: not the type of one tunnel
 THREADS = 8
 TIMEOUT = 4                  # seconds one connect or one handshake may take
 BLIND_SHARE = 0.8            # more than this share of the nodes failing from the panel's host: the panel's host is blind, the node layer is not judged
@@ -413,11 +417,16 @@ def restart_story(aid: int, tunnel_id: int, why: str) -> None:
     autopilot._say(aid, f"{res['name']}: " + "; ".join(res.get("steps") or []) + f" - the tunnel is {res.get('state')}" + (f" ({res['why']})" if res.get("why") else "") + ". The next look (in half an hour) measures the layers again.", done=True, ok=res.get("state") == "up")
 
 
-def _mark_restart(name: str, now: int) -> None:
+def _mark(key: str, name: str, now: int) -> None:
+    """Keep when the look did `key` ("restarted" | "escalated") for a tunnel; marks older than a week go."""
     d = dict(st.get("pathprobe") or {})
-    r = {k: v for k, v in (d.get("restarted") or {}).items() if now - int(v) < 7 * 86400}
+    r = {k: v for k, v in (d.get(key) or {}).items() if now - int(v) < 7 * 86400}
     r[name] = now
-    st.put("pathprobe", {"restarted": r})
+    st.put("pathprobe", {key: r})
+
+
+def _mark_restart(name: str, now: int) -> None:
+    _mark("restarted", name, now)
 
 
 def fix(result: dict, now: int) -> list[str]:
@@ -454,10 +463,87 @@ def fix(result: dict, now: int) -> list[str]:
     return started
 
 
+def escalate_wanted(restarted_at: int, state: dict | None, code: str, now: int, tried_at: int = 0) -> str:
+    """Pure: '' when the look may build another type beside a tunnel now, else why not. The tunnel was restarted by the look `restarted_at` (0 = never), the settled state is `state`, this look says `code`:
+    only a tunnel that was restarted, whose verdict was `tunnel` before and after, ESCALATE_AFTER seconds later, and has not been escalated in the last ESCALATE_GAP."""
+    if code != "tunnel" or (state or {}).get("code") != "tunnel":
+        return "the tunnel does not reset new connections now"
+
+    if not restarted_at:
+        return "the look has not restarted it yet"
+
+    if now - restarted_at < ESCALATE_AFTER:
+        return f"it was restarted only {(now - restarted_at) // 60} minutes ago: the next look says whether that cured it"
+
+    if tried_at and now - tried_at < ESCALATE_GAP:
+        return f"another type was tried for it {(now - tried_at) // 3600} hours ago"
+
+    return ""
+
+
+def escalate(result: dict, now: int) -> list[str]:
+    """The second rung of the look: a tunnel that was restarted by the look and still resets new connections two looks later gets another type built beside it, without a cut (`doctor._run_retype`, the same swap as every automatic change
+    of type; the speed gain is not asked for - a speed test does not see a tunnel that stalls new connections, the new tunnel is judged by what it carries). One tunnel per look. The rails: the modes fix and move, nothing while the Doctor's own
+    affairs wait, `swap.MAX_AT_ONCE`, the day's volume of tests (`urgent`), once in 24 hours per tunnel (`doctor.may_retype` and ESCALATE_GAP), a protected tunnel never, and not while more than a third of the looked-at tunnels say `tunnel` at once
+    (then it is the Iran side or the panel's host, not the type of one tunnel). Returns the names it started a change for."""
+    from . import autopilot, bandwidth, doctor, swap, testbudget, userq
+
+    rows_res = result.get("tunnels") or {}
+    bad = [tid for tid, r in rows_res.items() if verdict(r.get("node"), r.get("tunnel"), r.get("path"))[0] == "tunnel"]
+
+    if not bad or len(rows_res) >= 3 and len(bad) > FLEET_SHARE * len(rows_res):
+        return []
+
+    if get_settings().read_only or not bandwidth.actions_mode_allows_fix() or autopilot.quiet_now() or swap.at_once() >= swap.MAX_AT_ONCE or not testbudget.allow("urgent"):
+        return []
+
+    doc = st.get("pathprobe") or {}
+    restarted, escalated = dict(doc.get("restarted") or {}), dict(doc.get("escalated") or {})
+
+    with session() as db:
+        rows = [(t.id, t.name, dict((t.record or {}).get("layers") or {}), is_protected(t)) for t in db.scalars(select(Tunnel).where(Tunnel.id.in_(bad)))]
+
+    for tid, name, lay, protected in rows:
+        r = rows_res.get(tid) or {}
+        code = verdict(r.get("node"), r.get("tunnel"), r.get("path"))[0]
+
+        if protected or escalate_wanted(int(restarted.get(name) or 0), lay.get("state"), code, now, int(escalated.get(name) or 0)):
+            continue
+
+        if doctor.may_retype(name, doctor._state().get("retype_done") or {}, now):
+            continue
+
+        try:
+            snap = autopilot._snapshot(tid)
+            cur = autopilot.kind_of(snap["type"], snap["transport"], snap["record"])
+        except ValueError:
+            continue
+
+        cand, _pct = userq._steadier_kind(snap, cur, now, force=True)
+
+        if cand is None:
+            continue
+
+        why = (f"The layered look: {lay.get('text') or 'the tunnel resets new connections'}. The tunnel was restarted {(now - int(restarted.get(name) or now)) // 60} minutes ago and it still does, so {cand['kind']} (it works on this pair, score {cand.get('score')}) "
+               f"is built beside it and the users' new connections are handed over without a cut. The new tunnel is judged by what it carries, not by a speed gain.")
+
+        try:
+            autopilot._start(name, doctor._run_retype, tid, cand["kind"], cur, why, True, False, 0.0, action="autopilot", source="auto")
+        except ValueError as e:
+            log.info("the change of type of %s was not started: %s", name, str(e)[:100])
+            continue
+
+        _mark("escalated", name, now)
+        userq._UX_TRIED[name] = now
+        return [name]
+
+    return []
+
+
 # ------------------------------------------------------------------ the job
 def run() -> list[str]:
     """Job (every EVERY seconds): plan, look at every layer in parallel, keep the verdicts, tag the foreign servers whose node fails, restart a tunnel that resets. Nothing when the Doctor is off or the panel is read-only.
-    Returns the names of the tunnels a restart was started for."""
+    Returns the names of the tunnels a restart or a change of type was started for."""
     from . import actions, testbudget
 
     if get_settings().read_only or jobs.stopping() or actions.doctor_mode() == "off":
@@ -491,7 +577,12 @@ def run() -> list[str]:
             except Exception:
                 log.exception("the tag of server %s could not be kept", sid)
 
-        return fix(result, now)
+        started = fix(result, now)
+
+        if not started:
+            started = escalate(result, now)
+
+        return started
     finally:
         with _LOCK:
             _RUNNING[0] = False

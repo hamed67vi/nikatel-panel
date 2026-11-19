@@ -55,6 +55,14 @@ Plain JS, no build step; hover fade on every button and row; a loading box and a
 |---|---|
 | **Settings → Api & Key → Bale · customer notices** | a small Bale bot on one Iran server (`relay/bale_relay.py`): customers start it once and may link their subscription; it tells them by itself when the server has lost the whole outside world for a few minutes and again when it is back; customers can write to you in the same chat and you answer from your own Bale (so an owner abroad with only Bale reachable can run it: `/send`, `/cut`, `/back`, `/info`). Install / update / remove from the box, the state read from the server, the texts changeable. Design and limits: [`bale.md`](bale.md) |
 
+## The layered look, second phase (1.69.291)
+
+Three additions (the owner, 2026-11-19, «بریم فاز بعدی»). (1) The quality job (`quality`, the latency, jitter and loss of every tunnel, every 30 minutes) took 156 seconds one tunnel after the other on the live fleet - the only background test
+that was fully serial (the rest already run their servers in a pool, some on purpose slowly): now every Iran server is a lane (its tunnels one after the other, so a small server is never asked for two measurements at once) and six lanes run at once.
+(2) A tunnel that the layered look restarted and that STILL resets new connections two looks later gets another type built beside it without a cut (`pathprobe.escalate`: the best other type that works on the pair and is not known to be unsteady,
+the same swap as every automatic change, no speed gain asked for), once in 24 hours per tunnel, never a protected one, not while more than a third of the looked-at tunnels have that verdict at once. (3) The tunnel window has a Layers row: what each layer
+answered (fresh TLS handshakes through, out of those tried) and the verdict. Not built: a DNS layer (a name that points at a CDN or rotates on purpose would be accused) and the configs behind a CDN name.
+
 ## The layered look: where is the problem (1.69.290)
 
 When the users of a config suffer, the Doctor used to ask one question - how fast is the tunnel - and a speed test of one big connection hides a tunnel that stalls or resets NEW connections. On 2026-11-19 a config answered 24-85 % of the probe's

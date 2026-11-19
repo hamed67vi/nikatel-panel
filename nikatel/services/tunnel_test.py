@@ -86,7 +86,7 @@ def quality(tunnel_id: int, speed: bool = True) -> dict:
 
 
 def quality_all_start(source: str = "manual") -> int:
-    """The quality of every tunnel (10 s of pings each, one after the other) as an action. Read only."""
+    """The quality of every tunnel (10 s of pings each; the Iran servers in parallel, the tunnels of one server one after the other) as an action. Read only."""
     from . import autopilot
 
     def work(aid: int) -> None:
@@ -101,20 +101,46 @@ def quality_all_start(source: str = "manual") -> int:
     return autopilot._start("quality of all tunnels", work, action="quality", source=source, allow_read_only=True)
 
 
+QUALITY_WORKERS = 6        # Iran servers measured at once (1.69.291)
+
+
+def lanes_by_server(rows: list[tuple[int, int]]) -> list[list[int]]:
+    """Pure: [(tunnel id, Iran server id)] -> one lane of tunnel ids per Iran server, in the order the servers and the tunnels were first seen. The tunnels of ONE Iran server are measured one after the other (a small
+    server is never asked for two measurements at once), the servers in parallel."""
+    lanes: dict[int, list[int]] = {}
+
+    for tid, sid in rows:
+        lanes.setdefault(sid, []).append(tid)
+
+    return list(lanes.values())
+
+
 def quality_all(speed: bool = True) -> list[dict]:
-    """Every tunnel, one after the other; `speed=False` = pings only through the doors (the job)."""
+    """Every tunnel; `speed=False` = pings only through the doors (the job). (1.69.291, the owner: «a complete parallelization of the Doctor's tests») The job took 156 seconds one tunnel after the other: now every Iran server
+    is a lane (its tunnels one after the other, `lanes_by_server`) and up to QUALITY_WORKERS lanes run at once; the answer keeps the order of the tunnels."""
+    from concurrent.futures import ThreadPoolExecutor
+
     with session() as db:
-        ids = [t.id for t in db.scalars(select(Tunnel).where(Tunnel.enabled.is_(True)))]
+        rows = [(t.id, t.iran_server_id) for t in db.scalars(select(Tunnel).where(Tunnel.enabled.is_(True)))]
 
-    out = []
-
-    for tid in ids:
+    def one(tid: int) -> dict:
         try:
-            out.append(quality(tid, speed=speed))
+            return quality(tid, speed=speed)
         except (ValueError, RuntimeError, SSHError) as e:          # (1.69.274: a tunnel that carries nothing right now is a result, not a failed job)
-            out.append({"id": tid, "error": str(e)[:120]})
+            return {"id": tid, "error": str(e)[:120]}
 
-    return out
+    def lane(ids: list[int]) -> list[tuple[int, dict]]:
+        return [(tid, one(tid)) for tid in ids]
+
+    lanes = lanes_by_server(rows)
+    done: dict[int, dict] = {}
+
+    if lanes:
+        with ThreadPoolExecutor(max(1, min(QUALITY_WORKERS, len(lanes)))) as ex:
+            for part in ex.map(lane, lanes):
+                done.update(part)
+
+    return [done[tid] for tid, _sid in rows if tid in done]
 
 
 LOSS_HIGH = 10.0           # % packet loss users feel (video stalls, slow pages)

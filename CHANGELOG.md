@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.69.291 - The layered look, second phase
+
+> **In short:** the owner (2026-11-19, «بریم فاز بعدی»). The first rounds of 1.69.290 on the live fleet took 14 seconds for 20 tunnels and found every layer fine (one handshake in eight timed out on one tunnel). The background job list shows the quality job as the only fully
+> serial test (156 s for 24 tunnels, one after the other; the others already use pools, some deliberately slow). New: `tunnel_test.quality_all` runs one lane per Iran server (`lanes_by_server`, pure; the tunnels of one server one after the other, `QUALITY_WORKERS` 6 lanes at once, the answer in the
+> old order); `pathprobe.escalate` - a tunnel the look restarted and whose verdict is STILL `tunnel` after `ESCALATE_AFTER` (two looks) gets the best other type beside it (`userq._steadier_kind(force=True)`, `doctor._run_retype` with no speed gain asked for), once in `ESCALATE_GAP` 24 h, the rails of the restart
+> on top, `doctor.may_retype`, `swap.MAX_AT_ONCE`, the day's volume of tests, never a protected tunnel, not while more than a third of the looked-at tunnels say `tunnel`; the tunnel window has a Layers row (`tunLayersCell`). Tests `tests/test_quality_parallel.py`, `tests/test_pathprobe_escalate.py`.
+> Not built: a DNS layer (a CDN name or a rotating record would be accused) and the configs behind a CDN name.
+
 ## 1.69.290 - The layered look: where is the problem
 
 > **In short:** the owner (2026-11-19), after the layered diagnosis of the Austria config - «بله، بساز» to the first phase of "the Doctor tests every config lightly, in parallel, from the server and the path to the tunnel, fixes what it finds and tags a foreign server

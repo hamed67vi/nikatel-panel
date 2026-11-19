@@ -548,14 +548,15 @@ def _investigate_later(tunnel_id: int) -> None:
 
 
 # ------------------------------------------------------------------ the change of type for suffering users (1.69.288)
-def _steadier_kind(snap: dict, cur: str, now: int) -> tuple[dict | None, int | None]:
+def _steadier_kind(snap: dict, cur: str, now: int, force: bool = False) -> tuple[dict | None, int | None]:
     """(1.69.290, the owner, 2026-11-19: the rule of 1.69.288 could not fire for the Austria tunnel - its type tested 778 Mb/s, no type was five times faster) (the best OTHER type that works on the pair and is not itself known to be
-    unsteady, the percent of kept tests the tunnel's own type passed): only when the Doctor's memory calls the type the tunnel runs as UNSTEADY (under `knowledge.STEADY_OK` percent). (None, percent) otherwise."""
+    unsteady, the percent of kept tests the tunnel's own type passed): only when the Doctor's memory calls the type the tunnel runs as UNSTEADY (under `knowledge.STEADY_OK` percent). (None, percent) otherwise.
+    (1.69.291) `force`: the layered look restarted the tunnel and it still resets new connections - the type is taken off even when the memory has no number against it."""
     from . import autopilot, knowledge, license
 
     pct = autopilot._steady_pct(snap, cur)
 
-    if pct is None or pct >= knowledge.STEADY_OK:
+    if not force and (pct is None or pct >= knowledge.STEADY_OK):
         return None, pct
 
     for r in knowledge.ranked(knowledge.pair(snap["iran_id"], snap["foreign_id"]), now):

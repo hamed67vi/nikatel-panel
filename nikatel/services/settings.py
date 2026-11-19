@@ -28,7 +28,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
     "doctor": {"moves": [], "suggestions": [], "back": {}, "tried": {}, "res_at": {}, "retyped": {}, "retype_done": {}, "dns_heal": {}},                  # the Doctor's ledger of moves, its suggestions, who came back when
     # the tunnel cores (services/engines.py): `auto` = the Doctor keeps them up to date by itself (off until the owner switches it on), `hour` = the local hour it starts (panel clock), `bad` = {core: version} that did
     # not hold on a server and was put back (never tried again by itself), `last` = what the last automatic run did
-    "pathprobe": {"restarted": {}},                               # the layered look (services/pathprobe.py): when a tunnel was last restarted by it, per tunnel name
+    "pathprobe": {"restarted": {}, "escalated": {}},                               # the layered look (services/pathprobe.py): when a tunnel was last restarted by it, per tunnel name
     "janitor": {"done": [], "pointed": {}},                      # (pointed: when the DNS names of a second copy were moved to the keeper, per tunnel id)
     "retypewatch": {"watch": {}},                                 # the notes of the changes of type the Doctor watches the users after (services/retypewatch.py)
     "testbudget": {"daily_gb": 30.0, "day": 0, "bytes": 0, "by": {}, "tests": {}, "days": {}, "days_by": {}, "firsts": {}, "firsts_day": 0, "speed_days": 10.0},          # the volume the Doctor's own speed tests moved today and the daily budget (services/testbudget.py)
