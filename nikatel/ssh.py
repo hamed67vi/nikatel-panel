@@ -164,7 +164,9 @@ echo "ARCH $(uname -m)"
 echo "ARCH=$(uname -m)"
 # (1.69.263) how many processes hold the core OPEN FOR WRITING: the sftp-server of a copy that stalled and never ended on this side (2026-11-13: a bulk copy to one Iran server stalled all morning). The binary is the same build but it
 # cannot run - the unit that starts it fails with "Text file busy" - so it must be put there again, as a new file.
-W=0; for fd in /proc/[0-9]*/fd/*; do [ "$(readlink "$fd" 2>/dev/null)" = '@BIN@' ] || continue; fl=$(awk '/^flags:/ {print $2}' "${fd%/fd/*}/fdinfo/${fd##*/}" 2>/dev/null); [ -n "$fl" ] && [ $((8#$fl & 3)) -ne 0 ] && W=$((W+1)); done; echo "WRITERS=$W"
+# (1.69.293) ONE `find` reads where every fd of every process points (a loop in C: a few milliseconds for ten thousand open files); only the few fds that point at the core get a look at their flags (one writer = one process, counted once).
+# The loop of 1.69.263 started a `readlink` for EVERY open fd on the server: about 8,500 fds on a busy Iran server took 46 s, longer than the 30 s of this probe, so every build on that server failed with "timeout after 20s".
+W=0; L=''; for fd in $(find /proc/[0-9]*/fd -lname '@BIN@' 2>/dev/null); do p=${fd%/fd/*}; [ "$p" = "$L" ] && continue; fl=$(awk '/^flags:/ {print $2}' "$p/fdinfo/${fd##*/}" 2>/dev/null); if [ -n "$fl" ] && [ $((8#$fl & 3)) -ne 0 ]; then W=$((W+1)); L=$p; fi; done; echo "WRITERS=$W"
 """, {"BIN": r"^/(usr/local/bin|opt/nikatel-xgw)/[A-Za-z0-9._-]{1,40}$"}),
 
     # what the BackPack / Paqet / Chisel builders must know about a server

@@ -1,6 +1,7 @@
 """A core binary that a stalled old copy still holds open for writing ("Text file busy"; the owner, 2026-11-13: the move of two tunnels to an Iran server failed on it after the copies had gone through, six
 hours after the copies that stalled): the probe counts the writers, every copy makes a NEW file, a core that is held is put there again, and a unit that fails to start for it is repaired inside the build."""
 import subprocess
+import sys
 import time
 import types
 
@@ -38,6 +39,49 @@ def test_the_probe_counts_the_processes_that_hold_the_core_open_for_writing(tmp_
         reader.wait()
 
     assert "WRITERS=0" in run_probe(core)
+
+
+HOLDER_WITH_MANY_FDS = """
+import os, resource, sys, time
+core, other, want = sys.argv[1], sys.argv[2], int(sys.argv[3])
+soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+resource.setrlimit(resource.RLIMIT_NOFILE, (min(hard, want + 100) if hard > 0 else want + 100, hard))
+busy = [os.open("/dev/null", os.O_RDONLY) for _ in range(min(want, resource.getrlimit(resource.RLIMIT_NOFILE)[0] - 50))]
+w1 = os.open(core, os.O_WRONLY | os.O_APPEND)
+w2 = os.open(core, os.O_RDWR)                  # (two writing fds of ONE process: one writer)
+r1 = os.open(core, os.O_RDONLY)                # (a reader: not counted)
+o1 = os.open(other, os.O_WRONLY | os.O_APPEND) # (another file with a name that only starts like the core: not counted)
+print("ready", len(busy), flush=True)
+time.sleep(60)
+"""
+
+
+def test_a_server_with_thousands_of_open_files_is_probed_in_seconds_not_minutes(tmp_path):
+    """The owner (2026-11-22): every build on a busy Iran server failed with "timeout after 20s" - the loop of 1.69.263 started one `readlink` for EVERY open fd (about 8,500 fds took 46 s, the probe waits 30 s). One `find` reads
+    all the links at once: the same server answers in well under a second, and a writer is still found among thousands of fds, counted once per process."""
+    core = tmp_path / "backpack"
+    core.write_bytes(b"x" * 100)
+    core.chmod(0o755)
+    other = tmp_path / "backpack2"
+    other.write_bytes(b"y")
+    holder = subprocess.Popen([sys.executable, "-c", HOLDER_WITH_MANY_FDS, str(core), str(other), "4000"], stdout=subprocess.PIPE, text=True)
+
+    try:
+        assert holder.stdout.readline().startswith("ready")
+        t0 = time.time()
+        out = run_probe(core)
+        took = time.time() - t0
+        assert "WRITERS=1" in out and "SHA=" in out and "ARCH=" in out          # (two writing fds of one process = one writer; the other file and the reader are not counted)
+        assert took < 5, f"the probe took {took:.1f} s with thousands of open files"
+    finally:
+        holder.kill()
+        holder.wait()
+
+
+def test_the_probe_does_not_start_a_process_for_every_open_file():
+    code = "\n".join(line for line in ssh.SCRIPTS["engine_sha"][0].splitlines() if not line.lstrip().startswith("#"))          # (the comments tell the story of the old loop: only the commands count)
+    assert "readlink" not in code and "for fd in /proc" not in code            # (the loop that took 46 s on a server with 8,500 open files)
+    assert "find /proc/[0-9]*/fd -lname '@BIN@'" in code
 
 
 def test_a_core_that_is_held_for_writing_cannot_run_which_is_what_the_probe_finds(tmp_path):
