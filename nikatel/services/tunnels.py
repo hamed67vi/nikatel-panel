@@ -88,16 +88,34 @@ def in_move(name: str, now: int | None = None) -> bool:
     return made is not None and int(now or time.time()) - int(made or 0) < MOVE_YOUNG
 
 
+def _off_words(role: str, s: Server | None) -> str:
+    """The sentence for one server of a pair that cannot carry the tunnel now: it is off (or does not answer), or (1.69.292, an Iran server) it is on but its own network is cut off - it reaches neither the internet nor the foreign
+    servers, so nothing built on it can work. "" when it is fine."""
+    if s is None or not s.enabled:
+        return ""
+
+    if s.online is False:
+        return f"{role} server {s.name} is off or does not answer"
+
+    if role == "Iran" and s.online is True:
+        from . import netwatch
+
+        if netwatch.is_netcut((s.extra or {}).get("net"), time.time()):
+            return f"Iran server {s.name} is on, but its own network is cut off (it reaches neither the internet nor the foreign servers)"
+
+    return ""
+
+
 def servers_off(t: Tunnel) -> list[str]:
-    """Plain sentences for the servers of this tunnel that are off (or do not answer). While one is, nothing is done to the tunnel by itself: there is nothing to repair until the server is back."""
-    return [f"{role} server {s.name} is off or does not answer" for role, s in (("Iran", t.iran), ("Foreign", t.foreign)) if s is not None and s.enabled and s.online is False]
+    """Plain sentences for the servers of this tunnel that are off (or do not answer), or an Iran server that is on but cut off in itself. While one is, nothing is done to the tunnel by itself: there is nothing to repair until the server is back."""
+    return [w for role, s in (("Iran", t.iran), ("Foreign", t.foreign)) if (w := _off_words(role, s))]
 
 
 def servers_off_of(iran_id: int, foreign_id: int) -> list[str]:
     """`servers_off` for a pair given by id, read from the database NOW: a repair that began while both servers answered must notice the moment one of them stops (the pulse needs ~8 s), and the tunnel it works on
     may not have a row any more (it is removed while the repair builds it again)."""
     with session() as db:
-        return [f"{role} server {s.name} is off or does not answer" for role, sid in (("Iran", iran_id), ("Foreign", foreign_id)) if (s := db.get(Server, sid)) is not None and s.enabled and s.online is False]
+        return [w for role, sid in (("Iran", iran_id), ("Foreign", foreign_id)) if (w := _off_words(role, db.get(Server, sid)))]
 
 
 _IPV4 = re.compile(r"\d{1,3}(\.\d{1,3}){3}")

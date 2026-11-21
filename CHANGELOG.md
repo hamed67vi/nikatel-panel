@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.69.294 - The Doctor looks at the Iran server first; the Servers list is in alphabetical order
+
+An Iran server that is **on** but whose **own network is cut off** (it reaches neither the internet nor the foreign servers) used to look fine to the panel: the panel's host could still reach it, so the Doctor treated its tunnels as
+broken tunnels and spent twenty minutes restarting, removing the tunnel and building nine types against it that could not work, and moved them only when the pulse noticed, ten minutes later (the real evening of 2026-11-21).
+
+- A tunnel that is down now earns its Iran server a **quick look at its own network** (the same pings as the round of five minutes, at most one per 45 seconds per server) before anything is done to the tunnel.
+- A server whose own network is cut off counts as dead for the tunnels that stand on it: **no restart, no rebuild, no other type, no removal** - every repair step already stops for a server that is off, and now for this one too, with
+  the words "is on, but its own network is cut off".
+- **One minute** after the first tunnel is down, all its tunnels move to another Iran server (the wait for a server cut from abroad was ninety seconds; it is one minute too). Not when most Iran servers are cut together (the country's
+  line: there is nowhere to move to), not for a look older than four minutes, not when the foreign servers it pinged answered (a filtered internet ping is no cut).
+- The event says what is true: *"Iran server X is on, but its network is cut off (...): its tunnels cannot work through it. The Doctor moves them to another Iran server when it stays like this for a minute."*
+- A server that is cut off in itself is not counted as back for the return of its tunnels.
+- **The Servers list is in the alphabetical order of the names** (`lab.js labCmp`): the owner (2026-11-22, a picture of the list): "the server names must be in alphabetical order". The rows were grouped by country first, so BOT (a German server) stood between FR and DE. Now the names alone decide - upper and lower case alike, the digits of a name by their value (DE2 before DE10), the row of the same name by its id; a problem still moves nothing. The tunnel list keeps its own order (the country of the foreign server first). Proved: `tests/test_web_menu.py` runs `labCmp` through node on twelve names.
+
 ## 1.69.293 - The check of a core on a server does not start a process for every open file
 
 > **In short:** found on 2026-11-22 while the owner's DE2 server was replaced (the fix was asked for in the owner's session): every tunnel build on a busy Iran server failed with "timeout after 20s" (two builds in a row), and a workaround had to be run by hand. The cause was the probe `engine_sha` that every build runs first: since 1.69.263 it counts the processes that hold the core open for writing with a loop that started one `readlink` for EVERY open file of EVERY process on the server. That server holds thousands of open files (about 8,500 on that night): the loop took 46 s, the probe waits 30 s, the panel then tried two jump servers and stopped. Now ONE `find` reads where all the file links point (in C, milliseconds) and only the few files that point at the core are looked at. The answer is the same: `SHA=`, `ARCH=` and `WRITERS=`.

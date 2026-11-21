@@ -1,5 +1,5 @@
 """An Iran server that is on but cut from abroad (1.69.211; the owner, 2026-11-04: "if an Iran server became cut (اکسز), put a tag on it", "when the routes of the Iran servers are closed the Doctor must replace one quickly - uptime matters to us"):
-the row says "Iran only", the Doctor moves its tunnels after ninety seconds when they are down, and a tunnel only moves to an Iran server of its own folder."""
+the row says "Iran only", the Doctor moves its tunnels after a minute when they are down, and a tunnel only moves to an Iran server of its own folder."""
 import time
 
 from sqlalchemy import select
@@ -57,17 +57,17 @@ def _cut_world(monkeypatch, tunnel_state="down", note=CUT, online=True):
     return sid, ran
 
 
-def test_an_iran_server_cut_from_abroad_whose_tunnels_are_down_is_replaced_after_ninety_seconds(monkeypatch):
+def test_an_iran_server_cut_from_abroad_whose_tunnels_are_down_is_replaced_after_a_minute(monkeypatch):
     sid, ran = _cut_world(monkeypatch)
-    assert failover.CUT_WAIT == 90
+    assert failover.CUT_WAIT == 60
     failover.check()
-    assert str(sid) in st.get("failover")["seen"] and ran == []                                              # seen, ninety seconds have not passed
-    st.put("failover", {"seen": {str(sid): int(time.time()) - 60}})
+    assert str(sid) in st.get("failover")["seen"] and ran == []                                              # seen, a minute has not passed
+    st.put("failover", {"seen": {str(sid): int(time.time()) - 40}})
     failover.check()
-    assert ran == []                                                                                          # a minute: not yet
-    st.put("failover", {"seen": {str(sid): int(time.time()) - 100}})
+    assert ran == []                                                                                          # forty seconds: not yet
+    st.put("failover", {"seen": {str(sid): int(time.time()) - 70}})
     failover.check()
-    assert len(ran) == 1 and ran[0]["server_id"] == sid and "cut from abroad" in ran[0]["why"]               # ninety seconds: replaced, the plan says why
+    assert len(ran) == 1 and ran[0]["server_id"] == sid and "cut from abroad" in ran[0]["why"]               # a minute: replaced, the plan says why
     failover.check()
     assert len(ran) == 1                                                                                      # not twice
 

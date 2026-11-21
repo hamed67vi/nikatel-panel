@@ -503,8 +503,8 @@ def test_the_server_row_shows_one_total_for_the_traffic_and_the_line_of_the_serv
     assert 'class="lab-trf lab-live"' in cell and 'c.ge ? "≥ " : ""' in cell and "LAB_AU" not in cell and "tx_mbps" not in cell and "rx_mbps" not in cell      # the line, never the traffic
     assert lab.count("${labCapCell(") == 2 and "labCapCell(srv, !!(srv && srv.enabled))" in lab and "labCapCell(s, on)" in lab      # the server rows and the rows of the PasarGuard nodes (the server they run on)
 
-def test_the_server_list_puts_the_servers_with_a_problem_first_then_every_location_together_in_alphabetical_order(tmp_path):
-    """The owner, 2026-10-19: "every location next to each other, the locations in alphabetical order; any server with a problem at the top"; and a PasarGuard server shows the ordinary server icon (with its profile tag only)."""
+def test_the_server_list_is_in_the_alphabetical_order_of_the_names_and_a_country_groups_nothing(tmp_path):
+    """The owner, 2026-11-22: "the server names must be in alphabetical order" (the list had put BOT, a German server, between FR and DE: every country together); since 1.69.144 a problem moves nothing; and a PasarGuard server shows the ordinary server icon (with its profile tag only)."""
     import json
     import shutil
     import subprocess
@@ -517,18 +517,17 @@ def test_the_server_list_puts_the_servers_with_a_problem_first_then_every_locati
 
     lab = _web("lab.js")
     assert 'labLogo("PasarGuard")' not in lab and 'title="PasarGuard node">${SRV_IC}</i>' in lab      # (the lion is gone from the rows: the PasarGuard servers and nodes have the ordinary server icon)
-    code = lab[lab.index("const labLoc = p =>"): lab.index("\nfunction labListInner")]
+    code = lab[lab.index("const labCmp = (a, b) =>"): lab.index("\nfunction labListInner")]
     driver = tmp_path / "order.js"
     driver.write_text(
-        "const SRVS = {1: {role: 'foreign', country: 'DE'}, 2: {role: 'foreign', country: 'FI'}, 3: {role: 'iran', country: ''}, 4: {role: 'foreign', country: 'DE'}, 5: {role: 'foreign', country: 'CA'}, 6: {role: 'foreign', country: 'NL'}, 7: {role: 'foreign', country: ''}};\n"
-        "const labServer = p => SRVS[p.id] || null;\n"
-        + code + "\n"
-        "const rows = [{id: 1, name: 'DE2'}, {id: 2, name: 'FI'}, {id: 3, name: 'rapido'}, {id: 4, name: 'DE1'}, {id: 5, name: 'CA'}, {id: 6, name: 'NL1'}, {id: 7, name: 'zz'}, {id: 8, name: 'gone'}];\n"
+        code + "\n"
+        "const rows = [{id: 1, name: 'DE2'}, {id: 2, name: 'FI'}, {id: 3, name: 'rapido'}, {id: 4, name: 'DE1'}, {id: 5, name: 'CA'}, {id: 6, name: 'fi-test'}, {id: 7, name: 'BOT'}, {id: 8, name: 'FR'}, {id: 9, name: 'DE10'}, {id: 10, name: 'AT'}, {id: 11, name: 'at2'}, {id: 12, name: 'AZ'}];\n"
         "process.stdout.write(JSON.stringify(rows.slice().sort(labCmp).map(r => r.name)));\n",
         encoding="utf-8")
     r = subprocess.run([node, str(driver)], capture_output=True, text=True, encoding="utf-8", timeout=60, check=False)
     assert r.returncode == 0, r.stderr[-600:]
-    assert json.loads(r.stdout) == ["CA", "FI", "DE1", "DE2", "rapido", "NL1", "gone", "zz"]      # (since 1.69.144 a problem moves nothing) the locations in alphabetical order - Canada, Finland, Germany (by name), Iran, the Netherlands - and the unknown location last
+    assert json.loads(r.stdout) == ["AT", "at2", "AZ", "BOT", "CA", "DE1", "DE2", "DE10", "FI", "fi-test", "FR", "rapido"]      # (the names in the alphabet - upper and lower case alike, DE10 after DE2 - and no country, no problem puts a row somewhere else)
+    assert "const labLoc = " not in lab
 
 
 def test_the_lab_row_is_the_owners_drawing_lamp_flag_name_provider_address_cpu_chart_traffic_and_two_buttons():

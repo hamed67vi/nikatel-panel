@@ -449,6 +449,14 @@ def auto_repair() -> None:
     now = int(time.time())
 
     with session() as db:
+        iran_ids = {t.iran_server_id for t in db.scalars(select(Tunnel).where(Tunnel.enabled.is_(True), Tunnel.state == "down"))}
+
+    if iran_ids:          # (1.69.292: the FIRST step for a tunnel that is down is to see whether its Iran server is on and reaches the world - a server cut off in itself gets no restart, no rebuild, no test; its tunnels are moved)
+        from . import netwatch
+
+        netwatch.quick_looks(iran_ids)
+
+    with session() as db:
         down = [(t.id, t.name, t.state_since, t.last_error or "") for t in db.scalars(select(Tunnel).where(Tunnel.enabled.is_(True), Tunnel.state == "down")) if not servers_off(t)       # a server that is off: nothing to restart until it is back
                 and not (is_route_fault(t.last_error) and knowledge.cut_before(t.iran_server_id, t.foreign_server_id, ("gre_blocked", "route_cut"), now))]       # a route that was filtered before: no restart, the smart repair builds what connects
 

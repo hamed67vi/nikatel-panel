@@ -115,3 +115,13 @@ def _no_kind_times_in_the_alert_timing_tests(request, monkeypatch):
         from nikatel.services import settings as _st
 
         monkeypatch.setitem(_st.DEFAULTS["alerts"], "down_seconds_by_kind", {})
+
+
+@pytest.fixture(autouse=True)
+def _no_quick_look_of_the_network(monkeypatch):
+    """(1.69.292) The first tunnel of an Iran server that is down earns the server a quick look at its own network (services/netwatch.py quick_look): that needs SSH - a test gets an answer that is an error, the
+    tests that are about the look put their own in place."""
+    from nikatel.services import netwatch
+
+    monkeypatch.setattr(netwatch, "probe_one", lambda item: {"id": item[0], "name": item[1], "error": "tests: no ssh"})
+    netwatch._QUICK.clear()

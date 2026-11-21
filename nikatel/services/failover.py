@@ -903,9 +903,11 @@ def _vet_target(p: dict, sid: int) -> dict:
 
 
 RETRY_NO_TARGET = 120     # a dead server whose tunnels found no target is looked at again after this long (it was ten minutes: with half the servers off, the first plans leave a server with room later)
-CUT_WAIT = 90             # an Iran server that is ON but cut from abroad (the pulse: "the panel's host cannot connect to it, but it is on") whose tunnels are half down or more is replaced after this many seconds ...
+CUT_WAIT = 60             # an Iran server that is ON but cut off (cut from abroad: the pulse says the panel's host cannot connect to it; or (1.69.292) cut off in itself: see `is_netcut`) whose tunnels are down is replaced after this many seconds (the owner, 2026-11-21: "if it is not on again within a minute, move the tunnels - do not test tunnels against a dead server")
 CUT_SHARE = 0.5           # ... (the owner, 2026-11-04: "when the routes of the Iran servers are closed the Doctor must replace one quickly - uptime matters to us"; a server that is off waits `server_minutes`)
 CUT_WHY = "the server is cut from abroad (it is on, only Iran sees it) and its tunnels are down"
+NETCUT_WHY = "the server is on, but its own network is cut off (it reaches neither the internet nor the foreign servers) and its tunnels are down"
+NETCUT_FLEET = 3          # (1.69.292) when this many Iran servers are cut off at the same moment, and BLIND_SHARE of them, it is the country's line, not their fault: nothing moves for it
 OFF_WAIT = 60             # an Iran server that is OFF (the pulse: two misses in a row, and nobody inside Iran sees it) is replaced after this many seconds (the owner, 2026-11-04: "when the Doctor sees a server is off it must replace it at once"); `server_minutes` now only counts when the panel cannot be sure ...
 BLIND_MIN = 4             # ... that is, when this many servers - and BLIND_SHARE of all of them - are off at the same moment: that is the panel's own network, not their fault, and the old waiting time stands
 BLIND_SHARE = 0.6
@@ -916,6 +918,14 @@ def is_cut(server) -> bool:
     from . import pulse
 
     return getattr(server, "online", None) is True and str(getattr(server, "last_error", "") or "").startswith(pulse.IRAN_ONLY)
+
+
+def is_netcut(server) -> bool:
+    """(1.69.292) An Iran server that the panel CAN reach (it is on) whose own network is cut off: its latest look (the round of five minutes, or the quick look the first down tunnel earned) says the internet anchors and the foreign
+    servers are lost. Its tunnels cannot work through it - the panel's host sees nothing wrong with it, which is why it was not found before."""
+    from . import netwatch
+
+    return getattr(server, "online", None) is True and netwatch.is_netcut((getattr(server, "extra", None) or {}).get("net"), time.time())
 
 
 def panel_blind(total: int, off: int) -> bool:
@@ -1024,6 +1034,13 @@ def tick() -> None:
     if doctor.mode() == "off" or not doctor.can_move():
         return
 
+    try:
+        from . import netwatch
+
+        netwatch.look_suspects()          # (1.69.292: a tunnel that is down earns its Iran server a quick look at its own network - the verdict is there in seconds)
+    except Exception:
+        log.exception("failover: the quick look at the Iran servers")
+
     check()
 
 
@@ -1059,8 +1076,14 @@ def _check() -> None:
             if t.state != "up":
                 bad[t.iran_server_id] = bad.get(t.iran_server_id, 0) + 1
 
-        cut = {x.id: x.name for x in db.scalars(select(Server).where(Server.role == "iran", Server.enabled.is_(True), Server.online.is_(True)))
-               if is_cut(x) and load.get(x.id) and bad.get(x.id, 0) / load[x.id] >= CUT_SHARE}          # (on, cut from abroad AND its tunnels are down: a server only the panel cannot reach, whose tunnels carry, is left alone)
+        iran_on = list(db.scalars(select(Server).where(Server.role == "iran", Server.enabled.is_(True), Server.online.is_(True))))
+        cut = {x.id: x.name for x in iran_on if is_cut(x) and load.get(x.id) and bad.get(x.id, 0) / load[x.id] >= CUT_SHARE}          # (on, cut from abroad AND its tunnels are down: a server only the panel cannot reach, whose tunnels carry, is left alone)
+        netcut = {x.id: x.name for x in iran_on if x.id not in cut and load.get(x.id) and bad.get(x.id, 0) >= 1 and is_netcut(x)}          # (1.69.292: on, and its OWN network is cut off, and a tunnel of it is down)
+
+        if len(netcut) >= NETCUT_FLEET and len(netcut) / max(len(iran_on), 1) >= BLIND_SHARE:
+            netcut = {}                    # (most Iran servers are cut together: the line of the country - there is nowhere to move to)
+
+        cut.update(netcut)
         down.update(cut)
 
     wait = off_wait(configured, blind)
@@ -1114,8 +1137,11 @@ def _check() -> None:
         p["down_since"] = since
         lead = f"is cut from abroad (on, but only Iran sees it) and its tunnels have been down for {(now - since) // 60} min" if sid in cut else f"has been off for {(now - since) // 60} min"
 
+        if sid in netcut:
+            lead = f"is on, but its own network is cut off (it reaches neither the internet nor the foreign servers) and its tunnels have been down for {(now - since) // 60} min"
+
         if sid in cut:
-            p["why"] = CUT_WHY
+            p["why"] = NETCUT_WHY if sid in netcut else CUT_WHY
 
         with _STATE_LOCK:
             s = _state()
@@ -1331,7 +1357,7 @@ def _work(aid: int, p: dict, finish: bool = True) -> bool:
 
     with session() as db:
         src = db.get(Server, p["server_id"])
-        src_on = src is not None and src.online is True and not is_cut(src)          # (a server that is cut from abroad cannot be reached to wait for its old tunnels: the failover way, like a dead one)
+        src_on = src is not None and src.online is True and not is_cut(src) and not is_netcut(src)          # (a server that is cut from abroad cannot be reached to wait for its old tunnels: the failover way, like a dead one)
 
     autopilot._say(aid, f"{'Move' if src_on else 'Failover'} of {p['server']} ({p['why']}): {len(p['tunnels'])} tunnel(s) → {p['target']['name']}, {len(p['dns'])} DNS record(s) → {p['target']['ip']}"
                    + (" - the server is on: the new tunnels are built first, the old ones stay until the DNS has settled." if src_on and p["tunnels"] else ""))
@@ -1377,7 +1403,7 @@ def _work(aid: int, p: dict, finish: bool = True) -> bool:
             with session() as db:
                 row = db.get(Tunnel, t["id"])
 
-                if row is not None and row.iran is not None and (row.iran.online is False or is_cut(row.iran)):
+                if row is not None and row.iran is not None and (row.iran.online is False or is_cut(row.iran) or is_netcut(row.iran)):
                     left = _leftover({**snap, "port": row.port}, p["server_id"])
 
             fast = _fast_kind(aid, snap, p["target"])

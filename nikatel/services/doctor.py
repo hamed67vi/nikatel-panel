@@ -528,7 +528,7 @@ def _purge_leftovers(aid: int, server_id: int, name: str) -> None:
 def _track_back(s: dict, now: int) -> bool:
     """Who is on since when: the clock of a server that came back starts when it is first seen on, and is forgotten when it goes off."""
     with session() as db:
-        on = {str(x.id) for x in db.scalars(select(Server).where(Server.role == "iran", Server.enabled.is_(True), Server.online.is_(True))) if not failover.is_cut(x)}          # (a server that is on but cut from abroad is not back)
+        on = {str(x.id) for x in db.scalars(select(Server).where(Server.role == "iran", Server.enabled.is_(True), Server.online.is_(True))) if not failover.is_cut(x) and not failover.is_netcut(x)}          # (a server that is on but cut from abroad, or cut off in itself, is not back)
 
     changed = False
 
