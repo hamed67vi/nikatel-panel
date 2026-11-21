@@ -289,7 +289,7 @@ class WarpWatchIn(BaseModel):
 
 @router.get("/settings/warpwatch")
 def warpwatch_get():
-    """The WARP watch (an AI config down for 7 minutes with its node up gets its node reconnected, up to 6 times a day with a longer wait each time): on or off, how many times each node was reconnected in the last 24 hours, and the flags (what it is doing about each AI config that is down)."""
+    """The WARP watch (an AI config down for 7 minutes with its node up gets its node reconnected, every quarter of an hour, then a move to another WARP account): on or off, how many times each node was reconnected in the last 24 hours, and the flags (what it is doing about each AI config that is down)."""
     from ..services import warpwatch
 
     d = st.get("warpwatch")
