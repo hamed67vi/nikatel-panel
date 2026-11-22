@@ -132,8 +132,18 @@ def require(feature: str) -> None:
         raise ValueError(f"{FEATURES.get(feature, feature)} needs a license (Settings → About → License)")
 
 
+# (1.69.295) The kinds the tunnel cores of today cannot run, whatever the licence says. BackPack 2.0.0 (2026-11-20) took the UDP and the QUIC carrier of its direct tunnel away - a unit that names one exits at
+# once ("the udp and quic carriers were removed in Backpack v2.0.0": it stopped the nightly update of the cores on 2026-11-21) - and made its direct PCK a port forwarder WITHOUT an interface, so the panel's
+# BackPack Direct · PCK build, which waits for that interface, never comes up ("the tunnel network does not come up": three standby builds of 2026-11-22). Every place that offers, picks or builds a kind asks
+# `tunnel_kind_allowed` - the Doctor's ladder, the standby, the survey, the Trident, the duel, Compare - so one line here leaves them out everywhere. The reverse transports of the same names (bp:pck, bp:quic)
+# and BackPack Direct · xDi are untouched. A row that still names one of them keeps its label (`tunnel_test.KINDS`, `build_other.BP_DIRECT`).
+RETIRED_KINDS = frozenset({"bpd:udp", "bpd:quic", "bpd:pck"})
+RETIRED_WHY = "BackPack 2 cannot run it (the UDP and QUIC carriers of its direct tunnel are gone, and its direct PCK has no interface any more)"
+
+
 def tunnel_kind_allowed(kind: str) -> bool:
-    return has("tunnels") or kind in FREE_TUNNEL_KINDS
+    """May this tunnel kind be built here: not one the cores of today cannot run (`RETIRED_KINDS`), and the licence (the free tier builds Backhaul TCP Mux only)."""
+    return kind not in RETIRED_KINDS and (has("tunnels") or kind in FREE_TUNNEL_KINDS)
 
 
 def set_token(token: str) -> dict:

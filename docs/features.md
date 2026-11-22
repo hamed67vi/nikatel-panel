@@ -198,3 +198,10 @@ from abroad** - the panel's host cannot connect, somebody inside Iran sees it; i
 the internet anchors nor the foreign servers (`netwatch.is_netcut`); its tunnels move after one minute too. In all three, nothing is restarted, rebuilt or tried against it: the guard every repair step asks (`tunnels.servers_off`)
 answers for the third case as it did for the first. A tunnel that is down earns its Iran server a quick look (`netwatch.quick_look`, at most one per 45 seconds per server) at the first moment, so the verdict does not wait for the round of
 five minutes. When most Iran servers are cut off together it is the line of the country and nothing moves.
+
+## BackPack 2 and the direct types it cannot run (1.69.295)
+
+BackPack 2.0.0 removed the UDP and QUIC carriers of its direct tunnel and made its direct PCK a port forwarder without an interface. The panel therefore never offers, picks or builds `bpd:udp`, `bpd:quic` or `bpd:pck`
+(`license.RETIRED_KINDS`, asked through `license.tunnel_kind_allowed` by every place that chooses a type); the Doctor's order and its readiness for a cut leave them out; a build asked for by hand is refused with the
+reason. The reverse BackPack transports and BackPack Direct · xDi are as before. Running the BackPack binary by hand on a server (anything but `-v` or `-c <file>`) opens its menu, which installs its own web panel
+(port 7777) and monitor services: the panel never does that, and neither should a person.

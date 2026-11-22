@@ -688,7 +688,7 @@ def test_the_extra_strand_is_planned_on_shifted_ports_and_a_kind_that_shares_no_
 def test_the_extra_strand_is_built_beside_a_tunnel_that_is_up_and_a_standby_that_is_up(monkeypatch):
     writable(monkeypatch)
     w = world("de-ir1")
-    monkeypatch.setattr(knowledge, "plan_for", lambda *a, **k: (["bpd:udp"], []))
+    monkeypatch.setattr(knowledge, "plan_for", lambda *a, **k: (["bpd:xdi"], []))
     started = []
     monkeypatch.setattr(trident.build_other, "start_build", lambda *a, **k: started.append((a, k)) or 77)
     monkeypatch.setattr(trident.builder, "start_build", lambda *a, **k: started.append((a, k)) or 78)

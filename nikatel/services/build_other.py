@@ -479,6 +479,13 @@ class Build:
     extra_record: dict = field(default_factory=dict)          # more fields for the row's record (the relay strand of a Trident: `relay`)
 
 
+def direct_carriers() -> dict:
+    """(1.69.295) The BackPack Direct carriers a NEW tunnel can use: `BP_DIRECT` without the ones BackPack 2 cannot run (`license.RETIRED_KINDS`); the table itself keeps them for the rows that still name one."""
+    from . import license
+
+    return {k: v for k, v in BP_DIRECT.items() if f"bpd:{k}" not in license.RETIRED_KINDS}
+
+
 def start_build(iran_id: int, foreign_id: int, ports_text: str, kind: str, transport: str = "", opts: dict | None = None, forced_name: str = "", measure: str = "full", standby_of: str = "",
                 hidden_key: str = "standby_of", extra_record: dict | None = None, capped: bool = False) -> int:
     """Validate, create the action_log entry, build in a thread. Returns the action id. `standby_of`: the name of the tunnel this one is the warm standby of (`hidden_key` "strand_of": an extra strand of its Trident;
@@ -506,6 +513,9 @@ def start_build(iran_id: int, foreign_id: int, ports_text: str, kind: str, trans
 
         if transport not in BP_DIRECT:
             raise ValueError("unknown BackPack Direct carrier")
+
+        if f"bpd:{transport}" in license.RETIRED_KINDS:          # (1.69.295) asked for by hand (the menus no longer offer it): said at once, not after a build that cannot come up
+            raise ValueError(f"BackPack Direct · {BP_DIRECT[transport][0]} cannot be built: {license.RETIRED_WHY}. Choose SNI spoofing, IP spoofing or xDi, or another tunnel type")
 
         dom = str(opts.get("sni_domain") or "").strip()
 

@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.69.295 - BackPack 2: the three direct types it cannot run are no longer offered, picked or built
+
+BackPack 2.0.0 (released 2026-11-20; every server of the fleet runs it since 2026-11-22) changed its **direct** tunnel: the **UDP** and **QUIC** carriers are gone - a unit that names one exits at once with
+*"the udp and quic carriers were removed in Backpack v2.0.0"*, which is what stopped the nightly update of the cores on 2026-11-21 (a warm standby of that type did not come back and the old build was put back) - and
+its direct **PCK** is a port forwarder without an interface now, so the panel's build of it, which waits for that interface, never comes up (*"the tunnel network does not come up"*: three standby builds of 2026-11-22, a
+minute each, before another type was built).
+
+- **One gate** (`license.tunnel_kind_allowed`, `RETIRED_KINDS` = `bpd:udp`, `bpd:quic`, `bpd:pck`): every place that offers, picks or builds a tunnel type already asks it - the Doctor's ladder, the warm standby, the
+  night survey, the Trident, the duel, the comeback, the capacity and the speed looks - so these three are left out everywhere at once.
+- **The Doctor's order** (`knowledge.plan_for`) no longer names them, not even as "nobody tried it here yet", so a cut tunnel does not lose a minute on a build that cannot work; **the readiness for a cut**
+  (`knowledge.readiness`) does not count one of them as the way out, however well it tested before.
+- **The forms**: Create tunnel offers SNI spoofing, IP spoofing and xDi under BackPack Direct (`build_other.direct_carriers`), Compare and the pair test list the kinds without the three (`tunnel_test.buildable_kinds`).
+  One asked for by hand is refused at once with the reason (`build_other.start_build`, `tunnel_test.compare_start`).
+- **Untouched**: the reverse BackPack transports (WebSocket TLS, TCP Mux, Stealth, TCP + PCK, QUIC ...), BackPack Direct · xDi, and the labels of a row that still names one of the three.
+- **Not done**: a new build of the direct PCK the way BackPack 2 wants it (ports only, no interface).
+- **Proved**: `tests/test_backpack2.py`.
+
 ## 1.69.294 - The Doctor looks at the Iran server first; the Servers list is in alphabetical order
 
 An Iran server that is **on** but whose **own network is cut off** (it reaches neither the internet nor the foreign servers) used to look fine to the panel: the panel's host could still reach it, so the Doctor treated its tunnels as

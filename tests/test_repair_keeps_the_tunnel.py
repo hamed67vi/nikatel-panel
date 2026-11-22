@@ -326,7 +326,7 @@ def test_the_types_a_server_cannot_run_are_left_out_and_the_others_are_still_tri
         return kind == "wssmux"
 
     monkeypatch.setattr(ap, "_replace", replace)
-    kinds = ["bp:wssmux", "chisel:tls", "wssmux", "bpd:pck", "paqet"]
+    kinds = ["bp:wssmux", "chisel:tls", "wssmux", "bpd:xdi", "paqet"]
     assert ap._switch_cut(1, ap._snapshot(tid), kinds) == "wssmux"
     assert attempts == ["wssmux"] and any(ln.startswith("4 kind(s) left out, nothing was removed for them") for ln in said)
 

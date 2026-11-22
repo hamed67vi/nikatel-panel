@@ -658,9 +658,16 @@ def readiness(pair: dict | None, now: int) -> dict[str, dict]:
     "ready": a type that stays possible in that cut (the Iran server cut from abroad: one where the Iran server dials out; the foreign server filtered from Iran: one where the foreign server dials in) passed its last test
     with `READY_SCORE` or more, less than `FAIL_FRESH` ago. "maybe": only kernel-link types (`RAW_KINDS`) passed - whether GRE / ESP / IPIP / L2TPv3 still pass when the cut happens is known only then (a route may drop TCP and
     UDP and let them through - seen on a real pair). "none": nothing known to work. `kind` / `score` / `at`: the best of those; `n`: how many; `old`: the best was tested more than `REFRESH` ago."""
+    from .license import (
+        RETIRED_KINDS,  # (1.69.295: a type the cores of today cannot run is no way out of a cut, however well it tested before)
+    )
+
     rows = []
 
     for r in ranked(pair, now):
+        if r["kind"] in RETIRED_KINDS:
+            continue
+
         shown = r["user"] if r.get("user") is not None else r["score"]
 
         if now - int(r["at"] or 0) <= FAIL_FRESH and (shown is None or shown >= READY_SCORE):          # (a type that carried data but was never scored counts: a real build checks that data passes)
@@ -894,7 +901,11 @@ def plan_for(iran_id: int, foreign_id: int, current: str, no_gre: bool, lossy: b
     cur_link = linkmodels.split_kind(current)[0]
     cut_link = cur_link if no_gre and cur_link not in ("", "gre") else ""          # the link under this tunnel is not GRE and it is the link that is cut: its other transports would be cut the same way - the other links, native GRE too, may still pass
     drop_gre = no_gre and not cut_link or (no_gre and cause == "route_cut")        # (GRE is left out where GRE itself is filtered, or where the two servers cannot reach each other at all)
-    base = None if lossy else cut_order(dial_i, dial_f, drop_gre)
+    from .license import (
+        RETIRED_KINDS,  # (1.69.295: the kinds BackPack 2 cannot run are in no order the Doctor walks - not even as "nobody tried it here yet")
+    )
+
+    base = [k for k in (PRIOR if lossy else cut_order(dial_i, dial_f, drop_gre)) if k not in RETIRED_KINDS]
     cannot = unreachable(dial_i, dial_f) if not lossy else frozenset()
     hints = [] if lossy else sibling_kinds(iran_id, foreign_id, now)
     kinds = candidates(p, current, drop_gre, lossy, now, limit=LIMIT if lossy else len(PRIOR), base=base, unreachable_kinds=cannot, prefer=hints)

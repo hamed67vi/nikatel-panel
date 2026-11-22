@@ -175,8 +175,8 @@ def tunnel_kinds():
                                                                      ("wgchiselfwd:tcpmux", "TCP Mux · WireGuard in Chisel (Iran dials)", "the same, but the Iran server opens the TCP connection (use it when the foreign address is not filtered from Iran)"))]},
         {"key": "backpack", "title": "BackPack", "note": "the foreign server dials the Iran server; twelve transports, presets, UDP", "direction": "reverse",
          "transports": [{"key": k, "label": v[0], "note": v[1] + (" · root" if v[2] else ""), "udp": v[3]} for k, v in bo.BP_TRANSPORTS.items()]},
-        {"key": "backpack_direct", "title": "BackPack Direct", "note": "an L3 link the Iran server dials: UDP / QUIC / PCK / SNI spoofing (a fake TLS hello) / IP spoofing (a forged source address) / xDi carriers", "direction": "direct",
-         "transports": [{"key": k, "label": v[0], "note": v[1] + (" · root" if v[2] else ""), "udp": v[3]} for k, v in bo.BP_DIRECT.items()]},
+        {"key": "backpack_direct", "title": "BackPack Direct", "note": "an L3 link the Iran server dials: SNI spoofing (a fake TLS hello) / IP spoofing (a forged source address) / xDi carriers (BackPack 2 took the UDP and QUIC carriers away, and its PCK has no interface)", "direction": "direct",
+         "transports": [{"key": k, "label": v[0], "note": v[1] + (" · root" if v[2] else ""), "udp": v[3]} for k, v in bo.direct_carriers().items()]},
         {"key": "paqet", "title": "Paqet", "note": "KCP over raw sockets: the foreign server listens, the Iran server opens the ports", "direction": "direct",
          "transports": [{"key": "kcp", "label": "KCP", "note": "modes normal / fast / fast2 / fast3"}]},
         {"key": "chisel", "title": "Chisel", "note": "one WebSocket port: on the Iran server (reverse, the foreign server dials) or on the foreign server (forward, the Iran server dials)", "direction": "reverse",
@@ -409,7 +409,7 @@ def test_kinds():
     """Every tunnel kind the pair test can build, grouped by engine."""
     from ..services import tunnel_test as tt
 
-    return {"ok": True, "kinds": [{"key": k, "label": lbl, "note": note, "group": grp, "default": dflt} for k, lbl, note, grp, dflt in tt.KINDS]}
+    return {"ok": True, "kinds": [{"key": k, "label": lbl, "note": note, "group": grp, "default": dflt} for k, lbl, note, grp, dflt in tt.buildable_kinds()]}
 
 
 @router.post("/tunnel-test/compare", status_code=202)

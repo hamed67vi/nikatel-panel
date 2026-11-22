@@ -467,6 +467,13 @@ def build_args(key: str) -> tuple[str, str, dict]:
     return kind, transport, opts
 
 
+def buildable_kinds() -> list[tuple]:
+    """(1.69.295) `KINDS` without the ones the cores of today cannot run (`license.RETIRED_KINDS`): what the menus offer. The table itself keeps them - a row that still names one has its label."""
+    from . import license
+
+    return [k for k in KINDS if k[0] not in license.RETIRED_KINDS]
+
+
 def kind_parts(kind: str) -> tuple[str, str]:
     """A test kind -> (builder kind, transport). Backhaul transports keep their bare key; "wg:tcpmux", "fou:tcpmux", "ipsec:tcp" ... are Backhaul over another link (`kind_link`)."""
     if kind in ("tcpmux", "tcp", "wsmux", "wssmux"):
@@ -614,6 +621,9 @@ def compare_start(iran_id: int, foreign_id: int, kinds: list[str], measure: str 
 
     kinds = [k for k in kinds if k in {k_[0] for k_ in KINDS}] or ["tcpmux"]
     allowed = [k for k in kinds if license.tunnel_kind_allowed(k)]
+
+    if not allowed and any(k in license.RETIRED_KINDS for k in kinds):          # (1.69.295) only kinds BackPack 2 cannot run were asked for: said plainly (the licence is not the reason)
+        raise ValueError(", ".join(k for k in kinds if k in license.RETIRED_KINDS) + ": " + license.RETIRED_WHY)
 
     if not allowed:
         license.require("tunnels")
