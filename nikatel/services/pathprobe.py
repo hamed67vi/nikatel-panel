@@ -41,6 +41,7 @@ CONFIRM = 2                  # a verdict (and a tag) changes after this many loo
 TAG_AFTER = 2
 RESTART_GAP = 6 * 3600       # a tunnel is restarted by the look at most this often
 ESCALATE_AFTER = 3300        # (1.69.291) a restart that was made this long ago (two looks) and a tunnel that STILL resets new connections: another type is built beside it
+ESCALATE_FAST = 1500         # (1.69.298) ... or this long ago (the FIRST look after the restart) when the tunnel's own warm standby is another type that is up already: it is proved, nothing has to be built
 ESCALATE_GAP = 24 * 3600     # ... and it is done for the same tunnel at most this often
 FLEET_SHARE = 1 / 3          # more than this share of the looked-at tunnels with the verdict `tunnel` at once: not the type of one tunnel
 THREADS = 8
@@ -463,16 +464,40 @@ def fix(result: dict, now: int) -> list[str]:
     return started
 
 
-def escalate_wanted(restarted_at: int, state: dict | None, code: str, now: int, tried_at: int = 0) -> str:
+def _ready_standby(name: str, snap: dict, cur: str, now: int) -> dict | None:
+    """(1.69.298) The Doctor's memory row of the tunnel's own warm standby when the standby is READY (up), is another type than the tunnel's, is allowed here, and the memory does not call that type unsteady - else None.
+    A type that already stands up beside the tunnel is the quickest change there is: the swap takes it as it is (`swap._work` builds nothing when the standby is already that type)."""
+    from . import knowledge, license, standby
+
+    try:
+        sb = standby.status(name)
+    except Exception:
+        log.exception("the standby of %s could not be read", name)
+        return None
+
+    kind = str(sb.get("kind") or "")
+
+    if not (sb.get("on") and sb.get("up") and sb.get("state") == "ready") or not kind or kind == cur or not license.tunnel_kind_allowed(kind):
+        return None
+
+    for r in knowledge.ranked(knowledge.pair(snap["iran_id"], snap["foreign_id"]), now):
+        if r["kind"] == kind:
+            return r if r.get("steady") is None or r["steady"] >= knowledge.STEADY_OK else None
+
+    return None
+
+
+def escalate_wanted(restarted_at: int, state: dict | None, code: str, now: int, tried_at: int = 0, fast: bool = False) -> str:
     """Pure: '' when the look may build another type beside a tunnel now, else why not. The tunnel was restarted by the look `restarted_at` (0 = never), the settled state is `state`, this look says `code`:
-    only a tunnel that was restarted, whose verdict was `tunnel` before and after, ESCALATE_AFTER seconds later, and has not been escalated in the last ESCALATE_GAP."""
+    only a tunnel that was restarted, whose verdict was `tunnel` before and after, ESCALATE_AFTER seconds later, and has not been escalated in the last ESCALATE_GAP.
+    (1.69.298) `fast`: the tunnel's own warm standby is another type that is up already (`_ready_standby`) - the FIRST look after the restart that still says `tunnel` is enough, ESCALATE_FAST seconds later."""
     if code != "tunnel" or (state or {}).get("code") != "tunnel":
         return "the tunnel does not reset new connections now"
 
     if not restarted_at:
         return "the look has not restarted it yet"
 
-    if now - restarted_at < ESCALATE_AFTER:
+    if now - restarted_at < (ESCALATE_FAST if fast else ESCALATE_AFTER):
         return f"it was restarted only {(now - restarted_at) // 60} minutes ago: the next look says whether that cured it"
 
     if tried_at and now - tried_at < ESCALATE_GAP:
@@ -507,8 +532,12 @@ def escalate(result: dict, now: int) -> list[str]:
         r = rows_res.get(tid) or {}
         code = verdict(r.get("node"), r.get("tunnel"), r.get("path"))[0]
 
-        if protected or escalate_wanted(int(restarted.get(name) or 0), lay.get("state"), code, now, int(escalated.get(name) or 0)):
+        when = (int(restarted.get(name) or 0), lay.get("state"), code, now, int(escalated.get(name) or 0))
+
+        if protected or escalate_wanted(*when, fast=True):
             continue
+
+        wait = escalate_wanted(*when)          # (1.69.298: not '' = only the first look after the restart: a tunnel whose warm standby is another type that is up already does not wait for the second one)
 
         if doctor.may_retype(name, doctor._state().get("retype_done") or {}, now):
             continue
@@ -519,13 +548,22 @@ def escalate(result: dict, now: int) -> list[str]:
         except ValueError:
             continue
 
-        cand, _pct = userq._steadier_kind(snap, cur, now, force=True)
+        ready = _ready_standby(name, snap, cur, now)
+
+        if wait and ready is None:
+            continue
+
+        cand = ready                                                      # (a type that stands up beside the tunnel is taken before the ranking of the memory)
+
+        if cand is None:
+            cand, _pct = userq._steadier_kind(snap, cur, now, force=True)
 
         if cand is None:
             continue
 
         why = (f"The layered look: {lay.get('text') or 'the tunnel resets new connections'}. The tunnel was restarted {(now - int(restarted.get(name) or now)) // 60} minutes ago and it still does, so {cand['kind']} (it works on this pair, score {cand.get('score')}) "
-               f"is built beside it and the users' new connections are handed over without a cut. The new tunnel is judged by what it carries, not by a speed gain.")
+               f"is built beside it and the users' new connections are handed over without a cut. The new tunnel is judged by what it carries, not by a speed gain."
+               + (" Its warm standby is that type and is up already, so the change does not wait for a second look after the restart." if wait else ""))
 
         try:
             autopilot._start(name, doctor._run_retype, tid, cand["kind"], cur, why, True, False, 0.0, action="autopilot", source="auto")

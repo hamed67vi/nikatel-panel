@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.69.298 - The Doctor does not wait a second look when a steadier type already stands ready
+
+The owner asked (2026-11-22, «the Doctor must do it by itself, without asking, and sooner»). On one tunnel the users had cuts from the evening on; the layered look restarted it within 11 minutes, the restart did not cure it, and the change of type
+(built beside, no cut) was due only at the SECOND look after the restart (`ESCALATE_AFTER`, 55 minutes): about an hour and a half after the cuts began. Its warm standby - another type, up for days - was ready the whole time.
+
+- **`pathprobe._ready_standby` / `escalate_wanted(fast=True)`**: when the tunnel's own warm standby is READY (up), is another type than the tunnel's, is allowed and the memory does not call it unsteady, the FIRST look after the restart that still says `tunnel` is enough
+  (`ESCALATE_FAST` 1500 s, shorter than one look), and that standby's type is the one taken (before the ranking of the memory, also after the long wait); `swap._work` builds nothing when the standby is already that type, it measures it and hands the users' new connections over.
+- Without such a standby nothing changes: two looks, `ESCALATE_AFTER` 3300 s, the type the memory ranks first. A standby that cannot be read is logged and leaves the old rule in force.
+- Every other rail is as before: the verdict `tunnel` before and after the restart, not under `quiet_now`, `swap.MAX_AT_ONCE`, the day's volume of tests, once in 24 hours per tunnel, never a protected one, not while more than a third of the looked-at tunnels have the verdict at once.
+- **Tests**: `tests/test_pathprobe_escalate.py` (the fast rule, the cases that do not qualify, the ready standby before the ranking, an unreadable standby).
+- **Not done**: the first rung (the restart) is as it was; a tunnel without a ready standby of another type still waits for the second look.
+
 ## 1.69.297 - A standby that stays sick is built again as ANOTHER type
 
 The owner found it on one tunnel (2026-11-22): its standby was `chisel:fwd`, built and ready, then "port 21861 accepts connections but no data comes back through the tunnel", restarted after 45 s, built again after

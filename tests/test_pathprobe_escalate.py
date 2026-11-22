@@ -18,6 +18,7 @@ from nikatel.services import (
     knowledge,
     license,
     pathprobe,
+    standby,
     swap,
     testbudget,
     userq,
@@ -43,6 +44,16 @@ def test_another_type_is_wanted_only_for_a_tunnel_that_was_restarted_and_is_stil
 
 def test_two_looks_are_enough_time_for_the_restart_to_have_cured_it():
     assert pathprobe.ESCALATE_AFTER > pathprobe.EVERY and pathprobe.ESCALATE_AFTER <= 2 * pathprobe.EVERY       # (the second look after the restart, not the first, and not a third)
+
+
+def test_the_first_look_after_the_restart_is_enough_when_a_steadier_standby_is_ready():
+    tun = {"code": "tunnel"}
+    assert 0 < pathprobe.ESCALATE_FAST <= pathprobe.EVERY < pathprobe.ESCALATE_AFTER                                    # (the next look after the restart, not the second)
+    assert pathprobe.escalate_wanted(NOW - pathprobe.ESCALATE_FAST, tun, "tunnel", NOW, fast=True) == ""
+    assert "next look" in pathprobe.escalate_wanted(NOW - pathprobe.ESCALATE_FAST + 1, tun, "tunnel", NOW, fast=True)
+    assert "next look" in pathprobe.escalate_wanted(NOW - pathprobe.ESCALATE_FAST, tun, "tunnel", NOW)                   # (no ready standby: the old wait stands)
+    assert "does not reset" in pathprobe.escalate_wanted(NOW - 1800, tun, "ok", NOW, fast=True)                           # (a restart that cured it is still the end of it)
+    assert "another type was tried" in pathprobe.escalate_wanted(NOW - 1800, tun, "tunnel", NOW, tried_at=NOW - 3 * 3600, fast=True)
 
 
 # ------------------------------------------------------------------ the type that is taken
@@ -79,6 +90,7 @@ def escal(calm, monkeypatch):  # noqa: F811
     monkeypatch.setattr(knowledge, "pair", lambda i, f: {})
     monkeypatch.setattr(license, "tunnel_kind_allowed", lambda k: True)
     monkeypatch.setattr(userq, "_UX_TRIED", {})
+    monkeypatch.setattr(standby, "status", lambda name: {"on": False, "state": "off", "why": "", "kind": "", "since": 0, "ports": "", "up": False})
     layers["tunnel"] = R(5, err="ConnectionResetError")
     return layers, started
 
@@ -184,6 +196,56 @@ def test_a_change_that_cannot_start_leaves_no_mark_and_is_made_again_at_the_next
     assert pathprobe.run() == [] and "t0" not in st.get("pathprobe")["escalated"]
     monkeypatch.setattr(autopilot, "_start", lambda label, fn, *a, **k: started.append((label, fn.__name__, a, k)) or 1)
     assert pathprobe.run() == ["t0"]
+
+
+def _ready(monkeypatch, kind, up=True, state="ready"):
+    monkeypatch.setattr(standby, "status", lambda name: {"on": True, "state": state, "why": "", "kind": kind, "since": 1, "ports": "", "up": up})
+
+
+def test_a_ready_steadier_standby_is_taken_at_the_first_look_after_a_restart_that_did_not_cure(escal, monkeypatch):
+    _layers, started = escal
+    (tid, _fid), = _world(1)["t"]
+    pathprobe.run()
+    assert pathprobe.run() == ["t0"] and started[0][1] == "restart_story"
+    _restarted_long_ago("t0", ago=1700)                                                                                 # (the very next look: past ESCALATE_FAST, short of ESCALATE_AFTER)
+    assert pathprobe.run() == [] and len(started) == 1                                                                  # (no standby: the old wait stands)
+
+    for kind, up, state in (("tcpmux", True, "ready"), ("paqet", True, "ready"), ("wssmux", False, "mending"), ("wssmux", True, "building")):
+        _ready(monkeypatch, kind, up, state)
+        assert pathprobe.run() == [] and len(started) == 1, (kind, up, state)                                           # (the tunnel's own type; a type the memory calls unsteady; a standby that is not ready)
+
+    _ready(monkeypatch, "wssmux")
+    assert pathprobe.run() == ["t0"] and len(started) == 2
+    label, fn, args, kw = started[1]
+    assert label == "t0" and fn == "_run_retype" and args[0] == tid and args[1:3] == ("wssmux", "tcpmux")
+    assert args[4] is True and args[5] is False and args[6] == 0.0 and kw == {"action": "autopilot", "source": "auto"}
+    assert "warm standby" in args[3] and "ConnectionResetError" in args[3] and "without a cut" in args[3]
+    assert "t0" in st.get("pathprobe")["escalated"] and pathprobe.run() == [] and len(started) == 2                      # (once in a day, as before)
+
+
+def test_a_ready_standby_is_taken_before_the_ranking_even_after_the_long_wait(escal, monkeypatch):
+    _layers, started = escal
+    _world(1)
+    pathprobe.run()
+    pathprobe.run()
+    _restarted_long_ago("t0")
+    monkeypatch.setattr(knowledge, "ranked", _rows(("paqet", None), ("wssmux", None), ("tcpmux", 80)))
+    _ready(monkeypatch, "wssmux")
+    assert pathprobe.run() == ["t0"] and started[1][2][1] == "wssmux" and "warm standby" not in started[1][2][3]       # (past the long wait the sentence about the sooner start is not said)
+
+
+def test_a_standby_that_cannot_be_read_is_no_reason_to_stop_the_look(escal, monkeypatch):
+    _layers, started = escal
+    _world(1)
+    pathprobe.run()
+    pathprobe.run()
+    _restarted_long_ago("t0")
+
+    def broken(name):
+        raise RuntimeError("the standby table is locked")
+
+    monkeypatch.setattr(standby, "status", broken)
+    assert pathprobe.run() == ["t0"] and started[1][2][1] == "wssmux"                                                   # (the ranking of the memory decides, as before 1.69.298)
 
 
 # ------------------------------------------------------------------ the tunnel window
