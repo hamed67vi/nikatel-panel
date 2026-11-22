@@ -1837,12 +1837,63 @@ def drop_move_suffix(name: str) -> str:
     return new
 
 
+def plain_name_without_number(name: str, foreign_name: str, iran_name: str, taken: set[str], age: int) -> str | None:
+    """Pure (1.69.299, the owner, 2026-11-23, a list of tunnels with a picture: "what are these 2 at the end of some names? fix it"): the name a tunnel that is called <foreign>-<iran>-N should carry, or None.
+    `pretty_name` puts -2 on a new tunnel when the plain name is taken - and a swap built beside the old tunnel (the old one is removed only when the users have left it) always meets the old name. When the old tunnel
+    is gone nothing took the number off again (`moved_name` leaves a -N name alone on purpose: it is a name for this server). Now: the tunnel is older than the half hour a move owns a new one (`tunnels.MOVE_YOUNG`),
+    the name is the one the panel makes for ITS OWN pair with a number (a long name is cut before the number, as `pretty_name` does), and a lower name is free among `taken` - the plain one, or -2 when it was -3. A name that is not
+    guessed stays."""
+    from .tunnels import MOVE_YOUNG
+
+    if age < MOVE_YOUNG:
+        return None
+
+    base = pretty_name(foreign_name, iran_name, set())
+
+    if not any(name == base[:15 - len(f"-{n}")] + f"-{n}" for n in range(2, 100)):
+        return None
+
+    new = pretty_name(foreign_name, iran_name, taken - {name})
+    return new if new != name and NAME_RE.match(new) else None
+
+
+def drop_number_suffix(name: str) -> str:
+    """(1.69.299) A tunnel called <foreign>-<iran>-N takes the lowest free name of its own pair (`plain_name_without_number`); the configs that name it, the alert mutes, the standby and the Doctor's ledger of moves follow
+    (`_rename_row`), what the servers know it as does not change. Returns the name the tunnel has now - the old one when nothing changed or the rename failed: a name is cosmetic and must never stop anything."""
+    new = name
+
+    try:
+        with _NAME_LOCK, session() as db:                # (two tunnels of one pair must not take the same new name)
+            t = db.scalar(select(Tunnel).where(Tunnel.name == name))
+
+            if t is None or t.iran is None or t.foreign is None or (t.record or {}).get("custom_name"):
+                return name
+
+            found = plain_name_without_number(name, t.foreign.name, t.iran.name, {x.name for x in db.scalars(select(Tunnel))}, int(time.time()) - int(t.created_at or 0))
+
+            if found is None:
+                return name
+
+            new = found
+            _rename_row(db, t, new, custom=False)
+            emit(db, "info", "tunnels", f"Tunnel {name} renamed to {new}: the tunnel that held the name is gone, so the number is dropped.", new)
+    except (ValueError, RuntimeError, SQLAlchemyError):
+        log.warning("tunnel %s: the name without the number was not saved", name, exc_info=True)
+        return name
+
+    from . import doctor
+
+    doctor.renamed(name, new)
+    return new
+
+
 TIDY_MAX = 10      # names put right in one round (a name is cosmetic: a long list is done over a few rounds)
 
 
 def tidy_names(limit: int = TIDY_MAX) -> list[str]:
     """(1.69.243) The tunnels that were moved before names followed moves: a tunnel that carries the name the panel made for ANOTHER Iran server than the one it runs on gets the name of its own (`follow_move`). Left alone: a name
-    chosen by hand, a standby, a temporary build, a protected tunnel (something stands on it), a tunnel that is switched off. (1.69.285) A tunnel a move left called <name>-mv / -mw whose old tunnel is gone gets the name of its own server too (`drop_move_suffix`). Returns ["old → new"]."""
+    chosen by hand, a standby, a temporary build, a protected tunnel (something stands on it), a tunnel that is switched off. (1.69.285) A tunnel a move left called <name>-mv / -mw whose old tunnel is gone gets the name of its own server too (`drop_move_suffix`). (1.69.299) A tunnel called <foreign>-<iran>-N whose lower name is free now (the tunnel that held it
+    is gone) takes it (`drop_number_suffix`). Returns ["old → new"]."""
     todo = []
 
     with session() as db:
@@ -1857,6 +1908,8 @@ def tidy_names(limit: int = TIDY_MAX) -> list[str]:
                 todo.append((t.name, follow_move))
             elif plain_name_after_move(t.name, t.foreign.name, iran, t.iran.name, names, int(time.time()) - int(t.created_at or 0)) is not None:
                 todo.append((t.name, drop_move_suffix))
+            elif plain_name_without_number(t.name, t.foreign.name, t.iran.name, names, int(time.time()) - int(t.created_at or 0)) is not None:
+                todo.append((t.name, drop_number_suffix))
 
     done = []
 

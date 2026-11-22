@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.69.299 - The number on a tunnel's name goes away when the tunnel that held the plain name is gone
+
+> به زبان ساده: اسم بعضی tunnel ها به `-2` تمام می‌شد چون موقع ساختن، tunnel قدیمی هنوز بود و اسم ساده پر بود. حالا وقتی tunnel قدیمی رفت، خود panel `-2` را برمی‌دارد (هر ۱۰ دقیقه یک دور).
+> In short: a tunnel built beside its old twin got `-2` on its name and kept it for good. Now the tidy round takes the number off once the twin is gone.
+
+The owner asked (2026-11-23, with a picture of the Tunnels list, «what are these 2 at the end of some names? fix it»). Three tunnels carried `-2` (`<foreign>-<iran>-2`) after a swap: the new tunnel is built beside the old one, so `builder.pretty_name`
+found the plain name taken and added the number; the old tunnel was removed later and nothing took the number off again (`moved_name` leaves a -N name alone on purpose: it is a name for this server, and `plain_name_after_move` only knows `-mv` / `-mw`).
+
+- **`builder.plain_name_without_number`** (pure) + **`builder.drop_number_suffix`**, called from `builder.tidy_names` (every 10 minutes): a tunnel older than `tunnels.MOVE_YOUNG` whose name is the one the panel makes for its OWN pair with a number
+  (`<foreign>-<iran>-N`, a long name cut before the number as `pretty_name` does) takes the lowest free name of that pair: the plain one, or -2 when it was -3. The configs that name it, the alert mutes, the standby and the Doctor's ledger follow
+  (`_rename_row`); what the servers know it as does not change.
+- Left alone as before: a name chosen by hand, a standby, a temporary build, a protected tunnel, a switched-off tunnel, a name that is not a panel name, a tunnel whose plain name is still held by another tunnel.
+- **Tests**: `tests/test_number_suffix_drops.py` (the pure rule, the tidy round, the followers, the cases left alone, two tunnels of one pair in one round).
+- **Not done**: a name that was renamed by hand with the Rename button is a name chosen by hand and stays as it is; server-side unit names keep the number (nothing reads them as a name).
+
 ## 1.69.298 - The Doctor does not wait a second look when a steadier type already stands ready
 
 The owner asked (2026-11-22, «the Doctor must do it by itself, without asking, and sooner»). On one tunnel the users had cuts from the evening on; the layered look restarted it within 11 minutes, the restart did not cure it, and the change of type
