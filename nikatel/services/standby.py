@@ -64,7 +64,7 @@ CLASH_QUIET = 900             # ... and when the last way back is this old (the 
 BETTER_EVERY = 60             # the knowledge is asked for a type to replace a clashing standby this often
 MISSING_GRACE = 3 * 3600      # a marked tunnel whose row is gone this long is not coming back: the mark and its standby go
 BUSY_CPU, BUSY_RAM = 85.0, 90.0      # a server this busy does not get a second tunnel
-KIND_SKIP = 6 * 3600          # a type whose build failed is not chosen again for this long
+KIND_SKIP = 6 * 3600          # a type whose build failed - or whose standby stayed sick until it was built again (1.69.297) - is not chosen again for this long
 TEST_PORT = tunnel_test.TEST_PORT
 _LOCK = threading.Lock()
 _BUILDS: dict[str, dict] = {}         # tunnel name -> {"aid", "name", "kind", "at"}: the standby builds that are running
@@ -345,6 +345,22 @@ def _set_failed(name: str, data: dict | None) -> None:
             failed[name] = data
 
         st.put("standby", {"failed": failed})
+
+
+def _skipped(name: str, now: int) -> set[str]:
+    """(1.69.297) The types the choice leaves out for this tunnel: those whose BUILD failed lately (`kinds`) and those whose standby was built but stayed sick until it was built again (`sick`: it connects, then no data
+    comes back - the same type chosen again made a ready / mending loop on one tunnel, 2026-11-22)."""
+    f = _failed(name)
+    return {k for d in (f.get("kinds"), f.get("sick")) for k, at in (d or {}).items() if now - int(at) < KIND_SKIP}
+
+
+def _mark_sick(name: str, kind: str, now: int) -> None:
+    """(1.69.297) A standby of this type was not healthy for REBUILD_AFTER seconds while its tunnel was fine and is being built again: the type is not chosen again for KIND_SKIP. The count and the wait of a failed
+    BUILD (`n`, `at`) are left as they are: the next build starts at once, it is only another type."""
+    f = _failed(name)
+    sick = {k: at for k, at in (f.get("sick") or {}).items() if now - int(at) < KIND_SKIP}
+    sick[kind] = now
+    _set_failed(name, {**f, "sick": sick})
 
 
 def _touch(server_id: int) -> None:
@@ -743,7 +759,7 @@ def build_plan(name: str, kind: str = "") -> dict:
     else:
         pair = knowledge.pair(p["iran_id"], p["foreign_id"])
         kinds, _ = knowledge.plan_for(p["iran_id"], p["foreign_id"], p["kind"], False, False, now=now)
-        skip = {k for k, at in (_failed(name).get("kinds") or {}).items() if now - int(at) < KIND_SKIP}
+        skip = _skipped(name, now)
 
         from . import weather
 
@@ -772,7 +788,7 @@ def _better_kind(p: dict, s: dict, name: str) -> str:
 
     pair = knowledge.pair(p["iran_id"], p["foreign_id"])
     kinds, _ = knowledge.plan_for(p["iran_id"], p["foreign_id"], p["kind"], False, False, now=now)
-    skip = {k for k, at in (_failed(name).get("kinds") or {}).items() if now - int(at) < KIND_SKIP}
+    skip = _skipped(name, now)
     res = better_carrier(kinds, p["kind"], s["kind"], pair, now, allowed=license.tunnel_kind_allowed, skip=skip)
     _BETTER[key] = (now, res)
     return res
@@ -840,15 +856,17 @@ def _collect() -> None:
         with _LOCK:
             _BUILDS.pop(name, None)
 
+        f = _failed(name)
+        sick = {k: at for k, at in (f.get("sick") or {}).items() if time.time() - int(at) < KIND_SKIP}          # (1.69.297) what stayed sick is remembered: a good build of ANOTHER type does not make the sick one chosen again
+
         if ok:
-            _set_failed(name, None)
+            _set_failed(name, {"sick": sick} if sick else None)
             continue
 
-        f = _failed(name)
         kinds = dict(f.get("kinds") or {})
         kinds[b["kind"]] = int(time.time())
         n = int(f.get("n") or 0) + 1
-        _set_failed(name, {"n": n, "at": int(time.time()), "why": str(last)[:200], "kinds": kinds})
+        _set_failed(name, {"n": n, "at": int(time.time()), "why": str(last)[:200], "kinds": kinds, **({"sick": sick} if sick else {})})
         log.info("standby: the build of %s for %s failed (%s): next try in %s s", b["name"], name, str(last)[:120], retry_wait(n))
 
         if n in (1, 5):
@@ -1189,6 +1207,11 @@ def _step(name: str) -> None:
         remove_standby(name)
     elif act == "rebuild":
         log.info("standby: %s is built again (%s)", name, why)
+
+        if s is not None and s["state"] != "up":          # (1.69.297) sick for REBUILD_AFTER while the tunnel is fine: this type does not work on this pair, the next one is ANOTHER type (a standby that is up and is replaced for its carrier is not sick)
+            _mark_sick(name, s["kind"], now)
+            log.info("standby: %s: the %s standby stayed sick, that type is left out for %s hours", name, s["kind"], KIND_SKIP // 3600)          # (the log only: a standby that falls makes no event)
+
         remove_standby(name)
     elif act == "restart" and s is not None and time.time() - _RESTARTED.get(s["id"], 0) >= (15 if s["use"] else RESTART_EVERY):
         _RESTARTED[s["id"]] = time.time()

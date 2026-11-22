@@ -54,7 +54,7 @@ standby ends the connections that stayed on it). Never while the users' ports ar
 * One standby per tunnel; none while the panel is read-only; nothing at all automatic in the Doctor's mode **off** (the buttons still work by hand); *fix* and *move* build, mend and hand over by themselves.
 * A standby is built only when the tunnel is **up**, no repair works on it, no storm (several servers off or many tunnels down) is on, both servers are on and not busy (CPU under 85 %, memory under 90 %: a second tunnel doubles the processes of the pair) and the
   pair has a type that can be a standby. A build that is running when the tunnel falls is stopped, so the servers are free for the repair (it is built beside the tunnel, under its own lock, but two builds on the same server still wait for each other).
-* A failed build waits 2, 4, 8 ... at most 60 minutes, and the type it failed with is not chosen again for 6 hours.
+* A failed build waits 2, 4, 8 ... at most 60 minutes, and the type it failed with is not chosen again for 6 hours. So is a type whose standby was built, then stayed sick for 5 minutes and was built again (1.69.297: chisel:fwd on a pair where it connects but passes no data was built, mended and built again, over and over): the next build is another type, at once - no wait, since nothing failed to build.
 * A handover is refused when the standby is not up, or no longer fits the tunnel (other servers after a move, other ports after *Ports*: it is removed and built again), or the panel is read-only.
 * An automatic build never installs a package on a server (the Doctor's rule): a WireGuard standby is built only where `wireguard-tools` is already there.
 

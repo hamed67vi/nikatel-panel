@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.69.297 - A standby that stays sick is built again as ANOTHER type
+
+The owner found it on one tunnel (2026-11-22): its standby was `chisel:fwd`, built and ready, then "port 21861 accepts connections but no data comes back through the tunnel", restarted after 45 s, built again after
+5 minutes - as `chisel:fwd` again, for ever (ready / mending / built again, every few minutes, a "Standby is ready" event each time). The choice only left out a type whose BUILD had failed; a type that builds, connects and then
+carries nothing was not remembered.
+
+- **`standby._step`**: a standby that is not up for `REBUILD_AFTER` (5 minutes) while its tunnel is fine and is built again now remembers its type (`standby._mark_sick`, the `sick` entry of the tunnel's failure record).
+  The type is left out of the choice for `KIND_SKIP` (6 hours) with the types whose build failed (`standby._skipped`, used by the build and by `_better_kind`); the log says it, no event (a standby that falls makes none). The count and the wait of a failed
+  build (`n`, `at`) are not touched: the next standby is built at once, it is only another type. A standby that is UP and replaced because it shares the carrier of its tunnel is not sick and is not remembered.
+- **`standby._collect`**: a good build still clears the failed builds, but not the types that stayed sick (they expire by themselves after 6 hours); a failed build keeps them too.
+- **Tests**: `tests/test_standby.py` (the rebuild marks the type and the choice takes another one, the mark survives a good and a failed build and expires, the carrier rebuild marks nothing).
+- **Not done**: nothing tells the Doctor's knowledge that the type does not carry data on the pair (the mark lives in the standby's own record; it is per tunnel name).
+
 ## 1.69.296 - BackPack 2: the new direct PCK is built
 
 BackPack 2.0.0 made its **direct PCK** a different engine - paqet: KCP for reliability, smux to carry many connections over one session, crafted TCP segments built and captured with libpcap. It forwards **ports only** (no

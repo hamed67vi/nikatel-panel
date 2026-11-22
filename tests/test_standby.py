@@ -849,6 +849,7 @@ def test_a_standby_on_the_carrier_of_its_tunnel_is_built_again_by_the_job(monkey
     standby._CHECKED[sid] = time.time()
     standby._step("jb6")
     assert removed == ["jb6"]                                                                                           # the standby shares the carrier of its tunnel and a type of another carrier is known: it is built again
+    assert standby._failed("jb6") == {}                                                                                 # (it was UP: a standby replaced for its carrier is not a sick one, nothing is remembered against its type)
 
     standby._step("jb6")
     assert len(asked) == 1                                                                                              # (the knowledge is asked once a minute, not at every turn of the job)
@@ -1355,3 +1356,62 @@ def test_the_marks_are_written_one_at_a_time():
         t.join()
 
     assert errors == [] and len(standby._marks()) == 40                                                                  # (a mark written between the read and the write of another would be lost)
+
+
+# ------------------------------------------------------------------ a standby that stays sick is not built again as the same type (1.69.297)
+def test_a_standby_that_stayed_sick_is_built_again_as_another_type_and_the_sick_one_is_left_out(monkeypatch):
+    writable(monkeypatch)
+    w = world("sk1")
+    sid = add_standby(w, state="down", since=standby.REBUILD_AFTER + 20)
+    fake_server(monkeypatch)
+    monkeypatch.setattr(actions, "doctor_mode", lambda: "move")
+    monkeypatch.setattr(ap, "storm_now", lambda: False)
+    monkeypatch.setattr(ap, "repairing_names", list)
+    removed = []
+    monkeypatch.setattr(builder, "delete_tunnel", lambda tunnel_id, keep_record=False, trash=False, skip_offline=False: removed.append(tunnel_id) or ["removed"])
+    monkeypatch.setattr(standby, "build", lambda name, *a, **k: 1)
+    sick_kind = standby._view("sk1")["s"]["kind"]
+    standby._mark("sk1", True)
+    standby._CHECKED[sid] = time.time()
+    standby._step("sk1")
+    f = standby._failed("sk1")
+    assert removed == [sid] and list(f["sick"]) == [sick_kind] and "n" not in f                                         # built again at once (no wait of a failed build), the type that stayed sick remembered
+    assert standby._skipped("sk1", clock()) == {sick_kind} and standby._skipped("sk1", clock() + standby.KIND_SKIP + 5) == set()     # ... for six hours
+
+    pair = knowledge.pair(w["iran"], w["foreign"])
+    assert standby.choose_kind([sick_kind, "bp:wssmux"], "tcpmux", pair, clock(), skip=standby._skipped("sk1", clock()))[0] == "bp:wssmux"     # the choice takes ANOTHER type, whatever the order of the Doctor's list
+
+    with session() as db:
+        assert db.scalars(select(Event).where(Event.ref == "sk1")).all() == []                                              # (a standby that falls makes no event: the rule of the rails stays)
+
+
+def test_what_stayed_sick_is_kept_through_a_good_and_a_failed_build_and_forgotten_after_six_hours(monkeypatch):
+    world("sk2")
+    standby._set_failed("sk2", {"n": 2, "at": NOW, "why": "x", "kinds": {"bp:tcpmux": NOW}, "sick": {"chisel:fwd": NOW - 60, "wssmux": NOW - standby.KIND_SKIP - 10}})
+
+    with session() as db:
+        e = ActionLog(ref="sk2-sb", action="build", source="manual", story=["Tunnel sk2-sb is ready."], ok=True, finished_at=NOW)
+        db.add(e)
+        db.flush()
+        aid = e.id
+
+    standby._BUILDS["sk2"] = {"aid": aid, "name": "sk2-sb", "kind": "paqet", "at": NOW}
+    standby._collect()
+    assert standby._failed("sk2") == {"sick": {"chisel:fwd": NOW - 60}}                                                  # a good build clears the failed builds, not the type that stayed sick (and the old one is gone)
+    assert standby._skipped("sk2", NOW) == {"chisel:fwd"}
+    assert standby.status("sk2")["state"] == "off"                                                                       # (not marked: no wait, no "failed" page from the sick mark alone)
+
+    with session() as db:
+        e = ActionLog(ref="sk2-sb", action="build", source="manual", story=["Stopped: no data"], ok=False, finished_at=NOW)
+        db.add(e)
+        db.flush()
+        aid = e.id
+
+    standby._BUILDS["sk2"] = {"aid": aid, "name": "sk2-sb", "kind": "paqet", "at": NOW}
+    standby._collect()
+    f = standby._failed("sk2")
+    assert f["n"] == 1 and "paqet" in f["kinds"] and "chisel:fwd" in f["sick"]                                           # a failed build counts as before and keeps the sick mark
+    assert standby._skipped("sk2", NOW) == {"paqet", "chisel:fwd"}
+
+    standby._set_failed("sk2", None)
+    assert standby._skipped("sk2", NOW) == set()
