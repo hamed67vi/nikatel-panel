@@ -205,3 +205,9 @@ BackPack 2.0.0 removed the UDP and QUIC carriers of its direct tunnel and made i
 (`license.RETIRED_KINDS`, asked through `license.tunnel_kind_allowed` by every place that chooses a type); the Doctor's order and its readiness for a cut leave them out; a build asked for by hand is refused with the
 reason. The reverse BackPack transports and BackPack Direct · xDi are as before. Running the BackPack binary by hand on a server (anything but `-v` or `-c <file>`) opens its menu, which installs its own web panel
 (port 7777) and monitor services: the panel never does that, and neither should a person.
+
+## The direct PCK of BackPack 2 (1.69.296)
+
+BackPack Direct · PCK is built the way BackPack 2 wants it: the Iran server dials the foreign server's TCP port, KCP carries the data inside crafted TCP segments, smux shares one session between many connections, and the
+token is the encryption key. It forwards ports only - no interface, no inner addresses - so it replaces nothing that routes traffic (xDi, SNI and IP spoofing keep their tunnel network). The foreign end connects only to its own
+loopback. The preset is balance (1 session), turbo (2, the default) or aggressive (4, for a long lossy route); `pck_*` keys fine-tune. A tunnel of this kind is measured by a ping between the two servers.

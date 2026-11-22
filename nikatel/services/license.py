@@ -137,8 +137,9 @@ def require(feature: str) -> None:
 # BackPack Direct · PCK build, which waits for that interface, never comes up ("the tunnel network does not come up": three standby builds of 2026-11-22). Every place that offers, picks or builds a kind asks
 # `tunnel_kind_allowed` - the Doctor's ladder, the standby, the survey, the Trident, the duel, Compare - so one line here leaves them out everywhere. The reverse transports of the same names (bp:pck, bp:quic)
 # and BackPack Direct · xDi are untouched. A row that still names one of them keeps its label (`tunnel_test.KINDS`, `build_other.BP_DIRECT`).
-RETIRED_KINDS = frozenset({"bpd:udp", "bpd:quic", "bpd:pck"})
-RETIRED_WHY = "BackPack 2 cannot run it (the UDP and QUIC carriers of its direct tunnel are gone, and its direct PCK has no interface any more)"
+# (1.69.296) The direct PCK is built again - the way BackPack 2 wants it (services/build_other.py `pck_texts`: ports only, no tunnel network), proved between two real servers - so only the two carriers that are gone stay here.
+RETIRED_KINDS = frozenset({"bpd:udp", "bpd:quic"})
+RETIRED_WHY = "BackPack 2 cannot run it (the UDP and QUIC carriers of its direct tunnel are gone)"
 
 
 def tunnel_kind_allowed(kind: str) -> bool:

@@ -248,6 +248,93 @@ peer_ip = "10.10.{net}.1"
     return iran, foreign
 
 
+PCK_PRESETS = ("balance", "turbo", "aggressive")
+PCK_KCP_MODES = ("normal", "fast", "fast2", "fast3")
+
+
+def pck_clean(opts: dict | None) -> dict:
+    """(1.69.296) The settings of a direct PCK tunnel (BackPack 2), checked: the preset (balance, turbo - the default - or aggressive: sessions, speed mode and windows come from it) and, only when asked for, the fine-tune keys
+    `pck_conns` (KCP sessions, 1-16), `pck_kcp_mode`, `pck_kcp_sndwnd` / `pck_kcp_rcvwnd` (packets), `pck_kcp_mtu` (576-1450; the same on both ends) and `pck_kcp_block` (the cipher; the same on both ends).
+    Returns only these keys, cleaned; raises ValueError with a sentence."""
+    o = opts or {}
+    preset = str(o.get("preset") or "turbo").strip().lower()
+
+    if preset not in PCK_PRESETS:
+        raise ValueError("the PCK preset is balance, turbo or aggressive")
+
+    out: dict = {"preset": preset}
+
+    def num(key: str, lo: int, hi: int, what: str) -> None:
+        v = o.get(key)
+
+        if v in (None, ""):
+            return
+
+        try:
+            n = int(v)
+        except (TypeError, ValueError):
+            raise ValueError(f"{what} must be a number from {lo} to {hi}") from None
+
+        if not lo <= n <= hi:
+            raise ValueError(f"{what} must be a number from {lo} to {hi}")
+
+        out[key] = n
+
+    num("pck_conns", 1, 16, "PCK sessions")
+    num("pck_kcp_sndwnd", 32, 65536, "the PCK send window")
+    num("pck_kcp_rcvwnd", 32, 65536, "the PCK receive window")
+    num("pck_kcp_mtu", 576, 1450, "the PCK packet size")
+    mode, block = str(o.get("pck_kcp_mode") or "").strip().lower(), str(o.get("pck_kcp_block") or "").strip().lower()
+
+    if mode:
+        if mode not in PCK_KCP_MODES:
+            raise ValueError("the PCK speed mode is normal, fast, fast2 or fast3")
+
+        out["pck_kcp_mode"] = mode
+
+    if block:
+        if not re.fullmatch(r"[a-z0-9-]{3,20}", block):
+            raise ValueError("the PCK cipher is a name such as aes, aes-128-gcm, salsa20 or none")
+
+        out["pck_kcp_block"] = block
+
+    return out
+
+
+def _pck_entries(ports: list[PortMap], test_port: int) -> list[str]:
+    """(1.69.296) The `ports` lines of the Iran toml of a direct PCK tunnel: users reach THIS server's `listen` port and the foreign server dials ITS OWN 127.0.0.1:`target` (a bare port keeps its number). The foreign end
+    connects only to itself, so a target never names another host, and the test door is the same pair as in the reverse tunnel."""
+    return [f"{p.listen}={p.target}" if p.target else str(p.listen) for p in ports] + [f"127.0.0.1:{test_port}={test_port}"]
+
+
+def pck_texts(foreign_host: str, port: int, token: str, ports: list[PortMap], test_port: int, opts: dict | None = None) -> tuple[str, str]:
+    """(1.69.296) (Iran toml - dials, foreign toml - listens) of a direct PCK tunnel of BackPack 2 (paqet: KCP over raw TCP segments, `carrier = "pck"`). No interface, no tunnel addresses, no MTU: the old keys are not written. The token is
+    the encryption key; both ends carry the same preset and fine-tune keys (the packet size and the cipher must match)."""
+    o = pck_clean(opts)
+    tune = "".join(f'{k} = "{v}"\n' if isinstance(v, str) else f"{k} = {v}\n" for k, v in o.items())
+    port_lines = "\n".join(f'    "{e}",' for e in _pck_entries(ports, test_port))
+    udp = "true" if (opts or {}).get("accept_udp") else "false"
+    iran = f"""# Nikatel panel - BackPack direct PCK (Iran dials; ports only)
+[l3]
+mode = "dial"
+addr = "{foreign_host}:{port}"
+carrier = "pck"
+token = "{token}"
+{tune}accept_udp = {udp}
+ports = [
+{port_lines}
+]
+"""
+    foreign = f"""# Nikatel panel - BackPack direct PCK (foreign listens)
+[l3]
+mode = "listen"
+addr = "0.0.0.0:{port}"
+carrier = "pck"
+token = "{token}"
+{tune}"""
+    return iran, foreign
+
+
 def bp_unit(name: str, cfg: str, side: str, fw: str = "") -> str:
     pre = f"ExecStartPre=/usr/local/sbin/{fw} up\n" if fw else ""
     post = f"ExecStopPost=/usr/local/sbin/{fw} down\n" if fw else ""
@@ -509,13 +596,16 @@ def start_build(iran_id: int, foreign_id: int, ports_text: str, kind: str, trans
         if transport not in BP_TRANSPORTS:
             raise ValueError("unknown BackPack transport")
     elif kind == "backpack_direct":
-        transport = transport or "udp"
+        transport = transport or "pck"          # (1.69.296: UDP was the old default and is gone with BackPack 2; PCK is the first carrier of the list)
 
         if transport not in BP_DIRECT:
             raise ValueError("unknown BackPack Direct carrier")
 
         if f"bpd:{transport}" in license.RETIRED_KINDS:          # (1.69.295) asked for by hand (the menus no longer offer it): said at once, not after a build that cannot come up
-            raise ValueError(f"BackPack Direct · {BP_DIRECT[transport][0]} cannot be built: {license.RETIRED_WHY}. Choose SNI spoofing, IP spoofing or xDi, or another tunnel type")
+            raise ValueError(f"BackPack Direct · {BP_DIRECT[transport][0]} cannot be built: {license.RETIRED_WHY}. Choose PCK, SNI spoofing, IP spoofing or xDi, or another tunnel type")
+
+        if transport == "pck":          # (1.69.296) the settings of the new direct PCK are checked here, before anything is built
+            opts.update(pck_clean(opts))
 
         dom = str(opts.get("sni_domain") or "").strip()
 
@@ -728,10 +818,12 @@ def _plan(b: Build, fi: dict, ff: dict) -> None:
         b.port = free_port(9850, 9950, taken_f)                   # carrier port on the foreign server
         b.test_port = free_port(39600, 39700, taken_i | taken_f | {b.port})
         seen = " ".join(fi["ips"] + ff["ips"])
-        b.net = next((n for n in range(10, 250) if n not in used_nets and f"10.10.{n}." not in seen), 0)
 
-        if not b.net:
-            raise RuntimeError("no free 10.10.x.0/30 network for the tunnel")
+        if b.transport != "pck":          # (1.69.296) the direct PCK of BackPack 2 carries ports only: no TUN, no 10.10.x.0/30
+            b.net = next((n for n in range(10, 250) if n not in used_nets and f"10.10.{n}." not in seen), 0)
+
+            if not b.net:
+                raise RuntimeError("no free 10.10.x.0/30 network for the tunnel")
     elif b.kind == "paqet":
         b.port = free_port(9700, 9800, taken_f)                   # raw port on the foreign server
         b.test_port = free_port(39200, 39300, taken_i | {b.port})
@@ -938,6 +1030,26 @@ def _build(b: Build) -> None:
         _wait_for_data(b, iran, key, f"Is {proto.upper()} port {b.port} open between the servers?", foreign, f"backpack-{b.name}-kharej.service")
         direction, tlabel = "reverse", f"BackPack · {label}"
 
+    elif b.kind == "backpack_direct" and b.transport == "pck":
+        label = BP_DIRECT["pck"][0]
+        _say(aid, "BackPack · Direct · PCK: the Iran server dials the foreign server; ports only, KCP over raw TCP segments, no tunnel network")
+        iran_toml, foreign_toml = pck_texts(b.foreign.host, b.port, token, b.ports, b.test_port, b.opts)
+        _install_sink(b, foreign, key)
+
+        for label2, node, cfg, text, unit in (("foreign", foreign, f"/etc/backpack/{b.name}-kharej.toml", foreign_toml, f"backpack-{b.name}-kharej.service"),
+                                              ("Iran", iran, f"/etc/backpack/{b.name}.toml", iran_toml, f"backpack-{b.name}.service")):
+            _put(node, cfg, text, "0600")
+            _put(node, f"/etc/systemd/system/{unit}", bp_unit(b.name, cfg, label2), "0644")
+
+            if label2 == "foreign" and ff["ufw"]:
+                run_action(foreign, "ufw_allow", {"PORT": str(b.port), "PROTO": "tcp"})
+
+            _start(node, label2, unit, b)
+
+        _say(aid, "BackPack PCK: services running on both servers")
+        _wait_for_data(b, iran, key, f"Raw sockets can be blocked by the provider, or TCP port {b.port} is closed on the foreign server.", iran, f"backpack-{b.name}.service")
+        direction, tlabel = "direct", f"Direct · {label}"
+
     elif b.kind == "backpack_direct":
         label = BP_DIRECT[b.transport][0]
         _say(aid, f"BackPack · Direct · {label}: the Iran server dials the foreign server")
@@ -1076,6 +1188,7 @@ def set_ports(tunnel_id: int, ports_text: str) -> dict:
         iran, foreign, name, test_port = _node(t.iran), _node(t.foreign), sname(t), int(rec.get("test_port") or 0)
         udp, forward = bool((rec.get("opts") or {}).get("accept_udp")), rec.get("direction") == "forward"
         peer = str(t.foreign_tunnel_ip or (f"10.10.{int(rec['inner_net'])}.2" if rec.get("inner_net") else ""))
+        pck2 = str(t.transport or "") == "l3:pck" and not peer          # (1.69.296) a direct PCK of BackPack 2 has no tunnel network: its lines name no peer
 
     b64 = lambda text: base64.b64encode(text.encode()).decode()
     check = " ".join(str(p.listen) for p in ports)
@@ -1092,10 +1205,10 @@ def set_ports(tunnel_id: int, ports_text: str) -> dict:
         if not done and "EDITED" in out:
             run_action(client, "unit_restore", {"UNIT": unit}, timeout=60)
     else:
-        if kind == "backpack_direct" and not peer:
+        if kind == "backpack_direct" and not peer and not pck2:
             raise ValueError("the tunnel network of this tunnel is not known: its ports cannot be rewritten")
 
-        entries = _direct_entries(ports, test_port, peer) if kind == "backpack_direct" else _entries(ports, test_port)
+        entries = _pck_entries(ports, test_port) if pck2 else _direct_entries(ports, test_port, peer) if kind == "backpack_direct" else _entries(ports, test_port)
         body = "\n".join(f'    "{e}",' for e in entries)
         out = run_action(iran, "set_ports_bp", {"CFG": name, "B64": b64(body), "CHECK": check}, timeout=60)
         done = "PORTS_OK" in out

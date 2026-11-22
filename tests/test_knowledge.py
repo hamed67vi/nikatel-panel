@@ -162,9 +162,9 @@ def test_every_result_is_kept_per_pair_and_the_page_state_shows_it(client):
     assert row["foreign_id"] == fr and row["tunnels"] == 1 and row["tested"] == 2 and row["best"][0]["kind"] == "bpd:pck" and row["best"][0]["down_mbps"] == 665.0
     assert [b["kind"] for b in row["blocked"]] == ["bpd:udp"] and row["blocked"][0]["error"] == "handshake did not complete" and row["due"] == len(knowledge.READY) - 2
     assert s["on"] is True and (s["from_hour"], s["to_hour"]) == (2, 6) and s["running"] is None and s["kinds"] == len(knowledge.PRIOR) and s["ready"] == knowledge.READY and row["cuts"] == 0        # the night survey is on: nights only, quiet servers only
-    assert row["ready_for"]["iran_cut"]["level"] == "none" and row["ready_for"]["iran_cut"]["kind"] == "" and row["ready_for"]["foreign_cut"]["level"] == "none" and row["ready_for"]["both_cut"]["level"] == "none"       # (BackPack Direct · PCK tested well here, but BackPack 2 cannot run it any more (1.69.295): it is no way out of a cut, the page still shows what was measured)
+    assert row["ready_for"]["iran_cut"]["level"] == "ready" and row["ready_for"]["iran_cut"]["kind"] == "bpd:pck" and row["ready_for"]["foreign_cut"]["level"] == "none" and row["ready_for"]["both_cut"]["level"] == "none"       # (BackPack Direct: the Iran server dials out)
     j = client.get("/api/doctor/knowledge").json()
-    assert j["ok"] and any(p["iran_id"] == ir for p in j["pairs"]) and next(p for p in j["pairs"] if p["iran_id"] == ir)["ready_for"]["iran_cut"]["kind"] == ""
+    assert j["ok"] and any(p["iran_id"] == ir for p in j["pairs"]) and next(p for p in j["pairs"] if p["iran_id"] == ir)["ready_for"]["iran_cut"]["kind"] == "bpd:pck"
 
 
 def test_the_quality_test_of_a_live_tunnel_with_a_door_is_a_free_full_measurement(monkeypatch):
@@ -320,7 +320,7 @@ def test_the_job_starts_the_survey_of_the_pair_with_the_least_knowledge_only_at_
     monkeypatch.setattr(knowledge, "survey_start", lambda iran_id, foreign_id, source="survey-manual", kinds=None: started.append((iran_id, foreign_id, source, kinds)) or "cmp1")
     night(monkeypatch, hour=14)
     knowledge.run()
-    assert started == [(ir2, fr2, "survey-cold", [k for k in knowledge.READY if k not in ("bpd:pck", "bpd:udp")])]                                                    # an afternoon: only the pair nobody tested (on quiet servers); the one that knows a kind waits for the night
+    assert started == [(ir2, fr2, "survey-cold", [k for k in knowledge.READY if k != "bpd:udp"])]                                                    # an afternoon: only the pair nobody tested (on quiet servers); the one that knows a kind waits for the night
     started.clear()
     night(monkeypatch, hour=3)
     st.put("knowledge", {"on": False})
@@ -328,7 +328,7 @@ def test_the_job_starts_the_survey_of_the_pair_with_the_least_knowledge_only_at_
     assert started == []                                                                                              # switched off: nothing
     night(monkeypatch, hour=3)
     knowledge.run()
-    assert len(started) == 1 and started[0][:3] == (ir2, fr2, "survey") and started[0][3] == [k for k in knowledge.READY if k not in ("bpd:pck", "bpd:udp")]           # the pair nobody tested first, the kinds a repair reaches for
+    assert len(started) == 1 and started[0][:3] == (ir2, fr2, "survey") and started[0][3] == [k for k in knowledge.READY if k != "bpd:udp"]           # the pair nobody tested first, the kinds a repair reaches for
     started.clear()
     monkeypatch.setattr(autopilot, "repairing_names", lambda: ["some-tunnel"])
     knowledge.run()

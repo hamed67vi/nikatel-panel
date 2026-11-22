@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.69.296 - BackPack 2: the new direct PCK is built
+
+BackPack 2.0.0 made its **direct PCK** a different engine - paqet: KCP for reliability, smux to carry many connections over one session, crafted TCP segments built and captured with libpcap. It forwards **ports only** (no
+TUN interface, no tunnel addresses, no MTU) and holds up on a lossy path where the old one stalled. The panel built it the old way and waited for an interface that is not there, so every build failed (1.69.295 stopped
+offering it). Now it is built the new way.
+
+- **The texts** (`build_other.pck_texts`): `[l3] mode = "dial"` (Iran) and `"listen"` (foreign), `carrier = "pck"`, the token (it is the encryption key), `preset` (balance, turbo - the default - or aggressive) and the fine-tune keys
+  `pck_conns`, `pck_kcp_mode`, `pck_kcp_sndwnd`, `pck_kcp_rcvwnd`, `pck_kcp_mtu`, `pck_kcp_block` when asked for (`pck_clean` checks them, the API form passes them); the ports: users reach the Iran server's port and the foreign
+  server dials ITS OWN `127.0.0.1:<target>` (`_pck_entries`). No `iface`, `local_ip`, `peer_ip` or `mtu` any more; no `10.10.x.0/30` network and no firewall script (the engine installs its own rules and takes them off on stop).
+- **The build** waits for DATA through the test door, not for an interface; the foreign TCP port of the carrier is opened in ufw when it is on. The row has no inner address, so every look that used one (the ping over the interface,
+  the vantage ping) falls back to what a tunnel without a link gets: the ping between the two servers. The ports of an existing one are rewritten in the new form (`set_ports`).
+- **Allowed again**: `bpd:pck` leaves `license.RETIRED_KINDS` (only `bpd:udp` and `bpd:quic` stay); it is a carrier of the Create form (the first of the list and the default), of Compare, of the standby, the survey and the Doctor's order.
+- **Proved on two real servers** (an Iran server with no tunnel and a foreign test server, by hand, before this change): the first byte through the tunnel after 2.4 s, 64 MB each way intact at 86 Mbit/s, 30 small round trips at a
+  median of 82 ms over a 45 ms line, back by itself 13 s after the foreign end restarted and 1.5 s after the Iran end; everything it made was removed. The files of this change were then built from the panel's own texts and tried
+  the same way (`tests/test_pck_direct.py` checks the texts parse as TOML and name no interface).
+- **Not done**: UDP through it is not tried (`accept_udp` is written when asked for); the PCK fine-tune drawer of BackPack's own panel is not in this panel's form (the keys are in the API).
+
 ## 1.69.295 - BackPack 2: the three direct types it cannot run are no longer offered, picked or built
 
 BackPack 2.0.0 (released 2026-11-20; every server of the fleet runs it since 2026-11-22) changed its **direct** tunnel: the **UDP** and **QUIC** carriers are gone - a unit that names one exits at once with

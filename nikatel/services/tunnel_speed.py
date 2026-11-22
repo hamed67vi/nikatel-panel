@@ -191,7 +191,7 @@ def run_door(aid: int, tunnel_id: int, say) -> dict:
             raise ValueError("this tunnel has no test door (BackPack, Paqet and Chisel have one)")
 
         iran, foreign, port, key = build_other._node(t.iran), build_other._node(t.foreign), int(rec["test_port"]), str(sec["test_key"])
-        name, bind = build_other.sname(t), "0.0.0.0" if str(t.transport or "").startswith("l3:") else ""
+        name, bind = build_other.sname(t), "0.0.0.0" if str(t.transport or "").startswith("l3:") and (rec.get("inner_net") or str(t.transport) != "l3:pck") else ""          # (1.69.296: a direct PCK of BackPack 2 has no tunnel network - its foreign end dials its own 127.0.0.1)
 
     try:
         run_action(foreign, "sink_install", {"NAME": name, "PORT": str(port), "KEY": key, "BIND": bind}, timeout=60)          # (the sink is kept at the current version)

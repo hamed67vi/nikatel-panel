@@ -71,7 +71,7 @@ def test_the_plan_says_who_can_dial_and_what_is_known():
     knowledge.record(ir, fr, {"kind": "bp:wssmux", "ok": False, "score": 42, "latency_ms": 150.0, "loss_pct": 0.0}, "latency")
     knowledge.record(sibling_ir, fr, {"kind": "chisel:tls", "ok": False, "score": 36, "latency_ms": 165.0, "loss_pct": 0.0}, "latency")          # another Iran server connects to the same foreign server with chisel:tls
     kinds, lines = knowledge.plan_for(ir, fr, "tcpmux", True, False, dial_i=False, dial_f=True)
-    assert kinds[0] == "bp:wssmux" and "tcpmux" not in kinds and len(kinds) == len(knowledge.PRIOR) - 4 - 3 and kinds[1] == "chisel:tls"      # all of them, without the four GRE kinds; the neighbour's kind right after what is known here
+    assert kinds[0] == "bp:wssmux" and "tcpmux" not in kinds and len(kinds) == len(knowledge.PRIOR) - 4 - 2 and kinds[1] == "chisel:tls"      # all of them, without the four GRE kinds; the neighbour's kind right after what is known here
     assert lines[0].startswith("Who can still open connections: the Iran server CANNOT reach the foreign server, the foreign server CAN reach the Iran server") and "reverse" in lines[0]
     assert any(ln.startswith("Known to connect between these two servers") and "bp:wssmux 42" in ln for ln in lines)
     assert any(ln.startswith("The other tunnels that end on this foreign server connect with: chisel:tls") for ln in lines)
@@ -100,12 +100,12 @@ def test_what_healed_a_pair_the_last_time_goes_first_and_a_cut_is_counted():
     kinds, lines = knowledge.plan_for(ir, fr, "tcpmux", True, False, dial_i=True, dial_f=True, cause="gre_blocked")
     assert kinds[0] == "bp:wssmux" and lines[0] == "The last time this happened on this pair (gre blocked), bp:wssmux healed it - it goes first."
     kinds, lines = knowledge.plan_for(ir, fr, "tcpmux", True, False, dial_i=True, dial_f=True, cause="route_cut")      # nothing healed a route cut: the order of a cut tunnel
-    assert kinds[0] == "chisel:fwd" and not lines[0].startswith("The last time")
+    assert kinds[0] == "bpd:pck" and not lines[0].startswith("The last time")
     kinds, _ = knowledge.plan_for(ir, fr, "tcpmux", True, False, dial_i=False, dial_f=True, cause="gre_blocked")
     assert kinds[0] == "bp:wssmux"
     knowledge.record(ir, fr, {"kind": "bp:wssmux", "ok": False, "error": "no data passes"}, "latency")                # it failed lately: the playbook does not push it
     kinds, _ = knowledge.plan_for(ir, fr, "tcpmux", True, False, dial_i=True, dial_f=True, cause="gre_blocked")
-    assert kinds[0] == "chisel:fwd" and "bp:wssmux" not in kinds[:3]
+    assert kinds[0] == "bpd:pck" and "bp:wssmux" not in kinds[:3]
 
 
 # ------------------------------------------------------------------ the first kind that connects is the one to build
@@ -193,12 +193,12 @@ def test_a_filtered_route_is_not_tried_with_the_same_method_again_the_first_type
     assert ap.ladder_for("gre_blocked", "tcpmux", "switch") == ["switch"] and ap.ladder_for("gre_blocked", "tcpmux", "rebuild") == ["relink"]          # no new GRE link where GRE is filtered
     assert ap.smart_fix(7, tid, "switch", "auto") is True
     kinds = [a[0] for a in attempts]
-    assert kinds[0] == "chisel:fwd" and kinds[-1] == "bp:wssmux" and "tcpmux" not in kinds and "wssmux" not in kinds              # the Iran server can dial: the fast kinds first; the one that connects stays; no GRE kind
+    assert kinds[0] == "bpd:pck" and kinds[-1] == "bp:wssmux" and "tcpmux" not in kinds and "wssmux" not in kinds              # the Iran server can dial: the fast kinds first; the one that connects stays; no GRE kind
     assert [a[1] for a in attempts] == [True] + [False] * (len(attempts) - 1) and not any(a[2] for a in attempts)               # the tunnel is removed once, and the old type is not built again while another one is tried
-    assert any("any tunnel type that connects is better than none" in ln for ln in said) and any(ln.startswith("Trying bp:wssmux (5 of ") for ln in said)
+    assert any("any tunnel type that connects is better than none" in ln for ln in said) and any(ln.startswith("Trying bp:wssmux (6 of ") for ln in said)
     assert not any("A new GRE link" in ln or "No other tunnel type works well" in ln for ln in said)
     p = knowledge.pair(ir, fr)
-    assert knowledge.verdict(p["kinds"]["chisel:fwd"]) == "failed" and knowledge.verdict(p["kinds"]["bp:wssmux"]) == "poor"    # what each one answered is kept: the next time the ones that failed are not tried, the one that worked is
+    assert knowledge.verdict(p["kinds"]["bpd:pck"]) == "failed" and knowledge.verdict(p["kinds"]["bp:wssmux"]) == "poor"    # what each one answered is kept: the next time the ones that failed are not tried, the one that worked is
     assert knowledge.playbook(ir, fr, "gre_blocked")["kind"] == "bp:wssmux" and knowledge.cut_before(ir, fr, ("gre_blocked",))
 
     with session() as db:
@@ -224,8 +224,8 @@ def test_when_nothing_connects_every_kind_is_tried_the_old_type_is_put_back_and_
     tid, ir, fr = world("pl-ir3")
     said, attempts = fake_repair(monkeypatch, {**GRE_CUT, "cause": "route_cut", "dial_i": False, "dial_f": False})
     assert ap.smart_fix(9, tid, "switch", "auto") is False
-    assert len(attempts) == len(knowledge.PRIOR) - 4 - 3 and attempts[0][1] is True                                         # all of them except the GRE kinds
-    assert any(ln.startswith(f"None of the {len(knowledge.PRIOR) - 4 - 3} tunnel types connected on this route. Putting the old tcpmux tunnel back") for ln in said)
+    assert len(attempts) == len(knowledge.PRIOR) - 4 - 2 and attempts[0][1] is True                                         # all of them except the GRE kinds
+    assert any(ln.startswith(f"None of the {len(knowledge.PRIOR) - 4 - 2} tunnel types connected on this route. Putting the old tcpmux tunnel back") for ln in said)
     assert any("None of the tunnel types connects on this route right now. The repair tries again in 1 minute (then 2, 5 and every 10 minutes; the types that failed are not tried again)." in ln for ln in said)
     assert set(knowledge.blocked(knowledge.pair(ir, fr), int(time.time()))) == {a[0] for a in attempts}                  # each one failed here: none is tried again for two weeks
     assert knowledge.playbook(ir, fr, "route_cut") == {} and knowledge.repeats(ir, fr) == 1                              # the cut is remembered though nothing healed it
@@ -492,7 +492,7 @@ def test_when_every_kind_failed_a_carried_wireguard_link_is_the_last_resort_if_t
     asked = []
     monkeypatch.setattr(ap, "_carrier_last_resort", lambda aid, snap, tried: asked.append(set(tried)) or ["wgchiselfwd:tcpmux"])
     assert ap.smart_fix(9, tid, "switch", "auto") is True
-    assert len(attempts) == len(knowledge.PRIOR) - 4 - 3 + 1 and attempts[-1][0] == "wgchiselfwd:tcpmux" and attempts[-1][1] is False         # after every kind of the list; the tunnel was removed once, by the first attempt
+    assert len(attempts) == len(knowledge.PRIOR) - 4 - 2 + 1 and attempts[-1][0] == "wgchiselfwd:tcpmux" and attempts[-1][1] is False         # after every kind of the list; the tunnel was removed once, by the first attempt
     assert len(asked) == 1 and "bp:wssmux" in asked[0] and not any(k.startswith("wgchisel") for k in asked[0])                          # (asked once, when the list is done)
     assert any(ln == "Trying wgchiselfwd:tcpmux (last resort): it is built as the real tunnel and checked for data." for ln in said)
     assert not any(ln.startswith("None of the") and "connected on this route" in ln for ln in said)
@@ -502,8 +502,8 @@ def test_a_last_resort_that_finds_nothing_leaves_the_story_as_it_was_and_the_old
     tid, _, _ = world("lr-ir2")
     said, attempts = fake_repair(monkeypatch, {**GRE_CUT, "cause": "route_cut", "dial_i": False, "dial_f": False})
     monkeypatch.setattr(ap, "_carrier_last_resort", lambda aid, snap, tried: [])
-    assert ap.smart_fix(9, tid, "switch", "auto") is False and len(attempts) == len(knowledge.PRIOR) - 4 - 3
-    assert any(ln.startswith(f"None of the {len(knowledge.PRIOR) - 4 - 3} tunnel types connected on this route. Putting the old tcpmux tunnel back") for ln in said)
+    assert ap.smart_fix(9, tid, "switch", "auto") is False and len(attempts) == len(knowledge.PRIOR) - 4 - 2
+    assert any(ln.startswith(f"None of the {len(knowledge.PRIOR) - 4 - 2} tunnel types connected on this route. Putting the old tcpmux tunnel back") for ln in said)
 
 
 def test_the_doctor_builds_a_carried_kind_over_its_link_and_never_asks_for_a_package(monkeypatch):

@@ -90,7 +90,7 @@ def build(body: BuildIn):
         if kind == "backhaul" and body.kind not in ("auto", "trident"):
             opts["link_fallback"] = True                         # the link under it does not pass between the two servers: the other link models are tried, one by one, before the build gives up
 
-        other_opts = {k: v for k, v in ({} if body.kind in ("auto", "trident") else body.opts).items() if k in ("preset", "accept_udp", "sni_domain", "spoof_profile", "spoof_src_ip", "spoof_interface", "mtu", "kcp_mode", "conn", "keepalive", "heartbeat", "nodelay", "connection_pool", "mux_con", "channel_size", "rcvwnd", "sndwnd", "smuxbuf", "streambuf", "kcp_block") and isinstance(v, (str, int, bool)) and len(str(v)) <= 80}
+        other_opts = {k: v for k, v in ({} if body.kind in ("auto", "trident") else body.opts).items() if k in ("preset", "accept_udp", "sni_domain", "spoof_profile", "spoof_src_ip", "spoof_interface", "mtu", "kcp_mode", "conn", "keepalive", "heartbeat", "nodelay", "connection_pool", "mux_con", "channel_size", "rcvwnd", "sndwnd", "smuxbuf", "streambuf", "kcp_block", "pck_conns", "pck_kcp_mode", "pck_kcp_sndwnd", "pck_kcp_rcvwnd", "pck_kcp_mtu", "pck_kcp_block") and isinstance(v, (str, int, bool)) and len(str(v)) <= 80}
         measure = "full" if body.opts.get("measure") != "latency" else "latency"
 
         names = [n.strip().lower() for n in body.dns_names if n.strip()]
@@ -175,7 +175,7 @@ def tunnel_kinds():
                                                                      ("wgchiselfwd:tcpmux", "TCP Mux · WireGuard in Chisel (Iran dials)", "the same, but the Iran server opens the TCP connection (use it when the foreign address is not filtered from Iran)"))]},
         {"key": "backpack", "title": "BackPack", "note": "the foreign server dials the Iran server; twelve transports, presets, UDP", "direction": "reverse",
          "transports": [{"key": k, "label": v[0], "note": v[1] + (" · root" if v[2] else ""), "udp": v[3]} for k, v in bo.BP_TRANSPORTS.items()]},
-        {"key": "backpack_direct", "title": "BackPack Direct", "note": "an L3 link the Iran server dials: SNI spoofing (a fake TLS hello) / IP spoofing (a forged source address) / xDi carriers (BackPack 2 took the UDP and QUIC carriers away, and its PCK has no interface)", "direction": "direct",
+        {"key": "backpack_direct", "title": "BackPack Direct", "note": "an L3 link the Iran server dials: PCK (ports only, KCP over raw TCP segments) / SNI spoofing (a fake TLS hello) / IP spoofing (a forged source address) / xDi carriers (BackPack 2 took the UDP and QUIC carriers away)", "direction": "direct",
          "transports": [{"key": k, "label": v[0], "note": v[1] + (" · root" if v[2] else ""), "udp": v[3]} for k, v in bo.direct_carriers().items()]},
         {"key": "paqet", "title": "Paqet", "note": "KCP over raw sockets: the foreign server listens, the Iran server opens the ports", "direction": "direct",
          "transports": [{"key": "kcp", "label": "KCP", "note": "modes normal / fast / fast2 / fast3"}]},
