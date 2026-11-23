@@ -94,6 +94,14 @@ with auto, `swap.beside`: speed test through the new tunnel, handover, the old t
 two swaps at once, the day's volume of tests, once in 24 hours per tunnel, a protected tunnel never, and nothing when more than a third of the graded tunnels suffer at once (then it is the probe or the foreign side). A tunnel is tried at most every six hours.
 What stays: a type that only tested fast is not proof - the swap measures it through itself again and refuses it when it is not clearly better. Not proved on a real tunnel.
 
+**A much faster type is taken even when no type of the pair is proven steady (1.69.300).** The look for a better type (`bandwidth._upgrade_check`) wanted the better type to be proven steady (75 % or more of its kept tests). On a pair where
+every type had a failed test that can never be met, so a slow type that a repair had put on as a stopgap stayed for ever, while the Doctor's own memory held a type that carried seven times as much (the owner, 2026-11-23: of two
+configs of the same kind one gave 188 Mb/s and the other 73). Now, when the running type is not proven steady either and the memory knows a type whose SLOWEST kept full test still gave twice the running type's number (and 100 Mb/s
+more), with no failed full test in the last week, at most 1 % loss and a ping about the same, the Doctor builds that type beside the tunnel (the swap: measured through itself, rolled back when it is not clearly better, the users
+are not cut). A type that only a latency test called poor is not left out (that test scores a type from its ping alone); one that a full test called poor is. Not for a tunnel that was cut in the last 6 hours (that is the repair's
+business). The speed bar of the swap is the pair test of the running type, not the tunnel's own reading: on a tunnel that runs over a link the own reading can be the link's. Every other rail is as before: once in 24 hours per tunnel,
+one change an hour for the whole panel, never a protected tunnel, the modes fix and move only. Not proved on a real tunnel.
+
 ## The failovers of one outage do not collide (1.69.287)
 
 When several Iran servers are cut or off in the same minute, every one of them is planned and started at once, and their tunnels go to the Iran servers that are left. Two things made some of those failovers end "not ok" (2026-11-17, four

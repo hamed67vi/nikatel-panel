@@ -359,6 +359,61 @@ def steadier_kinds(pair: dict | None, now: int, current: str, allowed=lambda k: 
     return sorted(rows, key=lambda r: (-r["steady"], -(r.get("user") or 0)))
 
 
+SPEEDIER_RATIO = 2.0            # (1.69.300) a type is MUCH faster when even the slowest of its kept full tests gave this many times what the running type gave in its own full test ...
+SPEEDIER_MIN_GAIN = 100.0       # ... and at least this many Mb/s more
+
+
+def speedier_kinds(pair: dict | None, now: int, current: str, allowed=lambda k: True) -> list[dict]:
+    """Pure: (1.69.300, the owner, 2026-11-23: two tunnels of the same kind of config, one gave 188 Mb/s and the other 73 - "the Doctor must diagnose this and fix it well") the types the Doctor's memory of the pair
+    knows to be MUCH faster than the RUNNING type, for a tunnel whose own type is not proven steady either. The rule of `upgrade_kinds` (a better type must be proven steady, STEADY_OK) can never be met on a pair
+    where every type had a failed test, so a slow type that a repair had put on as a stopgap stayed for ever although the memory held a type that carried seven times as much. Here a type counts when: the running
+    type has a fresh full test (the number to beat) and is itself NOT proven steady (a steady one is left only by `upgrade_kinds`); the other type has at least STEADY_MIN_TESTS passed full tests, none of its full
+    tests of the last STEADY_RECENT failed, the SLOWEST of its kept full tests still gave SPEEDIER_RATIO times the running type's number (and SPEEDIER_MIN_GAIN Mb/s more), it lost at most UPGRADE_MAX_LOSS %, answers
+    about as fast (`_ping_ok`), is not heavier on the wire, was measured less than FASTER_FRESH ago, and the licence allows it. A type that a FULL test called poor is left out; one that a latency-only test called
+    poor (a test with no speed in it - it scores a type from its ping alone, and fails when the server was busy that minute) is not: the swap builds the type beside the tunnel and measures it through itself before
+    a single user moves, so a type that is no good now is refused there. The one with the best worst test first."""
+    kinds = (pair or {}).get("kinds") or {}
+    cur_e = kinds.get(current) or {}
+    full = cur_e.get("full") or {}
+
+    if full.get("down_mbps") is None or now - int(full.get("at") or 0) > FASTER_FRESH:
+        return []
+
+    st_cur = stability(cur_e, now)
+
+    if st_cur is not None and st_cur["pct"] >= STEADY_OK:
+        return []
+
+    base = float(full["down_mbps"])
+    need = max(base * SPEEDIER_RATIO, base + SPEEDIER_MIN_GAIN)
+    c_cur, _ = overhead.cost(current, cur_e.get("wire"), wire_raw(current))
+    out = []
+
+    for r in ranked(pair, now, include_poor=True):
+        e = kinds.get(r["kind"]) or {}
+
+        if r["kind"] == current or r.get("measure") != "full" or r.get("down_mbps") is None or now - int(r.get("at") or 0) > FASTER_FRESH or not allowed(r["kind"]):
+            continue
+
+        if verdict(e) == "poor" and (e.get("last") or {}).get("measure") == "full":
+            continue
+
+        fulls = [x for x in (e.get("hist") or []) if x.get("m") == "full" and now - int(x.get("at") or 0) <= FULL_FRESH]
+        passes = [float(x["down"]) for x in fulls if x.get("ok") and x.get("down") is not None]
+
+        if len(passes) < STEADY_MIN_TESTS or any(not x.get("ok") for x in fulls if now - int(x.get("at") or 0) <= STEADY_RECENT):
+            continue
+
+        worst = min(passes)
+
+        if worst < need or float(r.get("loss_pct") or 0) > UPGRADE_MAX_LOSS or not _ping_ok(r, full) or not (r["wire"] < overhead.HEAVY or r["wire"] <= c_cur):
+            continue
+
+        out.append({**r, "worst": worst, "passes": len(passes), "base": base})
+
+    return sorted(out, key=lambda r: (-r["worst"], -float(r["down_mbps"])))
+
+
 LIGHTER_KEEP = 0.8              # a lighter type must give the user at least this much of what the heavy running type gave in its test (volume is not saved with a slow tunnel)
 
 

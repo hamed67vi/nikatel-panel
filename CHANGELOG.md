@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.69.300 - The Doctor changes a tunnel that runs far slower than its own memory knows another type to be
+
+The owner asked (2026-11-23, «two configs of the same kind, one is faster - the Doctor must diagnose this and fix it well»). One of two tunnels of the same kind gave 188 Mb/s through the real entry and the other 73 (six parallel
+downloads: 461 and 158). The slow one ran a Backhaul type over an IPsec link, put on by a repair as a stopgap when its first type was cut; the Doctor's memory of the pair held its OWN test of that type (137 Mb/s) and a type that
+carried 964 Mb/s in nine full tests. The look for a better type refused: it wants the better type proven steady (75 %), and on this pair no type reached that - each had a failed test, some of them latency-only tests that fail when a
+server is busy that minute. The slow type stayed.
+
+New `knowledge.speedier_kinds`: for a running type that is not proven steady either, a type whose slowest kept full test still gave twice the running type's number and 100 Mb/s more, with at least three passed full tests, none failed
+in the last week, at most 1 % loss, a ping about the same and no heavier on the wire. A type that a latency-only test called poor is no longer left out (the swap measures it through itself before a user moves); one that a full test
+called poor is. `bandwidth._upgrade_check` takes it after the steady rules found nothing, not for a tunnel cut in the last 6 hours, and the swap's speed bar is the pair test of the running type (the tunnel's own reading can be the
+reading of its link). Every other rail stands: once in 24 hours per tunnel, one change an hour for the panel, never a protected tunnel, no cut for the users, rolled back when the new type is not clearly better.
+
+Not proved on a real tunnel yet. Not done: a speed reading through the users' real port for tunnels that run over a link; a retest of a type that only a failed latency test marked down.
+
 ## 1.69.299 - The number on a tunnel's name goes away when the tunnel that held the plain name is gone
 
 > به زبان ساده: اسم بعضی tunnel ها به `-2` تمام می‌شد چون موقع ساختن، tunnel قدیمی هنوز بود و اسم ساده پر بود. حالا وقتی tunnel قدیمی رفت، خود panel `-2` را برمی‌دارد (هر ۱۰ دقیقه یک دور).

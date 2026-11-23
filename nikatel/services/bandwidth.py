@@ -1109,6 +1109,7 @@ def _cuts_lately(tunnel_id: int, now: int, hours: int = 24) -> int:
 
 UPGRADE_EVERY = 6 * 3600         # a tunnel is looked at for a better type this often (the look reads the Doctor's memory only: no server is asked)
 _UPGRADE_AT: dict[int, int] = {}
+SPEEDIER_QUIET = 6 * 3600        # (1.69.300) a type that is MUCH faster is taken only for a tunnel that has not been cut for this long (a tunnel that was cut lately is the repair's business, not a speed look's)
 UPGRADE_FLEET_GAP = 3600          # (1.69.220) one change of type of a working tunnel an hour for the whole panel: an upgrade that goes wrong must not go wrong everywhere at once
 
 
@@ -1132,9 +1133,17 @@ def _upgrade_check(tunnel_id: int) -> None:
     steadier = cuts >= knowledge.STEADY_CUTS
     rows = knowledge.steadier_kinds(p, now, cur, license.tunnel_kind_allowed) if steadier else []
     rows = rows or knowledge.upgrade_kinds(p, now, cur, license.tunnel_kind_allowed)
-    lighter = not rows
-    rows = rows or knowledge.lighter_kinds(p, now, cur, license.tunnel_kind_allowed)          # (1.69.223: nothing faster is known - is there a type that costs far less on the wire and is nearly as good?)
-    rows = [r for r in rows if r.get("steady") is not None and r["steady"] >= knowledge.STEADY_OK]          # (not proven steady: not by itself, and nothing is suggested)
+    quick = []
+
+    if not rows:                                                      # (1.69.300: nothing STEADY is better known - is a type known that is MUCH faster, though no type of this pair is proven steady?)
+        quick = knowledge.speedier_kinds(p, now, cur, license.tunnel_kind_allowed)
+
+        if quick and _cuts_lately(tunnel_id, now, SPEEDIER_QUIET // 3600):
+            quick = []
+
+    lighter = not rows and not quick
+    rows = rows or quick or knowledge.lighter_kinds(p, now, cur, license.tunnel_kind_allowed)          # (1.69.223: nothing faster is known - is there a type that costs far less on the wire and is nearly as good?)
+    rows = [r for r in rows if r.get("worst") is not None or (r.get("steady") is not None and r["steady"] >= knowledge.STEADY_OK)]          # (not proven steady: not by itself, and nothing is suggested)
 
     if not rows or any(x.get("tunnel") == snap["name"] for x in doctor._state()["suggestions"]):          # (a move suggestion of the tunnel is more urgent)
         return
@@ -1147,7 +1156,15 @@ def _upgrade_check(tunnel_id: int) -> None:
 
     r = rows[0]
 
-    if steadier and not lighter:
+    speedy = r.get("worst") is not None
+
+    if speedy:
+        age = max(0, (now - int(r.get("at") or now)) // 3600)
+        why = (f"In the pair test of {snap['iran_name']} ⇄ {snap['foreign_name']} {cur} carried {r['base']:.0f} Mb/s and its type is not proven steady; {r['kind']} carried {float(r['down_mbps']):.0f} Mb/s in its last test "
+               f"({age} h ago) and never less than {r['worst']:.0f} Mb/s in its {r['passes']} full tests, lost {float(r.get('loss_pct') or 0):g} % and answered in {float(r.get('latency_ms') or 0):.0f} ms. "
+               f"No type of this pair is proven steady, so the steady rule could not act - but a tunnel that gives {r['worst'] / max(r['base'], 1):.1f} times less than another type of the same pair is not left on it. "
+               "The new type is built beside the tunnel and measured through itself first; the users are not cut.")
+    elif steadier and not lighter:
         why = (f"{snap['name']} was cut {cuts} times in the last day. In the tests of {snap['iran_name']} ⇄ {snap['foreign_name']} {r['kind']} was steady: {r['passed']} of {r['tests']} tests passed, stability "
                f"{r['steady']} %, {float(r['down_mbps']):.0f} Mb/s, {float(r.get('latency_ms') or 0):.0f} ms. Many users need a type that does not drop.")
     elif lighter:
@@ -1164,7 +1181,8 @@ def _upgrade_check(tunnel_id: int) -> None:
     log.info("a better steady type for tunnel %s: %s -> %s (changed by itself)", tunnel_id, cur, r["kind"])
 
     try:
-        autopilot._start(snap["name"], doctor._run_retype, tunnel_id, r["kind"], cur, why, True, action="autopilot", source="auto")
+        extra = (False, r["base"]) if speedy else ()          # (the speed bar of the swap is the pair test of the running type: the tunnel's own reading can be the reading of its LINK, not of what its users get)
+        autopilot._start(snap["name"], doctor._run_retype, tunnel_id, r["kind"], cur, why, True, *extra, action="autopilot", source="auto")
     except ValueError as e:
         log.info("the change of type of tunnel %s not started: %s", tunnel_id, str(e)[:100])
 
