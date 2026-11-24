@@ -102,6 +102,13 @@ are not cut). A type that only a latency test called poor is not left out (that 
 business). The speed bar of the swap is the pair test of the running type, not the tunnel's own reading: on a tunnel that runs over a link the own reading can be the link's. Every other rail is as before: once in 24 hours per tunnel,
 one change an hour for the whole panel, never a protected tunnel, the modes fix and move only. Not proved on a real tunnel.
 
+**A type is given a speed test where other Iran servers proved it (1.69.301).** The rule above needs a speed number of the better type on THE PAIR, and a pair can hold none: the night survey asks only delay and loss, a type that
+such a test calls poor is nobody's rival, and it is not tested again for a month - so after the Doctor moved Germany-2's tunnel to another Iran server, the new pair knew no BackPack type's speed at all and the rule had nothing to
+act on (the owner, 2026-11-24). Now the verify survey of a live pair whose running type is not proven steady also tests (one per pair, `knowledge.scout_kinds`) a kind that has no speed test on the pair but that the pairs of
+OTHER Iran servers to the same foreign server carried at twice the running type's number (and 100 Mb/s more) at their worst, in at least three full tests, none failed in a week (`knowledge.cousin_worsts`). A kind with such
+outside proof needs only ONE passed full test on the pair to be taken by the rule above (its slowest test still has to clear the bar); the swap still builds it beside the tunnel and measures it through itself first. Not proved on
+a real tunnel.
+
 ## The failovers of one outage do not collide (1.69.287)
 
 When several Iran servers are cut or off in the same minute, every one of them is planned and started at once, and their tunnels go to the Iran servers that are left. Two things made some of those failovers end "not ok" (2026-11-17, four

@@ -363,7 +363,7 @@ SPEEDIER_RATIO = 2.0            # (1.69.300) a type is MUCH faster when even the
 SPEEDIER_MIN_GAIN = 100.0       # ... and at least this many Mb/s more
 
 
-def speedier_kinds(pair: dict | None, now: int, current: str, allowed=lambda k: True) -> list[dict]:
+def speedier_kinds(pair: dict | None, now: int, current: str, allowed=lambda k: True, cousin: dict | None = None) -> list[dict]:
     """Pure: (1.69.300, the owner, 2026-11-23: two tunnels of the same kind of config, one gave 188 Mb/s and the other 73 - "the Doctor must diagnose this and fix it well") the types the Doctor's memory of the pair
     knows to be MUCH faster than the RUNNING type, for a tunnel whose own type is not proven steady either. The rule of `upgrade_kinds` (a better type must be proven steady, STEADY_OK) can never be met on a pair
     where every type had a failed test, so a slow type that a repair had put on as a stopgap stayed for ever although the memory held a type that carried seven times as much. Here a type counts when: the running
@@ -371,7 +371,8 @@ def speedier_kinds(pair: dict | None, now: int, current: str, allowed=lambda k: 
     tests of the last STEADY_RECENT failed, the SLOWEST of its kept full tests still gave SPEEDIER_RATIO times the running type's number (and SPEEDIER_MIN_GAIN Mb/s more), it lost at most UPGRADE_MAX_LOSS %, answers
     about as fast (`_ping_ok`), is not heavier on the wire, was measured less than FASTER_FRESH ago, and the licence allows it. A type that a FULL test called poor is left out; one that a latency-only test called
     poor (a test with no speed in it - it scores a type from its ping alone, and fails when the server was busy that minute) is not: the swap builds the type beside the tunnel and measures it through itself before
-    a single user moves, so a type that is no good now is refused there. The one with the best worst test first."""
+    a single user moves, so a type that is no good now is refused there. The one with the best worst test first. `cousin` (1.69.301, `cousin_worsts`): what the pairs of OTHER Iran servers to the same foreign server
+    proved of each kind - a kind that those pairs carried at least as much as this rule asks needs only ONE passed full test on this pair (the slowest one still has to clear the bar), not STEADY_MIN_TESTS."""
     kinds = (pair or {}).get("kinds") or {}
     cur_e = kinds.get(current) or {}
     full = cur_e.get("full") or {}
@@ -401,7 +402,9 @@ def speedier_kinds(pair: dict | None, now: int, current: str, allowed=lambda k: 
         fulls = [x for x in (e.get("hist") or []) if x.get("m") == "full" and now - int(x.get("at") or 0) <= FULL_FRESH]
         passes = [float(x["down"]) for x in fulls if x.get("ok") and x.get("down") is not None]
 
-        if len(passes) < STEADY_MIN_TESTS or any(not x.get("ok") for x in fulls if now - int(x.get("at") or 0) <= STEADY_RECENT):
+        backed = (cousin or {}).get(r["kind"]) if float(((cousin or {}).get(r["kind"]) or {}).get("worst") or 0) >= need else None
+
+        if len(passes) < (1 if backed else STEADY_MIN_TESTS) or any(not x.get("ok") for x in fulls if now - int(x.get("at") or 0) <= STEADY_RECENT):
             continue
 
         worst = min(passes)
@@ -409,7 +412,7 @@ def speedier_kinds(pair: dict | None, now: int, current: str, allowed=lambda k: 
         if worst < need or float(r.get("loss_pct") or 0) > UPGRADE_MAX_LOSS or not _ping_ok(r, full) or not (r["wire"] < overhead.HEAVY or r["wire"] <= c_cur):
             continue
 
-        out.append({**r, "worst": worst, "passes": len(passes), "base": base})
+        out.append({**r, "worst": worst, "passes": len(passes), "base": base, "backed": backed})
 
     return sorted(out, key=lambda r: (-r["worst"], -float(r["down_mbps"])))
 
@@ -1143,6 +1146,92 @@ def verify_kinds(pair: dict | None, now: int, current: str, allowed=lambda k: Tr
     return out
 
 
+SCOUT_MAX = 1                   # (1.69.301) a pair is given at most this many scout kinds in one verify survey (each is a speed test of up to 120 MB)
+
+
+def cousin_worsts(doc_pairs: dict | None, iran_id: int, foreign_id: int, now: int) -> dict[str, dict]:
+    """Pure (1.69.301): what the pairs of OTHER Iran servers to the same foreign server proved of each kind: kind -> {"worst": the slowest passed full test of the best such pair, "passes": how many, "iran_id": that pair's Iran
+    server}. A kind counts for a pair only with at least STEADY_MIN_TESTS passed full tests in FULL_FRESH and none failed in the last STEADY_RECENT. The foreign server is the part of a route that every Iran server shares (its
+    CPU, its network, its filter), so what a kind carries from one Iran server says much about what it will carry from another - not everything (the Iran side differs), which is why a kind is only TESTED on the pair
+    from this, never changed to on this alone."""
+    out: dict[str, dict] = {}
+
+    for key, p in (doc_pairs or {}).items():
+        try:
+            i, f = (int(x) for x in str(key).split(":"))
+        except ValueError:
+            continue
+
+        if f != int(foreign_id) or i == int(iran_id):
+            continue
+
+        for kind, e in ((p or {}).get("kinds") or {}).items():
+            fulls = _full_tests(e, now)
+            passes = [float(x["down"]) for x in fulls if x.get("ok") and x.get("down") is not None]
+
+            if len(passes) < STEADY_MIN_TESTS or any(not x.get("ok") for x in fulls if now - int(x.get("at") or 0) <= STEADY_RECENT):
+                continue
+
+            worst = min(passes)
+
+            if worst > float((out.get(kind) or {}).get("worst") or 0):
+                out[kind] = {"worst": worst, "passes": len(passes), "iran_id": i}
+
+    return out
+
+
+def cousins(iran_id: int, foreign_id: int, now: int) -> dict[str, dict]:
+    """What the other Iran servers' pairs to this foreign server proved of each kind (`cousin_worsts` on the kept memory)."""
+    return cousin_worsts(_doc()["pairs"], iran_id, foreign_id, now)
+
+
+def scout_kinds(pair: dict | None, now: int, current: str, cousin: dict | None, allowed=lambda k: True) -> list[str]:
+    """Pure (1.69.301, the owner, 2026-11-24: Germany-2 ran a type that gave 73 Mb/s where Germany-1 gave 188, and the Doctor did nothing - the pair of the moved tunnel held a speed number of NO BackPack type: the night survey
+    asks only delay and loss, a type that such a test calls poor is nobody's rival and is not looked at for a month, so no speed test ever came): the kinds of this pair that were never given a SPEED test (no full test in
+    FULL_FRESH, and not failed or untested) but that other Iran servers' pairs to the same foreign server proved at least as much faster than the RUNNING type as `speedier_kinds` asks (twice and SPEEDIER_MIN_GAIN more,
+    at their worst). Only when the running type has a fresh full test and is itself not proven steady. The best proof first, at most SCOUT_MAX. They are TESTED, not changed to: the test is the one number the pair lacked."""
+    kinds = (pair or {}).get("kinds") or {}
+    cur_e = kinds.get(current) or {}
+    full = cur_e.get("full") or {}
+
+    if not cousin or full.get("down_mbps") is None or now - int(full.get("at") or 0) > FASTER_FRESH:
+        return []
+
+    st_cur = stability(cur_e, now)
+
+    if st_cur is not None and st_cur["pct"] >= STEADY_OK:
+        return []
+
+    base = float(full["down_mbps"])
+    need = max(base * SPEEDIER_RATIO, base + SPEEDIER_MIN_GAIN)
+    rows = []
+
+    for k, c in cousin.items():
+        e = kinds.get(k)
+
+        if k == current or not allowed(k) or float(c.get("worst") or 0) < need or _full_tests(e, now) or verdict(e) in ("failed", "untested"):
+            continue
+
+        rows.append((float(c["worst"]), k))
+
+    return [k for _, k in sorted(rows, reverse=True)[:SCOUT_MAX]]
+
+
+def verify_set(pair: dict | None, now: int, curs, cousin: dict | None, allowed=lambda k: True) -> list[str]:
+    """Pure: the kinds a live pair is given a full test now: for every running type the running type and its best rivals (`verify_kinds`, VERIFY_RIVALS + 2 in all), then the scouts of `scout_kinds` after them."""
+    kinds: list[str] = []
+
+    for cur in sorted(curs):
+        kinds += [k for k in verify_kinds(pair, now, cur, allowed) if k not in kinds]
+
+    kinds = kinds[: VERIFY_RIVALS + 2]
+
+    for cur in sorted(curs):
+        kinds += [k for k in scout_kinds(pair, now, cur, cousin, allowed) if k not in kinds]
+
+    return kinds
+
+
 def verify_pairs(now: int) -> list[tuple[int, int, list[str]]]:
     """The live pairs whose running types (and their best rivals) are due a full test: (Iran id, foreign id, the kinds), the pair with the fewest full tests first."""
     from . import autopilot, license
@@ -1162,13 +1251,10 @@ def verify_pairs(now: int) -> list[tuple[int, int, list[str]]]:
                 continue
 
             p = d["pairs"].get(pair_key(i, f)) or {}
-            kinds = []
-
-            for cur in sorted(curs):
-                kinds += [k for k in verify_kinds(p, now, cur, license.tunnel_kind_allowed) if k not in kinds]
+            kinds = verify_set(p, now, curs, cousin_worsts(d["pairs"], i, f, now), license.tunnel_kind_allowed)
 
             if kinds:
-                out.append((min(len(_full_tests((p.get("kinds") or {}).get(k), now)) for k in kinds), i, f, kinds[: VERIFY_RIVALS + 2]))
+                out.append((min(len(_full_tests((p.get("kinds") or {}).get(k), now)) for k in kinds), i, f, kinds))
 
     return [(i, f, k) for _, i, f, k in sorted(out)]
 

@@ -1133,16 +1133,17 @@ def _upgrade_check(tunnel_id: int) -> None:
     steadier = cuts >= knowledge.STEADY_CUTS
     rows = knowledge.steadier_kinds(p, now, cur, license.tunnel_kind_allowed) if steadier else []
     rows = rows or knowledge.upgrade_kinds(p, now, cur, license.tunnel_kind_allowed)
+    steady_rows = [r for r in rows if r.get("steady") is not None and r["steady"] >= knowledge.STEADY_OK]          # (1.69.301: a type of unknown steadiness must not hide a type that is MUCH faster)
     quick = []
 
-    if not rows:                                                      # (1.69.300: nothing STEADY is better known - is a type known that is MUCH faster, though no type of this pair is proven steady?)
-        quick = knowledge.speedier_kinds(p, now, cur, license.tunnel_kind_allowed)
+    if not steady_rows:                                                      # (1.69.300: nothing STEADY is better known - is a type known that is MUCH faster, though no type of this pair is proven steady?)
+        quick = knowledge.speedier_kinds(p, now, cur, license.tunnel_kind_allowed, knowledge.cousins(snap["iran_id"], snap["foreign_id"], now))
 
         if quick and _cuts_lately(tunnel_id, now, SPEEDIER_QUIET // 3600):
             quick = []
 
     lighter = not rows and not quick
-    rows = rows or quick or knowledge.lighter_kinds(p, now, cur, license.tunnel_kind_allowed)          # (1.69.223: nothing faster is known - is there a type that costs far less on the wire and is nearly as good?)
+    rows = steady_rows or quick or (knowledge.lighter_kinds(p, now, cur, license.tunnel_kind_allowed) if not rows else [])          # (1.69.223: nothing faster is known - is there a type that costs far less on the wire and is nearly as good?)
     rows = [r for r in rows if r.get("worst") is not None or (r.get("steady") is not None and r["steady"] >= knowledge.STEADY_OK)]          # (not proven steady: not by itself, and nothing is suggested)
 
     if not rows or any(x.get("tunnel") == snap["name"] for x in doctor._state()["suggestions"]):          # (a move suggestion of the tunnel is more urgent)
@@ -1164,6 +1165,10 @@ def _upgrade_check(tunnel_id: int) -> None:
                f"({age} h ago) and never less than {r['worst']:.0f} Mb/s in its {r['passes']} full tests, lost {float(r.get('loss_pct') or 0):g} % and answered in {float(r.get('latency_ms') or 0):.0f} ms. "
                f"No type of this pair is proven steady, so the steady rule could not act - but a tunnel that gives {r['worst'] / max(r['base'], 1):.1f} times less than another type of the same pair is not left on it. "
                "The new type is built beside the tunnel and measured through itself first; the users are not cut.")
+
+        if r.get("backed"):
+            why += (f" This pair holds {r['passes']} full test of {r['kind']} only; the pairs of other Iran servers to {snap['foreign_name']} carried it at {r['backed']['worst']:.0f} Mb/s at the least "
+                    f"in {r['backed']['passes']} full tests, and this pair's own test cleared the same bar.")
     elif steadier and not lighter:
         why = (f"{snap['name']} was cut {cuts} times in the last day. In the tests of {snap['iran_name']} ⇄ {snap['foreign_name']} {r['kind']} was steady: {r['passed']} of {r['tests']} tests passed, stability "
                f"{r['steady']} %, {float(r['down_mbps']):.0f} Mb/s, {float(r.get('latency_ms') or 0):.0f} ms. Many users need a type that does not drop.")

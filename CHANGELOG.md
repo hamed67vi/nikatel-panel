@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.69.301 - A type no test ever timed on a pair is timed there when other Iran servers proved it much faster
+
+The owner asked (2026-11-24, «with the new rule, why does it not change Germany-2?»). The Doctor had moved Germany-2's tunnel to another Iran server, and that pair held no speed number of any BackPack type: the night survey
+measures only delay and loss, a type that such a test calls poor is nobody's rival and is not looked at again for a month, so the rule of 1.69.300 had no number to act on - while the pairs of two other Iran servers to the same
+foreign server had carried the type at about 1000 Mb/s in many tests, the running type gave 137.
+
+New: `knowledge.cousin_worsts` (what other Iran servers' pairs to the same foreign server proved of each kind: at least three passed full tests, none failed in a week), `scout_kinds` (a kind with no speed test on the pair that
+those pairs carried at twice the running type's number and 100 Mb/s more at their worst), `verify_set` (the verify survey of a live pair whose running type is not proven steady now also tests one scout). A kind with such outside
+proof needs only one passed full test on the pair to be taken by the rule of 1.69.300 (its slowest test still clears the same bar); the swap builds it beside the tunnel and measures it through itself, the users are not cut.
+Every rail stands: once in 24 hours per tunnel, one change an hour for the panel, never a protected tunnel, modes fix and move only, nothing is changed to on outside proof alone - the pair's own test comes first.
+
+Not proved on a real tunnel yet. Not done: a speed reading through the users' real port for tunnels that run over a link.
+
 ## 1.69.300 - The Doctor changes a tunnel that runs far slower than its own memory knows another type to be
 
 The owner asked (2026-11-23, «two configs of the same kind, one is faster - the Doctor must diagnose this and fix it well»). One of two tunnels of the same kind gave 188 Mb/s through the real entry and the other 73 (six parallel
