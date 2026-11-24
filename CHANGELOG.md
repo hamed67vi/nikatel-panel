@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.69.304 - A cut tunnel moves to a server that still reaches its foreign server, leaving behind a port nobody uses
+
+> به زبان ساده: وقتی server خارج از ایران فیلتر شد، فقط دو Iran server هنوز به آن می‌رسیدند، ولی یک port قدیمی tunnel روی هر دو پر بود و Doctor می‌گفت «هیچ server ی جا ندارد». حالا برای tunnel قطع، port ی که هیچ config آن را استفاده نمی‌کند جا گذاشته می‌شود و tunnel به server ی که می‌رسد می‌رود.
+> In short: a cut tunnel now moves to an Iran server that still reaches its foreign server even if a port of it is taken there, when no probe config dials that port - the port is left off the move.
+
+The owner asked (2026-11-24, after the Canada tunnel: «build the second fix too»). The foreign server was filtered from 8 of the 10 Iran servers; the two that still reached it both forwarded the tunnel's legacy port 8075 already, and `detect.auto_iran` gives a server score 0 for ANY
+wanted port that another tunnel takes - so the move had no target ("no other Iran server can carry it") although the tunnel was cut on every port and no config dialled that port.
+
+- **`detect.tolerant`** (a context variable, so no caller changes): inside it `auto_iran` keeps the score of a server where a wanted port is taken (3 points less per port) and says `clash`. Only `failover._make_plan` (a plan for given tunnels, not a whole dead server)
+  and `failover.quality_move` ask for it, and only for a tunnel that is CUT (`down` / `degraded`); everything else keeps the strict rule.
+- **`failover.config_ports` / `spare_ports` / `clash_allowed` / `drop_for`** (pure parts tested): a port is never left behind when a probe config dials it (a config that carries the tunnel's name, or whose address is the Iran server or a DNS name that points at it); at least one port
+  of the tunnel always stays; a tunnel that is up leaves nothing behind. The plan says it (`drop`, `ports_note`), the story prints it, and `failover.plan_snap` makes the build on the target (`_work`, both the "server is on" and the "server is off" way) use
+  the port list without them (`builder.without_ports`). The port stays with the tunnel that has it there.
+- **Tests**: `tests/test_cut_tunnel_drops_port.py` (the tolerant ranking, the pure rules, the plan with and without a config on the port, a tunnel that is up, a whole-server plan, the snapshot of the build, the quality move's ranking).
+- **Not done**: a host of a PasarGuard panel that no probe config names is not known when the ports are chosen (a cut tunnel serves it with nothing now either); the move still waits for its rails (three a day, two hours between) and in the mode "move" for the speed test of `quality_move`; `pathscan.scan` still looks at three other Iran servers only.
 ## 1.69.303 - A tunnel that stays DEGRADED because its port is shut climbs the smart repair
 
 > به زبان ساده: یک tunnel که همهٔ port هایش بسته بود و کاربرها قطع بودند، چهار ساعت «خراب ولی نه قطع» ماند و Doctor هیچ کاری نکرد. حالا چنین tunnel ای مثل tunnel قطع، وارد تعمیر هوشمند می‌شود.

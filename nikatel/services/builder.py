@@ -90,6 +90,12 @@ def parse_ports(text: str) -> list[PortMap]:
     return out
 
 
+def without_ports(ports_text: str, gone) -> str:
+    """Pure (1.69.304): the port list of a tunnel without the Iran-side ports in `gone`, in the same text shape ('8075, 1840:1820' - a range is written out). '' when nothing is left."""
+    drop = {int(x) for x in gone}
+    return ",".join(p.spec() for p in parse_ports(ports_text) if p.listen not in drop)
+
+
 def pretty_name(foreign_name: str, iran_name: str, taken: set[str]) -> str:
     """<foreign>-<iran> style (e.g. fi-ir1), max 15 chars (Linux interface name), unique."""
     def slug(v: str, n: int) -> str:

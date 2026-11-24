@@ -1,6 +1,8 @@
 """The automatic choice of the Iran server for a new tunnel (ranked by quality, resources, load and free ports)."""
 from __future__ import annotations
 
+import contextlib
+import contextvars
 from concurrent.futures import ThreadPoolExecutor
 
 from sqlalchemy import select
@@ -24,12 +26,30 @@ def rank_key(r: dict) -> tuple:
     return (r.get("score", 0) <= 0, bool(r.get("gre_bad")), bool(r.get("prev_cut")), -(r.get("quality", 0) // 10), -r.get("resources", 0), -r.get("unused", 0), r.get("name", ""))
 
 
+_TOLERANT = contextvars.ContextVar("nikatel_ranking_tolerant", default=False)
+
+
+@contextlib.contextmanager
+def tolerant(on: bool = True):
+    """(1.69.304, the owner, 2026-11-24, the Canada tunnel) Inside this block `auto_iran` does not give a server score 0 for a wanted port that another tunnel of the panel takes there: it keeps the score (3 points less per port), says
+    `clash` (the ports) and leaves it to the caller to decide whether those ports may be left off. Only the move of a tunnel that is CUT asks for it (`failover._make_plan`, `failover.quality_move`): every port of a cut tunnel
+    carries nothing now, so a server that reaches the foreign server and has all but a port free brings back more than none. Every other caller keeps the strict rule. A context variable, not an argument: callers that
+    replace `auto_iran` or `autopilot.ranking` need no change."""
+    token = _TOLERANT.set(bool(on))
+
+    try:
+        yield
+    finally:
+        _TOLERANT.reset(token)
+
+
 def auto_iran(foreign_id: int, ports_text: str = "") -> list[dict]:
     """Rank the Iran servers for a new tunnel to this foreign server: ping quality from each one (loss,
     rtt), free resources, how many tunnels it already carries, and whether the wanted ports are free."""
     from .builder import parse_ports
 
     wanted = {p.listen for p in parse_ports(ports_text)} if ports_text.strip() else set()
+    tol = _TOLERANT.get()          # (read here, in the calling thread: the pings below run in a pool)
     walls = folders.load()          # (1.69.286: a server of a private Servers folder is a candidate only for a foreign server of that folder - and the foreign servers of the fleet have none of those Iran servers to choose from)
 
     with session() as db:
@@ -62,7 +82,7 @@ def auto_iran(foreign_id: int, ports_text: str = "") -> list[dict]:
                "gre_bad": gre_bad, "prev_cut": sid in prev}
         busy = wanted & load.get(("ports", sid), set())
 
-        if busy:
+        if busy and not tol:
             row.update(score=0, reason="port " + ", ".join(map(str, sorted(busy))) + " already used here")
             return row
 
@@ -80,8 +100,16 @@ def auto_iran(foreign_id: int, ports_text: str = "") -> list[dict]:
         q = max(0.0, 100 - loss * 10) * 0.6 + max(0.0, 100 - max(0.0, (avg or 0) - 40) / 2) * 0.4
         r = max(0.0, 100 - (facts.get("cpu") or 0)) * 0.5 + max(0.0, 100 - (facts.get("ram") or 0)) * 0.3 + max(0.0, 100 - min(100, (facts.get("load1") or 0) / (facts.get("cores") or 1) * 50)) * 0.2
         u = max(0.0, 100 - load.get(sid, 0) * 12.5)
-        row.update(rtt_ms=avg, loss_pct=loss, quality=round(q), resources=round(r), unused=round(u), score=round(q * 0.4 + r * 0.3 + u * 0.3),
-                   reason=f"{avg} ms, {loss}% loss, {load.get(sid, 0)} tunnels, cpu {facts.get('cpu')}%" + (" · GRE not OK: last choice" if gre_bad else "") + (f" · its tunnel to {fname} is {prev[sid]}" if sid in prev else ""))
+        score = round(q * 0.4 + r * 0.3 + u * 0.3)
+        note = ""
+
+        if busy:          # (tolerant: the ports are told, the score pays 3 points each)
+            score = max(1, score - 3 * len(busy))
+            note = " · port " + ", ".join(map(str, sorted(busy))) + " is used here already"
+            row["clash"] = sorted(busy)
+
+        row.update(rtt_ms=avg, loss_pct=loss, quality=round(q), resources=round(r), unused=round(u), score=score,
+                   reason=f"{avg} ms, {loss}% loss, {load.get(sid, 0)} tunnels, cpu {facts.get('cpu')}%" + (" · GRE not OK: last choice" if gre_bad else "") + (f" · its tunnel to {fname} is {prev[sid]}" if sid in prev else "") + note)
         return row
 
     with ThreadPoolExecutor(8) as ex:

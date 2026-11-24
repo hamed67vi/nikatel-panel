@@ -464,6 +464,65 @@ def _live_busy(server_id: int, ports: set[int]) -> list[int]:
     return sorted(ports & build_other.parse_simple_facts(run_script(node, "simple_facts", timeout=45))["tcp"])
 
 
+CUT_STATES = ("down", "degraded")          # a tunnel in one of these carries nothing on any of its ports: a move may leave a port behind that nothing uses (1.69.304)
+
+
+def config_ports(tunnels: list[dict], recs: list[dict], ip: str) -> dict[int, set[int]]:
+    """(1.69.304) {tunnel id: the ports of the tunnel that a probe config dials}: a config that carries the tunnel's name, or whose address is the Iran server itself or a DNS name that points at it (`recs`). A port in this set is
+    never left behind by a move: the config behind it would stay down. (A host of a PasarGuard panel that no probe config names is not known here - a cut tunnel serves it with nothing now either.)"""
+    names = {str(r.get("fqdn") or "").lower() for r in recs} | {str(ip or "").lower()}
+    names.discard("")
+
+    with session() as db:
+        configs = [(str(c.tunnel or ""), str((c.meta or {}).get("address", "")).lower(), int((c.meta or {}).get("port") or 0)) for c in db.scalars(select(Config))]
+
+    out: dict[int, set[int]] = {}
+
+    for t in tunnels:
+        out[t["id"]] = {port for label, addr, port in configs if port and port in t["ports"] and (label == t["name"] or addr in names)}
+
+    return out
+
+
+def spare_ports(tunnels: list[dict], used: dict[int, set[int]]) -> dict[int, set[int]]:
+    """Pure: {tunnel id: the ports a move may leave behind} - for a CUT tunnel (`CUT_STATES`) the ports no probe config dials; a tunnel that is up leaves nothing behind."""
+    return {t["id"]: (set(t["ports"]) - used.get(t["id"], set())) if t.get("state") in CUT_STATES else set() for t in tunnels}
+
+
+def clash_allowed(row: dict, ports: set[int], spare: set[int]) -> bool:
+    """Pure: may this ranking row (`detect.tolerant`: it says the ports of the tunnel that another tunnel takes on that server, `clash`) be a target? Every clashing port must be one the move may leave behind, and at least one
+    port of the tunnel must stay. A row with no clash is always allowed."""
+    clash = set(row.get("clash") or ())
+    return not clash or (clash <= spare and bool(set(ports) - clash))
+
+
+def drop_for(moving: list[dict], spare: dict[int, set[int]], server_id: int) -> dict[int, list[int]]:
+    """{tunnel id: ports left behind} when these tunnels move to this Iran server: the ports a panel tunnel there takes already, if the move may leave them (`spare_ports`) and the tunnel keeps another port."""
+    busy = _ports_on(server_id)
+    out: dict[int, list[int]] = {}
+
+    for t in moving:
+        gone = set(t["ports"]) & busy & spare.get(t["id"], set())
+
+        if gone and set(t["ports"]) - gone:
+            out[t["id"]] = sorted(gone)
+
+    return out
+
+
+def plan_snap(p: dict, tunnel_id: int, snap: dict) -> dict:
+    """The snapshot of a tunnel for the build on the target: without the ports the plan leaves behind (`p["drop"]`; the keys are text after the plan went through JSON). Unchanged when nothing is left behind."""
+    from . import builder
+
+    drop = p.get("drop") or {}
+    gone = drop.get(tunnel_id) or drop.get(str(tunnel_id)) or []
+
+    if not gone:
+        return snap
+
+    return {**snap, "ports": builder.without_ports(snap["ports"], gone)}
+
+
 def _ports_problem(server_id: int, ports: set[int]) -> str:
     """'' when every port of `ports` is free on this Iran server: no tunnel of the panel forwards it there AND nothing listens on it (looked at over SSH); else the sentence that says why not.
     A server that cannot be looked at counts as not usable: a move must not start on a guess."""
@@ -517,6 +576,7 @@ def _make_plan(server_id: int, move: set[int] | None, reason: str, target_id: in
     left = [] if whole else [{"fqdn": r["fqdn"], "configs": r["configs"], "tunnels": r["tunnels"]} for r in recs if r not in dns]
     rankings, problems, skipped, candidates = {}, [], {}, []
     ports = set().union(*(t["ports"] for t in moving)) if moving else set()
+    spare: dict[int, set[int]] = spare_ports(moving, config_ports(moving, recs, info["ip"])) if move is not None and any(t.get("state") in CUT_STATES for t in moving) else {}          # (1.69.304: a whole-server plan keeps the old rule)
 
     target = None
 
@@ -537,8 +597,13 @@ def _make_plan(server_id: int, move: set[int] | None, reason: str, target_id: in
 
     if strict or not target_id:
         def rank_one(t: dict) -> tuple[list[dict] | None, str]:
+            from . import detect
+
             try:
-                return [r for r in autopilot.ranking(t["id"]) if r.get("online", True) is not False and r.get("score", 0) > 0 and r["id"] not in exclude], ""
+                with detect.tolerant(bool(spare.get(t["id"]))):          # (1.69.304: only a CUT tunnel that has a port to leave behind)
+                    rows = autopilot.ranking(t["id"])
+
+                return [r for r in rows if r.get("online", True) is not False and r.get("score", 0) > 0 and r["id"] not in exclude and clash_allowed(r, t["ports"], spare.get(t["id"], set()))], ""
             except (ValueError, RuntimeError) as e:
                 return None, f"{t['name']}: {str(e)[:120]}"
 
@@ -576,7 +641,8 @@ def _make_plan(server_id: int, move: set[int] | None, reason: str, target_id: in
             ranked = [c for c in ranked if c["id"] == target["id"]]
 
         for c in ranked[:5]:
-            bad = _ports_problem(c["id"], ports)
+            left = {x for ps in drop_for(moving, spare, c["id"]).values() for x in ps}          # (the ports a cut tunnel leaves behind there are not asked for)
+            bad = _ports_problem(c["id"], ports - left)
 
             if bad:
                 skipped[c["id"]] = {"name": c["name"], "why": bad}
@@ -584,6 +650,17 @@ def _make_plan(server_id: int, move: set[int] | None, reason: str, target_id: in
                 candidates.append(c)
 
         target = candidates[0] if candidates else None
+
+    drop = drop_for(moving, spare, target["id"]) if target and spare else {}
+
+    if drop:
+        names = {t["id"]: t["name"] for t in moving}
+        said = "; ".join(f"{names[tid]}: port {', '.join(str(x) for x in ps)}" for tid, ps in sorted(drop.items()))
+        ports_note = (f"{target['name']} takes the tunnel without a port that another tunnel there already has ({said}): the tunnel is cut, it carries nothing on any port now, and no probe config dials that port on it. "
+                      "The port stays with the other tunnel.")
+    else:
+        ports_note = ""
+
     if moving and not target and not defer:
         problems.append("no other Iran server can carry all of these tunnels" + (" (" + "; ".join(f"{v['name']}: {v['why']}" for v in skipped.values())[:300] + ")" if skipped else ""))
 
@@ -607,6 +684,10 @@ def _make_plan(server_id: int, move: set[int] | None, reason: str, target_id: in
 
     if kept:
         out["protected"] = kept
+
+    if drop:
+        out["drop"] = drop
+        out["ports_note"] = ports_note
 
     if defer:
         out["_rankings"] = rankings
@@ -1398,7 +1479,8 @@ def _work(aid: int, p: dict, finish: bool = True) -> bool:
             return "", None
 
         try:
-            snap = autopilot._snapshot(t["id"])
+            snap = plan_snap(p, t["id"], autopilot._snapshot(t["id"]))
+            kw = {"snap": snap} if p.get("drop") else {}          # (1.69.304: the build must see the port list without the ports left behind; otherwise the call stays as it was)
 
             with session() as db:
                 row = db.get(Tunnel, t["id"])
@@ -1408,12 +1490,12 @@ def _work(aid: int, p: dict, finish: bool = True) -> bool:
 
             fast = _fast_kind(aid, snap, p["target"])
             kind = fast or _best_kind(aid, snap, p["target"], pairs, first_ok=True)      # (a dead server: the first type that connects, in the Doctor's order - no time for a full comparison)
-            ok = autopilot._replace(aid, t["id"], p["target"]["id"], snap["foreign_id"], kind, f"Failover: {p['why']}.", skip_offline=True)
+            ok = autopilot._replace(aid, t["id"], p["target"]["id"], snap["foreign_id"], kind, f"Failover: {p['why']}.", skip_offline=True, **kw)
 
             if not ok and fast:                                                  # (1.69.262: the type built without a test did not come up: the types are tested now, as before)
                 autopilot._say(aid, f"{snap['name']}: {fast} did not build on {p['target']['name']}: the types are tested now.")
                 kind = _best_kind(aid, snap, p["target"], pairs, first_ok=True)
-                ok = autopilot._replace(aid, t["id"], p["target"]["id"], snap["foreign_id"], kind, f"Failover: {p['why']}.", skip_offline=True)
+                ok = autopilot._replace(aid, t["id"], p["target"]["id"], snap["foreign_id"], kind, f"Failover: {p['why']}.", skip_offline=True, **kw)
 
             if ok:
                 new = builder.follow_move(snap["name"], bool((snap.get("record") or {}).get("custom_name")))          # (1.69.243: the rebuilt tunnel runs on the new Iran server: a name the panel made follows it)
@@ -1464,7 +1546,7 @@ def _work(aid: int, p: dict, finish: bool = True) -> bool:
             continue
 
         try:
-            snap = autopilot._snapshot(t["id"])
+            snap = plan_snap(p, t["id"], autopilot._snapshot(t["id"]))
             kind = old_kind = autopilot.kind_of(snap["type"], snap["transport"], snap["record"])
             temp = _temp_name(snap["name"], str((snap.get("record") or {}).get("slug") or ""))
             autopilot._say(aid, f"{snap['name']}: building the new {kind} tunnel on {p['target']['name']} as {temp} (the old one keeps running)…")
@@ -1619,6 +1701,33 @@ def _run(aid: int, p: dict) -> bool:
         autopilot.mass_end()
 
 
+def _cut_ranking(snap: dict, tunnel_id: int) -> list[dict]:
+    """(1.69.304) `autopilot.ranking` for the move of a tunnel: a CUT one (`CUT_STATES`) also sees the servers where only a port that nothing uses is taken - and only those whose clash the move may leave behind
+    (`clash_allowed`). A tunnel that is up gets the ranking as it was."""
+    from . import detect
+
+    row = snap.get("row") or {}
+
+    if row.get("state") not in CUT_STATES:
+        return autopilot.ranking(tunnel_id)
+
+    with detect.tolerant(True):
+        rows = autopilot.ranking(tunnel_id)
+
+    if not any(r.get("clash") for r in rows):
+        return rows
+
+    with session() as db:
+        t = db.get(Tunnel, tunnel_id)
+        sid, ip = t.iran_server_id, t.iran.host
+
+    tunnels = [x for x in _tunnels_of(sid) if x["id"] == tunnel_id]
+    recs, _ = _records(ip, tunnels, hosts=False)
+    keep = spare_ports(tunnels, config_ports(tunnels, recs, ip)).get(tunnel_id, set())
+    ports = tunnels[0]["ports"] if tunnels else set()
+    return [r for r in rows if clash_allowed(r, ports, keep)]
+
+
 def quality_pick(ranking: list[dict], rtt: float | None) -> dict | None:
     """Pure: the Iran server a tunnel may be moved to by itself for quality - the first row of `autopilot.ranking` (best first) that is on, ranks at least QUALITY_MIN_SCORE, has the room for one more tunnel, did not fail its
     GRE check, has no cut tunnel of its own to this foreign server, answers it with at most QUALITY_LOSS % loss and in at most QUALITY_DELAY times the tunnel's own delay (`rtt`, None = not asked). None when there is none."""
@@ -1667,7 +1776,7 @@ def quality_move(aid: int, tunnel_id: int, reason: str, now_mbps: float, rtt: fl
         return False
 
     try:
-        cand = quality_pick(autopilot.ranking(tunnel_id), rtt)
+        cand = quality_pick(_cut_ranking(snap, tunnel_id), rtt)
     except (ValueError, RuntimeError) as e:
         say(f"No move for quality: the Iran servers could not be ranked ({str(e)[:100]}).")
         return False
