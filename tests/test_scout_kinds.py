@@ -40,7 +40,7 @@ def _doc(**extra):
 
 def test_other_iran_servers_to_the_same_foreign_server_count_and_nothing_else_does():
     z = kn.cousin_worsts(_doc(), 8, 73, NOW)
-    assert z["bp:wss"] == {"worst": 910.0, "passes": 4, "iran_id": 44} and z["bp:tcpmux"]["worst"] == 650.0
+    assert z["bp:wss"] == {"worst": 910.0, "passes": 4, "iran_id": 44, "best": 1012.0} and z["bp:tcpmux"]["worst"] == 650.0
     assert "ipsec:tcpmux" not in z                                                         # (this pair's own tests are no outside proof)
     assert kn.cousin_worsts({"8:73": _ours(), "44:90": _cousin()}, 8, 73, NOW) == {}       # (another foreign server says nothing about this one)
     assert kn.cousin_worsts({"8:73": _cousin()}, 8, 73, NOW) == {}                         # (the same pair is not its own cousin)

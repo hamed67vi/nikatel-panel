@@ -1009,6 +1009,7 @@ def _recommend_now(aid: int, iran_id: int, foreign_id: int, kinds: list[str], pa
 
 BETTER_BY = 10          # a candidate must score this much more than the tunnel it replaces
 QUIET_MBPS = 1.5        # below this traffic (both ways together) a swap hardly disturbs anyone
+QUIET_CONNS = 5         # (1.69.303) a tunnel whose traffic counters cannot be read (a BackPack tunnel shows none) is quiet when no more than this many connections are open on its ports
 VERY_BAD_LOSS = 30.0    # at this loss users are already suffering: no waiting for a quiet moment
 
 
@@ -1039,9 +1040,11 @@ def quiet_ok(rx: float | None, tx: float | None, loss: float | None) -> bool:
     return (rx or 0) + (tx or 0) < QUIET_MBPS
 
 
-def _wait_quiet(aid: int, tunnel_id: int, limit: int = 1800, loss_counts: bool = True) -> bool:
+def _wait_quiet(aid: int, tunnel_id: int, limit: int = 1800, loss_counts: bool = True, conns=None) -> bool:
     """Wait (up to `limit` s) for a quiet moment before the swap, so that customers are not cut while they use the tunnel. `loss_counts` False: a tunnel that loses many packets is NOT called quiet for that
-    (the swap beside the tunnel waits for the open connections to end, however bad the old tunnel is: nobody is cut)."""
+    (the swap beside the tunnel waits for the open connections to end, however bad the old tunnel is: nobody is cut). `conns` (1.69.303): a function that counts the connections open on the tunnel's ports (None: it cannot
+    be told); a tunnel whose traffic counters cannot be read - a BackPack tunnel shows none, `quiet_ok` called it quiet always and a move removed it ten minutes after its DNS changed, with every long connection on it - is
+    quiet only when at most QUIET_CONNS connections are open (or the loss is that bad that waiting costs more)."""
     end, said = time.time() + limit, False
 
     while True:
@@ -1050,9 +1053,18 @@ def _wait_quiet(aid: int, tunnel_id: int, limit: int = 1800, loss_counts: bool =
             rx, tx, loss = (t.rx_mbps, t.tx_mbps, (t.detail or {}).get("loss_pct") if loss_counts else None) if t is not None else (None, None, None)
 
         if quiet_ok(rx, tx, loss):
-            return True
+            if conns is None or rx is not None or tx is not None or (loss or 0) >= VERY_BAD_LOSS:
+                return True
 
-        if not said:
+            n = conns()
+
+            if n is not None and n <= QUIET_CONNS:
+                return True
+
+            if not said:
+                _say(aid, "Waiting for the users to leave it: " + (f"{n} connection(s) are still open on its ports" if n is not None else "its open connections could not be counted") + " (its traffic counters cannot be read), so customers are not cut.")
+                said = True
+        elif not said:
             _say(aid, f"Waiting for a quiet moment to swap it: {(rx or 0) + (tx or 0):.1f} Mb/s flow now (under {QUIET_MBPS} Mb/s is quiet), so customers are not cut.")
             said = True
 

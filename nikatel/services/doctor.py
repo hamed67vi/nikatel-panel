@@ -39,6 +39,8 @@ MODES = ("off", "fix", "move")
 MAX_PER_DAY = 3             # moves of one tunnel in 24 hours (out and back count)
 COOLDOWN = 2 * 3600         # between two moves of the same tunnel
 BACK_AFTER = 3600           # a server that came back must stay healthy this long before its tunnels return (1.69.230, the owner: one hour; it was three)
+RETURN_RETRY = 3 * 3600     # (1.69.303) a return that failed is not tried again for this long (it was tried every 10 minutes for hours: nine minutes of tests between two live servers each time) ...
+RETURN_TRIES = 3            # ... and not more than this many times in 24 hours
 SATURATED = 90.0            # % CPU or RAM ...
 SATURATED_FOR = 900         # ... over this many seconds of samples (one every 2 minutes)
 SATURATED_MIN_SAMPLES = 5
@@ -236,6 +238,37 @@ def ready_to_return(entry: dict, back_since: int | None, now: int, net_level: st
 
 
 # ------------------------------------------------------------------ the ledger and the suggestions
+def return_backoff(moves: list[dict], entry: dict, now: int, retry: int = RETURN_RETRY, tries: int = RETURN_TRIES) -> str:
+    """Pure (1.69.303): '' when the tunnels of this ledger entry may be tried to return now, else why not. A return that FAILED is a ledger entry of the reason "return" with ok False that went from the server the tunnels are on
+    to the server they left: the next try waits `retry`, and no more than `tries` of them in a day."""
+    fails = [m for m in moves if m.get("reason") == "return" and m.get("ok") is False and m.get("from_id") == entry.get("to_id") and m.get("to_id") == entry.get("from_id")]
+    last = max((int(m.get("at") or 0) for m in fails), default=0)
+
+    if last and now - last < retry:
+        return f"the last return failed {(now - last) // 60} minutes ago: the next try waits {retry // 3600} hours"
+
+    if sum(1 for m in fails if now - int(m.get("at") or 0) < 86400) >= tries:
+        return f"{tries} returns failed in the last day: the next try waits"
+
+    return ""
+
+
+def return_clash(tunnel_id: int, origin_id: int) -> str:
+    """(1.69.303) '' when the ports a tunnel forwards are free of the panel's other tunnels on the server it would return to, else the sentence: the return builds the tunnel there first and the build refuses a port that is held
+    (a tunnel left behind by an earlier try holds them), after nine minutes of tests."""
+    with session() as db:
+        t = db.get(Tunnel, tunnel_id)
+        mine = {int(x) for x in (t.forwarded_ports or []) if str(x).isdigit()} if t is not None else set()
+        held = [(x.name, sorted({int(p) for p in (x.forwarded_ports or []) if str(p).isdigit()} & mine)) for x in db.scalars(select(Tunnel).where(Tunnel.iran_server_id == origin_id, Tunnel.id != tunnel_id))]
+
+    held = [(n, p) for n, p in held if p]
+
+    if not held:
+        return ""
+
+    return "port " + ", ".join(str(p) for _n, ps in held for p in ps) + " is held on that server by " + ", ".join(f"the tunnel {n}" for n, _ps in held) + ": the tunnel is not returned until it is free"
+
+
 def record_move(p: dict, moved: list[str], leftover: list[dict], ok: bool) -> dict:
     """Written by failover._work when a plan ran: one ledger entry per plan. A return marks the entry it undoes."""
     s = _state()
@@ -484,6 +517,11 @@ def return_now(move_id: str) -> int:
         raise ValueError("these tunnels are no longer on the server they were moved to")
 
     tid = rows[0][0]
+    clash = return_clash(tid, int(e["from_id"]))
+
+    if clash:
+        raise ValueError(clash)
+
     return move_now(tid, int(e["from_id"]), "return", f"back to {e['from']} as asked", rails=False)
 
 
@@ -667,6 +705,19 @@ def returns() -> None:
         block = may_move(name, s["moves"], now, cooldown=0)          # (the hour of health is the wait: the two hours between two moves of a tunnel would hold the return back for another hour)
 
         if block:
+            continue
+
+        if return_backoff(s["moves"], e, now):
+            continue
+
+        clash = return_clash(tid, origin.id)
+
+        if clash:
+            if e.get("return_note") != clash:
+                e["return_note"] = clash
+                _save(s)
+                log.info("return of %s is not tried: %s", name, clash)
+
             continue
 
         try:

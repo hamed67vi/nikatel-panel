@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.69.305 - A move keeps the type that the speed tests know to be fast, a failed return waits, an old BackPack tunnel is not removed under its users
+
+The owner asked (2026-11-24, «find the root of the error in the move code and fix it in this session»). Germany-2 had been put on the fast type by hand; when the Iran server it had been moved away from came back, the Doctor's
+return tested six types by delay and loss alone, took the best score (a Backhaul type over a link, 62, against 44 for bp:wss, which gave 1000 Mb/s), built it, re-pointed four DNS records and by the evening 1300 users were on
+the slow tunnel; the old tunnel stood idle (its counters cannot be read, so it counted as quiet and was to be removed 10 minutes after the DNS changed, with every long connection on it). The return then failed every 10
+minutes for hours ("port is already in use": its own first try held it), nine minutes of tests between two live servers each time.
+
+New: `knowledge.move_objection` (a type is left out of a move's choice when the memory has speed tests of the type that runs and the other type has none or at best under half of it), `failover._speed_objections` (said in the
+story), `doctor.return_backoff` (3 hours after a failed return, at most 3 a day) and `doctor.return_clash` (not tried while another tunnel holds a port it forwards on that server; the reason is kept on the ledger entry),
+`ssh.port_conns` and `autopilot._wait_quiet(conns=)` (a tunnel whose counters cannot be read is removed after a move only when at most 5 connections are open on its ports). `knowledge.cousin_worsts` also reports the best test.
+
+Not proved on a real move yet.
+
 ## 1.69.304 - A cut tunnel moves to a server that still reaches its foreign server, leaving behind a port nobody uses
 
 > به زبان ساده: وقتی server خارج از ایران فیلتر شد، فقط دو Iran server هنوز به آن می‌رسیدند، ولی یک port قدیمی tunnel روی هر دو پر بود و Doctor می‌گفت «هیچ server ی جا ندارد». حالا برای tunnel قطع، port ی که هیچ config آن را استفاده نمی‌کند جا گذاشته می‌شود و tunnel به server ی که می‌رسد می‌رود.

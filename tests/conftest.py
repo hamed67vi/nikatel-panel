@@ -54,6 +54,7 @@ def _no_type_test_in_moves(monkeypatch):
 
     monkeypatch.setattr(failover, "PICK_BEST", False)
     monkeypatch.setattr(failover, "PUSH_CHECK", False)      # (1.69.260: the push probe before a move needs SSH - tests/test_move_resilience.py turns it on with a stub)
+    monkeypatch.setattr(failover, "_open_conns", lambda tid: 0)      # (1.69.303: counting the open connections of an old tunnel needs SSH, and a tunnel whose counters cannot be read is waited for up to 30 minutes when they cannot be counted: the tests that are not about it find it quiet)
     failover._PUSH.clear()
 
 

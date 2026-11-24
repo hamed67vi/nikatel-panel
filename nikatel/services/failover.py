@@ -1280,6 +1280,58 @@ def _test_pair(aid: int, snap: dict, target: dict, old: str, first_ok: bool) -> 
         return []
 
 
+def _speed_objections(aid: int, snap: dict, target: dict, old: str, results: list[dict]) -> dict[str, str]:
+    """(1.69.303) {type: why} for the tested types that the Doctor's SPEED tests (`knowledge.move_objection`) say are not as fast as the type the tunnel runs now; said in the story. {} when nothing is known or the memory cannot be read."""
+    from . import knowledge
+
+    try:
+        now = int(time.time())
+        origin = knowledge.pair(snap["iran_id"], snap["foreign_id"])
+        new = knowledge.pair(target["id"], snap["foreign_id"])
+        cousin = knowledge.cousins(target["id"], snap["foreign_id"], now)
+    except Exception:      # noqa: BLE001 - what is known that cannot be read must not stop a move: the delay-only choice stays as it was
+        return {}
+
+    out = {}
+
+    for r in results:
+        kind = r.get("kind")
+
+        if not kind or kind == old or not autopilot.connected(r):
+            continue
+
+        why = knowledge.move_objection(old, kind, origin, new, cousin, now)
+
+        if why:
+            out[kind] = why
+
+    if out:
+        autopilot._say(aid, f"{snap['name']}: a test of delay and loss cannot tell which type is faster; left out by what the Doctor's speed tests know: " + "; ".join(f"{k} ({w})" for k, w in out.items())[:600] + ".")
+
+    return out
+
+
+def _open_conns(tunnel_id: int) -> int | None:
+    """(1.69.303) The connections open on the ports a tunnel forwards, counted on its Iran server; None when they cannot be told (the server did not answer, nothing is forwarded)."""
+    from ..ssh import Node, SSHError, run_script
+
+    try:
+        with session() as db:
+            row = db.get(Tunnel, tunnel_id)
+
+            if row is None or row.iran is None or not row.forwarded_ports:
+                return None
+
+            node, ports = Node(row.iran.host, row.iran.ssh_user, row.iran.ssh_port), [int(x) for x in row.forwarded_ports if str(x).isdigit()]
+
+        out = run_script(node, "port_conns", {"PORTS": " ".join(str(p) for p in ports)}, timeout=30)
+    except (SSHError, ValueError, RuntimeError, OSError):
+        return None
+
+    rows = [ln.split() for ln in out.splitlines() if ln.startswith("S ")]
+    return sum(int(x[2]) for x in rows if len(x) == 3 and x[2].isdigit()) if rows else None
+
+
 def _best_kind(aid: int, snap: dict, target: dict, cache: dict, first_ok: bool = False, prefer: str = "") -> str:
     """The tunnel type to build on the new Iran server (the owner, 2026-10-19: "when it moves, the type stays the same as before unless the better ones do not answer - choose the best type here too"): the types are
     TESTED between the target and the foreign server (once for a pair, the tunnels of the pair share it); the best one that connects is built - but the type it has now stays when nothing beats it clearly
@@ -1300,7 +1352,9 @@ def _best_kind(aid: int, snap: dict, target: dict, cache: dict, first_ok: bool =
 
     results = cache[key]
     cur = next((r for r in results if r.get("kind") == old and autopilot.connected(r)), None)
-    best = autopilot.choose_better(cur.get("score") if cur else None, results) or (None if cur else autopilot.choose_better(None, results, cut=True))
+    objected = _speed_objections(aid, snap, target, old, results)          # (1.69.303: a delay-only score cannot tell a fast type from a slow one: where the Doctor has SPEED tests they decide)
+    kept = [r for r in results if r.get("kind") not in objected] or results
+    best = autopilot.choose_better(cur.get("score") if cur else None, kept) or (None if cur else autopilot.choose_better(None, kept, cut=True))
     shown = ", ".join(f"{r['kind']} {r.get('score')}" for r in results if autopilot.connected(r)) or "none connected"
     autopilot._say(aid, f"{snap['name']}: tested {len(results)} tunnel type(s) between {target['name']} and {snap['foreign_name']}: {shown}.")
 
@@ -1617,7 +1671,7 @@ def _work(aid: int, p: dict, finish: bool = True) -> bool:
                 _sleep(grace)
 
             for old_id, temp, snap in built:
-                if not autopilot._wait_quiet(aid, old_id, QUIET_LIMIT):         # the owner, 2026-10-19: "the old tunnel must not be cut until the new one is in place - the user must not feel a cut": it goes only when nobody uses it
+                if not autopilot._wait_quiet(aid, old_id, QUIET_LIMIT, conns=lambda old_id=old_id: _open_conns(old_id)):         # the owner, 2026-10-19: "the old tunnel must not be cut until the new one is in place - the user must not feel a cut": it goes only when nobody uses it
                     autopilot._say(aid, f"{snap['name']}: users still use the old tunnel on {p['server']} {QUIET_LIMIT // 60} minutes after the DNS changed (clients that hold the old address, or a config that has the address itself), so it is NOT removed. "
                                    f"The new tunnel runs beside it as {temp}; remove the old one by hand when it is quiet (its menu → Remove tunnel).")
                     errors.append(f"{snap['name']}: the old tunnel is still in use, kept")

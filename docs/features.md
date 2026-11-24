@@ -102,6 +102,14 @@ are not cut). A type that only a latency test called poor is not left out (that 
 business). The speed bar of the swap is the pair test of the running type, not the tunnel's own reading: on a tunnel that runs over a link the own reading can be the link's. Every other rail is as before: once in 24 hours per tunnel,
 one change an hour for the whole panel, never a protected tunnel, the modes fix and move only. Not proved on a real tunnel.
 
+**A move keeps the type the speed tests know to be fast (1.69.305).** When the Doctor moves or returns a tunnel it tests the types between the new Iran server and the foreign server, by delay and loss alone, and built the best
+score. That score cannot tell a fast type from a slow one (on a route of 80 ms every BackPack type scores 44, a Backhaul type over a link 60): a tunnel that gave 1000 Mb/s went back to its home server as a type that gives 120
+and the DNS followed (`knowledge.move_objection`, `failover._speed_objections`). Now a type is left out when the memory has speed tests of the type the tunnel runs (its slowest passed full test, on its own pair, the new pair or
+the other Iran servers' pairs to the same foreign server) and the other type has none, or at best under half of it (and 100 Mb/s less); the delay score chooses among what is left, and the type stays when nothing is left. A
+return that fails is not tried again for 3 hours (and not more than 3 times a day), and not at all while another tunnel of the panel holds a port the tunnel forwards on that server (it was tried every 10 minutes for hours,
+nine minutes of tests each time). The old tunnel of a move whose traffic counters cannot be read (a BackPack tunnel shows none, so it was always called quiet) is removed only when at most 5 connections are open on its ports
+(`ssh.port_conns`, `autopilot._wait_quiet(conns=)`), otherwise it is kept as before.
+
 **A transport that the newest BackPack breaks stays on the older release (1.69.302).** BackPack v2.0.0 answers its multiplexed transports (`tcpmux`, `wsmux`, `wssmux`) badly under many new connections: on a test
 tunnel with 250 new connections a second it served about 740 of 15 000 and logged «forwarded port: the queue is full, dropping a client» (a tunnel that is "up" while its users have a bad connection for hours), where
 v1.8.5 served all but one or two on the same servers, the same config, only the binary of the unit changed (the owner, 2026-11-24: «wssmux worked before the BackPack 2 update»). `engines.PINS` names the release

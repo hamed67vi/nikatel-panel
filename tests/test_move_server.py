@@ -311,7 +311,7 @@ def _tunnel_move_fakes(monkeypatch, events, said, quiet):
 
     monkeypatch.setattr(autopilot, "_build_kind", build)
     monkeypatch.setattr(autopilot, "_wait", _finished(True))
-    monkeypatch.setattr(autopilot, "_wait_quiet", lambda aid, tid, limit=1800: events.append(("quiet", tid, limit)) or quiet.pop(0))
+    monkeypatch.setattr(autopilot, "_wait_quiet", lambda aid, tid, limit=1800, **k: events.append(("quiet", tid, limit)) or quiet.pop(0))
     monkeypatch.setattr(builder, "delete_tunnel", delete)
     monkeypatch.setattr(failover, "_sleep", lambda secs: events.append(("sleep", secs)))
 

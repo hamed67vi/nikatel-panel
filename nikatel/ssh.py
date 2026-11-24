@@ -862,6 +862,10 @@ ping -c 10 -i 0.3 -W 1 -I '@IFACE@' '@PEER@' 2>&1 | tail -3
     "estab_check": (r"""ss -tnH state established '( sport = :@PORT@ )' 2>/dev/null | head -5
 """, {"PORT": r"^\d{1,5}$"}),
 
+    # (1.69.303) how many connections are open to each of these local ports - the users of a tunnel's forwarded ports: one "S <port> <count>" line each (0 too); only reads
+    "port_conns": (r"""for P in @PORTS@; do echo "S $P $(ss -Htn state established "( sport = :$P )" 2>/dev/null | wc -l)"; done
+""", {"PORTS": r"^\d{1,5}( \d{1,5}){0,200}$"}),
+
     # a request through a forwarded port on the Iran side
     "http_probe": (r"""curl -sS -m 8 -o /dev/null -w '%{http_code}' 'http://127.0.0.1:@PORT@/' 2>/dev/null || echo FAIL
 """, {"PORT": r"^\d{1,5}$"}),

@@ -1172,10 +1172,13 @@ def cousin_worsts(doc_pairs: dict | None, iran_id: int, foreign_id: int, now: in
             if len(passes) < STEADY_MIN_TESTS or any(not x.get("ok") for x in fulls if now - int(x.get("at") or 0) <= STEADY_RECENT):
                 continue
 
-            worst = min(passes)
+            worst, best = min(passes), max(passes)
+            prev = out.get(kind) or {}
 
-            if worst > float((out.get(kind) or {}).get("worst") or 0):
-                out[kind] = {"worst": worst, "passes": len(passes), "iran_id": i}
+            if worst > float(prev.get("worst") or 0):
+                out[kind] = {"worst": worst, "passes": len(passes), "iran_id": i, "best": max(best, float(prev.get("best") or 0))}
+            elif prev:
+                prev["best"] = max(best, float(prev.get("best") or 0))          # (1.69.303: the best test of any such pair too - what a kind CAN carry there)
 
     return out
 
@@ -1183,6 +1186,40 @@ def cousin_worsts(doc_pairs: dict | None, iran_id: int, foreign_id: int, now: in
 def cousins(iran_id: int, foreign_id: int, now: int) -> dict[str, dict]:
     """What the other Iran servers' pairs to this foreign server proved of each kind (`cousin_worsts` on the kept memory)."""
     return cousin_worsts(_doc()["pairs"], iran_id, foreign_id, now)
+
+
+def _passed_fulls(e: dict | None, now: int) -> list[float]:
+    """Pure: the speeds (Mb/s down) of the full tests of a kind that passed, kept and fresher than FULL_FRESH."""
+    return [float(x["down"]) for x in _full_tests(e, now) if x.get("ok") and x.get("down") is not None]
+
+
+def move_objection(running: str, candidate: str, origin_pair: dict | None, target_pair: dict | None, cousin: dict | None, now: int) -> str:
+    """Pure (1.69.303, the owner, 2026-11-24): '' when the Doctor's memory has no objection to a MOVE building `candidate` instead of the type `running` (the tunnel's own), else the sentence that says why. A move tests the types
+    between the new Iran server and the foreign server by delay and loss alone, and such a score cannot tell a fast type from a slow one: on a route of 80 ms every BackPack type scores 44 and a Backhaul type over a link
+    scores 60, so the Doctor moved a tunnel that gave 1000 Mb/s onto one that gives 120. Here the SPEED tests decide where they exist. What the running type carries: its slowest passed full test on the pair it runs on, on the
+    new pair, or at the other Iran servers' pairs to the same foreign server (`cousin`), the highest of these. What the candidate can carry: its best passed full test on the new pair or at those other pairs.
+    An objection when the running type has such a number and (a) the candidate has none - nothing says it is as fast - or (b) its best is under 1/SPEEDIER_RATIO of it and SPEEDIER_MIN_GAIN less. Nothing is known about the
+    running type: no objection (the delay-only test is all there is)."""
+    def low(p: dict | None, k: str) -> float | None:
+        ps = _passed_fulls(((p or {}).get("kinds") or {}).get(k), now)
+        return min(ps) if ps else None
+
+    runs = [v for v in (low(origin_pair, running), low(target_pair, running), float(((cousin or {}).get(running) or {}).get("worst") or 0) or None) if v is not None]
+
+    if not runs:
+        return ""
+
+    base = max(runs)
+    ps = _passed_fulls(((target_pair or {}).get("kinds") or {}).get(candidate), now)
+    got = max([*ps, float(((cousin or {}).get(candidate) or {}).get("best") or 0)])
+
+    if got <= 0:
+        return f"it has no speed test for this foreign server, and {running} carried {base:.0f} Mb/s even at its slowest"
+
+    if got * SPEEDIER_RATIO <= base and base - got >= SPEEDIER_MIN_GAIN:
+        return f"it carried {got:.0f} Mb/s at its best, {running} {base:.0f} Mb/s at its slowest"
+
+    return ""
 
 
 def scout_kinds(pair: dict | None, now: int, current: str, cousin: dict | None, allowed=lambda k: True) -> list[str]:
