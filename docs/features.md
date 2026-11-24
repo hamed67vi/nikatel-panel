@@ -102,6 +102,13 @@ are not cut). A type that only a latency test called poor is not left out (that 
 business). The speed bar of the swap is the pair test of the running type, not the tunnel's own reading: on a tunnel that runs over a link the own reading can be the link's. Every other rail is as before: once in 24 hours per tunnel,
 one change an hour for the whole panel, never a protected tunnel, the modes fix and move only. Not proved on a real tunnel.
 
+**A transport that the newest BackPack breaks stays on the older release (1.69.302).** BackPack v2.0.0 answers its multiplexed transports (`tcpmux`, `wsmux`, `wssmux`) badly under many new connections: on a test
+tunnel with 250 new connections a second it served about 740 of 15 000 and logged «forwarded port: the queue is full, dropping a client» (a tunnel that is "up" while its users have a bad connection for hours), where
+v1.8.5 served all but one or two on the same servers, the same config, only the binary of the unit changed (the owner, 2026-11-24: «wssmux worked before the BackPack 2 update»). `engines.PINS` names the release
+(`v1.8.5`), the file beside the newest one (`/usr/local/bin/backpack-v1`) and the transports; `build_other._build` puts that file on both servers (`engines.ensure_pinned_on_node`, the panel's cache holds the
+release, it is downloaded and verified when missing; no unit is restarted) and writes the units of such a transport against it. Every other transport and the Update button for the newest release are unchanged;
+the two ends of a tunnel always run the same release. A tunnel built before keeps the binary it was built with.
+
 **A type is given a speed test where other Iran servers proved it (1.69.301).** The rule above needs a speed number of the better type on THE PAIR, and a pair can hold none: the night survey asks only delay and loss, a type that
 such a test calls poor is nobody's rival, and it is not tested again for a month - so after the Doctor moved Germany-2's tunnel to another Iran server, the new pair knew no BackPack type's speed at all and the rule had nothing to
 act on (the owner, 2026-11-24). Now the verify survey of a live pair whose running type is not proven steady also tests (one per pair, `knowledge.scout_kinds`) a kind that has no speed test on the pair but that the pairs of

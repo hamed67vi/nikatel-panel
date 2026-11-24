@@ -335,7 +335,7 @@ token = "{token}"
     return iran, foreign
 
 
-def bp_unit(name: str, cfg: str, side: str, fw: str = "") -> str:
+def bp_unit(name: str, cfg: str, side: str, fw: str = "", binary: str = "/usr/local/bin/backpack") -> str:
     pre = f"ExecStartPre=/usr/local/sbin/{fw} up\n" if fw else ""
     post = f"ExecStopPost=/usr/local/sbin/{fw} down\n" if fw else ""
     return f"""[Unit]
@@ -344,7 +344,7 @@ After=network.target
 
 [Service]
 Type=simple
-{pre}ExecStart=/usr/local/bin/backpack -c {cfg}
+{pre}ExecStart={binary} -c {cfg}
 {post}Restart=always
 RestartSec=3
 LimitNOFILE=1048576
@@ -1008,23 +1008,34 @@ def _build(b: Build) -> None:
         if engines.ensure_on_node(node, eng):
             _say(aid, f"{engines.ENGINES[eng]['title']} installed on the {label} server")
 
+    pin = engines.pin_for(eng, b.transport) if b.kind == "backpack" else None          # (1.69.302: a transport that the newest release breaks runs on the older one)
+
+    if pin:
+        for label, node in (("Iran", iran), ("foreign", foreign)):
+            if engines.ensure_pinned_on_node(node, eng, pin):
+                _say(aid, f"{engines.ENGINES[eng]['title']} {pin['version']} installed on the {label} server")
+
     token, key = secrets.token_hex(24), secrets.token_hex(8)
     proto = "udp" if b.udp else "tcp"
 
     if b.kind == "backpack":
         label = BP_TRANSPORTS[b.transport][0]
         _say(aid, f"BackPack · {label}: the foreign server dials the Iran server")
+
+        if pin:
+            _say(aid, f"This transport runs on BackPack {pin['version']}: the newest release answers it badly under many new connections")
+
         server, client = backpack_texts(b.iran.host, b.port, token, b.transport, b.ports, b.test_port, str(b.opts.get("preset") or "turbo"), b.opts)
         _install_sink(b, foreign, key)
         _put(iran, f"/etc/backpack/{b.name}.toml", server, "0600")
-        _put(iran, f"/etc/systemd/system/backpack-{b.name}.service", bp_unit(b.name, f"/etc/backpack/{b.name}.toml", "Iran"), "0644")
+        _put(iran, f"/etc/systemd/system/backpack-{b.name}.service", bp_unit(b.name, f"/etc/backpack/{b.name}.toml", "Iran", binary=(pin or {}).get("bin", "/usr/local/bin/backpack")), "0644")
 
         if fi["ufw"]:
             run_action(iran, "ufw_allow", {"PORT": str(b.port), "PROTO": proto})
 
         _start(iran, "Iran", f"backpack-{b.name}.service", b)
         _put(foreign, f"/etc/backpack/{b.name}-kharej.toml", client, "0600")
-        _put(foreign, f"/etc/systemd/system/backpack-{b.name}-kharej.service", bp_unit(b.name, f"/etc/backpack/{b.name}-kharej.toml", "foreign"), "0644")
+        _put(foreign, f"/etc/systemd/system/backpack-{b.name}-kharej.service", bp_unit(b.name, f"/etc/backpack/{b.name}-kharej.toml", "foreign", binary=(pin or {}).get("bin", "/usr/local/bin/backpack")), "0644")
         _start(foreign, "foreign", f"backpack-{b.name}-kharej.service", b)
         _say(aid, "BackPack: services running on both servers")
         _wait_for_data(b, iran, key, f"Is {proto.upper()} port {b.port} open between the servers?", foreign, f"backpack-{b.name}-kharej.service")

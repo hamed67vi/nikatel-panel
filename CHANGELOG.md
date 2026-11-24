@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.69.302 - A transport that BackPack 2 answers badly stays on the older release
+
+The owner said (2026-11-24) that `wssmux` worked before the BackPack 2 update and asked to roll that protocol, and every protocol that ran into trouble, back to the older version, or to fix it. Measured on a test
+tunnel between two servers of the fleet (one transport at a time, the same toml, only the binary of the unit switched between v2.0.0 and v1.8.5; load: new short connections, 400 idle-ish connections, 8 bulk streams):
+at 250 new connections a second v2.0.0 served about 740 of 15 000 on `tcpmux`, `wsmux` and `wssmux` alike, at 60 a second 351 of 3 599 (the Iran end logs «forwarded port: the queue is full, dropping a client»), v1.8.5
+all or all but one or two; the bulk speed is the same (about 560 Mb/s each way). `wss`, `stealth`, `tcp` and `ws` at 60 and 120 a second: v2.0.0 is the same as v1.8.5 or better, so they are not pinned.
+
+New: `engines.PINS` / `pin_for` / `pin_file` / `ensure_pinned_on_node`: the older release (`v1.8.5`) is put beside the newest one (`/usr/local/bin/backpack-v1`, from the panel's cache or downloaded from that release
+and verified) on both servers of a tunnel of such a transport, and `build_other.bp_unit` writes its unit against it. Nothing else changes: the newest release stays what every other transport runs, the Update button and
+the nightly update touch only `/usr/local/bin/backpack`, a tunnel built before keeps the binary it has.
+
+Not proved on a real user tunnel yet.
+
 ## 1.69.301 - A type no test ever timed on a pair is timed there when other Iran servers proved it much faster
 
 The owner asked (2026-11-24, «with the new rule, why does it not change Germany-2?»). The Doctor had moved Germany-2's tunnel to another Iran server, and that pair held no speed number of any BackPack type: the night survey

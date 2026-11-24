@@ -38,6 +38,19 @@ ENGINES = {
     "xray": {"title": "Xray", "repo": "XTLS/Xray-core", "asset": r"^Xray-linux-64\.zip$", "member": "xray", "bin": "/opt/nikatel-xgw/xray", "units": "nikatel-xgw.service",
              "arm64": {"asset": r"^Xray-linux-arm64-v8a\.zip$", "member": "xray"}},
 }
+# (1.69.302, the owner, 2026-11-24: «wssmux worked before the BackPack 2 update») a transport that the newest release of a core broke stays on the release that worked. BackPack v2.0.0 serves a mux transport
+# (tcpmux, wsmux, wssmux) badly under many new connections - on a test tunnel with 250 new connections a second it answered ~740 of 15 000 and logged "forwarded port: the queue is full, dropping a client",
+# where v1.8.5 answered all but 1-2 (the same toml, the same two servers, only the binary of the unit changed). The panel keeps the old release beside the new one (`bin`) and writes the unit of such a transport
+# against it; the newest release stays what every other transport runs.
+PINS = {"backpack": {"version": "v1.8.5", "bin": "/usr/local/bin/backpack-v1", "transports": frozenset(('tcpmux', 'wsmux', 'wssmux'))}}
+
+
+def pin_for(engine: str, transport: str) -> dict | None:
+    """Pure: the pin that holds this transport of this core on an older release, or None (the transport runs the core the server has)."""
+    p = PINS.get(engine)
+    return p if p and str(transport) in p["transports"] else None
+
+
 ARCH_OF = {"x86_64": "amd64", "amd64": "amd64", "aarch64": "arm64", "arm64": "arm64"}      # (`uname -m` -> the build of a core that server runs; the panel's own cache of a core is the amd64 one, the arm64 ones are beside it)
 WATCH = 24                            # seconds the units of a swapped core are watched after their restart (engine_swap): a build that starts and crashes again shows within it
 TUNNEL_WAIT = 45.0                    # seconds the tunnels that carried traffic before a swap get to be "up" again
@@ -94,9 +107,9 @@ def wg_state(w: dict | None) -> str:
     return "missing" if w["apt"] else "no apt"
 
 
-def latest(engine: str) -> dict:
+def latest(engine: str, tag: str = "") -> dict:
     e = ENGINES[engine]
-    r = httpx.get(f"https://api.github.com/repos/{e['repo']}/releases/latest", timeout=25, headers={"Accept": "application/vnd.github+json", "User-Agent": "nikatel-panel"})
+    r = httpx.get(f"https://api.github.com/repos/{e['repo']}/releases/" + (f"tags/{tag}" if tag else "latest"), timeout=25, headers={"Accept": "application/vnd.github+json", "User-Agent": "nikatel-panel"})
     r.raise_for_status()
     rel = r.json()
     tag = str(rel.get("tag_name", "")).strip()
@@ -195,8 +208,8 @@ def last() -> dict:
     return {"engines": _STATE["result"] or {}, "checked_at": _STATE["checked_at"], "job": _STATE["job"], "checking": bool(_STATE.get("checking")), "wireguard": _STATE.get("wireguard"), "wg_job": _STATE.get("wg_job"), "auto": auto_state()}
 
 
-def _download(engine: str, arch: str = "amd64") -> tuple[str, bytes]:
-    lt = latest(engine)
+def _download(engine: str, arch: str = "amd64", tag: str = "") -> tuple[str, bytes]:
+    lt = latest(engine, tag) if tag else latest(engine)          # (a tag: that release, not the newest)
     pick = lt if arch == "amd64" else lt.get(arch)
 
     if not pick:
@@ -284,7 +297,7 @@ def parse_writers(probe: str) -> int:
     return int(m.group(1)) if m else 0
 
 
-def _copy_to_node(node: Node, engine: str, f: Path) -> None:
+def _copy_to_node(node: Node, engine: str, f: Path, bin_path: str = "") -> None:
     """Copy the core `f` (the panel's cache) next to its place on the server (`<bin>.nikatel.new`) with scp: nothing runs from it yet. The Xray gateway keeps its binary in a directory of its own, made first. RuntimeError with
     the sentence when the copy fails. (The Update button used to send the binary as base64 through the `put_file` action: its path and size rules refuse a core - on 2026-10-25 an update of Xray failed on all 29 servers at once.)"""
     e = ENGINES[engine]
@@ -293,12 +306,12 @@ def _copy_to_node(node: Node, engine: str, f: Path) -> None:
         run_action(node, "xgw_mkdir", timeout=30)
 
     try:
-        run_action(node, "engine_prep", {"FILE": f"{e['bin']}.nikatel.new"}, timeout=30)          # (1.69.263: the old temp file goes, the copy makes a NEW file - a stalled old copy that holds the old one open cannot make the core busy)
+        run_action(node, "engine_prep", {"FILE": f"{bin_path or e['bin']}.nikatel.new"}, timeout=30)          # (1.69.263: the old temp file goes, the copy makes a NEW file - a stalled old copy that holds the old one open cannot make the core busy)
     except SSHError:
         pass                                                                  # (the copy below says so when the server cannot be reached)
 
     try:
-        copy_file(node, f, f"{e['bin']}.nikatel.new", timeout=300)          # (1.69.260: through a jump server when the direct copy stalls)
+        copy_file(node, f, f"{bin_path or e['bin']}.nikatel.new", timeout=300)          # (1.69.260: through a jump server when the direct copy stalls)
     except SSHError as err:
         raise RuntimeError(f"could not copy {e['title']} to {node.host}: " + str(err)[:120]) from err
 
@@ -337,6 +350,51 @@ def ensure_on_node(node: Node, engine: str, say=None, only_missing: bool = False
 
     if say:
         say(f"{e['title']} installed on {node.host}")
+
+    return True
+
+
+def pin_file(engine: str, arch: str, version: str) -> Path:
+    """(1.69.302) The release `version` of a core in the panel's cache (<engine>-<version>, <engine>-arm64-<version>); downloaded from that release and verified when it is not there yet."""
+    f = cache_path(engine, arch, version)
+
+    if f.exists() and f.stat().st_size > 1_000_000:
+        return f
+
+    got, binary = _download(engine, arch, version)
+
+    if got != version:
+        raise RuntimeError(f"the release {version} of {ENGINES[engine]['title']} was asked for, {got} came")
+
+    f.parent.mkdir(parents=True, exist_ok=True)
+    f.write_bytes(binary)
+    log.info("cached %s %s %s (%d bytes)", engine, arch, version, len(binary))
+    return f
+
+
+def ensure_pinned_on_node(node: Node, engine: str, pin: dict, say=None) -> bool:
+    """(1.69.302) The older release of the pin is on the server next to the newest one (`pin["bin"]`; nothing runs from it yet, no unit is restarted). True when it was put there."""
+    probe = run_script(node, "engine_sha", {"BIN": pin["bin"]}, timeout=60)
+    machine = parse_arch(probe)
+    arch = arch_key(machine) if machine else "amd64"
+
+    if not arch:
+        raise RuntimeError(f"{ENGINES[engine]['title']} cannot be put on {node.host}: architecture {machine} is not supported (x86_64 and aarch64 only)")
+
+    f = pin_file(engine, arch, pin["version"])
+    sha = hashlib.sha256(f.read_bytes()).hexdigest()
+
+    if f"SHA={sha}" in probe and not parse_writers(probe):
+        return False
+
+    _copy_to_node(node, engine, f, pin["bin"])
+    out = run_action(node, "engine_swap", {"BIN": pin["bin"], "SHA": sha, "UNITS": "nikatel-none.service", "WATCH": "0"}, timeout=120)
+
+    if "SWAPPED" not in out:
+        raise RuntimeError(f"{ENGINES[engine]['title']} {pin['version']} did not install on {node.host}: {out.strip()[-120:]}")
+
+    if say:
+        say(f"{ENGINES[engine]['title']} {pin['version']} installed on {node.host}")
 
     return True
 
