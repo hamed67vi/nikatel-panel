@@ -51,7 +51,7 @@ from . import (
 )
 from . import settings as st
 from .events import emit
-from .tunnels import check_tunnel, in_move, servers_off, servers_off_of
+from .tunnels import FAST_DEGRADED, check_tunnel, in_move, servers_off, servers_off_of
 
 log = get_logger("autopilot")
 LEVELS = ("restart", "rebuild", "switch")
@@ -1848,6 +1848,17 @@ OBSERVE_EVERY = 30       # seconds between two looks at the tunnels that lose pa
 DEGRADED_AFTER = 120     # a tunnel that is only DEGRADED (it flaps, it loses packets, it moves no data) is repaired after this long (it was ten minutes); a tunnel that is DOWN waits for nothing
 
 
+CLIMBS_DEGRADED = ("flaps", "loss", "lost packets", "no data moves")      # what a DEGRADED tunnel's error says when the route is bad: restarts do not cure it, so it climbs without them
+
+
+def climbs_degraded(err: str | None) -> bool:
+    """Pure (the owner, 2026-11-24, «why did the Doctor not act?»: a tunnel to a foreign server that was filtered from Iran sat `degraded` for 3 h 40 min, 100 % loss, with the error "port 8075, 1840, 11444 is not listening
+    on the Iran server" - every user cut - and no smart repair, no move and no suggestion was ever made): does the error of a tunnel that is only DEGRADED say its users are cut? `CLIMBS_DEGRADED` named a bad route
+    (flapping, loss) only; a shut port (the tunnel's own listener is down when the foreign end cannot connect in), a path that is blocked in front of the server and "no data comes back" are the reasons
+    `tunnels.FAST_DEGRADED` already calls "nothing passes, or a port is shut" - and a shut port never turns the state to `down` by itself (the check returns `degraded` for it at once), so it must climb as degraded."""
+    return any(w in (err or "") for w in CLIMBS_DEGRADED + tuple(FAST_DEGRADED))
+
+
 def repair_cycle() -> None:
     """The one repair job (every 5 s, and at once when a tunnel is cut or a repair ends): the plain restarts of the tunnels that are down and the smart repair of those a restart could not heal - at the FIRST moment, with no
     waiting time - and, every OBSERVE_EVERY seconds, the look at the tunnels that lose packets. (It replaces three jobs that woke up separately and looked at the same tunnels.)"""
@@ -1898,9 +1909,9 @@ def auto_escalate() -> None:
     from . import knowledge
 
     with session() as db:
-        # down tunnels, and degraded ones whose trouble is the route (flapping or lossy link): restarts do not cure those, so they climb without them
+        # down tunnels, and degraded ones whose trouble is the route (flapping or lossy link) or whose users are cut (a shut port, nothing comes back): restarts do not cure those, so they climb without them (`climbs_degraded`)
         down = [(t.id, t.name, t.state_since, t.state, t.last_error or "", t.iran_server_id, t.foreign_server_id, is_protected(t)) for t in db.scalars(select(Tunnel).where(Tunnel.enabled.is_(True), Tunnel.state.in_(("down", "degraded"))))
-                if (t.state == "down" or any(w in (t.last_error or "") for w in ("flaps", "loss", "lost packets", "no data moves"))) and not servers_off(t)]       # a server that is off: no smart repair until it is back
+                if (t.state == "down" or climbs_degraded(t.last_error)) and not servers_off(t)]       # a server that is off: no smart repair until it is back
 
     down.sort(key=lambda r: (r[3] != "down", r[2]))      # the tunnels that are down first, the longest-down first
     down = [r for r in down if not in_move(r[1], now)]      # (the new tunnel of a move that is still running is the move's business: it checks it, and renames or removes it)

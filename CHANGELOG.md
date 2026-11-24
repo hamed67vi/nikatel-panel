@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.69.303 - A tunnel that stays DEGRADED because its port is shut climbs the smart repair
+
+> به زبان ساده: یک tunnel که همهٔ port هایش بسته بود و کاربرها قطع بودند، چهار ساعت «خراب ولی نه قطع» ماند و Doctor هیچ کاری نکرد. حالا چنین tunnel ای مثل tunnel قطع، وارد تعمیر هوشمند می‌شود.
+> In short: a tunnel whose ports were all shut stayed "degraded" for hours and the Doctor never started a smart repair. Now it climbs like a cut tunnel.
+
+The owner asked (2026-11-24, with the Canada config link, «the foreign server is filtered - why did the Tunnel Doctor not act so that the filtered foreign server answers?»; and «fix its tunnel first, then review the Doctor's work and fix it»).
+The foreign server was filtered from 8 of the 10 Iran servers at once (the two others still reached it, both ways). The tunnel's state stayed `degraded` (100 % loss, error "port 8075, 1840, 11444 is not listening on the Iran server") from the first
+check to the hand removal 3 h 40 min later: the look every 30 minutes only wrote the diagnosis, the plain restart was tried once - and `autopilot.auto_escalate`, which starts the smart repair (switch type, then move), takes a `degraded` tunnel only when its error
+says "flaps", "loss", "lost packets" or "no data moves". A shut port is none of those, and the check returns `degraded` for it at once and never `down` (the data probe that makes a tunnel down is not run when the port does not listen), so the tunnel
+waited for ever: no smart repair, no move, no suggestion (the Doctor's suggestions stayed empty).
+
+- **`autopilot.climbs_degraded`** (pure): a `degraded` tunnel climbs when its error is one of the old four OR one of `tunnels.FAST_DEGRADED` ("no data comes back", "blocked in front of the server", "is not listening on the Iran server") - the reasons the
+  fast lane already calls "nothing passes, or a port is shut". `auto_escalate` uses it; the wait is as before (`DEGRADED_AFTER` 120 s, one retry gap rule, the rails: a few repairs at a time, not in a storm, never a protected tunnel moved).
+- **Tests**: `tests/test_degraded_climbs.py` (the pure rule; a degraded tunnel with a shut port starts the smart repair; a degraded tunnel with a slow-line error does not).
+- **Not done (found in the same look, left for the owner's word)**: (1) the move's ranking (`detect.auto_iran`) gives a server score 0 when ANY wanted port is used on it, so a cut tunnel whose legacy port (here the CDN port) is taken on every Iran server that still reaches
+  the foreign server gets "no Iran server can carry it" even though two do reach it - the move would need to drop or remap a port that no enabled config uses; (2) `pathscan.scan` samples only the first three other Iran servers, so "other Iran servers lose packets toward
+  this foreign server too" can be said when two of ten reach it fine (the sentence points at the foreign provider; the Doctor does not act on it for a cut tunnel).
 ## 1.69.302 - A transport that BackPack 2 answers badly stays on the older release
 
 The owner said (2026-11-24) that `wssmux` worked before the BackPack 2 update and asked to roll that protocol, and every protocol that ran into trouble, back to the older version, or to fix it. Measured on a test
