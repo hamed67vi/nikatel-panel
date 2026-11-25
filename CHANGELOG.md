@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.69.306 - A tunnel with no number is measured at once, even while a failover or a move runs
+
+> به زبان ساده: وقتی Doctor یک tunnel را به server دیگر می‌برد، tunnel تازه تا آخر move، یعنی تا ۳۵ دقیقه، در لیست خط تیره بود، چون تست سرعت تا پایان move صبر می‌کرد. حالا tunnel ی که هنوز هیچ عدد ندارد وسط move هم یک‌بار اندازه‌گیری می‌شود.
+> In short: while a failover or a move runs, the speed-test job now measures one tunnel that has no number at all per turn (and does nothing more with it); the rest of the Doctor's own affairs still wait.
+
+The owner asked (2026-11-25, a screenshot of the Tunnels list with dashes on three tunnels that a failover had moved: «look at these, why are they dashes, fix it», and then «build the fix»). The capacity of a tunnel is the first number of its row and a dash means no test has run yet.
+`bandwidth.run` returned at its first line while `autopilot.quiet_now()` (a failover or a move story running, and `MASS_SETTLE` 300 s after it), and since 1.69.305 a move waits up to 30 minutes for the old tunnel's open connections, so a tunnel that
+a move had just built kept its dash for the whole move, up to 35 minutes (the day's budget of the Doctor's tests was over 150 % as well; the first test of a new tunnel is allowed over it, `testbudget.first_allowed`).
+
+Now, in the quiet time of a failover or a move (not in a mass disruption, `storm_now`), the job measures ONE tunnel that has no number at all per turn, within the same budget rules, and nothing more: no watch of the tunnels nobody uses (`_zero_watch`), no look at a drop,
+no retype, no upgrade look - they wait for the end of the quiet time. A tunnel that already has a number is not measured in the quiet time, as before.
+
+Not proved on a real move yet.
+
 ## 1.69.305 - A move keeps the type that the speed tests know to be fast, a failed return waits, an old BackPack tunnel is not removed under its users
 
 The owner asked (2026-11-24, «find the root of the error in the move code and fix it in this session»). Germany-2 had been put on the fast type by hand; when the Iran server it had been moved away from came back, the Doctor's

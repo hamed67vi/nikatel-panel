@@ -658,23 +658,29 @@ def run() -> None:
 
     from . import autopilot
 
-    if autopilot.quiet_now():
-        return                              # (1.69.230: a failover is on - no speed test, no upgrade check, no swap now)
+    quiet = autopilot.quiet_now()
+
+    if quiet and autopilot.storm_now():
+        return                              # (1.69.230: a mass disruption is on - no speed test, no upgrade check, no swap now)
 
     with _LOCK:
         if _RUNNING:
             return
 
-    try:
-        _zero_watch()
-    except Exception:
-        log.exception("the watch of the tunnels that nobody uses failed")
+    if not quiet:
+        try:
+            _zero_watch()
+        except Exception:
+            log.exception("the watch of the tunnels that nobody uses failed")
 
     now = int(time.time())
     ids = _due(now)
 
     if ids and not testbudget.allow("routine", now):          # (1.69.223: the day's volume of the Doctor's own tests is used: only a tunnel with no number yet, or one that dropped, is still measured - until the whole budget is used)
         ids = [i for i in ids if (_no_sample(i) and testbudget.first_allowed(i, now)) or (testbudget.allow("urgent", now) and _in_trouble(i))]          # (1.69.265: a tunnel with no number yet is measured up to 150 % of the budget, one that dropped up to the whole budget; 1.69.276: and over 150 % a few tries a day, `first_allowed`)
+
+    if quiet:
+        ids = [i for i in ids if _no_sample(i)][:1]          # (1.69.306: a failover or a move runs and settles - the Doctor's own affairs wait, but a tunnel with NO number at all - the one the move has just built - is measured: one light test per turn, so that its row does not stay a dash for the whole move, up to 35 minutes; the day's budget above still holds)
 
     if not ids:
         return
@@ -694,6 +700,9 @@ def run() -> None:
         try:
             bw, change = measure(tid)
             log.info("bandwidth of tunnel %s: %s Mb/s (usual %s) %s", tid, bw.get("down"), bw.get("ref"), bw.get("state"))
+
+            if quiet:
+                continue                                            # (1.69.306: the number only. The look at a drop, the retype and the upgrade look are the Doctor's own affairs: they wait for the end of the quiet time and the next due test brings them back)
 
             if change in ("drop", "slow"):
                 _investigate_later(tid)
