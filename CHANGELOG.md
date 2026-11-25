@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.69.307 - A move reads the real listening ports of the target server before it builds anything
+
+> به زبان ساده: Doctor یک tunnel را برای کیفیت به server دیگر می‌برد، تست سرعت را انجام داد و tunnel تازه را ساخت، ولی ساخت رد شد چون روی همان server برنامهٔ یک tunnel دیگر روی همان port گوش می‌داد و panel از آن خبر نداشت. حالا Doctor قبل از تست سرعت و قبل از ساختن، port های واقعی server مقصد را از خود server می‌خواند و اگر port گرفته بود سراغ server بعدی می‌رود.
+> In short: before a move for quality speed-tests anything or builds the tunnel, the Doctor now reads the real listening ports of the target Iran server over SSH and passes over a server where one of the tunnel's ports is taken (three servers at most); every single-tunnel move except the Return refuses before anything is built.
+
+The owner asked (2026-11-25, after the 24-hour review: «yes, build it»). A move for quality of a tunnel was started by the Doctor itself: it proved another Iran server much faster with a speed test, built the new tunnel there as the first step of the move and the build stopped with
+"port 8075 is already in use on the Iran server; choose another port" - a program of another tunnel listened on that port, and the panel's own record (`forwarded_ports`) did not say so. Everything created was removed again and the old tunnel stayed, so nothing broke, but the speed test and the build were wasted.
+The Move button already read the listening ports (`failover._ports_problem`, 1.69.286); the Doctor's own move for quality did not.
+
+`failover.quality_move` now makes the plan for each candidate and reads the ports of the tunnel on that server (`failover.plan_ports_problem`: the panel's own tunnels there and what listens, over SSH) BEFORE the speed test; a server where one is taken is passed over and the next ranked server is looked at, at most `QUALITY_PORT_LOOKS` (3) of them. `doctor._run_move`, which every
+single-tunnel move goes through (a suggestion applied, the button of the tunnel's menu, a move for quality), reads them again before it builds and stops with "Not moved: ... Nothing was built" - the Return is the exception, it puts a tunnel back where it was. A server whose ports cannot be read counts as not usable, as in the Move button. The ports a cut tunnel leaves behind are not asked for.
+
+Not done: the move of a dead Iran server's tunnels (the failover) still picks its target by the panel's own record only; a clash there still shows at the build.
+
 ## 1.69.306 - A tunnel with no number is measured at once, even while a failover or a move runs
 
 > به زبان ساده: وقتی Doctor یک tunnel را به server دیگر می‌برد، tunnel تازه تا آخر move، یعنی تا ۳۵ دقیقه، در لیست خط تیره بود، چون تست سرعت تا پایان move صبر می‌کرد. حالا tunnel ی که هنوز هیچ عدد ندارد وسط move هم یک‌بار اندازه‌گیری می‌شود.

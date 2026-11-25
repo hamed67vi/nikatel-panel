@@ -358,6 +358,13 @@ def _run_move(aid: int, tunnel_id: int, target_id: int, reason: str, why: str, p
         autopilot._say(aid, "No target: " + ("; ".join(p["problems"]) or "the Iran server cannot carry this tunnel"), done=True, ok=False)
         return
 
+    if reason != "return":          # (1.69.307: before anything is built, the ports of the tunnel are read from the target server itself - a program of another tunnel may listen on one and the panel's own record may not say so; the Return puts a tunnel back where it was and the build tells the truth)
+        bad = failover.plan_ports_problem(p, target_id)
+
+        if bad:
+            autopilot._say(aid, f"Not moved: {p['target']['name']} cannot take {name} now - {bad}. Nothing was built, {name} stays where it is.", done=True, ok=False)
+            return
+
     if p["pulled"]:
         autopilot._say(aid, "Also moved, so that the DNS stays consistent: " + ", ".join(p["pulled"]))
 

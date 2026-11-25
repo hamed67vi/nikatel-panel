@@ -59,6 +59,14 @@ def _no_type_test_in_moves(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _no_live_ports_read_in_moves(monkeypatch):
+    """(1.69.307) A move reads the listening ports of its target Iran server over SSH (failover._live_busy) before it builds: the tests find the ports free - tests/test_move_live_ports.py and tests/test_move_server.py replace it with what they need."""
+    from nikatel.services import failover
+
+    monkeypatch.setattr(failover, "_live_busy", lambda sid, ports: [])
+
+
+@pytest.fixture(autouse=True)
 def _no_type_test_after_a_drop(monkeypatch):
     """After a drop the Doctor tests other types between the pair's servers (bandwidth._swap_after_drop): that needs SSH and minutes - only the tests that are about it turn it on."""
     from nikatel.services import bandwidth

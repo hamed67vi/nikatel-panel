@@ -58,6 +58,7 @@ QUALITY_MIN_SCORE = 70     # (1.69.186, the owner, 2026-11-02: "I gave the Docto
 QUALITY_DELAY = 1.1        # ... answers the foreign server in at most this many times the tunnel's own delay ...
 QUALITY_LOSS = 1.0         # ... and loses at most this % of the packets
 # (1.69.208, the owner, 2026-11-04: "remove the 90-minute rule - when the server itself is the problem and nothing else cures it, change the server quickly; a config must not stay down": a dropped tunnel is looked at for a move at once)
+QUALITY_PORT_LOOKS = 3     # (1.69.307) a move for quality reads the listening ports of at most this many Iran servers (one SSH look each) before it gives up for this turn
 QUALITY_GAP = 600          # one such move every ten minutes for the whole panel (it was an hour: the tunnels of an Iran server whose own line is bad waited in a queue, one an hour)
 
 
@@ -546,6 +547,14 @@ def _ports_problem(server_id: int, ports: set[int]) -> str:
         return f"its listening ports could not be read ({str(e)[:80]})"
 
     return ("port " + ", ".join(str(p) for p in busy) + " already has a program listening on it") if busy else ""
+
+
+def plan_ports_problem(p: dict, target_id: int) -> str:
+    """(1.69.307, the owner, 2026-11-25: a move for quality was built on an Iran server and refused at the build - "port 8075 is already in use on the Iran server" - because a program of another tunnel listened on it and the panel's own record
+    did not say so) '' when every port the tunnels of this plan listen on is free on this Iran server: no tunnel of the panel forwards it there AND nothing listens on it, looked at over SSH (`_ports_problem`). The ports a cut tunnel
+    leaves behind (`p["drop"]`, the keys are text after the plan went through JSON) are not asked for. A server that cannot be looked at counts as not usable: a move must not start on a guess."""
+    left = {int(x) for ps in (p.get("drop") or {}).values() for x in ps}
+    return _ports_problem(target_id, _plan_ports(p) - left)
 
 
 def _make_plan(server_id: int, move: set[int] | None, reason: str, target_id: int | None = None, strict: bool = False, defer: bool = False, exclude: frozenset = frozenset(), dns: bool = True) -> dict:
@@ -1782,11 +1791,11 @@ def _cut_ranking(snap: dict, tunnel_id: int) -> list[dict]:
     return [r for r in rows if clash_allowed(r, ports, keep)]
 
 
-def quality_pick(ranking: list[dict], rtt: float | None) -> dict | None:
+def quality_pick(ranking: list[dict], rtt: float | None, skip: frozenset = frozenset()) -> dict | None:
     """Pure: the Iran server a tunnel may be moved to by itself for quality - the first row of `autopilot.ranking` (best first) that is on, ranks at least QUALITY_MIN_SCORE, has the room for one more tunnel, did not fail its
     GRE check, has no cut tunnel of its own to this foreign server, answers it with at most QUALITY_LOSS % loss and in at most QUALITY_DELAY times the tunnel's own delay (`rtt`, None = not asked). None when there is none."""
     for c in ranking:
-        if c.get("online", True) is False or int(c.get("score") or 0) < QUALITY_MIN_SCORE or c.get("gre_bad") or c.get("prev_cut") or room_for(c, 1):
+        if c.get("online", True) is False or int(c.get("score") or 0) < QUALITY_MIN_SCORE or c.get("gre_bad") or c.get("prev_cut") or room_for(c, 1) or c.get("id") in skip:          # (`skip`, 1.69.307: the servers already passed over - a port taken there)
             continue
 
         delay, loss = c.get("rtt_ms"), c.get("loss_pct")
@@ -1830,24 +1839,42 @@ def quality_move(aid: int, tunnel_id: int, reason: str, now_mbps: float, rtt: fl
         return False
 
     try:
-        cand = quality_pick(_cut_ranking(snap, tunnel_id), rtt)
+        rows = _cut_ranking(snap, tunnel_id)
     except (ValueError, RuntimeError) as e:
         say(f"No move for quality: the Iran servers could not be ranked ({str(e)[:100]}).")
         return False
 
-    if cand is None:
-        say("No move for quality: no other Iran server reaches the foreign server clearly better and has the room.")
-        return False
+    skip: set[int] = set()
+    passed: list[str] = []
 
-    try:
-        plan = _make_plan(snap["iran_id"], {tunnel_id}, reason if reason in REASONS else "quality", target_id=cand["id"])
-    except (ValueError, RuntimeError) as e:
-        say(f"No move for quality to {cand['name']}: {str(e)[:120]}.")
-        return False
+    for _ in range(QUALITY_PORT_LOOKS):
+        cand = quality_pick(rows, rtt, frozenset(skip))
 
-    if plan["pulled"] or plan["problems"] or not plan["target"]:
-        why = ("it would pull " + ", ".join(plan["pulled"]) + " along (they share a DNS record with this tunnel)") if plan["pulled"] else "; ".join(plan["problems"]) or "no plan"
-        say(f"No move for quality to {cand['name']}: {why}.")
+        if cand is None:
+            say("No move for quality: no other Iran server reaches the foreign server clearly better and has the room" + (" (" + "; ".join(passed) + ")" if passed else "") + ".")
+            return False
+
+        try:
+            plan = _make_plan(snap["iran_id"], {tunnel_id}, reason if reason in REASONS else "quality", target_id=cand["id"])
+        except (ValueError, RuntimeError) as e:
+            say(f"No move for quality to {cand['name']}: {str(e)[:120]}.")
+            return False
+
+        if plan["pulled"] or plan["problems"] or not plan["target"]:
+            why = ("it would pull " + ", ".join(plan["pulled"]) + " along (they share a DNS record with this tunnel)") if plan["pulled"] else "; ".join(plan["problems"]) or "no plan"
+            say(f"No move for quality to {cand['name']}: {why}.")
+            return False
+
+        bad = plan_ports_problem(plan, cand["id"])          # (1.69.307: before the speed test and the build - what listens on the target is read from the server itself, not only from the panel's own record)
+
+        if not bad:
+            break
+
+        passed.append(f"{cand['name']}: {bad}")
+        skip.add(cand["id"])
+        say(f"No move for quality to {cand['name']}: {bad}. The next Iran server is looked at.")
+    else:
+        say("No move for quality: " + "; ".join(passed) + ".")
         return False
 
     cur = autopilot.kind_of(snap["type"], snap["transport"], snap["record"])
