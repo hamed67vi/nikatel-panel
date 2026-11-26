@@ -467,3 +467,35 @@ def test_a_tunnel_whose_users_ports_the_trident_writes_is_not_given_a_second_tun
     s = Stage(monkeypatch, tid, p_state="degraded")
     monkeypatch.setattr(trident, "owns", lambda name: True)
     assert s.run_lossy() == swap.CANNOT and s.names() == [] and "Trident" in s.said[-1][0]
+
+
+# ------------------------------------------------------------------ the users already stand on the standby (1.69.309)
+def test_the_users_already_on_the_standby_of_the_wanted_type_finish_the_swap_without_a_second_handover(monkeypatch):
+    """The owner, 2026-11-26: the tunnel must become the type the users already ride - the hand-made handover used to block the swap."""
+    tid = _world()
+    s = Stage(monkeypatch, tid, KIND, in_use=True)
+    s.run()
+    names = s.names()
+    assert "build" not in names and "handover" not in names and "remove_standby" not in names                  # (the standby carries the users: it is neither built, nor removed, nor handed over again)
+    assert names[:4] == ["measure", "quiet", "replace", "give_back"] and ("replace", KIND) in s.events and names[-1] == "unwant"          # (the old type is built again as the standby's type while they stand on it; the ports go back last)
+    assert any("already stand on it" in line for line, _, _ in s.said)
+
+
+def test_a_standby_of_another_type_or_a_swap_for_loss_still_holds_while_the_users_stand_on_it(monkeypatch):
+    tid = _world()
+    s = Stage(monkeypatch, tid, "bp:stealth", in_use=True)
+    s.run()
+    assert "replace" not in s.names() and "handover" not in s.names() and "build" not in s.names()
+
+    tid2 = _world("sw-b")
+    s2 = Stage(monkeypatch, tid2, KIND, in_use=True)
+    s2.run_lossy()
+    assert "replace" not in s2.names() and "handover" not in s2.names()
+
+
+def test_a_speed_that_is_not_clearly_better_leaves_the_users_where_they_are(monkeypatch):
+    tid = _world()
+    s = Stage(monkeypatch, tid, KIND, in_use=True, sb_down=15.0)
+    s.run()
+    assert "replace" not in s.names() and "give_back" not in s.names() and "handover" not in s.names()
+    assert any("the users stay where they are" in line for line, _, _ in s.said)

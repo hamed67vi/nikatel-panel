@@ -98,5 +98,5 @@ def test_the_tags_of_a_cut_tunnel_do_not_say_gre_and_the_type_cell_has_two_rows(
     js, css = (WEB / "app.js").read_text(encoding="utf-8"), (WEB / "lab.css").read_text(encoding="utf-8")
     tags = js.split("const CUT_TAGS = [", 1)[1].split("];", 1)[0]
     assert '"GRE foreign"' not in tags and '"GRE Iran"' not in tags and '"GRE cut"' not in tags and '"foreign link"' in tags and '"Iran link"' in tags and '"link cut"' in tags
-    assert '<td class="td-ty2"><span class="td-type' in js and '</span><small class="mut">${gre ? linkTag(t)' in js
+    assert '<td class="td-ty2">${sbOn(t) ?' in js and '<span class="td-type' in js and '</span><small class="mut">${gre ? linkTag(t)' in js
     assert "html body #page .tun-tbl td.td-ty2 small { display: block;" in css and "html body #page .tun-tbl td.td-ty2 .td-type { display: inline-block; font-size: 9px;" in css

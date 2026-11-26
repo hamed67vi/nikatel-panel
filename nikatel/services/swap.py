@@ -271,7 +271,9 @@ def beside(aid: int, snap: dict, kind: str, why: str, before: float, revert: boo
     if p is None or p["state"] not in live:
         return _suggest(say, snap, cur, kind, f"{name} is not up, and a tunnel that is not up cannot hand its users to a new one", lossy)
 
-    if s is not None and s["use"]:
+    carried = s is not None and bool(s["use"]) and lossy is None and s["kind"] == kind and not s["stale"] and s["state"] == "up"          # (1.69.309: the users' ports already stand on a standby of the type that is wanted - handed over by hand ("Make main") or by an earlier look: the swap goes on from there, it does not hand over a second time)
+
+    if s is not None and s["use"] and not carried:
         return _suggest(say, snap, cur, kind, f"the users' ports of {name} stand on its standby now", lossy, hold=True)
 
     if lossy is not None:
@@ -375,18 +377,20 @@ def _work(aid: int, snap: dict, cur: str, kind: str, why: str, before: float, sa
         proof = f"{kind} gives {down:g} Mb/s in the speed test through itself (the dropped {cur} gives {before:g})." if down is not None else ""
 
     if bad:
-        say(f"{kind} is up beside {cur}, but {bad}: the users stay on {cur}.", done=True, ok=False)
+        say(f"{kind} is up beside {cur}, but {bad}: " + ("the users stay where they are." if s.get("use") else f"the users stay on {cur}."), done=True, ok=False)
         remember(snap, kind, False)
         return REJECTED
 
-    say(f"{proof} The users' new connections go over to it now.".strip())
+    carried = bool(s.get("use"))          # (1.69.309: the users' ports already stand on it - there is nothing to hand over; the way back below still gives them back to the tunnel when it is built again)
+    say(f"{proof} The users' ports already stand on it.".strip() if carried else f"{proof} The users' new connections go over to it now.".strip())
     doctor.mark_retyped(name, int(time.time()))
 
-    try:
-        standby.handover(name, why, manual=True)
-    except (ValueError, RuntimeError, SSHError) as e:
-        say(f"The new connections could not be handed over ({str(e)[:140]}): nothing was changed.", done=True, ok=False)
-        return CANNOT
+    if not carried:
+        try:
+            standby.handover(name, why, manual=True)
+        except (ValueError, RuntimeError, SSHError) as e:
+            say(f"The new connections could not be handed over ({str(e)[:140]}): nothing was changed.", done=True, ok=False)
+            return CANNOT
 
     state = {"back": False}
 

@@ -1415,3 +1415,22 @@ def test_what_stayed_sick_is_kept_through_a_good_and_a_failed_build_and_forgotte
 
     standby._set_failed("sk2", None)
     assert standby._skipped("sk2", NOW) == set()
+
+
+def test_the_make_main_button_starts_the_swap_only_while_the_users_stand_on_the_standby(client, monkeypatch):
+    """The owner, 2026-11-26: "this tunnel must go and the one that is connected must be the tunnel" - the standby becomes the main tunnel, without a cut."""
+    from nikatel.services import doctor
+
+    writable(monkeypatch)
+    w = world("sw7", state="down", since=20)
+    add_standby(w)
+    fake_server(monkeypatch)
+    standby._mark("sw7", True)
+    r = client.post(f"/api/tunnels/{w['id']}/standby/promote")
+    assert r.status_code == 400 and "not on the standby" in r.json()["error"]                                             # (the users stand on the tunnel: nothing is started)
+    assert client.post("/api/tunnels/9999/standby/promote").status_code == 404
+    assert client.post(f"/api/tunnels/{w['id']}/standby/handover").status_code == 200
+    calls = []
+    monkeypatch.setattr(doctor, "retype_now", lambda tid, kind, was="", why="", auto=False: calls.append((tid, kind, auto)) or 77)
+    r = client.post(f"/api/tunnels/{w['id']}/standby/promote")
+    assert r.status_code == 202 and r.json()["id"] == 77 and calls and calls[0][0] == w["id"] and calls[0][1] and calls[0][2] is True      # (the swap BESIDE: auto=True)

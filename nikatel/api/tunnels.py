@@ -535,6 +535,24 @@ def _standby_name(tunnel_id: int) -> str:
         return t.name
 
 
+@router.post("/tunnels/{tunnel_id}/standby/promote", status_code=202)
+def standby_promote(tunnel_id: int):
+    """Make the standby the MAIN tunnel without a cut (the owner, 2026-11-26: "this tunnel must go and the one that is connected must be the tunnel"): only while the users' ports stand on the standby. The tunnel is built again as
+    the standby's type while the users stand on the standby (the Doctor's swap beside, services/swap.py), the users' ports go to it, the old type is removed. Returns the action to follow."""
+    from ..services import doctor
+
+    name = _standby_name(tunnel_id)
+    s = standby.status(name)
+
+    if s.get("state") != "in_use" or not s.get("kind"):
+        raise HTTPException(400, "the users' ports are not on the standby: hand them over first (Switch now)")
+
+    try:
+        return {"ok": True, "id": doctor.retype_now(tunnel_id, s["kind"], "", "You made the standby the main tunnel.", auto=True)}
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
 @router.post("/tunnels/{tunnel_id}/standby/handover")
 def standby_handover(tunnel_id: int):
     """Hand the users' ports of this tunnel to its standby NOW (by hand: they stay there until Back now). Refused when the standby is not up."""

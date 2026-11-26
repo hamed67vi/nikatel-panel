@@ -74,7 +74,7 @@ def test_the_window_says_connected_but_no_service_and_offers_the_ports_dialog(ru
 
 def test_the_list_shows_one_amber_tag_for_it():
     cell = LIST[LIST.index("const bwCell = t =>"): LIST.index("/* the Ping / Loss cell")]
-    assert '<span class="cut-tag svc" title="${esc(noSvcText(t, ns))}">no service</span>' in cell and "if (ns) return nsTag + bwMeterFor(t) + why;\n    return bwMeterFor(t) + why;" in cell
+    assert '<span class="cut-tag svc" title="${esc(noSvcText(t, ns))}">no service</span>' in cell and "if (ns) return nsTag + bwMeterFor(t) + sbNote(t) + why;\n    return bwMeterFor(t) + sbNote(t) + why;" in cell
     assert "const ns = tunNoSvc(t)" in cell
     css = (WEB / "lab.css").read_text(encoding="utf-8")
     assert ".tun-tbl .cut-tag.svc" in css and 'html[data-mode="light"] body #page .tun-tbl .cut-tag.svc' in css

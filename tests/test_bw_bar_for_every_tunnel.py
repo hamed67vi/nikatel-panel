@@ -11,7 +11,7 @@ WEB = Path(__file__).resolve().parents[1] / "nikatel" / "web"
 def test_every_tunnel_that_runs_has_the_meter_and_only_a_problem_has_a_word():
     js = (WEB / "app.js").read_text(encoding="utf-8")
     cell = js.split("const bwCell = t => {", 1)[1].split("/* the Ping / Loss cell", 1)[0]
-    assert "return bwMeterFor(t) + why;" in cell and 'if (!["up", "degraded"].includes(t.state)) return `<span class="cut-tag' in cell                       # (a cut tunnel: still its tag, no meter)
+    assert "return bwMeterFor(t) + sbNote(t) + why;" in cell and 'if (!["up", "degraded"].includes(t.state)) return `<span class="cut-tag' in cell                       # (a cut tunnel: still its tag, no meter)
     fn = js.split("const bwMeterFor = t => {", 1)[1].split("const bwTone", 1)[0]
     assert 'prob ? (!hurt ? "dip" : stall || b.state === "drop" ? "drop" : "slow") : full ? "full" : "ok"' in fn and 'prob ? (stall ? "no data" : b.state === "drop" ? "low for users" : "very slow") : full ? "nearly full" : idle ? "no users" : ""' in fn
 

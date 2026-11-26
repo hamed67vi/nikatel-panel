@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.69.309 - A standby that carries the users can be made the main tunnel, without a cut
+
+> به زبان ساده: وقتی مشتری‌ها روی standby هستند، حالا دکمهٔ «Make main» خود tunnel را به نوع standby تبدیل می‌کند و tunnel کند می‌رود، بدون قطع.
+> In short: while the users' ports stand on the standby, the Doctor's swap beside no longer refuses; a new «Make main» button (and `POST /api/tunnels/{id}/standby/promote`) builds the tunnel again as the standby's type while the users stand on the standby, then gives the ports to it and removes the old type.
+
+The owner asked (2026-11-26, after 1.69.308 drew the standby in the list: «نمیگم که اینطوری نمایش بده، ینی این تانلو کلن یا باید حذف بشه و تانل اصلی نمایش داده بشه»). A US tunnel was slow as `wss` (about 25 Mb/s on a 165 ms path) while its standby of another type was fast; the users' ports were handed to the standby by hand, so they were fine, but the list still had the slow main tunnel and the Doctor could not change its type: `swap.beside` refused with «the users' ports stand on its standby now» whatever type the standby was, so the hand-made handover blocked the very change the Doctor wanted.
+
+`swap.beside`: when the users' ports stand on a standby that is UP, of the wanted type and not stale (and the swap is not for loss), it goes on from there: the speed through the standby is still confirmed, the handover is skipped (`carried`), the open connections of the old tunnel are waited for, the tunnel is built again as the standby's type (`autopilot._replace`, the users stand on the standby meanwhile) and the ports are given back to it (`give_back`, in the `finally` as before). A standby of ANOTHER type that carries the users, a swap for loss and a stale standby still hold as before. `doctor.retype_now(..., auto=True)` starts the swap beside as an action; `POST /api/tunnels/{id}/standby/promote` (400 unless the users' ports are on the standby) and the «Make main» button of the standby bar in the tunnel window call it.
+Also: four tests (`test_bw_bar_for_every_tunnel`, `test_capacity`, `test_instant_state`, `test_no_service_ui`) that read the old text of the list row were left red by 1.69.308 (its quick test run did not include them); they expect the new text now. Nothing in the running panel was wrong.
+Proved: tests with the stand-ins of the swap (the order of the steps with the users on the standby, no second handover, the holds that stay, a refused speed leaves the users where they are) and of the API (400 while the users are on the tunnel, the call with `auto=True` while they are on the standby). Not proved: a real swap that starts with the users on the standby; what the standby job does with the standby of the same type after the swap (it is rebuilt as another type after `CLASH_AFTER`, like after every swap).
+
 ## 1.69.308 - The tunnel list names the tunnel that carries the users while they are on the standby
 
 > به زبان ساده: وقتی مشتری‌ها روی standby هستند، ردیف فهرست حالا همان tunnel را نشان می‌دهد که واقعاً وصل است، نه فقط tunnel اصلی را.

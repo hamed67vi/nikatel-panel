@@ -1815,3 +1815,10 @@ def test_the_list_names_the_tunnel_that_carries_the_users_while_they_are_on_the_
     row = app.split("const row = t => {", 1)[1].split("const creating = false;", 1)[0]
     assert "${sbOn(t) ? `<span class=\"td-type ty-${esc(tunType(t))} sb-live\"" in row and "sbLabel(t.standby.kind)" in row and "standby carries the users" in row and row.count("<td") == 8       # (the Type cell; the row keeps its eight cells)
     assert "return bwMeterFor(t) + sbNote(t) + why;" in app and ".td-type.sb-live" in css                                                              # (the speed cell says its number is the main tunnel's; the amber look)
+
+
+def test_the_standby_bar_has_a_make_main_button_while_the_users_stand_on_the_standby():
+    """The owner, 2026-11-26: "this tunnel must go and the one that is connected must be the tunnel"."""
+    app = _web("app.js")
+    assert '"in_use" ? b("Back now"' in app and 'b("Make main", `tunStandbyPromote(${id})`' in app and "window.tunStandbyPromote = async id =>" in app
+    assert "`/api/tunnels/${id}/standby/promote`" in app and 'apStoryWindow(r.id, "Making the standby the main tunnel")' in app

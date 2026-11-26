@@ -491,7 +491,7 @@ def _run_retype(aid: int, tunnel_id: int, kind: str, was: str, why: str, auto: b
     say(f"{snap['name']} runs as {kind} now.{after}", done=True, ok=True)
 
 
-def retype_now(tunnel_id: int, kind: str, was: str = "", why: str = "") -> int:
+def retype_now(tunnel_id: int, kind: str, was: str = "", why: str = "", auto: bool = False) -> int:
     """Start the change of a tunnel's type as an action (the story is followed by its id). `was`: the type the suggestion was written for - if the tunnel runs another type by now, nothing is changed."""
     with session() as db:
         t = db.get(Tunnel, tunnel_id)
@@ -504,7 +504,7 @@ def retype_now(tunnel_id: int, kind: str, was: str = "", why: str = "") -> int:
 
         name = t.name
 
-    return autopilot._start(name, _run_retype, tunnel_id, kind, was, why, source="manual")
+    return autopilot._start(name, _run_retype, tunnel_id, kind, was, why, auto, source="manual")          # (`auto`: the change goes BESIDE the old type, no cut - what the "Make main" button of a standby asks for)
 
 
 def return_now(move_id: str) -> int:

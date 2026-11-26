@@ -1113,7 +1113,7 @@ function tunStandby(t) {
     st === "in_use" ? `The users' ports are on the standby (${esc(s.kind)}) since ${clock(s.since)} - they go back to this tunnel when it has held for a minute` :
     esc(s.why || SB_WORD[st] || "");
   const acts = st === "off" ? b("Turn on", `tunStandbySet(${id}, true)`, false, "Build the standby now (about a minute); nothing changes for the users")
-    : st === "in_use" ? b("Back now", `tunStandbyBack(${id})`, true, "Take the users' ports off the standby now") + b("Turn off", `tunStandbySet(${id}, false)`, false, "Give the ports back and remove the standby")
+    : st === "in_use" ? b("Back now", `tunStandbyBack(${id})`, true, "Take the users' ports off the standby now") + b("Make main", `tunStandbyPromote(${id})`, false, "Make the standby the main tunnel: the tunnel is built again as the standby's type while the users stand on the standby, then their ports go to it and the old type is removed. Nobody is cut.") + b("Turn off", `tunStandbySet(${id}, false)`, false, "Give the ports back and remove the standby")
     : st === "ready" ? b("Switch now", `tunStandbyNow(${id})`, false, "Hand the users' ports to the standby now (a drill; they stay there until Back now)") + b("Turn off", `tunStandbySet(${id}, false)`, false, "Remove the standby")
     : st === "removing" ? "" : b("Turn off", `tunStandbySet(${id}, false)`, false, "Remove the standby");
   return `<div class="lab-ban ${tone}" data-b="standby" title="The warm standby: another tunnel type between the same two servers, on shifted ports, built before a cut"><i class="lb-i">${st === "in_use" ? "⇆" : "⧉"}</i><div class="lb-t"><b>Standby · ${SB_WORD[st] || st}</b><span class="lb-m" title="${esc(s.why || "")}">${meta}</span></div><div class="lb-a">${acts}</div></div>`;
@@ -1651,6 +1651,10 @@ window.tunStandbyNow = async id => {
   if (!await gconfirm("Hand the users' ports of this tunnel to its standby now? New connections go through the standby until you press Back now (a drill of what happens when the tunnel is cut).")) return;
   try { const r = await api(`/api/tunnels/${id}/standby/handover`, {method: "POST"}); toast(`✓ The users' ports are on the standby (${r.kind})`, "ok"); } catch (e) { toast("✕ " + e.message, "bad"); }
   await tunRedraw(id);
+};
+window.tunStandbyPromote = async id => {      // (the owner, 2026-11-26: "this tunnel must go and the one that is connected must be the tunnel")
+  if (!await gconfirm("Make the standby the main tunnel? The tunnel is built again as the standby's type while the users stand on the standby, then their ports go to it and the old type is removed. Nobody is cut; it takes a few minutes.")) return;
+  try { const r = await api(`/api/tunnels/${id}/standby/promote`, {method: "POST"}); apStoryWindow(r.id, "Making the standby the main tunnel"); } catch (e) { toast("✕ " + e.message, "bad"); }
 };
 window.tunStandbyBack = async id => {
   try { await api(`/api/tunnels/${id}/standby/back`, {method: "POST"}); toast("✓ The users' ports are on the tunnel again; open connections end on the standby by themselves", "ok"); } catch (e) { toast("✕ " + e.message, "bad"); }
