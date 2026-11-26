@@ -1237,7 +1237,7 @@ def test_the_tunnel_table_has_the_lamp_before_the_name_and_the_bandwidth_in_plac
     assert "<thead><tr><th data-fit=\"196\">Tunnel</th><th data-min=\"176\">Type</th><th>Status</th>" not in app and '<thead><tr><th data-fit="196">Tunnel</th><th data-min="176">Type</th><th class="bwh" data-prio="1" data-min="130" title="Shown only when there is something to see' in app and '<span class="bwh-in">Bandwidth<em>Mb/s</em></span></th>' in app
     assert "<small><i>capacity</i>" not in app                                                    # the header says the word and the unit, nothing else (the owner, 2026-10-17: "write only mb/s here"); the legend is in the tooltip
     cell = app.split("const bwCell = t => {", 1)[1].split("const row = t => {", 1)[0]
-    assert "workMap.has(t.name)" in cell and "cutTag(t)" in cell and 'bwMeterFor(t) + why' in cell and 'const prob = stall || b.state === "drop" || b.state === "slow";' in cell and "bwx" not in cell and "bwUse(t)" not in cell      # (1.69.50: EMPTY while the tunnel is fine - the numbers are in the window of the tunnel)
+    assert "workMap.has(t.name)" in cell and "cutTag(t)" in cell and 'bwMeterFor(t) + sbNote(t) + why' in cell and 'const prob = stall || b.state === "drop" || b.state === "slow";' in cell and "bwx" not in cell and "bwUse(t)" not in cell      # (1.69.50: EMPTY while the tunnel is fine - the numbers are in the window of the tunnel)
     capcell = app.split("const bwCap = t => {", 1)[1].split("/* the numbers of what the users use change by themselves", 1)[0]
     assert "▼" not in capcell and "<em>" not in capcell and "b.state === \"drop\" ? \"drop\" : b.state === \"slow\" ? \"slow\" : \"ok\"" in capcell and "b.state === \"low\"" not in capcell      # one number, red only for a drop or a stall (a "low" one is not coloured any more, 1.64.5; a VERY SLOW one is amber, 1.69.14); no second red number in the row
     assert "const bwFmt = v =>" in app and "const bwTip = t =>" in app and "const bwWhy = t =>" in app and "[\"drop\", \"slow\"].includes((t.bw || {}).state)" in app
@@ -1781,3 +1781,37 @@ def test_the_type_list_has_best_of_the_day_which_the_panel_resolves_when_build_i
     assert 'const BK_AUTO = {key: "auto", title: "Automatic", transports: [{key: "trident", label: "Trident"}]};' in app and '{key: "best", label: "Best of the day"}' not in app          # (1.69.124: Trident beside it, tests/test_trident.py)
     assert 'bk.kinds = kd.kinds.some(k => k.key === "auto") ? kd.kinds : [BK_AUTO, ...kd.kinds];' in app and '"auto:best": "the type that connects best between these two servers today"' in app
     assert 'else if (K.key === "auto") options = ' in app and 'if (bk.kind === "auto") { box.innerHTML = ' in app and 'if (r.why) toast((r.trident ? "🔱 Trident, first strand: " : "★ Best of the day: ") + r.why, "ok");' in app
+
+
+def test_the_list_names_the_tunnel_that_carries_the_users_while_they_are_on_the_standby(tmp_path):
+    """The owner, 2026-11-26: "what is a standby? the list must show the tunnel that is connected" - the row drew only the main tunnel while the users' ports were on its standby."""
+    import json
+    import shutil
+    import subprocess
+
+    node = shutil.which("node")
+
+    if node is None:
+        import pytest
+
+        pytest.skip("node is not installed here")
+
+    app, css = _web("app.js"), _web("app.css")
+    code = app[app.index("const sbOn = t =>"): app.index("\n", app.index("const sbNote = t =>"))]
+    driver = tmp_path / "sb.js"
+    driver.write_text("const esc = s => String(s); const ago = ts => '5m';\n" + code + "\nconst cases = JSON.parse(require('fs').readFileSync(0, 'utf8'));\n"
+                      "process.stdout.write(JSON.stringify(cases.map(c => [sbOn(c), c.standby && c.standby.kind ? sbLabel(c.standby.kind) : '', sbNote(c).includes('main tunnel')])));\n", encoding="utf-8")
+    main = {"type": "backpack", "transport": "wss"}
+    cases = [({**main, "standby": {"state": "in_use", "kind": "bpd:pck", "since": 1}}, [True, "BACKPACK · pck", True]),
+             ({**main, "standby": {"state": "in_use", "kind": "bp:stealth", "since": 1}}, [True, "BACKPACK · stealth", True]),
+             ({"type": "backhaul", "transport": "tcp", "standby": {"state": "in_use", "kind": "tcpmux", "since": 1}}, [True, "TCPMUX", True]),
+             ({**main, "standby": {"state": "ready", "kind": "bpd:pck"}}, [False, "BACKPACK · pck", False]),
+             ({**main, "standby": {"state": "off"}}, [False, "", False]),
+             ({**main, "standby": {"state": "in_use"}}, [False, "", False]),
+             (main, [False, "", False])]
+    r = subprocess.run([node, str(driver)], input=json.dumps([c for c, _ in cases]), capture_output=True, text=True, encoding="utf-8", timeout=60, check=False)
+    assert r.returncode == 0, r.stderr[-600:]
+    assert json.loads(r.stdout) == [want for _, want in cases]
+    row = app.split("const row = t => {", 1)[1].split("const creating = false;", 1)[0]
+    assert "${sbOn(t) ? `<span class=\"td-type ty-${esc(tunType(t))} sb-live\"" in row and "sbLabel(t.standby.kind)" in row and "standby carries the users" in row and row.count("<td") == 8       # (the Type cell; the row keeps its eight cells)
+    assert "return bwMeterFor(t) + sbNote(t) + why;" in app and ".td-type.sb-live" in css                                                              # (the speed cell says its number is the main tunnel's; the amber look)

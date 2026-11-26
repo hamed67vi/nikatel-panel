@@ -4845,3 +4845,4 @@ nav#nav a[hidden] { display: none !important; }      /* a section that is hidden
 .lay-c { display: inline-block; margin-right: 10px; white-space: nowrap; }
 .lay-c.err b { color: var(--err, #d64545); }
 .srv-tag { display: inline-block; margin-left: 7px; padding: 0 7px; border-radius: 999px; font-size: 10px; font-weight: 800; letter-spacing: .3px; line-height: 16px; color: #fff; background: #c0392b; cursor: help; vertical-align: middle; white-space: nowrap; }
+.td-type.sb-live { color: var(--warn); border-color: rgba(255,196,77,.5); background: rgba(255,196,77,.12); } .mut.sb-sm { color: var(--warn); }      /* (the list: the users are on the standby)  */

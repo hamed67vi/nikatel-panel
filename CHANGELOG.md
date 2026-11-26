@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.69.308 - The tunnel list names the tunnel that carries the users while they are on the standby
+
+> به زبان ساده: وقتی مشتری‌ها روی standby هستند، ردیف فهرست حالا همان tunnel را نشان می‌دهد که واقعاً وصل است، نه فقط tunnel اصلی را.
+> In short: while the users' ports of a tunnel are on its standby, the Type cell of the tunnel list shows the standby's type (with a ⇆ and an amber line) and the speed cell says its number is the main tunnel's.
+
+The owner asked (2026-11-26, a picture of the tunnel list where only the main row of a US tunnel was drawn while its users were on the standby: «تانل آمریکا فقط اینو تو پنل نمایش میده، تانل دیگه اش رو نشون نمیده», then «خب استندبای چیه؟ باید دیگه تانلی که وصله رو نشون بده»).
+The warm standby (another tunnel type between the same two servers) is not a row of the list, only a state in the window of its tunnel. When the users' ports were handed to it (by the Doctor or by hand) the row kept showing the main tunnel: its type, its speed (24 Mb/s of the slow type) and no sign that the users ride something else, so a tunnel whose users were fine looked like a slow one.
+
+`app.js`: `sbOn(t)` (the standby is `in_use` and has a kind), `sbLabel(kind)` (`bpd:pck` is drawn like the type column draws it, `BACKPACK · pck`), `sbTip(t)`, `sbNote(t)`. In the row the Type cell shows `⇆ <standby type>` in the amber tone with the small line «standby carries the users · main <type>» (the sentence is the tip too); the Bandwidth cell adds «main tunnel» beside its meter because that speed is the main tunnel's. Every other row is drawn as before. The window of the tunnel (`tunStandby`) is unchanged.
+Proved: a node driver runs the helpers over the cases (in use, ready, off, no kind, a BackPack kind, a Backhaul kind); the row still has eight cells. Not proved: not looked at on a live page yet; the standby has no speed number of its own in the list.
+
 ## 1.69.307 - A move reads the real listening ports of the target server before it builds anything
 
 > به زبان ساده: Doctor یک tunnel را برای کیفیت به server دیگر می‌برد، تست سرعت را انجام داد و tunnel تازه را ساخت، ولی ساخت رد شد چون روی همان server برنامهٔ یک tunnel دیگر روی همان port گوش می‌داد و panel از آن خبر نداشت. حالا Doctor قبل از تست سرعت و قبل از ساختن، port های واقعی server مقصد را از خود server می‌خواند و اگر port گرفته بود سراغ server بعدی می‌رود.
